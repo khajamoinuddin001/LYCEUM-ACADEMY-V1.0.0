@@ -1,0 +1,8 @@
+{
+  "name": "Lyceum Academy",
+  "description": "An Educational Relationship Management (ERM) system for Lyceum Academy, built with React, TypeScript, and Tailwind CSS. This application provides a clean dashboard interface for managing students, communications, and tasks.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
