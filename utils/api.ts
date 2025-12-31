@@ -232,6 +232,10 @@ export const saveLead = async (leadToSave: Omit<CrmLead, 'id' | 'stage'> & { id?
   }
 };
 
+export const deleteLead = async (leadId: number): Promise<void> => {
+  await apiRequest(`/leads/${leadId}`, { method: 'DELETE' });
+};
+
 export const updateLeadStage = async (leadId: number, newStage: CrmStage): Promise<CrmLead[]> => {
   const lead = await apiRequest<CrmLead>(`/leads/${leadId}`, { method: 'GET' });
   await apiRequest(`/leads/${leadId}`, {

@@ -397,6 +397,7 @@ export interface Notification {
   title: string;
   description: string;
   read: boolean;
+  type?: 'info' | 'error' | 'success';
   linkTo?: {
     type: 'contact' | 'lead' | 'user';
     id: number;

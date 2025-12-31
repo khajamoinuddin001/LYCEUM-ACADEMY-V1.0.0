@@ -47,8 +47,8 @@ const ReceptionView: React.FC<ReceptionViewProps> = ({ visitors, onNewVisitorCli
     const [statusFilter, setStatusFilter] = useState<'All' | 'Checked-in' | 'Checked-out'>('All');
     const [activeTab, setActiveTab] = useState<'log' | 'appointments'>('log');
 
-    const canCreate = user.permissions?.['Reception']?.create;
-    const canUpdate = user.permissions?.['Reception']?.update;
+    const canCreate = user.role === 'Admin' || user.permissions?.['Reception']?.create;
+    const canUpdate = user.role === 'Admin' || user.permissions?.['Reception']?.update;
 
     const { visitorsToday, currentlyCheckedIn, pendingAppointments, filteredVisitors, scheduledVisitors } = useMemo(() => {
         const todayStr = new Date().toDateString();

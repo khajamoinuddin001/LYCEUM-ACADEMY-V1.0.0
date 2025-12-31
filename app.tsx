@@ -491,8 +491,14 @@ const DashboardLayout: React.FC = () => {
   };
 
   const handleSaveLead = async (leadToSave: Omit<CrmLead, 'id' | 'stage' | 'quotations'> & { id?: number }) => {
-    if (editingLead === 'new' && !currentUser?.permissions['CRM']?.create) return;
-    if (editingLead !== 'new' && !currentUser?.permissions['CRM']?.update) return;
+    if (currentUser?.role !== 'Admin' && editingLead === 'new' && !currentUser?.permissions['CRM']?.create) {
+      addNotification({ title: 'Permission Denied', description: 'You do not have permission to create leads.', type: 'error' });
+      return;
+    }
+    if (currentUser?.role !== 'Admin' && editingLead !== 'new' && !currentUser?.permissions['CRM']?.update) {
+      addNotification({ title: 'Permission Denied', description: 'You do not have permission to update leads.', type: 'error' });
+      return;
+    }
 
     const isNew = editingLead === 'new';
     const savedLead = await api.saveLead(leadToSave, isNew);
@@ -510,6 +516,32 @@ const DashboardLayout: React.FC = () => {
     }
     setIsNewLeadModalOpen(false);
     setEditingLead(null);
+  };
+
+  const handleDeleteLead = async (leadId: number) => {
+    console.log('🗑️ handleDeleteLead called for ID:', leadId);
+    if (currentUser?.role !== 'Admin' && !currentUser?.permissions['CRM']?.delete) {
+      console.log('❌ Permission denied');
+      addNotification({ title: 'Permission Denied', description: 'You do not have permission to delete leads.', type: 'error' });
+      return;
+    }
+
+    if (!window.confirm('Are you sure you want to delete this lead? This action cannot be undone.')) {
+      console.log('❌ Deletion cancelled by user');
+      return;
+    }
+
+    try {
+      console.log('🚀 Calling api.deleteLead...');
+      await api.deleteLead(leadId);
+      console.log('✅ api.deleteLead success');
+      setLeads(prev => prev.filter(l => l.id !== leadId));
+      addNotification({ title: 'Lead Deleted', description: 'The lead has been successfully deleted.', type: 'success' });
+      logActivity(`Deleted lead ID ${leadId}`);
+    } catch (error) {
+      console.error('❌ Failed to delete lead:', error);
+      addNotification({ title: 'Error', description: 'Failed to delete lead.', type: 'error' });
+    }
   };
 
   const handleUpdateLeadStage = async (leadId: number, newStage: CrmStage) => {
@@ -800,8 +832,14 @@ const DashboardLayout: React.FC = () => {
   };
 
   const handleSaveVisitor = async (visitorData: { id?: number; name: string; company: string; host: string; cardNumber: string; }) => {
-    if (!currentUser?.permissions['Reception']?.create && !visitorData.id) return;
-    if (visitorData.id && !currentUser?.permissions['Reception']?.update) return;
+    if (currentUser?.role !== 'Admin' && !currentUser?.permissions['Reception']?.create && !visitorData.id) {
+      addNotification({ title: 'Permission Denied', description: 'You do not have permission to create visitors.', type: 'error' });
+      return;
+    }
+    if (currentUser?.role !== 'Admin' && visitorData.id && !currentUser?.permissions['Reception']?.update) {
+      addNotification({ title: 'Permission Denied', description: 'You do not have permission to update visitors.', type: 'error' });
+      return;
+    }
 
     const updatedVisitors = await api.saveVisitor(visitorData);
     setVisitors(updatedVisitors);
@@ -817,11 +855,10 @@ const DashboardLayout: React.FC = () => {
   };
 
   const handleVisitorCheckOut = async (visitorId: number) => {
-    if (!currentUser?.permissions['Reception']?.update) {
-      console.log('Permission denied for check-out');
+    if (currentUser?.role !== 'Admin' && !currentUser?.permissions['Reception']?.update) {
+      addNotification({ title: 'Permission Denied', description: 'You do not have permission to check out visitors.', type: 'error' });
       return;
     }
-
     try {
       console.log('Checking out visitor:', visitorId);
       const { allVisitors, checkedOutVisitor } = await api.checkOutVisitor(visitorId);
@@ -837,19 +874,24 @@ const DashboardLayout: React.FC = () => {
     } catch (error) {
       console.error('Check-out failed:', error);
       alert('Failed to check out visitor: ' + (error instanceof Error ? error.message : 'Unknown error'));
+      throw error; // Re-throw so modal can handle it
     }
   };
 
   const handleScheduleVisitor = async (name: string, company: string, host: string, scheduledCheckIn: string) => {
-    if (!currentUser?.permissions['Reception']?.create) return;
+    if (currentUser?.role !== 'Admin' && !currentUser?.permissions['Reception']?.create) {
+      addNotification({ title: 'Permission Denied', description: 'You do not have permission to schedule visitors.', type: 'error' });
+      return;
+    }
     const updatedVisitors = await api.scheduleVisitor({ name, company, host, scheduledCheckIn });
     setVisitors(updatedVisitors);
     addNotification({
       title: 'Visitor Scheduled',
-      description: `${name} from ${company} is scheduled to visit ${host} on ${new Date(scheduledCheckIn).toLocaleDateString()}.`,
+      description: `${name} has been scheduled to visit ${host}.`,
       recipientRoles: ['Admin', 'Staff']
     });
     setIsNewAppointmentModalOpen(false);
+    logActivity(`Scheduled visitor ${name} to meet ${host}.`);
   };
 
   const handleEditVisitor = (visitor: Visitor) => {
@@ -858,15 +900,19 @@ const DashboardLayout: React.FC = () => {
   };
 
   const handleCheckInScheduledVisitor = async (visitorId: number) => {
-    if (!currentUser?.permissions['Reception']?.update) return;
+    if (currentUser?.role !== 'Admin' && !currentUser?.permissions['Reception']?.update) {
+      addNotification({ title: 'Permission Denied', description: 'You do not have permission to check in visitors.', type: 'error' });
+      return;
+    }
     const { allVisitors, checkedInVisitor } = await api.checkInScheduledVisitor(visitorId);
     setVisitors(allVisitors);
     if (checkedInVisitor) {
       addNotification({
         title: 'Visitor Arrived',
         description: `${checkedInVisitor.name} from ${checkedInVisitor.company} has arrived to see ${checkedInVisitor.host}.`,
-        recipientRoles: ['Admin', 'Staff']
+        type: 'info'
       });
+      logActivity(`Checked in scheduled visitor ${checkedInVisitor.name}.`);
     }
   };
 
@@ -1172,7 +1218,7 @@ const DashboardLayout: React.FC = () => {
         if (leadForQuotation) {
           return <NewQuotationPage user={currentUser} lead={leadForQuotation} onCancel={handleCancelQuotation} onSave={handleSaveQuotation} templates={quotationTemplates} quotationToEdit={editingQuotation} onSaveTemplate={handleSaveQuotationTemplate} onDeleteTemplate={handleDeleteQuotationTemplate} />;
         }
-        return <CrmView user={currentUser} leads={leads} onLeadSelect={handleLeadSelect} onNewLeadClick={handleNewLeadClick} onUpdateLeadStage={handleUpdateLeadStage} />;
+        return <CrmView user={currentUser} leads={leads} onLeadSelect={handleLeadSelect} onNewLeadClick={handleNewLeadClick} onUpdateLeadStage={handleUpdateLeadStage} onDeleteLead={handleDeleteLead} />;
       case 'Agents':
         return <AgentsView onNavigateBack={() => handleAppSelect('Apps')} />;
       case 'Reception': return <ReceptionView visitors={visitors} onNewVisitorClick={() => setIsNewVisitorModalOpen(true)} onScheduleVisitorClick={() => setIsNewAppointmentModalOpen(true)} onCheckOut={handleVisitorCheckOut} onCheckInScheduled={handleCheckInScheduledVisitor} onEditVisitor={handleEditVisitor} user={currentUser} />;
@@ -1192,50 +1238,7 @@ const DashboardLayout: React.FC = () => {
     return <Loader />;
   }
 
-  // Show landing page if not logged in and landing page not dismissed
-  // Show landing page if not logged in and landing page not dismissed
-  if (!currentUser && showLandingPage) {
-    return <LandingPage
-      onLogin={() => {
-        setInitialRegisterMode(false);
-        setShowLandingPage(false);
-      }}
-      onRegister={() => {
-        setInitialRegisterMode(true);
-        setShowLandingPage(false);
-      }}
-    />;
-  }
 
-  if (!storedCurrentUser) {
-    // Check for reset token in URL
-    const urlParams = new URLSearchParams(window.location.search);
-    const resetToken = urlParams.get('token');
-
-    if (resetToken) {
-      return (
-        <ResetPasswordForm
-          token={resetToken}
-          onReset={handleResetPassword}
-          onBackToLogin={() => {
-            window.history.pushState({}, '', window.location.pathname);
-            setActiveApp('Login');
-          }}
-        />
-      );
-    }
-
-    if (activeApp === 'ForgotPassword') {
-      return (
-        <ForgotPasswordView
-          onBack={() => setActiveApp('Login')}
-          onSubmit={handleForgotPassword}
-        />
-      );
-    }
-
-    return <LoginView onLogin={handleLogin} users={users} onRegister={handleRegisterStudent} onForgotPassword={() => setActiveApp('ForgotPassword')} />;
-  }
 
   // Password reset check - only if user is logged in
   if (storedCurrentUser && storedCurrentUser.mustResetPassword) {
@@ -1251,7 +1254,16 @@ const DashboardLayout: React.FC = () => {
 
   // Show landing page if not logged in and landing page not dismissed
   if (!currentUser && showLandingPage) {
-    return <LandingPage onGetStarted={() => setShowLandingPage(false)} />;
+    return <LandingPage
+      onLogin={() => {
+        setInitialRegisterMode(false);
+        setShowLandingPage(false);
+      }}
+      onRegister={() => {
+        setInitialRegisterMode(true);
+        setShowLandingPage(false);
+      }}
+    />;
   }
 
   // Show login/reset password views

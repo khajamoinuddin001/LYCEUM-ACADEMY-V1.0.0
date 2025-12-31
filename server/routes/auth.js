@@ -32,9 +32,9 @@ router.post('/register', async (req, res) => {
     // Create user (auto-verify admin@lyceum.com)
     const userResult = await query(`
       INSERT INTO users (name, email, password, role, permissions, is_verified, verification_token)
-      VALUES ($1, $2, $3, 'Student', $4, $5, $6)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
       RETURNING id, name, email, role, permissions, "mustResetPassword"
-    `, [name, email.toLowerCase(), hashedPassword, JSON.stringify({}), isAdminEmail, verificationToken]);
+    `, [name, email.toLowerCase(), hashedPassword, isAdminEmail ? 'Admin' : 'Student', JSON.stringify({}), isAdminEmail, verificationToken]);
 
     const user = userResult.rows[0];
 

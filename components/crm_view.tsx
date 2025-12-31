@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from 'react';
 import type { CrmLead, CrmStage, User } from '../types';
-import { IndianRupee, Building2, User as UserIcon, GripVertical, Filter } from './icons';
+import { IndianRupee, Building2, User as UserIcon, GripVertical, Filter, Trash2 } from './icons';
 
 const STAGES: CrmStage[] = ['New', 'Qualified', 'Proposal', 'Won', 'Lost'];
 
@@ -19,6 +19,7 @@ interface CrmViewProps {
     onLeadSelect: (lead: CrmLead) => void;
     onNewLeadClick: () => void;
     onUpdateLeadStage: (leadId: number, newStage: CrmStage) => void;
+    onDeleteLead: (leadId: number) => void;
     user: User;
 }
 
@@ -50,7 +51,7 @@ const getColorForAgent = (agentName: string = '') => {
     return agentColors[index];
 };
 
-const LeadCard: React.FC<{ lead: CrmLead; onSelect: (lead: CrmLead) => void; draggable: boolean; }> = ({ lead, onSelect, draggable }) => {
+const LeadCard: React.FC<{ lead: CrmLead; onSelect: (lead: CrmLead) => void; onDelete: (id: number) => void; draggable: boolean; canDelete: boolean }> = ({ lead, onSelect, onDelete, draggable, canDelete }) => {
     const agentAvatar = lead.assignedTo ? (
         <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${getColorForAgent(lead.assignedTo)}`} title={lead.assignedTo}>
             {getInitials(lead.assignedTo)}
@@ -59,7 +60,7 @@ const LeadCard: React.FC<{ lead: CrmLead; onSelect: (lead: CrmLead) => void; dra
 
     return (
         <div
-            className="relative bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 border border-gray-200 dark:border-gray-700 mb-4 transition-shadow hover:shadow-md flex flex-col"
+            className="relative bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4 border border-gray-200 dark:border-gray-700 mb-4 transition-shadow hover:shadow-md flex flex-col group"
             draggable={draggable}
             style={{ cursor: draggable ? 'grab' : 'default' }}
             onDragStart={(e) => {
@@ -101,6 +102,18 @@ const LeadCard: React.FC<{ lead: CrmLead; onSelect: (lead: CrmLead) => void; dra
                 </div>
                 {agentAvatar}
             </div>
+            {canDelete && (
+                <button
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onDelete(lead.id);
+                    }}
+                    className="absolute top-2 right-8 text-gray-400 hover:text-red-500 dark:text-gray-500 dark:hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="Delete Lead"
+                >
+                    <Trash2 size={16} />
+                </button>
+            )}
             {draggable && (
                 <div className="absolute top-2 right-2 text-gray-400 dark:text-gray-500 group-hover:text-gray-600">
                     <GripVertical size={16} />
@@ -111,10 +124,11 @@ const LeadCard: React.FC<{ lead: CrmLead; onSelect: (lead: CrmLead) => void; dra
 };
 
 
-const CrmView: React.FC<CrmViewProps> = ({ leads, onLeadSelect, onNewLeadClick, onUpdateLeadStage, user }) => {
+const CrmView: React.FC<CrmViewProps> = ({ leads, onLeadSelect, onNewLeadClick, onUpdateLeadStage, onDeleteLead, user }) => {
     const [dragOverStage, setDragOverStage] = useState<CrmStage | null>(null);
     const [agentFilter, setAgentFilter] = useState('All Agents');
     const canUpdate = user.role === 'Admin' || !!user.permissions?.['CRM']?.update;
+    const canDelete = user.role === 'Admin' || !!user.permissions?.['CRM']?.delete;
 
     const uniqueAgents = useMemo(() => ['All Agents', ...Array.from(new Set(leads.map(l => l.assignedTo).filter(Boolean))) as string[]], [leads]);
 
@@ -211,7 +225,7 @@ const CrmView: React.FC<CrmViewProps> = ({ leads, onLeadSelect, onNewLeadClick, 
                             </div>
                             <div className="p-2 flex-1 overflow-y-auto">
                                 {stageLeads.map(lead => (
-                                    <LeadCard key={lead.id} lead={lead} onSelect={onLeadSelect} draggable={canUpdate} />
+                                    <LeadCard key={lead.id} lead={lead} onSelect={onLeadSelect} onDelete={onDeleteLead} draggable={canUpdate} canDelete={canDelete} />
                                 ))}
                             </div>
                         </div>

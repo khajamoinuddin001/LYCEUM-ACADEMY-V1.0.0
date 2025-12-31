@@ -347,9 +347,11 @@ router.put('/contacts/:id', async (req, res) => {
 // Helper to transform lead keys
 // Helper to transform lead keys
 const transformLead = (lead) => {
+  const { assigned_to, created_at, ...rest } = lead;
   return {
-    ...lead,
-    assignedTo: lead.assigned_to
+    ...rest,
+    assignedTo: assigned_to,
+    createdAt: created_at
   };
 };
 
@@ -395,7 +397,7 @@ router.post('/leads', async (req, res) => {
       lead.notes || null,
       JSON.stringify(lead.quotations || [])
     ]);
-    res.json(result.rows[0]);
+    res.json(transformLead(result.rows[0]));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -424,7 +426,19 @@ router.put('/leads/:id', async (req, res) => {
       req.params.id
     ]);
     const result = await query('SELECT * FROM leads WHERE id = $1', [req.params.id]);
-    res.json(result.rows[0]);
+    res.json(transformLead(result.rows[0]));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete('/leads/:id', async (req, res) => {
+  try {
+    const result = await query('DELETE FROM leads WHERE id = $1 RETURNING *', [req.params.id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Lead not found' });
+    }
+    res.json({ success: true, deletedLead: result.rows[0] });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

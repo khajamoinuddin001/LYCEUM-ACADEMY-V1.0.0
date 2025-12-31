@@ -5,7 +5,7 @@ import type { CrmLead, User } from '../types';
 interface NewLeadModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (lead: Omit<CrmLead, 'id' | 'stage'> & { id?: number }) => void;
+  onSave: (lead: Omit<CrmLead, 'id' | 'stage'> & { id?: number }) => Promise<void>;
   lead?: CrmLead | null;
   agents: string[];
   user: User;
@@ -13,6 +13,7 @@ interface NewLeadModalProps {
 
 const NewLeadModal: React.FC<NewLeadModalProps> = ({ isOpen, onClose, onSave, lead, agents, user }) => {
   const [isAnimatingOut, setIsAnimatingOut] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     title: '',
     company: '',
@@ -25,31 +26,31 @@ const NewLeadModal: React.FC<NewLeadModalProps> = ({ isOpen, onClose, onSave, le
     notes: ''
   });
   const [error, setError] = useState('');
-  
+
   const isEditing = !!lead;
-  const canWrite = isEditing ? user.permissions['CRM']?.update : user.permissions['CRM']?.create;
+  const canWrite = user.role === 'Admin' || (isEditing ? user.permissions['CRM']?.update : user.permissions['CRM']?.create);
 
   useEffect(() => {
     if (isOpen) {
-        if (isEditing) {
-            setFormData({
-                title: lead.title || '',
-                company: lead.company || '',
-                contact: lead.contact || '',
-                email: lead.email || '',
-                phone: lead.phone || '',
-                value: lead.value?.toString() || '',
-                source: lead.source || '',
-                assignedTo: lead.assignedTo || '',
-                notes: lead.notes || '',
-            });
-        } else {
-            setFormData({
-                title: '', company: '', contact: '', email: '', phone: '',
-                value: '', source: '', assignedTo: agents[0] || '', notes: ''
-            });
-        }
-        setError('');
+      if (isEditing) {
+        setFormData({
+          title: lead.title || '',
+          company: lead.company || '',
+          contact: lead.contact || '',
+          email: lead.email || '',
+          phone: lead.phone || '',
+          value: lead.value?.toString() || '',
+          source: lead.source || '',
+          assignedTo: lead.assignedTo || '',
+          notes: lead.notes || '',
+        });
+      } else {
+        setFormData({
+          title: '', company: '', contact: '', email: '', phone: '',
+          value: '', source: '', assignedTo: agents[0] || '', notes: ''
+        });
+      }
+      setError('');
     }
   }, [isOpen, lead, agents, isEditing]);
 
@@ -60,29 +61,44 @@ const NewLeadModal: React.FC<NewLeadModalProps> = ({ isOpen, onClose, onSave, le
       onClose();
     }, 200);
   };
-  
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSave = () => {
-    if (!formData.title.trim() || !formData.company.trim() || !formData.contact.trim() || !formData.value) {
-        setError('Title, Company, Contact, and Value are required.');
-        return;
+  const handleSave = async () => {
+    setError('');
+    // User requirements: Name (contact), Mobile (phone), Value (value), Notes (notes)
+    if (!formData.contact.trim() || !formData.phone.trim() || !formData.value || !formData.notes.trim()) {
+      setError('Contact Person, Phone, Estimated Value, and Notes are required.');
+      return;
     }
     const parsedValue = parseFloat(formData.value);
     if (isNaN(parsedValue) || parsedValue < 0) {
-        setError('Please enter a valid, non-negative value.');
-        return;
+      setError('Please enter a valid, non-negative value.');
+      return;
     }
 
     const leadToSave = {
-        ...formData,
-        value: parsedValue,
-        id: isEditing ? lead.id : undefined,
+      ...formData,
+      // Auto-fill Title and Company if empty to satisfy DB constraints
+      title: formData.title.trim() || `${formData.contact}'s Opportunity`,
+      company: formData.company.trim() || 'N/A',
+      value: parsedValue,
+      id: isEditing ? lead.id : undefined,
     };
-    onSave(leadToSave);
+
+    setIsSubmitting(true);
+    try {
+      await onSave(leadToSave);
+      // Only close if successful (onSave should throw if failed)
+    } catch (err: any) {
+      console.error('Save failed', err);
+      setError(err.message || 'Failed to save lead. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   if (!isOpen) return null;
@@ -123,73 +139,73 @@ const NewLeadModal: React.FC<NewLeadModalProps> = ({ isOpen, onClose, onSave, le
               <label htmlFor="lead-title" className={labelClasses}>Lead Title / Opportunity</label>
               <input type="text" id="lead-title" name="title" className={inputClasses} value={formData.title} onChange={handleChange} placeholder="e.g., Q4 Website Project" disabled={!canWrite} />
             </div>
-             <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label htmlFor="lead-company" className={labelClasses}>Company Name</label>
-                  <input type="text" id="lead-company" name="company" className={inputClasses} value={formData.company} onChange={handleChange} placeholder="e.g., Acme Corp" disabled={!canWrite} />
-                </div>
-                <div>
-                  <label htmlFor="lead-contact" className={labelClasses}>Contact Person</label>
-                  <input type="text" id="lead-contact" name="contact" className={inputClasses} value={formData.contact} onChange={handleChange} placeholder="e.g., John Doe" disabled={!canWrite} />
-                </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="lead-company" className={labelClasses}>Company Name</label>
+                <input type="text" id="lead-company" name="company" className={inputClasses} value={formData.company} onChange={handleChange} placeholder="e.g., Acme Corp" disabled={!canWrite} />
+              </div>
+              <div>
+                <label htmlFor="lead-contact" className={labelClasses}>Contact Person</label>
+                <input type="text" id="lead-contact" name="contact" className={inputClasses} value={formData.contact} onChange={handleChange} placeholder="e.g., John Doe" disabled={!canWrite} />
+              </div>
             </div>
-             <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label htmlFor="lead-email" className={labelClasses}>Contact Email</label>
-                  <input type="email" id="lead-email" name="email" className={inputClasses} value={formData.email} onChange={handleChange} placeholder="e.g., john.d@acme.corp" disabled={!canWrite} />
-                </div>
-                <div>
-                  <label htmlFor="lead-phone" className={labelClasses}>Contact Phone</label>
-                  <input type="tel" id="lead-phone" name="phone" className={inputClasses} value={formData.phone} onChange={handleChange} placeholder="e.g., +1 555-123-4567" disabled={!canWrite} />
-                </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="lead-email" className={labelClasses}>Contact Email</label>
+                <input type="email" id="lead-email" name="email" className={inputClasses} value={formData.email} onChange={handleChange} placeholder="e.g., john.d@acme.corp" disabled={!canWrite} />
+              </div>
+              <div>
+                <label htmlFor="lead-phone" className={labelClasses}>Contact Phone</label>
+                <input type="tel" id="lead-phone" name="phone" className={inputClasses} value={formData.phone} onChange={handleChange} placeholder="e.g., +1 555-123-4567" disabled={!canWrite} />
+              </div>
             </div>
-             <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label htmlFor="lead-value" className={labelClasses}>Estimated Value (₹)</label>
-                  <input type="number" id="lead-value" name="value" className={inputClasses} value={formData.value} onChange={handleChange} placeholder="e.g., 50000" disabled={!canWrite} />
-                </div>
-                 <div>
-                    <label htmlFor="lead-source" className={labelClasses}>Lead Source</label>
-                    <select id="lead-source" name="source" value={formData.source} onChange={handleChange} className={inputClasses} disabled={!canWrite}>
-                        <option value="" disabled>Select a source</option>
-                        <option value="Website">Website</option>
-                        <option value="Referral">Referral</option>
-                        <option value="Partner">Partner</option>
-                        <option value="Cold Call">Cold Call</option>
-                        <option value="Other">Other</option>
-                    </select>
-                </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="lead-value" className={labelClasses}>Estimated Value (₹)</label>
+                <input type="number" id="lead-value" name="value" className={inputClasses} value={formData.value} onChange={handleChange} placeholder="e.g., 50000" disabled={!canWrite} />
+              </div>
+              <div>
+                <label htmlFor="lead-source" className={labelClasses}>Lead Source</label>
+                <select id="lead-source" name="source" value={formData.source} onChange={handleChange} className={inputClasses} disabled={!canWrite}>
+                  <option value="" disabled>Select a source</option>
+                  <option value="Website">Website</option>
+                  <option value="Referral">Referral</option>
+                  <option value="Partner">Partner</option>
+                  <option value="Cold Call">Cold Call</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
             </div>
             <div>
-                <label htmlFor="lead-assignedTo" className={labelClasses}>Assigned To</label>
-                <select id="lead-assignedTo" name="assignedTo" value={formData.assignedTo} onChange={handleChange} className={inputClasses} disabled={!canWrite}>
-                    {agents.map(agent => (
-                        <option key={agent} value={agent}>{agent}</option>
-                    ))}
-                </select>
+              <label htmlFor="lead-assignedTo" className={labelClasses}>Assigned To</label>
+              <select id="lead-assignedTo" name="assignedTo" value={formData.assignedTo} onChange={handleChange} className={inputClasses} disabled={!canWrite}>
+                {agents.map(agent => (
+                  <option key={agent} value={agent}>{agent}</option>
+                ))}
+              </select>
             </div>
-             <div>
-                <label htmlFor="lead-notes" className={labelClasses}>Notes</label>
-                <textarea id="lead-notes" name="notes" rows={4} className={inputClasses} value={formData.notes} onChange={handleChange} placeholder="Add any relevant notes about this lead..." disabled={!canWrite}></textarea>
+            <div>
+              <label htmlFor="lead-notes" className={labelClasses}>Notes</label>
+              <textarea id="lead-notes" name="notes" rows={4} className={inputClasses} value={formData.notes} onChange={handleChange} placeholder="Add any relevant notes about this lead..." disabled={!canWrite}></textarea>
             </div>
             {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
           </div>
         </div>
         <div className="flex items-center justify-end p-4 bg-gray-50 dark:bg-gray-800/50 border-t border-gray-200 dark:border-gray-700 rounded-b-lg">
-          <button 
-            type="button" 
+          <button
+            type="button"
             onClick={handleClose}
             className="px-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-800 focus:ring-lyceum-blue"
           >
             Cancel
           </button>
-          <button 
+          <button
             type="button"
             onClick={handleSave}
-            disabled={!canWrite}
-            className="ml-3 px-4 py-2 bg-lyceum-blue border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-lyceum-blue-dark focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-800 focus:ring-lyceum-blue disabled:bg-gray-400 dark:disabled:bg-gray-600"
+            disabled={!canWrite || isSubmitting}
+            className="ml-3 px-4 py-2 bg-lyceum-blue border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-lyceum-blue-dark focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-800 focus:ring-lyceum-blue disabled:bg-gray-400 dark:disabled:bg-gray-600 disabled:cursor-not-allowed"
           >
-            {isEditing ? 'Save Changes' : 'Create Lead'}
+            {isSubmitting ? 'Saving...' : (isEditing ? 'Save Changes' : 'Create Lead')}
           </button>
         </div>
       </div>

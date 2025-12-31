@@ -7,7 +7,7 @@ import type { User, Visitor } from '../types';
 interface NewVisitorModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (data: { id?: number; name: string; company: string; host: string; cardNumber: string; }) => void;
+  onSave: (data: { id?: number; name: string; company: string; host: string; cardNumber: string; }) => Promise<void> | void;
   staff: User[];
   user: User;
   visitorToEdit?: Visitor | null;
@@ -15,13 +15,14 @@ interface NewVisitorModalProps {
 
 const NewVisitorModal: React.FC<NewVisitorModalProps> = ({ isOpen, onClose, onSave, staff, user, visitorToEdit }) => {
   const [isAnimatingOut, setIsAnimatingOut] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({ name: '', company: '', host: '' });
   const [cardNumber, setCardNumber] = useState('');
   const [error, setError] = useState('');
 
   const isEditing = !!visitorToEdit;
-  const canCreate = user.permissions?.['Reception']?.create;
-  const canUpdate = user.permissions?.['Reception']?.update;
+  const canCreate = user.role === 'Admin' || user.permissions?.['Reception']?.create;
+  const canUpdate = user.role === 'Admin' || user.permissions?.['Reception']?.update;
   const isDisabled = isEditing ? !canUpdate : !canCreate;
 
   useEffect(() => {
@@ -50,18 +51,26 @@ const NewVisitorModal: React.FC<NewVisitorModalProps> = ({ isOpen, onClose, onSa
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formData.name.trim()) {
       setError('Visitor name is required.');
       return;
     }
-    onSave({
-      id: visitorToEdit?.id,
-      name: formData.name,
-      company: formData.company || 'N/A',
-      host: formData.host || 'Walk-in',
-      cardNumber,
-    });
+    setIsSubmitting(true);
+    try {
+      await onSave({
+        id: visitorToEdit?.id,
+        name: formData.name,
+        company: formData.company || 'N/A',
+        host: formData.host || 'Walk-in',
+        cardNumber,
+      });
+    } catch (e) {
+      console.error(e);
+      setError('Failed to save visitor');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   if (!isOpen) return null;
@@ -122,8 +131,8 @@ const NewVisitorModal: React.FC<NewVisitorModalProps> = ({ isOpen, onClose, onSa
           <button type="button" onClick={handleClose} className="px-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600">
             Cancel
           </button>
-          <button type="button" onClick={handleSave} disabled={isDisabled} className="ml-3 px-4 py-2 bg-lyceum-blue border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-lyceum-blue-dark disabled:bg-gray-400">
-            {isEditing ? 'Save Changes' : 'Check-in Visitor'}
+          <button type="button" onClick={handleSave} disabled={isDisabled || isSubmitting} className="ml-3 px-4 py-2 bg-lyceum-blue border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-lyceum-blue-dark disabled:bg-gray-400">
+            {isSubmitting ? 'Saving...' : (isEditing ? 'Save Changes' : 'Check-in Visitor')}
           </button>
         </div>
       </div>
