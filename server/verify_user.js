@@ -11,14 +11,8 @@
  */
 
 import pg from 'pg';
-import dotenv from 'dotenv';
 import readline from 'readline';
 
-dotenv.config({ path: 'server/.env' }); // Try to load from server/.env if running from root
-// Fallback if that didn't work or if running from server dir
-if (!process.env.DATABASE_URL) {
-    dotenv.config();
-}
 
 const { Pool } = pg;
 

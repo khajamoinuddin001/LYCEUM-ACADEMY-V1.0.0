@@ -168,6 +168,19 @@ const DashboardLayout: React.FC = () => {
     loadData();
   }, []);
 
+  // Set default app based on role upon initial load or user change
+  useEffect(() => {
+    if (!isLoading && currentUser) {
+      if (activeApp === 'Apps') {
+        if (currentUser.role === 'Student') {
+          setActiveApp('student_dashboard');
+        } else if (currentUser.role === 'Admin') {
+          setActiveApp('dashboard');
+        }
+      }
+    }
+  }, [isLoading, currentUser]);
+
   const filteredNotifications = useMemo(() => {
     if (!currentUser) return [];
     return notifications.filter(n => {
@@ -316,7 +329,7 @@ const DashboardLayout: React.FC = () => {
 
   const handleForgotPassword = async (email: string): Promise<{ success: boolean; message: string }> => {
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5002/api'}/auth/forgot-password`, {
+      const response = await fetch(`${(import.meta as any).env.VITE_API_URL || 'http://localhost:5002/api'}/auth/forgot-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
@@ -337,7 +350,7 @@ const DashboardLayout: React.FC = () => {
 
   const handleResetPassword = async (token: string, newPassword: string): Promise<{ success: boolean; message: string }> => {
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5002/api'}/auth/reset-password`, {
+      const response = await fetch(`${(import.meta as any).env.VITE_API_URL || 'http://localhost:5002/api'}/auth/reset-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token, newPassword }),
@@ -1201,7 +1214,7 @@ const DashboardLayout: React.FC = () => {
           const contactData = editingContact === 'new' ? undefined : editingContact;
           if (contactData && contactViewMode === 'documents') return <ContactDocumentsView contact={contactData} onNavigateBack={() => setContactViewMode('details')} onAnalyze={handleAnalyzeDocument} />;
           if (contactData && contactViewMode === 'visaFiling') return <ContactVisaView user={currentUser} contact={contactData} onNavigateBack={() => setContactViewMode('details')} onSave={handleSaveContact} />;
-          if (contactData && contactViewMode === 'checklist') return <ContactChecklistView user={currentUser} contact={contactData} onNavigateBack={() => setContactViewMode('details')} onUpdateChecklistItem={handleUpdateChecklistItem} />;
+          if (contactData && contactViewMode === 'checklist') return <ContactChecklistView user={currentUser} contact={contactData} onNavigateBack={() => setContactViewMode('details')} onUpdateChecklistItem={handleUpdateChecklistItem} onSave={handleSaveContact} />;
 
           // Render form if we have data OR if we are creating a new contact
           if (contactData || editingContact === 'new') {
@@ -1305,13 +1318,13 @@ const DashboardLayout: React.FC = () => {
         <main className="flex-1 overflow-x-hidden overflow-y-auto bg-lyceum-light dark:bg-gray-800 p-3 md:p-6">
           {currentUser.role === 'Student' ? (
             (() => { // Use an IIFE to allow if/return inside JSX
-              if (activeApp === 'student_dashboard') {
+              if (activeApp === 'student_dashboard' || activeApp === 'dashboard') {
                 // Robustly find the student contact
                 const studentContact = contacts.find(c =>
                   c.userId === currentUser.id ||
-                  c.email.toLowerCase() === currentUser.email.toLowerCase()
+                  (c.email && currentUser.email && c.email.toLowerCase() === currentUser.email.toLowerCase())
                 );
-                return <StudentDashboard student={studentContact} courses={lmsCourses} onAppSelect={handleAppSelect} />;
+                return <StudentDashboard student={studentContact} courses={lmsCourses} events={events} onAppSelect={handleAppSelect} />;
               }
               return renderAppContent();
             })()

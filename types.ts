@@ -151,7 +151,10 @@ export type FileStatus = 'In progress' | 'Closed' | 'On hold' | '';
 export interface ChecklistItem {
   id: number;
   text: string;
+  type: 'checkbox' | 'text';
   completed: boolean;
+  response?: string;
+  isDefault?: boolean;
 }
 
 export interface StudentCourse {
@@ -293,6 +296,7 @@ export type QuotationStatus = 'Draft' | 'Sent' | 'Accepted' | 'Rejected';
 
 export interface Quotation {
   id: number;
+  quotationNumber?: string;
   title: string;
   description: string;
   lineItems: QuotationLineItem[];

@@ -165,11 +165,12 @@ export const DEFAULT_PERMISSIONS: Record<UserRole, { [appName: string]: AppPermi
 };
 
 export const DEFAULT_CHECKLIST: ChecklistItem[] = [
-  { id: 1, text: 'Submit High School Transcript', completed: false },
-  { id: 2, text: 'Complete Personal Statement', completed: false },
-  { id: 3, text: 'Pay Application Fee', completed: false },
-  { id: 4, text: 'Submit Letters of Recommendation', completed: false },
-  { id: 5, text: 'Pay SEVIS Fee', completed: false },
+  { id: 0, text: 'Documents', completed: false, type: 'checkbox' },
+  { id: 1, text: 'Submit High School Transcript', completed: false, type: 'checkbox' },
+  { id: 2, text: 'Complete Personal Statement', completed: false, type: 'checkbox' },
+  { id: 3, text: 'Pay Application Fee', completed: false, type: 'checkbox' },
+  { id: 4, text: 'Submit Letters of Recommendation', completed: false, type: 'checkbox' },
+  { id: 5, text: 'Pay SEVIS Fee', completed: false, type: 'checkbox' },
 ];
 
 export const INITIAL_QUOTATION_TEMPLATES: QuotationTemplate[] = [];

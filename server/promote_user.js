@@ -10,13 +10,7 @@
  */
 
 import pg from 'pg';
-import dotenv from 'dotenv';
 import readline from 'readline';
-
-dotenv.config({ path: 'server/.env' });
-if (!process.env.DATABASE_URL) {
-    dotenv.config();
-}
 
 const { Pool } = pg;
 

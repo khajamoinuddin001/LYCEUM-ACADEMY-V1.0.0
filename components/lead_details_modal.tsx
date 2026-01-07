@@ -28,6 +28,7 @@ const QuotationRow: React.FC<{ quotation: Quotation; onEdit: () => void; user: U
     return (
         <div className="flex items-center justify-between py-3 group">
             <div>
+                <p className="text-xs text-lyceum-blue font-mono mb-0.5">{quotation.quotationNumber || `#${quotation.id}`}</p>
                 <p className="font-medium text-gray-800 dark:text-gray-100">{quotation.title}</p>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
                     Created on {quotation.date}

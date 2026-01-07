@@ -1,34 +1,30 @@
-import nodemailer from 'nodemailer';
-import dotenv from 'dotenv';
+import nodemailer from "nodemailer";
+import dotenv from "dotenv";
 
+// Load env ONCE (server/.env)
 dotenv.config();
 
-// Create transporter
-// Create transporter using generic SMTP configuration
-const createTransporter = () => {
-  const user = process.env.EMAIL_USER;
-  const pass = process.env.EMAIL_PASSWORD;
-  const host = process.env.SMTP_HOST || 'smtp.gmail.com';
-  const port = parseInt(process.env.SMTP_PORT || '587');
-  const secure = process.env.SMTP_SECURE === 'true'; // true for port 465, false for others
+export const createTransporter = () => {
+  const host = process.env.SMTP_HOST;
+  const port = Number(process.env.SMTP_PORT || 587);
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
 
-  if (!user || !pass) {
-    console.warn('⚠️ SMTP credentials not fully configured in environment variables.');
+  if (!host || !user || !pass) {
+    console.warn("⚠️ SMTP credentials not fully configured");
   }
 
   return nodemailer.createTransport({
     host,
     port,
-    secure,
-    auth: { user, pass },
-    tls: {
-      // Allow self-signed certificates or slightly older SSL versions if needed
-      rejectUnauthorized: false
+    secure: false, // MUST be false for 587
+    auth: {
+      user,
+      pass,
     },
-    // Use pooling for better connection management in production
-    pool: true,
-    maxConnections: 5,
-    maxMessages: 100
+    tls: {
+      rejectUnauthorized: false,
+    },
   });
 };
 
@@ -40,7 +36,7 @@ export const sendPasswordResetEmail = async (email, name, resetToken) => {
     const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}`;
 
     const mailOptions = {
-      from: `"Lyceum Academy" <${process.env.EMAIL_USER}>`,
+      from: process.env.MAIL_FROM,
       to: email,
       subject: 'Reset Your Lyceum Academy Password',
       // ... (rest of mail options remain same)
@@ -142,7 +138,7 @@ export const sendVerificationEmail = async (email, name, token) => {
     const verifyUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/verify-email?token=${token}`;
 
     const mailOptions = {
-      from: `"Lyceum Academy" <${process.env.EMAIL_USER}>`,
+      from: process.env.MAIL_FROM,
       to: email,
       subject: 'Verify Your Email - Lyceum Academy',
       html: `

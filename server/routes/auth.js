@@ -48,12 +48,36 @@ router.post('/register', async (req, res) => {
     const isAdmin = userRole === 'Admin';
     const verificationToken = isAdmin ? null : crypto.randomBytes(32).toString('hex');
 
+    // Define default student permissions
+    const studentPermissions = {
+      'LMS': { read: true },
+      'dashboard': { read: true },
+      'Profile': { read: true, update: true }
+    };
+
+    const defaultChecklist = [
+      { id: 0, text: 'Documents', completed: false, type: 'checkbox' },
+      { id: 1, text: 'Submit High School Transcript', completed: false, type: 'checkbox' },
+      { id: 2, text: 'Complete Personal Statement', completed: false, type: 'checkbox' },
+      { id: 3, text: 'Pay Application Fee', completed: false, type: 'checkbox' },
+      { id: 4, text: 'Submit Letters of Recommendation', completed: false, type: 'checkbox' },
+      { id: 5, text: 'Pay SEVIS Fee', completed: false, type: 'checkbox' }
+    ];
+
     // Create user (auto-verify admins)
     const userResult = await query(`
       INSERT INTO users (name, email, password, role, permissions, is_verified, verification_token)
       VALUES ($1, $2, $3, $4, $5, $6, $7)
       RETURNING id, name, email, role, permissions, must_reset_password
-    `, [name, email.toLowerCase(), hashedPassword, userRole, JSON.stringify({}), isAdmin, verificationToken]);
+    `, [
+      name,
+      email.toLowerCase(),
+      hashedPassword,
+      userRole,
+      JSON.stringify(userRole === 'Student' ? studentPermissions : {}),
+      isAdmin,
+      verificationToken
+    ]);
 
     const user = userResult.rows[0];
 
@@ -62,14 +86,15 @@ router.post('/register', async (req, res) => {
 
     await query(`
       INSERT INTO contacts (user_id, name, email, contact_id, department, major, notes, checklist, activity_log, recorded_sessions)
-      VALUES ($1, $2, $3, $4, 'Unassigned', 'Unassigned', $5, '[]', '[]', '[]')
+      VALUES ($1, $2, $3, $4, 'Unassigned', 'Unassigned', $5, $6, '[]', '[]')
       RETURNING *
     `, [
       user.id,
       name,
       email.toLowerCase(),
       contactId,
-      `Student registered on ${new Date().toLocaleDateString()}.`
+      `Student registered on ${new Date().toLocaleDateString()}.`,
+      JSON.stringify(defaultChecklist) // Apply to all contacts created via registration
     ]);
 
     // Send verification email (skip for admins)
@@ -368,6 +393,22 @@ router.post('/create-user', authenticateToken, async (req, res) => {
     const temporaryPassword = crypto.randomBytes(8).toString('hex'); // 16 character password
     const hashedPassword = await hashPassword(temporaryPassword);
 
+    // Define default student permissions
+    const studentPermissions = {
+      'LMS': { read: true },
+      'dashboard': { read: true },
+      'Profile': { read: true, update: true }
+    };
+
+    const defaultChecklist = [
+      { id: 0, text: 'Documents', completed: false, type: 'checkbox' },
+      { id: 1, text: 'Submit High School Transcript', completed: false, type: 'checkbox' },
+      { id: 2, text: 'Complete Personal Statement', completed: false, type: 'checkbox' },
+      { id: 3, text: 'Pay Application Fee', completed: false, type: 'checkbox' },
+      { id: 4, text: 'Submit Letters of Recommendation', completed: false, type: 'checkbox' },
+      { id: 5, text: 'Pay SEVIS Fee', completed: false, type: 'checkbox' }
+    ];
+
     // Create user (auto-verified, must reset password on first login)
     const userResult = await query(`
       INSERT INTO users (name, email, password, role, permissions, is_verified, verification_token, must_reset_password)
@@ -378,7 +419,7 @@ router.post('/create-user', authenticateToken, async (req, res) => {
       email.toLowerCase(),
       hashedPassword,
       role,
-      JSON.stringify(permissions || {}),
+      JSON.stringify(role === 'Student' ? studentPermissions : (permissions || {})),
       true, // Auto-verified
       null, // No verification token needed
       true  // Must reset password on first login
@@ -391,14 +432,15 @@ router.post('/create-user', authenticateToken, async (req, res) => {
 
     await query(`
       INSERT INTO contacts (user_id, name, email, contact_id, department, major, notes, checklist, activity_log, recorded_sessions)
-      VALUES ($1, $2, $3, $4, 'Unassigned', 'Unassigned', $5, '[]', '[]', '[]')
+      VALUES ($1, $2, $3, $4, 'Unassigned', 'Unassigned', $5, $6, '[]', '[]')
       RETURNING *
     `, [
       user.id,
       name,
       email.toLowerCase(),
       contactId,
-      `${role} account created by admin on ${new Date().toLocaleDateString()}.`
+      `${role} account created by admin on ${new Date().toLocaleDateString()}.`,
+      JSON.stringify(defaultChecklist) // Apply to all contacts created by admin
     ]);
 
     res.json({

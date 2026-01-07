@@ -12,10 +12,7 @@
 
 import pg from 'pg';
 import bcrypt from 'bcryptjs';
-import dotenv from 'dotenv';
 import readline from 'readline';
-
-dotenv.config();
 
 const { Pool } = pg;
 

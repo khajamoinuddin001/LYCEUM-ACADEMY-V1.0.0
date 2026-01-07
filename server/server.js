@@ -1,13 +1,16 @@
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
+import dotenv from "dotenv";
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { initDatabase, closePool } from './database.js';
 import authRoutes from './routes/auth.js';
 import apiRoutes from './routes/api.js';
+import path from "path";
 
-dotenv.config();
+dotenv.config({
+  path: path.resolve(process.cwd(), "server/.env"),
+});
 
 const app = express();
 const PORT = process.env.PORT || 5002;

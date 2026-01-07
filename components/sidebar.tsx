@@ -62,7 +62,7 @@ const allStaffNavItems = [
 
 const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, activeApp, onAppSelect, isMobile, user, onLogout }) => {
   const sidebarClasses = `
-    bg-white dark:bg-gray-900 shadow-lg z-50 h-full transition-all duration-300 ease-in-out
+    bg-white dark:bg-gray-900 shadow-lg z-50 h-full transition-all duration-300 ease-in-out print:hidden
     ${isMobile
       ? `fixed inset-y-0 left-0 transform ${isOpen ? 'translate-x-0 w-64' : '-translate-x-full w-64'}`
       : `relative flex-shrink-0 ${isOpen ? 'w-64' : 'w-0 overflow-hidden'}`

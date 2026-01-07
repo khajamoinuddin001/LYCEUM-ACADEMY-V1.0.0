@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, IndianRupee, Plus, Trash2, Edit, X } from './icons';
+import { ArrowLeft, IndianRupee, Plus, Trash2, Edit, X, Printer, Download } from './icons';
 import type { Quotation, CrmLead, User, QuotationTemplate, QuotationLineItem } from '../types';
 import QuotationTemplateModal from './quotation_template_modal';
 
@@ -111,11 +111,18 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ lead, onCancel, onS
 
     const finalTotal = finalLineItems.reduce((sum, item) => sum + item.price, 0);
 
-    const quotationToSave = {
+    // Generate ID if new
+    let quotationToSave = {
       ...quotation,
       lineItems: finalLineItems,
       total: finalTotal,
     };
+
+    if (!isEditing && !quotationToSave.quotationNumber) {
+      const datePart = new Date().toISOString().slice(0, 7).replace('-', ''); // YYYYMM
+      const randomPart = Math.floor(Math.random() * 900) + 100; // 100-999
+      quotationToSave.quotationNumber = `S-${datePart}${randomPart}`;
+    }
 
     console.log('Saving quotation:', quotationToSave);
     onSave(quotationToSave);
@@ -125,18 +132,137 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ lead, onCancel, onS
 
   return (
     <div className="w-full mx-auto animate-fade-in">
-      <div className="mb-6">
-        <button onClick={onCancel} className="flex items-center text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-lyceum-blue mb-2">
-          <ArrowLeft size={16} className="mr-2" />
-          Back to CRM
-        </button>
-        <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-100">
-          {isEditing ? 'Edit Quotation for ' : 'New Quotation for '}
-          <span className="text-lyceum-blue">{lead.title}</span>
-        </h1>
-        <p className="text-gray-500 dark:text-gray-400 mt-1">
-          {isEditing ? 'Modify the details below and save your changes.' : 'Select a template or start from scratch to build a custom quotation.'}
-        </p>
+      <div className="mb-6 flex justify-between items-start print:hidden">
+        <div>
+          <button onClick={onCancel} className="flex items-center text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-lyceum-blue mb-2">
+            <ArrowLeft size={16} className="mr-2" />
+            Back to CRM
+          </button>
+          <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-100">
+            {isEditing ? 'Edit Quotation for ' : 'New Quotation for '}
+            <span className="text-lyceum-blue">{lead.title}</span>
+          </h1>
+          <p className="text-gray-500 dark:text-gray-400 mt-1">
+            {isEditing ? 'Modify the details below and save your changes.' : 'Select a template or start from scratch to build a custom quotation.'}
+          </p>
+        </div>
+        {isEditing && (
+          <>
+            <button
+              onClick={() => window.print()}
+              className="inline-flex items-center px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors mr-2"
+            >
+              <Printer size={18} className="mr-2" />
+              Print Quotation
+            </button>
+          </>
+        )}
+      </div>
+
+      {/* Print View - Visible only when printing */}
+      <div className="hidden print:block fixed inset-0 bg-white z-[9999] p-8">
+        <style dangerouslySetInnerHTML={{
+          __html: `
+          @media print {
+            @page { margin: 0.5cm; }
+            body * { visibility: hidden; }
+            .print\\:block, .print\\:block * { visibility: visible; }
+            .print\\:block { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+            nav, header, aside, .sidebar { display: none !important; }
+          }
+        `}} />
+
+        <div className="max-w-4xl mx-auto font-sans text-gray-800">
+          {/* Header */}
+          <div className="flex justify-between items-start border-b-2 border-lyceum-blue pb-6 mb-8">
+            <div className="flex items-center">
+              <div className="mr-3">
+                {/* SVG Logo Placeholder */}
+                <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M20 0L37.3205 10V30L20 40L2.67949 30V10L20 0Z" fill="#1C355E" />
+                </svg>
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-lyceum-blue tracking-wide">Maverick Overseas | Lyceum Academy</h1>
+                <p className="text-sm font-medium text-lyceum-blue/80">#Shaping Future</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <h2 className="text-3xl font-bold text-lyceum-blue mb-2">Quotation # {quotation.quotationNumber || 'DRAFT'}</h2>
+            </div>
+          </div>
+
+          {/* Client & Date Info */}
+          <div className="flex justify-between mb-8">
+            <div>
+              <p className="text-sm text-gray-500 mb-1">PREPARED FOR</p>
+              <h3 className="text-xl font-bold text-gray-900">{lead.contact || 'Client Name'}</h3>
+            </div>
+            <div className="border rounded-lg overflow-hidden flex text-sm">
+              <div className="bg-gray-100 px-4 py-3 border-r">
+                <p className="text-gray-500 font-semibold">Quotation Date</p>
+                <p className="font-bold">{quotation.date || new Date().toLocaleDateString()}</p>
+              </div>
+              <div className="bg-gray-100 px-4 py-3 border-r">
+                <p className="text-gray-500 font-semibold">Expiration</p>
+                <p className="font-bold">{new Date(new Date().setDate(new Date().getDate() + 30)).toISOString().split('T')[0]}</p>
+              </div>
+              <div className="bg-gray-100 px-4 py-3">
+                <p className="text-gray-500 font-semibold">Counsellor</p>
+                <p className="font-bold">Admissions Counsellor</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="mb-6">
+            <h4 className="font-bold text-lg mb-1 uppercase tracking-wide">DESCRIPTION</h4>
+            <p className="text-gray-600 mb-4">{quotation.description || 'No description provided'}</p>
+
+            {/* Line Items Table */}
+            <table className="w-full mb-8">
+              <thead>
+                <tr className="bg-lyceum-blue text-white uppercase text-sm font-semibold">
+                  <th className="py-3 px-4 text-left">Description</th>
+                  <th className="py-3 px-4 text-center">Quantity</th>
+                  <th className="py-3 px-4 text-right">Unit Price</th>
+                  <th className="py-3 px-4 text-right">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {quotation.lineItems.map((item, index) => (
+                  <tr key={index} className="border-b border-gray-200">
+                    <td className="py-3 px-4 font-medium text-gray-800">{item.description}</td>
+                    <td className="py-3 px-4 text-center text-gray-600">1 Unit</td> {/* Assuming quantity is 1 for now */}
+                    <td className="py-3 px-4 text-right text-gray-600">{formatCurrency(item.price)}</td>
+                    <td className="py-3 px-4 text-right font-bold text-gray-800">{formatCurrency(item.price)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {/* Simple Total Section (Similar to Image 3) */}
+            <div className="flex justify-end">
+              <div className="bg-lyceum-blue text-white px-6 py-2 rounded-l-none rounded">
+                <span className="font-bold mr-8">Total</span>
+                <span className="font-bold text-lg">{formatCurrency(quotation.total)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="mt-16 pt-8 border-t border-gray-200 text-center text-sm text-gray-500">
+            <p className="mb-1">By using our services, you agree to our Terms & Conditions : https://www.maverickoverseas.in/terms-conditions</p>
+            <div className="flex justify-center space-x-2 mt-4">
+              <span>omar@lyceumacad.com, support@lyceumacad.com</span>
+              <span>|</span>
+              <a href="https://www.maverickoverseas.in" className="text-lyceum-blue">www.maverickoverseas.in</a>, <a href="https://www.lyceumacad.com" className="text-lyceum-blue">www.lyceumacad.com</a>
+              <span>|</span>
+              <span>78930 78791</span>
+            </div>
+            <p className="mt-4">Page 1 / 1</p>
+          </div>
+
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -235,12 +361,6 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ lead, onCancel, onS
                 <IndianRupee size={20} className="mr-1" />
                 {quotation.total.toLocaleString('en-IN')}
               </span>
-              {/* DEBUG INFO */}
-              <div className="text-xs text-red-500 mt-2">
-                Debug: canWrite={canWrite.toString()}, Title="{quotation.title}", Items={quotation.lineItems.length}
-                <br />
-                Permissions: {JSON.stringify(user.permissions?.['CRM'])}
-              </div>
             </div>
             <div>
               <button type="button" onClick={onCancel} className="px-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium">Cancel</button>
@@ -316,6 +436,15 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ lead, onCancel, onS
       `}</style>
     </div>
   );
+};
+
+const formatCurrency = (amount: number) => {
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount);
 };
 
 export default NewQuotationPage;

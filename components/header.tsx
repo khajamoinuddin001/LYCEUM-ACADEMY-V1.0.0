@@ -55,7 +55,7 @@ const Header: React.FC<HeaderProps> = ({ sidebarOpen, setSidebarOpen, activeApp,
   }, []);
 
   return (
-    <header className="flex-shrink-0 bg-white dark:bg-gray-900 border-b dark:border-gray-700 shadow-sm z-30">
+    <header className="flex-shrink-0 bg-white dark:bg-gray-900 border-b dark:border-gray-700 shadow-sm z-30 print:hidden">
       <div className="flex items-center justify-between p-2 md:p-3 h-14 md:h-16">
         <div className="flex items-center gap-1 md:gap-2 flex-1 min-w-0">
           {/* Hamburger menu - always visible, toggles sidebar */}
@@ -77,42 +77,44 @@ const Header: React.FC<HeaderProps> = ({ sidebarOpen, setSidebarOpen, activeApp,
         </div>
 
         <div className="flex items-center space-x-2 sm:space-x-4">
-          {user.role !== 'Student' && (
-            <>
-              <button onClick={onSearchClick} className="p-2 text-gray-600 dark:text-gray-300 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring" aria-label="Search">
-                <Search size={20} />
-              </button>
-
-              <button onClick={onQuickCreateClick} className="p-2 text-gray-600 dark:text-gray-300 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring" aria-label="Quick Create">
-                <Plus size={20} />
-              </button>
-
-              <button className="hidden sm:inline-flex p-2 text-gray-600 dark:text-gray-300 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring" aria-label="Messages">
-                <MessageSquare size={20} />
-              </button>
-
-              <div className="relative" ref={notificationsRef}>
-                <button onClick={toggleNotifications} className="p-2 text-gray-600 dark:text-gray-300 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring" aria-label="Notifications">
-                  <Activity size={20} />
-                  {unreadCount > 0 && (
-                    <span className="absolute -top-1 -right-1 flex h-4 w-4">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-4 w-4 bg-red-500 text-white text-xs items-center justify-center">
-                        {unreadCount > 9 ? '9+' : unreadCount}
-                      </span>
-                    </span>
-                  )}
+          <div className="flex items-center space-x-2 sm:space-x-4">
+            {user.role !== 'Student' && (
+              <>
+                <button onClick={onSearchClick} className="p-2 text-gray-600 dark:text-gray-300 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring" aria-label="Search">
+                  <Search size={20} />
                 </button>
-                <NotificationsDropdown
-                  isOpen={notificationsOpen}
-                  onClose={() => setNotificationsOpen(false)}
-                  notifications={notifications}
-                  onMarkAllAsRead={onMarkAllNotificationsAsRead}
-                  onNotificationClick={onNotificationClick}
-                />
-              </div>
-            </>
-          )}
+
+                <button onClick={onQuickCreateClick} className="p-2 text-gray-600 dark:text-gray-300 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring" aria-label="Quick Create">
+                  <Plus size={20} />
+                </button>
+
+                <button className="hidden sm:inline-flex p-2 text-gray-600 dark:text-gray-300 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring" aria-label="Messages">
+                  <MessageSquare size={20} />
+                </button>
+              </>
+            )}
+
+            <div className="relative" ref={notificationsRef}>
+              <button onClick={toggleNotifications} className="p-2 text-gray-600 dark:text-gray-300 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring" aria-label="Notifications">
+                <Activity size={20} />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 flex h-4 w-4">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-4 w-4 bg-red-500 text-white text-xs items-center justify-center">
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
+                  </span>
+                )}
+              </button>
+              <NotificationsDropdown
+                isOpen={notificationsOpen}
+                onClose={() => setNotificationsOpen(false)}
+                notifications={notifications}
+                onMarkAllAsRead={onMarkAllNotificationsAsRead}
+                onNotificationClick={onNotificationClick}
+              />
+            </div>
+          </div>
 
           <div className="relative" ref={profileRef}>
             <button onClick={toggleProfile} className="flex items-center space-x-2 focus:outline-none focus:ring-2 ring-offset-2 ring-transparent ring-lyceum-blue rounded-full p-1" aria-label="User menu">

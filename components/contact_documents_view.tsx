@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { Contact, Document as Doc } from '../types';
-import { Paperclip, Upload, Download, ArrowLeft, Sparkles, Trash2 } from './icons';
+import { Paperclip, Upload, Download, ArrowLeft, Sparkles, Trash2, Eye } from './icons';
 import * as api from '../utils/api';
 
 interface ContactDocumentsViewProps {
@@ -125,6 +125,24 @@ const ContactDocumentsView: React.FC<ContactDocumentsViewProps> = ({ contact, on
                 >
                   <Sparkles size={14} className={`mr-1.5 ${analyzingDocId === doc.id ? 'animate-pulse' : ''}`} />
                   {analyzingDocId === doc.id ? 'Analyzing...' : 'Analyze with AI'}
+                </button>
+                <button
+                  onClick={() => {
+                    const token = localStorage.getItem('authToken');
+                    const tokenStr = token ? JSON.parse(token).token : '';
+                    fetch(`${(import.meta as any).env.VITE_API_URL || 'http://localhost:5002/api'}/documents/${doc.id}?preview=true`, {
+                      headers: { 'Authorization': `Bearer ${tokenStr}` }
+                    })
+                      .then(res => res.blob())
+                      .then(blob => {
+                        const url = URL.createObjectURL(blob);
+                        window.open(url, '_blank');
+                      });
+                  }}
+                  className="inline-flex items-center px-3 py-1.5 text-xs font-semibold text-lyceum-blue bg-lyceum-blue/10 rounded-md hover:bg-lyceum-blue/20 mr-2"
+                >
+                  <Eye size={14} className="mr-1.5" />
+                  Preview
                 </button>
                 <button
                   onClick={() => handleDownload(doc)}

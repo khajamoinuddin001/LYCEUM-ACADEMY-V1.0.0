@@ -45,6 +45,13 @@ router.post('/documents', async (req, res) => {
   }
 });
 
+const DEFAULT_CHECKLIST_ITEMS = [
+  { id: 1, text: 'Submit Application Form', type: 'checkbox', completed: false, isDefault: true },
+  { id: 2, text: 'Upload Passport Copy', type: 'checkbox', completed: false, isDefault: true },
+  { id: 3, text: 'Initial Consulting Fee Payment', type: 'checkbox', completed: false, isDefault: true },
+  { id: 4, text: 'Consulor Remarks', type: 'text', completed: false, response: '', isDefault: true }
+];
+
 router.get('/documents/:id', async (req, res) => {
   try {
     // Check permissions
@@ -59,13 +66,17 @@ router.get('/documents/:id', async (req, res) => {
     }
 
     const doc = result.rows[0];
+    const isPreview = req.query.preview === 'true';
+
     res.setHeader('Content-Type', doc.type);
-    res.setHeader('Content-Disposition', `attachment; filename="${doc.name}"`);
+    res.setHeader('Content-Disposition', `${isPreview ? 'inline' : 'attachment'}; filename="${doc.name}"`);
     res.send(doc.content);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
+
+
 
 router.get('/contacts/:id/documents', async (req, res) => {
   try {
@@ -204,6 +215,11 @@ router.get('/contacts', async (req, res) => {
 router.post('/contacts', async (req, res) => {
   try {
     const contact = req.body;
+
+    // Apply default checklist for new contacts if not provided
+    if (!contact.checklist || contact.checklist.length === 0) {
+      contact.checklist = DEFAULT_CHECKLIST_ITEMS.map(item => ({ ...item, id: Date.now() + Math.random() }));
+    }
 
     // Auto-generate contact reference number if not provided
     let contactId = contact.contactId;
@@ -466,7 +482,9 @@ router.get('/leads/:id', async (req, res) => {
 router.post('/leads', async (req, res) => {
   try {
     const lead = req.body;
-    const result = await query(`
+
+    // 1. Create the Lead
+    const leadResult = await query(`
       INSERT INTO leads (title, company, value, contact, stage, email, phone, source, assigned_to, notes, quotations)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       RETURNING *
@@ -483,8 +501,71 @@ router.post('/leads', async (req, res) => {
       lead.notes || null,
       JSON.stringify(lead.quotations || [])
     ]);
-    res.json(transformLead(result.rows[0]));
+
+    const newLead = leadResult.rows[0];
+
+    // 2. Automatically Create a Contact
+    // Generate Contact ID
+    const now = new Date();
+    const yy = now.getFullYear().toString().slice(-2);
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    const datePrefix = `LA${yy}${mm}${dd}`;
+
+    const todayContacts = await query(
+      "SELECT \"contact_id\" FROM contacts WHERE \"contact_id\" LIKE $1 ORDER BY \"contact_id\" DESC LIMIT 1",
+      [`${datePrefix}%`]
+    );
+
+    let sequence = 0;
+    if (todayContacts.rows.length > 0) {
+      const lastId = todayContacts.rows[0].contact_id;
+      sequence = parseInt(lastId.slice(-3)) + 1;
+    }
+    const newContactId = `${datePrefix}${String(sequence).padStart(3, '0')}`;
+
+    // Insert Contact
+    await query(`
+      INSERT INTO contacts (
+        name, contact_id, email, phone, department, major, notes, source, contact_type, checklist, created_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+    `, [
+      lead.contact, // Contact Name
+      newContactId,
+      lead.email || null,
+      lead.phone || null,
+      'Unassigned',
+      'Unassigned',
+      `Auto-created from Lead: ${lead.title}`,
+      lead.source || 'CRM Lead',
+      'Lead',
+      JSON.stringify([{ id: 0, text: 'Documents', completed: false, type: 'checkbox' }])
+    ]);
+
+    // 3. Send Notification (Placeholder for Request #4)
+    // 3. Send Notification
+    if (lead.assignedTo) {
+      // Find user ID by name (assignedTo is name string)
+      const assignedUserResult = await query('SELECT id FROM users WHERE name = $1', [lead.assignedTo]);
+      if (assignedUserResult.rows.length > 0) {
+        const userId = assignedUserResult.rows[0].id;
+        await query(`
+          INSERT INTO notifications (title, description, read, link_to, recipient_user_ids, timestamp)
+          VALUES ($1, $2, $3, $4, $5, NOW())
+        `, [
+          'New Lead Assigned',
+          `You have been assigned a new lead: ${lead.title}`,
+          false,
+          JSON.stringify({ type: 'lead', id: newLead.id }),
+          JSON.stringify([userId])
+        ]);
+        console.log(`[Notification] Lead assigned to ${lead.assignedTo} (User ID: ${userId})`);
+      }
+    }
+
+    res.json(transformLead(newLead));
   } catch (error) {
+    console.error('Error creating lead:', error);
     res.status(500).json({ error: error.message });
   }
 });
