@@ -8,9 +8,7 @@ import authRoutes from './routes/auth.js';
 import apiRoutes from './routes/api.js';
 import path from "path";
 
-dotenv.config({
-  path: path.resolve(process.cwd(), "server/.env"),
-});
+dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5002;
