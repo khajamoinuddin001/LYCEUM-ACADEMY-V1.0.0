@@ -4,8 +4,7 @@ import { authenticateToken, requireRole } from '../auth.js';
 
 const router = express.Router();
 
-// Apply auth to all routes
-router.use(authenticateToken);
+// Routes are protected individually with authenticateToken middleware
 
 // Configure multer for memory storage
 import multer from 'multer';
@@ -15,7 +14,7 @@ const upload = multer({
 });
 
 // Document routes
-router.post('/documents', async (req, res) => {
+router.post('/documents', authenticateToken, async (req, res) => {
   try {
     // Check permissions
     if (req.user.role !== 'Admin' && !req.user.permissions?.['Contacts']?.create) {
@@ -52,7 +51,7 @@ const DEFAULT_CHECKLIST_ITEMS = [
   { id: 4, text: 'Consulor Remarks', type: 'text', completed: false, response: '', isDefault: true }
 ];
 
-router.get('/documents/:id', async (req, res) => {
+router.get('/documents/:id', authenticateToken, async (req, res) => {
   try {
     // Check permissions
     if (req.user.role !== 'Admin' && !req.user.permissions?.['Contacts']?.read) {
@@ -78,7 +77,7 @@ router.get('/documents/:id', async (req, res) => {
 
 
 
-router.get('/contacts/:id/documents', async (req, res) => {
+router.get('/contacts/:id/documents', authenticateToken, async (req, res) => {
   try {
     // Check permissions
     if (req.user.role !== 'Admin' && !req.user.permissions?.['Contacts']?.read) {
@@ -93,7 +92,7 @@ router.get('/contacts/:id/documents', async (req, res) => {
 });
 
 // Users routes
-router.get('/users', async (req, res) => {
+router.get('/users', authenticateToken, async (req, res) => {
   try {
     const result = await query('SELECT id, name, email, role, permissions, must_reset_password AS "mustResetPassword", created_at AS "createdAt" FROM users');
     res.json(result.rows);
@@ -102,7 +101,7 @@ router.get('/users', async (req, res) => {
   }
 });
 
-router.post('/users', requireRole('Admin'), async (req, res) => {
+router.post('/users', authenticateToken, requireRole('Admin'), async (req, res) => {
   try {
     const { name, email, password, role } = req.body;
     const bcrypt = await import('bcryptjs');
@@ -118,7 +117,7 @@ router.post('/users', requireRole('Admin'), async (req, res) => {
   }
 });
 
-router.put('/users/:id', async (req, res) => {
+router.put('/users/:id', authenticateToken, async (req, res) => {
   try {
     const { name, email, role, permissions } = req.body;
 
@@ -202,7 +201,7 @@ const transformContact = (dbContact) => {
 };
 
 // Contacts routes
-router.get('/contacts', async (req, res) => {
+router.get('/contacts', authenticateToken, async (req, res) => {
   try {
     const result = await query('SELECT * FROM contacts');
     const transformedContacts = result.rows.map(transformContact);
@@ -212,7 +211,7 @@ router.get('/contacts', async (req, res) => {
   }
 });
 
-router.post('/contacts', async (req, res) => {
+router.post('/contacts', authenticateToken, async (req, res) => {
   try {
     const contact = req.body;
 
@@ -300,7 +299,7 @@ router.post('/contacts', async (req, res) => {
   }
 });
 
-router.put('/contacts/:id', async (req, res) => {
+router.put('/contacts/:id', authenticateToken, async (req, res) => {
   try {
     const contact = req.body;
     await query(`
@@ -372,7 +371,7 @@ const transformLead = (lead) => {
 };
 
 // Leads routes
-router.put('/users/:id', async (req, res) => {
+router.put('/users/:id', authenticateToken, async (req, res) => {
   try {
     // Only admin can update users
     if (req.user.role !== 'Admin') {
@@ -409,7 +408,7 @@ router.put('/users/:id', async (req, res) => {
 });
 
 // Delete user (Admin only) - PRESERVES all business data
-router.delete('/users/:id', async (req, res) => {
+router.delete('/users/:id', authenticateToken, async (req, res) => {
   try {
     // Only admin can delete users
     if (req.user.role !== 'Admin') {
@@ -458,7 +457,7 @@ router.delete('/users/:id', async (req, res) => {
   }
 });
 
-router.get('/leads', async (req, res) => {
+router.get('/leads', authenticateToken, async (req, res) => {
   try {
     const result = await query('SELECT * FROM leads');
     res.json(result.rows.map(transformLead));
@@ -467,7 +466,7 @@ router.get('/leads', async (req, res) => {
   }
 });
 
-router.get('/leads/:id', async (req, res) => {
+router.get('/leads/:id', authenticateToken, async (req, res) => {
   try {
     const result = await query('SELECT * FROM leads WHERE id = $1', [req.params.id]);
     if (result.rows.length === 0) {
@@ -479,7 +478,7 @@ router.get('/leads/:id', async (req, res) => {
   }
 });
 
-router.post('/leads', async (req, res) => {
+router.post('/leads', authenticateToken, async (req, res) => {
   try {
     const lead = req.body;
 
@@ -570,7 +569,7 @@ router.post('/leads', async (req, res) => {
   }
 });
 
-router.put('/leads/:id', async (req, res) => {
+router.put('/leads/:id', authenticateToken, async (req, res) => {
   try {
     const lead = req.body;
     await query(`
@@ -599,7 +598,7 @@ router.put('/leads/:id', async (req, res) => {
   }
 });
 
-router.delete('/leads/:id', async (req, res) => {
+router.delete('/leads/:id', authenticateToken, async (req, res) => {
   try {
     const result = await query('DELETE FROM leads WHERE id = $1 RETURNING *', [req.params.id]);
     if (result.rows.length === 0) {
@@ -612,7 +611,7 @@ router.delete('/leads/:id', async (req, res) => {
 });
 
 // Transactions routes
-router.get('/transactions', async (req, res) => {
+router.get('/transactions', authenticateToken, async (req, res) => {
   try {
     const result = await query('SELECT * FROM transactions');
     res.json(result.rows);
@@ -621,7 +620,7 @@ router.get('/transactions', async (req, res) => {
   }
 });
 
-router.post('/transactions', async (req, res) => {
+router.post('/transactions', authenticateToken, async (req, res) => {
   try {
     const transaction = req.body;
     const id = transaction.id || `INV-${String(Date.now()).slice(-6)}`;
@@ -644,7 +643,7 @@ router.post('/transactions', async (req, res) => {
   }
 });
 
-router.put('/transactions/:id', async (req, res) => {
+router.put('/transactions/:id', authenticateToken, async (req, res) => {
   try {
     const transaction = req.body;
     await query(`
@@ -668,7 +667,7 @@ router.put('/transactions/:id', async (req, res) => {
 });
 
 // Events routes
-router.get('/events', async (req, res) => {
+router.get('/events', authenticateToken, async (req, res) => {
   try {
     const result = await query('SELECT * FROM events');
     res.json(result.rows);
@@ -677,7 +676,7 @@ router.get('/events', async (req, res) => {
   }
 });
 
-router.post('/events', async (req, res) => {
+router.post('/events', authenticateToken, async (req, res) => {
   try {
     const event = req.body;
     const result = await query(`
@@ -697,7 +696,7 @@ router.post('/events', async (req, res) => {
   }
 });
 
-router.put('/events/:id', async (req, res) => {
+router.put('/events/:id', authenticateToken, async (req, res) => {
   try {
     const event = req.body;
     await query(`
@@ -718,7 +717,7 @@ router.put('/events/:id', async (req, res) => {
   }
 });
 
-router.delete('/events/:id', async (req, res) => {
+router.delete('/events/:id', authenticateToken, async (req, res) => {
   try {
     await query('DELETE FROM events WHERE id = $1', [req.params.id]);
     res.json({ success: true });
@@ -728,7 +727,7 @@ router.delete('/events/:id', async (req, res) => {
 });
 
 // Tasks routes
-router.get('/tasks', async (req, res) => {
+router.get('/tasks', authenticateToken, async (req, res) => {
   try {
     const result = await query('SELECT * FROM tasks WHERE user_id = $1 OR user_id IS NULL', [req.user.id]);
     res.json(result.rows.map(t => ({
@@ -741,7 +740,7 @@ router.get('/tasks', async (req, res) => {
   }
 });
 
-router.post('/tasks', async (req, res) => {
+router.post('/tasks', authenticateToken, async (req, res) => {
   try {
     const task = req.body;
     const result = await query(`
@@ -762,7 +761,7 @@ router.post('/tasks', async (req, res) => {
 });
 
 // Channels routes
-router.get('/channels', async (req, res) => {
+router.get('/channels', authenticateToken, async (req, res) => {
   try {
     const result = await query('SELECT * FROM channels');
     res.json(result.rows);
@@ -771,7 +770,7 @@ router.get('/channels', async (req, res) => {
   }
 });
 
-router.post('/channels', async (req, res) => {
+router.post('/channels', authenticateToken, async (req, res) => {
   try {
     const channel = req.body;
     const id = channel.id || `channel-${Date.now()}`;
@@ -792,7 +791,7 @@ router.post('/channels', async (req, res) => {
   }
 });
 
-router.put('/channels/:id', async (req, res) => {
+router.put('/channels/:id', authenticateToken, async (req, res) => {
   try {
     const channel = req.body;
     await query(`
@@ -813,7 +812,7 @@ router.put('/channels/:id', async (req, res) => {
 });
 
 // Coupons routes
-router.get('/coupons', async (req, res) => {
+router.get('/coupons', authenticateToken, async (req, res) => {
   try {
     const result = await query('SELECT * FROM coupons');
     res.json(result.rows);
@@ -822,7 +821,7 @@ router.get('/coupons', async (req, res) => {
   }
 });
 
-router.post('/coupons', async (req, res) => {
+router.post('/coupons', authenticateToken, async (req, res) => {
   try {
     const coupon = req.body;
     const result = await query(`
@@ -843,7 +842,7 @@ router.post('/coupons', async (req, res) => {
   }
 });
 
-router.delete('/coupons/:code', async (req, res) => {
+router.delete('/coupons/:code', authenticateToken, async (req, res) => {
   try {
     await query('DELETE FROM coupons WHERE code = $1', [req.params.code]);
     res.json({ success: true });
@@ -853,7 +852,7 @@ router.delete('/coupons/:code', async (req, res) => {
 });
 
 // LMS Courses routes
-router.get('/lms-courses', async (req, res) => {
+router.get('/lms-courses', authenticateToken, async (req, res) => {
   try {
     const result = await query('SELECT * FROM lms_courses');
     res.json(result.rows);
@@ -862,7 +861,7 @@ router.get('/lms-courses', async (req, res) => {
   }
 });
 
-router.post('/lms-courses', async (req, res) => {
+router.post('/lms-courses', authenticateToken, async (req, res) => {
   try {
     const course = req.body;
     const id = course.id || `course-${Date.now()}`;
@@ -887,7 +886,7 @@ router.post('/lms-courses', async (req, res) => {
   }
 });
 
-router.delete('/lms-courses/:id', async (req, res) => {
+router.delete('/lms-courses/:id', authenticateToken, async (req, res) => {
   try {
     await query('DELETE FROM lms_courses WHERE id = $1', [req.params.id]);
     res.json({ success: true });
@@ -897,7 +896,7 @@ router.delete('/lms-courses/:id', async (req, res) => {
 });
 
 // Visitors routes
-router.get('/visitors', async (req, res) => {
+router.get('/visitors', authenticateToken, async (req, res) => {
   try {
     const result = await query('SELECT * FROM visitors');
     const visitors = result.rows.map(v => ({
@@ -914,7 +913,7 @@ router.get('/visitors', async (req, res) => {
   }
 });
 
-router.post('/visitors', async (req, res) => {
+router.post('/visitors', authenticateToken, async (req, res) => {
   try {
     const { name, company, host, scheduledCheckIn, checkIn, checkOut, status, cardNumber } = req.body;
     const result = await query(`
@@ -947,7 +946,7 @@ router.post('/visitors', async (req, res) => {
 });
 
 // Get single visitor by ID
-router.get('/visitors/:id', async (req, res) => {
+router.get('/visitors/:id', authenticateToken, async (req, res) => {
   try {
     const result = await query('SELECT * FROM visitors WHERE id = $1', [req.params.id]);
     if (result.rows.length === 0) {
@@ -968,7 +967,7 @@ router.get('/visitors/:id', async (req, res) => {
   }
 });
 
-router.put('/visitors/:id', async (req, res) => {
+router.put('/visitors/:id', authenticateToken, async (req, res) => {
   try {
     const visitor = req.body;
     await query(`
@@ -1004,7 +1003,7 @@ router.put('/visitors/:id', async (req, res) => {
 });
 
 // Quotation Templates routes
-router.get('/quotation-templates', async (req, res) => {
+router.get('/quotation-templates', authenticateToken, async (req, res) => {
   try {
     const result = await query('SELECT id, title, description, line_items AS "lineItems", total, created_at AS "createdAt" FROM quotation_templates');
     res.json(result.rows);
@@ -1013,7 +1012,7 @@ router.get('/quotation-templates', async (req, res) => {
   }
 });
 
-router.post('/quotation-templates', async (req, res) => {
+router.post('/quotation-templates', authenticateToken, async (req, res) => {
   try {
     const template = req.body;
     const result = await query(`
@@ -1032,7 +1031,7 @@ router.post('/quotation-templates', async (req, res) => {
   }
 });
 
-router.put('/quotation-templates/:id', async (req, res) => {
+router.put('/quotation-templates/:id', authenticateToken, async (req, res) => {
   try {
     const template = req.body;
     await query(`
@@ -1052,7 +1051,7 @@ router.put('/quotation-templates/:id', async (req, res) => {
   }
 });
 
-router.delete('/quotation-templates/:id', async (req, res) => {
+router.delete('/quotation-templates/:id', authenticateToken, async (req, res) => {
   try {
     await query('DELETE FROM quotation_templates WHERE id = $1', [req.params.id]);
     res.json({ success: true });
@@ -1062,7 +1061,7 @@ router.delete('/quotation-templates/:id', async (req, res) => {
 });
 
 // Activity Log routes
-router.get('/activity-log', async (req, res) => {
+router.get('/activity-log', authenticateToken, async (req, res) => {
   try {
     const result = await query('SELECT * FROM activity_log ORDER BY timestamp DESC LIMIT 100');
     res.json(result.rows);
@@ -1071,7 +1070,7 @@ router.get('/activity-log', async (req, res) => {
   }
 });
 
-router.post('/activity-log', async (req, res) => {
+router.post('/activity-log', authenticateToken, async (req, res) => {
   try {
     const { adminName, action } = req.body;
     const result = await query(`
@@ -1086,7 +1085,7 @@ router.post('/activity-log', async (req, res) => {
 });
 
 // Payment Activity Log routes
-router.get('/payment-activity-log', async (req, res) => {
+router.get('/payment-activity-log', authenticateToken, async (req, res) => {
   try {
     const result = await query('SELECT * FROM payment_activity_log ORDER BY timestamp DESC LIMIT 50');
     res.json(result.rows);
@@ -1095,7 +1094,7 @@ router.get('/payment-activity-log', async (req, res) => {
   }
 });
 
-router.post('/payment-activity-log', async (req, res) => {
+router.post('/payment-activity-log', authenticateToken, async (req, res) => {
   try {
     const { text, amount, type } = req.body;
     const result = await query(`
@@ -1110,7 +1109,7 @@ router.post('/payment-activity-log', async (req, res) => {
 });
 
 // Notifications routes
-router.get('/notifications', async (req, res) => {
+router.get('/notifications', authenticateToken, async (req, res) => {
   try {
     const result = await query('SELECT * FROM notifications ORDER BY timestamp DESC LIMIT 100');
     res.json(result.rows);
@@ -1119,7 +1118,7 @@ router.get('/notifications', async (req, res) => {
   }
 });
 
-router.post('/notifications', async (req, res) => {
+router.post('/notifications', authenticateToken, async (req, res) => {
   try {
     const notification = req.body;
     const result = await query(`
@@ -1140,7 +1139,7 @@ router.post('/notifications', async (req, res) => {
   }
 });
 
-router.put('/notifications/mark-all-read', async (req, res) => {
+router.put('/notifications/mark-all-read', authenticateToken, async (req, res) => {
   try {
     await query(`
       UPDATE notifications SET read = true 
