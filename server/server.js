@@ -8,9 +8,15 @@ import authRoutes from './routes/auth.js';
 import apiRoutes from './routes/api.js';
 import path from "path";
 
+import { fileURLToPath } from 'url';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Load environment variables from the server directory
+const envFile = process.env.NODE_ENV === 'production' ? '.env.production' : '.env';
 dotenv.config({
-  path: path.resolve(process.cwd(), ".env"),
+  path: path.resolve(__dirname, envFile),
 });
 
 const app = express();
