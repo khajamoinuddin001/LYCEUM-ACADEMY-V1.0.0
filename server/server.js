@@ -10,7 +10,7 @@ import path from "path";
 
 
 dotenv.config({
-  path: path.resolve(process.cwd(), "server/.env"),
+  path: path.resolve(process.cwd(), ".env"),
 });
 
 const app = express();
