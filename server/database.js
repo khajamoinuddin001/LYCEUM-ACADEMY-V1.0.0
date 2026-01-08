@@ -1,4 +1,19 @@
 import pg from 'pg';
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Load environment variables immediately to ensure DATABASE_URL is available
+const envFile = process.env.NODE_ENV === 'production' ? '.env.production' : '.env';
+dotenv.config({ path: path.resolve(__dirname, envFile) });
+
+console.log(`📡 Database utility: loading ${envFile} from ${__dirname}`);
+if (!process.env.DATABASE_URL) {
+  console.warn('⚠️  DATABASE_URL is not defined in environment!');
+}
 
 const { Pool } = pg;
 
