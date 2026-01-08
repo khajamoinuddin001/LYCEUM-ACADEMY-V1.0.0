@@ -1,19 +1,16 @@
 import express from 'express';
 import cors from 'cors';
+import dotenv from "dotenv";
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { initDatabase, closePool } from './database.js';
 import authRoutes from './routes/auth.js';
 import apiRoutes from './routes/api.js';
-import dotenv from "dotenv";
 import path from "path";
-import { fileURLToPath } from "url";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 dotenv.config({
-  path: path.join(__dirname, ".env"),
+  path: path.resolve(process.cwd(), "server/.env"),
 });
 
 const app = express();
