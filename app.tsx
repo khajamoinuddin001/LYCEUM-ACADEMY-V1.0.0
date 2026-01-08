@@ -329,7 +329,7 @@ const DashboardLayout: React.FC = () => {
 
   const handleForgotPassword = async (email: string): Promise<{ success: boolean; message: string }> => {
     try {
-      const response = await fetch(`${(import.meta as any).env.VITE_API_URL || 'http://localhost:5002/api'}/auth/forgot-password`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/auth/forgot-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
@@ -350,7 +350,7 @@ const DashboardLayout: React.FC = () => {
 
   const handleResetPassword = async (token: string, newPassword: string): Promise<{ success: boolean; message: string }> => {
     try {
-      const response = await fetch(`${(import.meta as any).env.VITE_API_URL || 'http://localhost:5002/api'}/auth/reset-password`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/auth/reset-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token, newPassword }),

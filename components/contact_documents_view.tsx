@@ -130,7 +130,7 @@ const ContactDocumentsView: React.FC<ContactDocumentsViewProps> = ({ contact, on
                   onClick={() => {
                     const token = localStorage.getItem('authToken');
                     const tokenStr = token ? JSON.parse(token).token : '';
-                    fetch(`${(import.meta as any).env.VITE_API_URL || 'http://localhost:5002/api'}/documents/${doc.id}?preview=true`, {
+                    fetch(`${import.meta.env.VITE_API_URL}/documents/${doc.id}?preview=true`, {
                       headers: { 'Authorization': `Bearer ${tokenStr}` }
                     })
                       .then(res => res.blob())

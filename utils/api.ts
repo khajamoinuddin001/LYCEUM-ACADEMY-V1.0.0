@@ -1,7 +1,7 @@
 import type { CalendarEvent, Contact, CrmLead, AccountingTransaction, CrmStage, Quotation, User, UserRole, AppPermissions, ActivityLog, DocumentAnalysisResult, Document as Doc, ChecklistItem, QuotationTemplate, Visitor, TodoTask, PaymentActivityLog, LmsCourse, LmsLesson, LmsModule, Coupon, ContactActivity, ContactActivityAction, DiscussionPost, DiscussionThread, RecordedSession, Channel, Notification } from '../types';
 import { DEFAULT_PERMISSIONS, DEFAULT_CHECKLIST } from '../components/constants';
 
-const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:5002/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL;
 
 // Get auth token from storage
 function getToken(): string | null {
