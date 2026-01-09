@@ -1,20 +1,7 @@
+import './load_env.js';
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import dotenv from 'dotenv';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const envFile =
-  process.env.NODE_ENV === 'production'
-    ? '.env.production'
-    : '.env';
-
-const envPath = path.resolve(__dirname, envFile);
-dotenv.config({ path: envPath });
-
-console.log(`📡 [Server] Loading env from ${envPath}`);
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';

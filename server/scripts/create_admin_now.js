@@ -1,35 +1,15 @@
-import dotenv from 'dotenv';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Load environment variables using absolute paths
-const envFile = process.env.NODE_ENV === 'production' ? '.env.production' : '.env';
-const envPath = path.resolve(__dirname, '..', envFile);
-dotenv.config({ path: envPath });
-
-console.log(`📡 [Admin Setup] Loading env from ${envPath}`);
-
-import bcrypt from "bcryptjs";
-import pg from "pg";
-
-const { Pool } = pg;
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-});
+import '../load_env.js';
+import { hashPassword } from "../auth.js";
+import { query, closePool } from "../database.js";
 
 async function createAdmin() {
   const email = "admin@lyceum.com";
   const password = "admin123"; // change later
   const name = "Admin";
 
-  const hashedPassword = await bcrypt.hash(password, 10);
+  const hashedPassword = await hashPassword(password);
 
-  const existing = await pool.query(
+  const existing = await query(
     "SELECT id FROM users WHERE email = $1",
     [email]
   );
@@ -39,7 +19,7 @@ async function createAdmin() {
     process.exit(0);
   }
 
-  await pool.query(
+  await query(
     `
     INSERT INTO users 
     (name, email, password, role, permissions, is_verified, must_reset_password)
@@ -53,10 +33,12 @@ async function createAdmin() {
   console.log("📧 Email:", email);
   console.log("🔑 Password:", password);
 
+  await closePool();
   process.exit(0);
 }
 
-createAdmin().catch(err => {
+createAdmin().catch(async err => {
   console.error(err);
+  await closePool();
   process.exit(1);
 });

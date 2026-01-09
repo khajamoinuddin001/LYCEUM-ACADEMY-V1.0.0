@@ -10,19 +10,16 @@
  *   node create-admin.js
  */
 
+import '../load_env.js';
 import pg from 'pg';
-import bcrypt from 'bcryptjs';
+import { query, closePool } from '../database.js';
+import { hashPassword } from '../auth.js';
 import readline from 'readline';
-import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-// Load environment variables
-const envFile = process.env.NODE_ENV === 'production' ? '.env.production' : '.env';
-dotenv.config({ path: path.resolve(__dirname, '..', envFile) });
 
 const { Pool } = pg;
 
@@ -64,7 +61,7 @@ async function createAdminUser() {
 
             if (update.toLowerCase() === 'yes' || update.toLowerCase() === 'y') {
                 const hashedPassword = await bcrypt.hash(password, 10);
-                await pool.query('UPDATE users SET role = $1, password = $2, "must_reset_password" = false WHERE email = $3', ['Admin', hashedPassword, email.toLowerCase()]);
+                await pool.query('UPDATE users SET role = $1, password = $2, must_reset_password = false WHERE email = $3', ['Admin', hashedPassword, email.toLowerCase()]);
                 console.log('\n✅ User updated to Admin role and password reset successfully!');
             } else {
                 console.log('\n❌ Operation cancelled.');

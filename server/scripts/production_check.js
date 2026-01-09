@@ -1,3 +1,4 @@
+import '../load_env.js';
 import { initDatabase, closePool } from '../database.js';
 
 async function checkProduction() {

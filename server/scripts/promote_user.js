@@ -4,30 +4,14 @@
  * Promote User to Admin Script
  * 
  * This script promotes an existing user to the Admin role.
- * 
+ *
  * Usage:
  *   node server/promote-user.js
  */
 
-import pg from 'pg';
+import '../load_env.js';
+import { initDatabase, closePool, query } from '../database.js';
 import readline from 'readline';
-import dotenv from 'dotenv';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Load environment variables
-const envFile = process.env.NODE_ENV === 'production' ? '.env.production' : '.env';
-dotenv.config({ path: path.resolve(__dirname, '..', envFile) });
-
-const { Pool } = pg;
-
-const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-});
 
 const rl = readline.createInterface({
     input: process.stdin,
@@ -51,12 +35,11 @@ async function promoteUser() {
         }
 
         // Check if user exists
-        const userResult = await pool.query('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
+        const userResult = await query('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
 
         if (userResult.rows.length === 0) {
             console.log('\n❌ User not found!');
             rl.close();
-            pool.end();
             return;
         }
 
@@ -69,7 +52,7 @@ async function promoteUser() {
             const confirm = await question(`Are you sure you want to promote '${user.name}' to Admin? (yes/no): `);
             if (confirm.toLowerCase() === 'yes' || confirm.toLowerCase() === 'y') {
                 // Update role to Admin and reset permissions to empty object (Admins have implicit full access)
-                await pool.query('UPDATE users SET role = $1, permissions = $2 WHERE id = $3', ['Admin', '{}', user.id]);
+                await query('UPDATE users SET role = $1, permissions = $2 WHERE id = $3', ['Admin', '{}', user.id]);
                 console.log(`\n🎉 Success! User '${user.name}' (${user.email}) is now an Admin.`);
             } else {
                 console.log('\n❌ Operation cancelled.');
@@ -80,7 +63,7 @@ async function promoteUser() {
         console.error('\n❌ Error promoting user:', error.message);
     } finally {
         rl.close();
-        await pool.end();
+        await closePool();
     }
 }
 

@@ -1,16 +1,9 @@
 import pg from 'pg';
-import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-// Use absolute paths for env loading - critical for VPS/PM2
-const envPath = path.resolve(__dirname, process.env.NODE_ENV === 'production' ? '.env.production' : '.env');
-dotenv.config({ path: envPath });
-
-console.log(`📡 Database utility: loading env from ${envPath}`);
 
 const { Pool } = pg;
 
