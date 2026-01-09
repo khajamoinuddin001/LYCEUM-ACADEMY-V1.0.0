@@ -1,13 +1,20 @@
 import express from 'express';
-import './load_env.js'; // MUST be first to load correct variables
+import { fileURLToPath } from 'url';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
+// Load environment variables using absolute paths
+const envFile = process.env.NODE_ENV === 'production' ? '.env.production' : '.env';
+const envPath = path.resolve(__dirname, envFile);
+dotenv.config({ path: envPath });
+
+console.log(`📡 [Server] Loading env from ${envPath}`);
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { initDatabase, closePool } from './database.js';
 import authRoutes from './routes/auth.js';
 import apiRoutes from './routes/api.js';
-import path from "path";
 
 const app = express();
 const PORT = process.env.PORT || 5002;
@@ -61,11 +68,13 @@ app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Initialize database
-initDatabase().catch(err => {
+// Initialize database (BLOCKING – correct)
+try {
+  await initDatabase();
+} catch (err) {
   console.error('Failed to initialize database:', err);
   process.exit(1);
-});
+}
 
 // Routes
 app.use('/api/auth', authRoutes);

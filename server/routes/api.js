@@ -92,7 +92,7 @@ router.get('/contacts/:id/documents', authenticateToken, async (req, res) => {
 });
 
 // Users routes
-router.get('/users', authenticateToken, async (req, res) => {
+router.get('/users', authenticateToken, requireRole('Admin'), async (req, res) => {
   try {
     const result = await query('SELECT id, name, email, role, permissions, "mustResetPassword", "createdAt" FROM users');
     res.json(result.rows);
@@ -203,7 +203,16 @@ const transformContact = (dbContact) => {
 // Contacts routes
 router.get('/contacts', authenticateToken, async (req, res) => {
   try {
-    const result = await query('SELECT * FROM contacts');
+    let sql = 'SELECT * FROM contacts';
+    let params = [];
+
+    // RBAC: Students only see their own contact record
+    if (req.user.role === 'Student') {
+      sql = 'SELECT * FROM contacts WHERE "userId" = $1';
+      params = [req.user.id];
+    }
+
+    const result = await query(sql, params);
     const transformedContacts = result.rows.map(transformContact);
     res.json(transformedContacts);
   } catch (error) {
@@ -458,7 +467,7 @@ router.delete('/users/:id', authenticateToken, async (req, res) => {
   }
 });
 
-router.get('/leads', authenticateToken, async (req, res) => {
+router.get('/leads', authenticateToken, requireRole('Admin', 'Staff'), async (req, res) => {
   try {
     const result = await query('SELECT * FROM leads');
     res.json(result.rows.map(transformLead));

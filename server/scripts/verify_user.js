@@ -21,7 +21,7 @@ const __dirname = path.dirname(__filename);
 
 // Load environment variables
 const envFile = process.env.NODE_ENV === 'production' ? '.env.production' : '.env';
-dotenv.config({ path: path.resolve(__dirname, envFile) });
+dotenv.config({ path: path.resolve(__dirname, '..', envFile) });
 
 
 const { Pool } = pg;

@@ -6,41 +6,39 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-import './load_env.js';
+// Use absolute paths for env loading - critical for VPS/PM2
+const envPath = path.resolve(__dirname, process.env.NODE_ENV === 'production' ? '.env.production' : '.env');
+dotenv.config({ path: envPath });
 
-console.log(`📡 Database utility: starting connection pool`);
-if (!process.env.DATABASE_URL) {
-  console.warn('⚠️  DATABASE_URL is not defined in environment!');
-}
+console.log(`📡 Database utility: loading env from ${envPath}`);
 
 const { Pool } = pg;
 
-// PostgreSQL connection pool
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-  max: 50, // Maximum number of clients in the pool (Scaled for 200+ users)
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
-});
+let pool = null;
 
-// Test connection
-pool.on('connect', () => {
-  console.log('✅ Connected to PostgreSQL database');
-});
-
-pool.on('error', (err) => {
-  console.error('❌ Unexpected error on idle client', err);
-  process.exit(-1);
-});
-
-// Initialize database schema
 export async function initDatabase() {
+  console.log("📡 Database utility: starting connection pool");
+
+  if (!process.env.DATABASE_URL) {
+    throw new Error("❌ DATABASE_URL is not defined in environment!");
+  }
+
+  pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: process.env.NODE_ENV === "production"
+      ? { rejectUnauthorized: false }
+      : false,
+    max: 50,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 2000,
+  });
+
   const client = await pool.connect();
   try {
-    await client.query('BEGIN');
+    console.log("✅ Connected to PostgreSQL database");
+    await client.query("BEGIN");
 
-    // Users table
+    // USERS
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
@@ -56,7 +54,7 @@ export async function initDatabase() {
       )
     `);
 
-    // Contacts table
+    // CONTACTS
     await client.query(`
       CREATE TABLE IF NOT EXISTS contacts (
         id SERIAL PRIMARY KEY,
@@ -102,7 +100,7 @@ export async function initDatabase() {
       )
     `);
 
-    // Leads table
+    // LEADS
     await client.query(`
       CREATE TABLE IF NOT EXISTS leads (
         id SERIAL PRIMARY KEY,
@@ -286,40 +284,37 @@ export async function initDatabase() {
       )
     `);
 
-    await client.query('COMMIT');
-    console.log('✅ Database schema initialized successfully');
-  } catch (error) {
-    await client.query('ROLLBACK');
-    console.error('❌ Error initializing database:', error);
-    throw error;
+    await client.query("COMMIT");
+    console.log("✅ Database schema initialized successfully");
+  } catch (err) {
+    if (client) await client.query("ROLLBACK");
+    console.error("❌ Database init failed:", err);
+    throw err;
   } finally {
-    client.release();
+    if (client) client.release();
   }
 }
 
-// Helper function to execute queries
-export async function query(text, params) {
-  const start = Date.now();
-  try {
-    const res = await pool.query(text, params);
-    const duration = Date.now() - start;
-    console.log('Executed query', { text, duration, rows: res.rowCount });
-    return res;
-  } catch (error) {
-    console.error('Query error:', error);
-    throw error;
-  }
+export function query(text, params) {
+  if (!pool) throw new Error("Database not initialized");
+  return pool.query(text, params);
 }
 
-// Get a client from the pool
 export async function getClient() {
-  return await pool.connect();
+  if (!pool) throw new Error("Database not initialized");
+  return pool.connect();
 }
 
-// Graceful shutdown
 export async function closePool() {
-  await pool.end();
-  console.log('Database pool closed');
+  if (pool) {
+    await pool.end();
+    console.log("Database pool closed");
+  }
 }
 
-export default pool;
+export default {
+  initDatabase,
+  query,
+  getClient,
+  closePool
+};

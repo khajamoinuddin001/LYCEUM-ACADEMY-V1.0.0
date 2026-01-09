@@ -1,5 +1,16 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Load environment variables using absolute paths
+const envFile = process.env.NODE_ENV === 'production' ? '.env.production' : '.env';
+const envPath = path.resolve(__dirname, '..', envFile);
+dotenv.config({ path: envPath });
+
+console.log(`📡 [Admin Setup] Loading env from ${envPath}`);
 
 import bcrypt from "bcryptjs";
 import pg from "pg";
@@ -8,6 +19,7 @@ const { Pool } = pg;
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
 });
 
 async function createAdmin() {
