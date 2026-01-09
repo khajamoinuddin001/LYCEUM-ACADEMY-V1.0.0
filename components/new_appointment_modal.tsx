@@ -14,8 +14,8 @@ const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ isOpen, onClo
   const [isAnimatingOut, setIsAnimatingOut] = useState(false);
   const [formData, setFormData] = useState({ name: '', company: '', host: '', scheduledCheckIn: '' });
   const [error, setError] = useState('');
-  
-  const canCreate = user.permissions?.['Reception']?.create;
+
+  const canCreate = user.role === 'Admin' || !!user.permissions?.['Reception']?.create;
 
   const getInitialDateTime = () => {
     const now = new Date();
@@ -32,9 +32,9 @@ const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ isOpen, onClo
 
   useEffect(() => {
     if (isOpen) {
-      setFormData({ 
-        name: '', 
-        company: '', 
+      setFormData({
+        name: '',
+        company: '',
         host: staff.length > 0 ? staff[0].name : '',
         scheduledCheckIn: getInitialDateTime(),
       });
@@ -49,7 +49,7 @@ const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ isOpen, onClo
       onClose();
     }, 200);
   };
-  
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
@@ -62,8 +62,8 @@ const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ isOpen, onClo
     }
     const scheduledDate = new Date(formData.scheduledCheckIn);
     if (scheduledDate < new Date()) {
-        setError('Scheduled time cannot be in the past.');
-        return;
+      setError('Scheduled time cannot be in the past.');
+      return;
     }
     onSave(formData.name, formData.company, formData.host, scheduledDate.toISOString());
   };
@@ -114,7 +114,7 @@ const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ isOpen, onClo
                 ))}
               </select>
             </div>
-             <div>
+            <div>
               <label htmlFor="appt-datetime" className={labelClasses}>Scheduled Check-in Time</label>
               <input type="datetime-local" id="appt-datetime" name="scheduledCheckIn" className={inputClasses} value={formData.scheduledCheckIn} onChange={handleChange} disabled={!canCreate} />
             </div>
@@ -130,7 +130,7 @@ const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ isOpen, onClo
           </button>
         </div>
       </div>
-       <style>{`
+      <style>{`
         @keyframes fade-in-fast { from { opacity: 0; } to { opacity: 1; } }
         @keyframes fade-out-fast { from { opacity: 1; } to { opacity: 0; } }
         .animate-fade-in-fast { animation: fade-in-fast 0.2s ease-out forwards; }

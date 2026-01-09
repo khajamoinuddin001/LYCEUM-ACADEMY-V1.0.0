@@ -121,7 +121,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, activeApp, onAppSe
             {renderNavItems()}
           </nav>
           <div className="mt-auto p-2 border-t border-gray-200 dark:border-gray-700">
-            {user.permissions?.['Settings'] && (
+            {(user.role === 'Admin' || user.permissions?.['Settings']) && (
               <NavItem icon={<Cog size={20} />} label="Settings" active={activeApp === 'Settings'} onClick={() => onAppSelect('Settings')} />
             )}
             <NavItem icon={<LogOut size={20} />} label="Sign Out" onClick={onLogout} />

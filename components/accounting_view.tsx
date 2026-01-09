@@ -20,9 +20,9 @@ const KpiCard: React.FC<{ title: string; value: string; colorClass?: string; }> 
 
 
 const statusClasses: { [key in TransactionStatus]: string } = {
-  Paid: 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300',
-  Pending: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300',
-  Overdue: 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300',
+    Paid: 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300',
+    Pending: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300',
+    Overdue: 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300',
 };
 
 const TransactionRow: React.FC<{ transaction: AccountingTransaction; onRecordPayment: (id: string) => void; canUpdate: boolean; }> = ({ transaction, onRecordPayment, canUpdate }) => {
@@ -38,7 +38,7 @@ const TransactionRow: React.FC<{ transaction: AccountingTransaction; onRecordPay
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
-    
+
     return (
         <tr className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-100">{transaction.id}</td>
@@ -56,7 +56,7 @@ const TransactionRow: React.FC<{ transaction: AccountingTransaction; onRecordPay
             </td>
             <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                 {(transaction.status === 'Pending' || transaction.status === 'Overdue') && transaction.type === 'Invoice' && canUpdate && (
-                     <div className="relative inline-block text-left" ref={actionsRef}>
+                    <div className="relative inline-block text-left" ref={actionsRef}>
                         <button onClick={() => setActionsOpen(!actionsOpen)} className="p-1 rounded-full text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 hover:text-gray-600">
                             <MoreHorizontal size={18} />
                         </button>
@@ -84,20 +84,20 @@ const TransactionRow: React.FC<{ transaction: AccountingTransaction; onRecordPay
 }
 
 const AccountingView: React.FC<AccountingViewProps> = ({ transactions, onNewInvoiceClick, user, onRecordPayment }) => {
-    
+
     // Filters
     const [dateFrom, setDateFrom] = useState('');
     const [dateTo, setDateTo] = useState('');
     const [typeFilter, setTypeFilter] = useState<'All' | TransactionType>('All');
     const [statusFilter, setStatusFilter] = useState<'All' | TransactionStatus>('All');
-    
+
     // Sorting
     type SortKey = 'id' | 'date' | 'amount';
     const [sortConfig, setSortConfig] = useState<{ key: SortKey; direction: 'asc' | 'desc' } | null>({ key: 'date', direction: 'desc' });
-    
-    const canCreate = user.permissions?.['Accounting']?.create;
-    const canUpdate = user.permissions?.['Accounting']?.update;
-    
+
+    const canCreate = user.role === 'Admin' || !!user.permissions?.['Accounting']?.create;
+    const canUpdate = user.role === 'Admin' || !!user.permissions?.['Accounting']?.update;
+
     const filteredTransactions = useMemo(() => {
         return transactions.filter(t => {
             if (dateFrom && t.date < dateFrom) return false;
@@ -107,7 +107,7 @@ const AccountingView: React.FC<AccountingViewProps> = ({ transactions, onNewInvo
             return true;
         });
     }, [transactions, dateFrom, dateTo, typeFilter, statusFilter]);
-    
+
     const sortedTransactions = useMemo(() => {
         let sortableItems = [...filteredTransactions];
         if (sortConfig !== null) {
@@ -151,7 +151,7 @@ const AccountingView: React.FC<AccountingViewProps> = ({ transactions, onNewInvo
         const overdueAmount = filteredTransactions.filter(t => t.type === 'Invoice' && t.status === 'Overdue').reduce((sum, t) => sum + t.amount, 0);
 
         const formatCurrency = (amount: number) => `₹${amount.toLocaleString('en-IN')}`;
-        
+
         let chartData = Array.from({ length: 6 }, (_, i) => {
             const d = new Date(new Date().getFullYear(), new Date().getMonth() - 5 + i, 1);
             return {
@@ -165,7 +165,7 @@ const AccountingView: React.FC<AccountingViewProps> = ({ transactions, onNewInvo
         filteredTransactions.forEach(t => {
             const transactionDate = new Date(t.date);
             const monthIndex = chartData.findIndex(m => m.year === transactionDate.getFullYear() && m.month === transactionDate.toLocaleString('default', { month: 'short' }));
-            
+
             if (monthIndex !== -1) {
                 if (t.type === 'Invoice' && t.status === 'Paid') chartData[monthIndex].income += t.amount;
                 else if ((t.type === 'Bill' || t.type === 'Payment') && t.status === 'Paid') chartData[monthIndex].expense += Math.abs(t.amount);
@@ -192,12 +192,12 @@ const AccountingView: React.FC<AccountingViewProps> = ({ transactions, onNewInvo
         <div className="animate-fade-in space-y-6">
             <div className="flex items-center justify-between">
                 <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-100">Accounting Dashboard</h1>
-                 {canCreate && (
+                {canCreate && (
                     <div className="space-x-2">
                         <button onClick={onNewInvoiceClick} className="px-4 py-2 bg-lyceum-blue text-white rounded-md shadow-sm hover:bg-lyceum-blue-dark">New Invoice</button>
                         <button className="px-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-gray-600">New Bill</button>
                     </div>
-                 )}
+                )}
             </div>
 
             <div className="p-4 bg-white dark:bg-gray-800/50 rounded-lg shadow-sm">
@@ -212,13 +212,13 @@ const AccountingView: React.FC<AccountingViewProps> = ({ transactions, onNewInvo
                             <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className={inputClasses} />
                         </div>
                     </div>
-                     <div>
+                    <div>
                         <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Type</label>
                         <select value={typeFilter} onChange={e => setTypeFilter(e.target.value as any)} className={inputClasses + ' w-full'}>
                             <option value="All">All Types</option><option value="Invoice">Invoice</option><option value="Bill">Bill</option><option value="Payment">Payment</option>
                         </select>
                     </div>
-                     <div>
+                    <div>
                         <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Status</label>
                         <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as any)} className={inputClasses + ' w-full'}>
                             <option value="All">All Statuses</option><option value="Paid">Paid</option><option value="Pending">Pending</option><option value="Overdue">Overdue</option>
@@ -234,7 +234,7 @@ const AccountingView: React.FC<AccountingViewProps> = ({ transactions, onNewInvo
 
             <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
                 <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">Income vs. Expenses (Last 6 Months)</h2>
-                 <div className="flex justify-around items-end h-64 border-l border-b border-gray-200 dark:border-gray-700 pl-4 pb-4">
+                <div className="flex justify-around items-end h-64 border-l border-b border-gray-200 dark:border-gray-700 pl-4 pb-4">
                     {chartData.map(data => (
                         <div key={data.month} className="flex flex-col items-center w-full">
                             <div className="flex items-end h-full w-1/2">
@@ -269,7 +269,7 @@ const AccountingView: React.FC<AccountingViewProps> = ({ transactions, onNewInvo
                     </table>
                 </div>
             </div>
-             <style>{`
+            <style>{`
                 @keyframes fade-in {
                 from { opacity: 0; transform: translateY(10px); }
                 to { opacity: 1; transform: translateY(0); }

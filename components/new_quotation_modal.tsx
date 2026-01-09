@@ -28,7 +28,7 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ lead, onCancel, onS
   const [templateToEditInModal, setTemplateToEditInModal] = useState<QuotationTemplate | 'new' | null>(null);
 
   const isEditing = !!quotationToEdit;
-  const canWrite = isEditing ? user.permissions?.['CRM']?.update : user.permissions?.['CRM']?.create;
+  const canWrite = user.role === 'Admin' || (isEditing ? user.permissions?.['CRM']?.update : user.permissions?.['CRM']?.create);
 
   useEffect(() => {
     if (isEditing) {

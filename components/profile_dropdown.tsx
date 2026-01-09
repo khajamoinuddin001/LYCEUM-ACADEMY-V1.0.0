@@ -19,7 +19,7 @@ const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ isOpen, onClose, onNa
     onNavigate(appName);
     onClose();
   };
-  
+
   const handleDarkModeToggle = (e: React.MouseEvent) => {
     e.stopPropagation();
     setDarkMode(prev => !prev);
@@ -40,7 +40,7 @@ const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ isOpen, onClose, onNa
       <button onClick={() => handleNavigate('Profile')} className="w-full text-left block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" role="menuitem">
         My Profile
       </button>
-      {user.permissions?.['Settings'] && (
+      {(user.role === 'Admin' || user.permissions?.['Settings']) && (
         <button onClick={() => handleNavigate('Settings')} className="w-full text-left block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700" role="menuitem">
           Settings
         </button>
@@ -48,25 +48,23 @@ const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ isOpen, onClose, onNa
       <div className="border-t border-gray-100 dark:border-gray-700 my-1"></div>
       <div className="px-4 py-2" role="menuitem">
         <div className="flex items-center justify-between">
-            <label htmlFor="dark-mode-toggle" className="text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
-                Dark Mode
-            </label>
-            <button
-                id="dark-mode-toggle"
-                onClick={handleDarkModeToggle}
-                className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-800 focus:ring-lyceum-blue ${
-                    darkMode ? 'bg-lyceum-blue' : 'bg-gray-200 dark:bg-gray-600'
+          <label htmlFor="dark-mode-toggle" className="text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+            Dark Mode
+          </label>
+          <button
+            id="dark-mode-toggle"
+            onClick={handleDarkModeToggle}
+            className={`relative inline-flex items-center h-6 rounded-full w-11 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-800 focus:ring-lyceum-blue ${darkMode ? 'bg-lyceum-blue' : 'bg-gray-200 dark:bg-gray-600'
+              }`}
+            aria-pressed={darkMode}
+            aria-label="Toggle dark mode"
+          >
+            <span className="sr-only">Enable dark mode</span>
+            <span
+              className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${darkMode ? 'translate-x-6' : 'translate-x-1'
                 }`}
-                aria-pressed={darkMode}
-                aria-label="Toggle dark mode"
-            >
-                <span className="sr-only">Enable dark mode</span>
-                <span
-                    className={`inline-block w-4 h-4 transform bg-white rounded-full transition-transform ${
-                        darkMode ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                />
-            </button>
+            />
+          </button>
         </div>
       </div>
       <div className="border-t border-gray-100 dark:border-gray-700 my-1"></div>

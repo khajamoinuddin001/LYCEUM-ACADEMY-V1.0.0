@@ -17,7 +17,9 @@ const upload = multer({
 router.post('/documents', authenticateToken, async (req, res) => {
   try {
     // Check permissions
-    if (req.user.role !== 'Admin' && !req.user.permissions?.['Contacts']?.create) {
+    const canCreate = req.user.role === 'Admin' || !!req.user.permissions?.['Accounting']?.create;
+    const canUpdate = req.user.role === 'Admin' || !!req.user.permissions?.['Accounting']?.update; // This variable is defined but not used in this POST route.
+    if (!canCreate) {
       return res.status(403).json({ error: 'Unauthorized' });
     }
 
@@ -590,6 +592,14 @@ router.post('/leads', authenticateToken, async (req, res) => {
 router.put('/leads/:id', authenticateToken, async (req, res) => {
   try {
     const lead = req.body;
+
+    // Fetch current lead to preserve stage if not provided
+    const currentLeadResult = await query('SELECT stage, quotations FROM leads WHERE id = $1', [req.params.id]);
+    if (currentLeadResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Lead not found' });
+    }
+    const currentLead = currentLeadResult.rows[0];
+
     await query(`
       UPDATE leads SET
         title = $1, company = $2, value = $3, contact = $4, stage = $5,
@@ -600,13 +610,13 @@ router.put('/leads/:id', authenticateToken, async (req, res) => {
       lead.company,
       lead.value,
       lead.contact,
-      lead.stage,
+      lead.stage || currentLead.stage,
       lead.email,
       lead.phone,
       lead.source,
       lead.assignedTo,
       lead.notes,
-      JSON.stringify(lead.quotations || []),
+      JSON.stringify(lead.quotations || currentLead.quotations || []),
       req.params.id
     ]);
     const result = await query('SELECT * FROM leads WHERE id = $1', [req.params.id]);
