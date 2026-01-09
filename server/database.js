@@ -6,11 +6,9 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Load environment variables immediately to ensure DATABASE_URL is available
-const envFile = process.env.NODE_ENV === 'production' ? '.env.production' : '.env';
-dotenv.config({ path: path.resolve(__dirname, envFile) });
+import './load_env.js';
 
-console.log(`📡 Database utility: loading ${envFile} from ${__dirname}`);
+console.log(`📡 Database utility: starting connection pool`);
 if (!process.env.DATABASE_URL) {
   console.warn('⚠️  DATABASE_URL is not defined in environment!');
 }
@@ -51,10 +49,10 @@ export async function initDatabase() {
         password TEXT NOT NULL,
         role TEXT NOT NULL CHECK(role IN ('Admin', 'Staff', 'Student')),
         permissions JSONB DEFAULT '{}',
-        must_reset_password BOOLEAN DEFAULT false,
+        "mustResetPassword" BOOLEAN DEFAULT false,
         is_verified BOOLEAN DEFAULT false,
         verification_token TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
@@ -62,23 +60,23 @@ export async function initDatabase() {
     await client.query(`
       CREATE TABLE IF NOT EXISTS contacts (
         id SERIAL PRIMARY KEY,
-        user_id INTEGER REFERENCES users(id),
+        "userId" INTEGER REFERENCES users(id),
         name TEXT NOT NULL,
-        contact_id TEXT,
+        "contactId" TEXT,
         email TEXT,
         phone TEXT,
         department TEXT,
         major TEXT,
         notes TEXT,
-        file_status TEXT,
-        agent_assigned TEXT,
+        "fileStatus" TEXT,
+        "agentAssigned" TEXT,
         checklist JSONB DEFAULT '[]',
-        activity_log JSONB DEFAULT '[]',
-        recorded_sessions JSONB DEFAULT '[]',
+        "activityLog" JSONB DEFAULT '[]',
+        "recordedSessions" JSONB DEFAULT '[]',
         documents JSONB DEFAULT '[]',
-        visa_information JSONB DEFAULT '{}',
-        lms_progress JSONB DEFAULT '{}',
-        lms_notes JSONB DEFAULT '{}',
+        "visaInformation" JSONB DEFAULT '{}',
+        "lmsProgress" JSONB DEFAULT '{}',
+        "lmsNotes" JSONB DEFAULT '{}',
         gpa REAL,
         advisor TEXT,
         courses JSONB DEFAULT '[]',
@@ -91,16 +89,16 @@ export async function initDatabase() {
         gstin TEXT,
         pan TEXT,
         tags TEXT,
-        visa_type TEXT,
-        country_of_application TEXT,
+        "visaType" TEXT,
+        "countryOfApplication" TEXT,
         source TEXT,
-        contact_type TEXT,
+        "contactType" TEXT,
         stream TEXT,
         intake TEXT,
-        counselor_assigned TEXT,
-        application_email TEXT,
-        application_password TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        "counselorAssigned" TEXT,
+        "applicationEmail" TEXT,
+        "applicationPassword" TEXT,
+        "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
@@ -116,10 +114,10 @@ export async function initDatabase() {
         email TEXT,
         phone TEXT,
         source TEXT,
-        assigned_to TEXT,
+        "assignedTo" TEXT,
         notes TEXT,
         quotations JSONB DEFAULT '[]',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
@@ -127,13 +125,13 @@ export async function initDatabase() {
     await client.query(`
       CREATE TABLE IF NOT EXISTS transactions (
         id TEXT PRIMARY KEY,
-        customer_name TEXT NOT NULL,
+        "customerName" TEXT NOT NULL,
         date TEXT NOT NULL,
         description TEXT,
         type TEXT NOT NULL CHECK(type IN ('Invoice', 'Bill', 'Payment')),
         status TEXT NOT NULL CHECK(status IN ('Paid', 'Pending', 'Overdue')),
         amount REAL NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
@@ -146,7 +144,7 @@ export async function initDatabase() {
         "end" TIMESTAMP NOT NULL,
         color TEXT NOT NULL CHECK(color IN ('blue', 'green', 'purple', 'red')),
         description TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
@@ -156,10 +154,10 @@ export async function initDatabase() {
         id SERIAL PRIMARY KEY,
         title TEXT NOT NULL,
         description TEXT,
-        due_date TEXT NOT NULL,
+        "dueDate" TEXT NOT NULL,
         status TEXT NOT NULL CHECK(status IN ('todo', 'inProgress', 'done')),
-        user_id INTEGER REFERENCES users(id),
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        "userId" INTEGER REFERENCES users(id),
+        "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
@@ -171,7 +169,7 @@ export async function initDatabase() {
         type TEXT NOT NULL CHECK(type IN ('public', 'private', 'dm')),
         members JSONB DEFAULT '[]',
         messages JSONB DEFAULT '[]',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
@@ -195,7 +193,7 @@ export async function initDatabase() {
         price REAL,
         modules JSONB DEFAULT '[]',
         discussions JSONB DEFAULT '[]',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
@@ -206,12 +204,12 @@ export async function initDatabase() {
         name TEXT NOT NULL,
         company TEXT NOT NULL,
         host TEXT NOT NULL,
-        scheduled_check_in TIMESTAMP,
-        check_in TIMESTAMP,
-        check_out TIMESTAMP,
+        "scheduledCheckIn" TIMESTAMP,
+        "checkIn" TIMESTAMP,
+        "checkOut" TIMESTAMP,
         status TEXT NOT NULL CHECK(status IN ('Scheduled', 'Checked-in', 'Checked-out')),
-        card_number TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        "cardNumber" TEXT,
+        "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
@@ -221,9 +219,9 @@ export async function initDatabase() {
         id SERIAL PRIMARY KEY,
         title TEXT NOT NULL,
         description TEXT,
-        line_items JSONB DEFAULT '[]',
+        "lineItems" JSONB DEFAULT '[]',
         total REAL DEFAULT 0,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
@@ -232,7 +230,7 @@ export async function initDatabase() {
       CREATE TABLE IF NOT EXISTS activity_log (
         id SERIAL PRIMARY KEY,
         timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        admin_name TEXT NOT NULL,
+        "adminName" TEXT NOT NULL,
         action TEXT NOT NULL
       )
     `);
@@ -256,9 +254,9 @@ export async function initDatabase() {
         title TEXT NOT NULL,
         description TEXT NOT NULL,
         read BOOLEAN DEFAULT false,
-        link_to JSONB DEFAULT '{}',
-        recipient_user_ids JSONB DEFAULT '[]',
-        recipient_roles JSONB DEFAULT '[]'
+        "linkTo" JSONB DEFAULT '{}',
+        "recipientUserIds" JSONB DEFAULT '[]',
+        "recipientRoles" JSONB DEFAULT '[]'
       )
     `);
 

@@ -1,6 +1,7 @@
 import express from 'express';
+import './load_env.js'; // MUST be first to load correct variables
+
 import cors from 'cors';
-import dotenv from "dotenv";
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { initDatabase, closePool } from './database.js';
@@ -10,6 +11,16 @@ import path from "path";
 
 const app = express();
 const PORT = process.env.PORT || 5002;
+
+// Request logging middleware
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    console.log(`${req.method} ${req.originalUrl} ${res.statusCode} ${duration}ms`);
+  });
+  next();
+});
 
 // Security middleware
 app.use(helmet());
@@ -47,8 +58,8 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Initialize database
 initDatabase().catch(err => {
@@ -65,14 +76,28 @@ app.get('/health', (req, res) => {
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
-    database: 'connected'
+    database: 'connected',
+    env: process.env.NODE_ENV || 'development'
   });
+});
+
+// 404 Handler
+app.use((req, res) => {
+  res.status(404).json({ error: 'Route not found' });
 });
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-  console.error('Error:', err);
-  res.status(500).json({ error: 'Internal server error' });
+  console.error('Error:', err.message);
+
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+
+  res.status(500).json({
+    error: err.message,
+    stack: err.stack
+  });
 });
 
 // Start server
@@ -82,6 +107,8 @@ const server = app.listen(PORT, () => {
   console.log(`🔐 Auth endpoints at http://localhost:${PORT}/api/auth`);
   console.log(`🗄️  Database: PostgreSQL`);
   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+  const secret = process.env.JWT_SECRET;
+  console.log(`🔐 JWT Secret: ${secret ? 'Set (starts with ' + secret.substring(0, 3) + '...)' : 'MISSING (Using default!)'}`);
 });
 
 // Graceful shutdown

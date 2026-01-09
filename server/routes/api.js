@@ -94,7 +94,7 @@ router.get('/contacts/:id/documents', authenticateToken, async (req, res) => {
 // Users routes
 router.get('/users', authenticateToken, async (req, res) => {
   try {
-    const result = await query('SELECT id, name, email, role, permissions, must_reset_password AS "mustResetPassword", created_at AS "createdAt" FROM users');
+    const result = await query('SELECT id, name, email, role, permissions, "mustResetPassword", "createdAt" FROM users');
     res.json(result.rows);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -137,7 +137,7 @@ router.put('/users/:id', authenticateToken, async (req, res) => {
     }
 
     // Return updated user
-    const result = await query('SELECT id, name, email, role, permissions FROM users WHERE id = $1', [req.params.id]);
+    const result = await query('SELECT id, name, email, role, permissions, "mustResetPassword" FROM users WHERE id = $1', [req.params.id]);
     const user = result.rows[0];
 
     // Parse permissions JSON
@@ -156,16 +156,16 @@ router.put('/users/:id', authenticateToken, async (req, res) => {
 const transformContact = (dbContact) => {
   const contact = {
     id: dbContact.id,
-    userId: dbContact.user_id,
+    userId: dbContact.userId,
     name: dbContact.name,
-    contactId: dbContact.contact_id,
+    contactId: dbContact.contactId,
     email: dbContact.email,
     phone: dbContact.phone,
     department: dbContact.department,
     major: dbContact.major,
     notes: dbContact.notes,
-    fileStatus: dbContact.file_status,
-    agentAssigned: dbContact.agent_assigned,
+    fileStatus: dbContact.fileStatus,
+    agentAssigned: dbContact.agentAssigned,
     gpa: dbContact.gpa,
     advisor: dbContact.advisor,
     street1: dbContact.street1,
@@ -177,24 +177,24 @@ const transformContact = (dbContact) => {
     gstin: dbContact.gstin,
     pan: dbContact.pan,
     tags: dbContact.tags,
-    visaType: dbContact.visa_type,
-    countryOfApplication: dbContact.country_of_application,
+    visaType: dbContact.visaType,
+    countryOfApplication: dbContact.countryOfApplication,
     source: dbContact.source,
-    contactType: dbContact.contact_type,
+    contactType: dbContact.contactType,
     stream: dbContact.stream,
     intake: dbContact.intake,
-    counselorAssigned: dbContact.counselor_assigned,
-    applicationEmail: dbContact.application_email,
-    applicationPassword: dbContact.application_password,
-    createdAt: dbContact.created_at,
+    counselorAssigned: dbContact.counselorAssigned,
+    applicationEmail: dbContact.applicationEmail,
+    applicationPassword: dbContact.applicationPassword,
+    createdAt: dbContact.createdAt,
     // JSON fields
     checklist: Array.isArray(dbContact.checklist) ? dbContact.checklist : JSON.parse(dbContact.checklist || '[]'),
-    activityLog: Array.isArray(dbContact.activity_log) ? dbContact.activity_log : JSON.parse(dbContact.activity_log || '[]'),
-    recordedSessions: Array.isArray(dbContact.recorded_sessions) ? dbContact.recorded_sessions : JSON.parse(dbContact.recorded_sessions || '[]'),
+    activityLog: Array.isArray(dbContact.activityLog) ? dbContact.activityLog : JSON.parse(dbContact.activityLog || '[]'),
+    recordedSessions: Array.isArray(dbContact.recordedSessions) ? dbContact.recordedSessions : JSON.parse(dbContact.recordedSessions || '[]'),
     documents: Array.isArray(dbContact.documents) ? dbContact.documents : JSON.parse(dbContact.documents || '[]'),
-    visaInformation: typeof dbContact.visa_information === 'object' ? dbContact.visa_information : JSON.parse(dbContact.visa_information || '{}'),
-    lmsProgress: typeof dbContact.lms_progress === 'object' ? dbContact.lms_progress : JSON.parse(dbContact.lms_progress || '{}'),
-    lmsNotes: typeof dbContact.lms_notes === 'object' ? dbContact.lms_notes : JSON.parse(dbContact.lms_notes || '{}'),
+    visaInformation: typeof dbContact.visaInformation === 'object' ? dbContact.visaInformation : JSON.parse(dbContact.visaInformation || '{}'),
+    lmsProgress: typeof dbContact.lmsProgress === 'object' ? dbContact.lmsProgress : JSON.parse(dbContact.lmsProgress || '{}'),
+    lmsNotes: typeof dbContact.lmsNotes === 'object' ? dbContact.lmsNotes : JSON.parse(dbContact.lmsNotes || '{}'),
     courses: Array.isArray(dbContact.courses) ? dbContact.courses : JSON.parse(dbContact.courses || '[]'),
   };
   return contact;
@@ -246,11 +246,11 @@ router.post('/contacts', authenticateToken, async (req, res) => {
 
     const result = await query(`
       INSERT INTO contacts (
-        user_id, name, contact_id, email, phone, department, major, notes, file_status,
-        agent_assigned, checklist, activity_log, recorded_sessions, documents, visa_information,
-        lms_progress, lms_notes, gpa, advisor, courses, street1, street2, city, state, zip,
-        country, gstin, pan, tags, visa_type, country_of_application, source, contact_type,
-        stream, intake, counselor_assigned, application_email, application_password
+        "userId", name, "contactId", email, phone, department, major, notes, "fileStatus",
+        "agentAssigned", checklist, "activityLog", "recordedSessions", documents, "visaInformation",
+        "lmsProgress", "lmsNotes", gpa, advisor, courses, street1, street2, city, state, zip,
+        country, gstin, pan, tags, "visaType", "countryOfApplication", source, "contactType",
+        stream, intake, "counselorAssigned", "applicationEmail", "applicationPassword"
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38)
       RETURNING *
     `, [
@@ -305,13 +305,13 @@ router.put('/contacts/:id', authenticateToken, async (req, res) => {
     await query(`
       UPDATE contacts SET
         name = $1, email = $2, phone = $3, department = $4, major = $5, notes = $6,
-        file_status = $7, agent_assigned = $8, checklist = $9, activity_log = $10,
-        recorded_sessions = $11, documents = $12, visa_information = $13, lms_progress = $14,
-        lms_notes = $15, gpa = $16, advisor = $17, courses = $18, street1 = $19, street2 = $20,
+        "fileStatus" = $7, "agentAssigned" = $8, checklist = $9, "activityLog" = $10,
+        "recordedSessions" = $11, documents = $12, "visaInformation" = $13, "lmsProgress" = $14,
+        "lmsNotes" = $15, gpa = $16, advisor = $17, courses = $18, street1 = $19, street2 = $20,
         city = $21, state = $22, zip = $23, country = $24, gstin = $25, pan = $26, tags = $27,
-        visa_type = $28, country_of_application = $29, source = $30, contact_type = $31,
-        stream = $32, intake = $33, counselor_assigned = $34, application_email = $35,
-        application_password = $36
+        "visaType" = $28, "countryOfApplication" = $29, source = $30, "contactType" = $31,
+        stream = $32, intake = $33, "counselorAssigned" = $34, "applicationEmail" = $35,
+        "applicationPassword" = $36
       WHERE id = $37
     `, [
       contact.name,
@@ -362,11 +362,11 @@ router.put('/contacts/:id', authenticateToken, async (req, res) => {
 // Helper to transform lead keys
 // Helper to transform lead keys
 const transformLead = (lead) => {
-  const { assigned_to, created_at, ...rest } = lead;
+  const { assignedTo, createdAt, ...rest } = lead;
   return {
     ...rest,
-    assignedTo: assigned_to,
-    createdAt: created_at
+    assignedTo,
+    createdAt
   };
 };
 
@@ -442,7 +442,8 @@ router.delete('/users/:id', authenticateToken, async (req, res) => {
     // All business data (leads, activities, etc.) is preserved
 
     // Delete user's contact record
-    await query('DELETE FROM contacts WHERE user_id = $1', [userIdToDelete]);
+    // Delete user's contact record
+    await query('DELETE FROM contacts WHERE "userId" = $1', [userIdToDelete]);
 
     // Delete the user account
     await query('DELETE FROM users WHERE id = $1', [userIdToDelete]);
@@ -484,7 +485,7 @@ router.post('/leads', authenticateToken, async (req, res) => {
 
     // 1. Create the Lead
     const leadResult = await query(`
-      INSERT INTO leads (title, company, value, contact, stage, email, phone, source, assigned_to, notes, quotations)
+      INSERT INTO leads (title, company, value, contact, stage, email, phone, source, "assignedTo", notes, quotations)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       RETURNING *
     `, [
@@ -512,13 +513,13 @@ router.post('/leads', authenticateToken, async (req, res) => {
     const datePrefix = `LA${yy}${mm}${dd}`;
 
     const todayContacts = await query(
-      "SELECT \"contact_id\" FROM contacts WHERE \"contact_id\" LIKE $1 ORDER BY \"contact_id\" DESC LIMIT 1",
+      "SELECT \"contactId\" FROM contacts WHERE \"contactId\" LIKE $1 ORDER BY \"contactId\" DESC LIMIT 1",
       [`${datePrefix}%`]
     );
 
     let sequence = 0;
     if (todayContacts.rows.length > 0) {
-      const lastId = todayContacts.rows[0].contact_id;
+      const lastId = todayContacts.rows[0].contactId;
       sequence = parseInt(lastId.slice(-3)) + 1;
     }
     const newContactId = `${datePrefix}${String(sequence).padStart(3, '0')}`;
@@ -526,7 +527,7 @@ router.post('/leads', authenticateToken, async (req, res) => {
     // Insert Contact
     await query(`
       INSERT INTO contacts (
-        name, contact_id, email, phone, department, major, notes, source, contact_type, checklist, created_at
+        name, "contactId", email, phone, department, major, notes, source, "contactType", checklist, "createdAt"
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
     `, [
       lead.contact, // Contact Name
@@ -549,7 +550,7 @@ router.post('/leads', authenticateToken, async (req, res) => {
       if (assignedUserResult.rows.length > 0) {
         const userId = assignedUserResult.rows[0].id;
         await query(`
-          INSERT INTO notifications (title, description, read, link_to, recipient_user_ids, timestamp)
+          INSERT INTO notifications (title, description, read, "linkTo", "recipientUserIds", timestamp)
           VALUES ($1, $2, $3, $4, $5, NOW())
         `, [
           'New Lead Assigned',
@@ -575,7 +576,7 @@ router.put('/leads/:id', authenticateToken, async (req, res) => {
     await query(`
       UPDATE leads SET
         title = $1, company = $2, value = $3, contact = $4, stage = $5,
-        email = $6, phone = $7, source = $8, assigned_to = $9, notes = $10, quotations = $11
+        email = $6, phone = $7, source = $8, "assignedTo" = $9, notes = $10, quotations = $11
       WHERE id = $12
     `, [
       lead.title,
@@ -625,7 +626,7 @@ router.post('/transactions', authenticateToken, async (req, res) => {
     const transaction = req.body;
     const id = transaction.id || `INV-${String(Date.now()).slice(-6)}`;
     const result = await query(`
-      INSERT INTO transactions (id, customer_name, date, description, type, status, amount)
+      INSERT INTO transactions (id, "customerName", date, description, type, status, amount)
       VALUES ($1, $2, $3, $4, $5, $6, $7)
       RETURNING *
     `, [
@@ -648,7 +649,7 @@ router.put('/transactions/:id', authenticateToken, async (req, res) => {
     const transaction = req.body;
     await query(`
       UPDATE transactions SET
-        customer_name = $1, date = $2, description = $3, type = $4, status = $5, amount = $6
+        "customerName" = $1, date = $2, description = $3, type = $4, status = $5, amount = $6
       WHERE id = $7
     `, [
       transaction.customerName,
@@ -729,11 +730,11 @@ router.delete('/events/:id', authenticateToken, async (req, res) => {
 // Tasks routes
 router.get('/tasks', authenticateToken, async (req, res) => {
   try {
-    const result = await query('SELECT * FROM tasks WHERE user_id = $1 OR user_id IS NULL', [req.user.id]);
+    const result = await query('SELECT * FROM tasks WHERE "userId" = $1 OR "userId" IS NULL', [req.user.id]);
     res.json(result.rows.map(t => ({
       ...t,
-      userId: t.user_id,
-      dueDate: t.due_date
+      userId: t.userId,
+      dueDate: t.dueDate
     })));
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -744,7 +745,7 @@ router.post('/tasks', authenticateToken, async (req, res) => {
   try {
     const task = req.body;
     const result = await query(`
-      INSERT INTO tasks (title, description, due_date, status, user_id)
+      INSERT INTO tasks (title, description, "dueDate", status, "userId")
       VALUES ($1, $2, $3, $4, $5)
       RETURNING *
     `, [
@@ -901,11 +902,11 @@ router.get('/visitors', authenticateToken, async (req, res) => {
     const result = await query('SELECT * FROM visitors');
     const visitors = result.rows.map(v => ({
       ...v,
-      scheduledCheckIn: v.scheduled_check_in,
-      checkIn: v.check_in,
-      checkOut: v.check_out,
-      cardNumber: v.card_number,
-      createdAt: v.created_at
+      scheduledCheckIn: v.scheduledCheckIn,
+      checkIn: v.checkIn,
+      checkOut: v.checkOut,
+      cardNumber: v.cardNumber,
+      createdAt: v.createdAt
     }));
     res.json(visitors);
   } catch (error) {
@@ -917,7 +918,7 @@ router.post('/visitors', authenticateToken, async (req, res) => {
   try {
     const { name, company, host, scheduledCheckIn, checkIn, checkOut, status, cardNumber } = req.body;
     const result = await query(`
-      INSERT INTO visitors (name, company, host, scheduled_check_in, check_in, check_out, status, card_number)
+      INSERT INTO visitors (name, company, host, "scheduledCheckIn", "checkIn", "checkOut", status, "cardNumber")
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       RETURNING *
     `, [
@@ -972,8 +973,8 @@ router.put('/visitors/:id', authenticateToken, async (req, res) => {
     const visitor = req.body;
     await query(`
       UPDATE visitors SET
-        name = $1, company = $2, host = $3, scheduled_check_in = $4, check_in = $5,
-        check_out = $6, status = $7, card_number = $8
+        name = $1, company = $2, host = $3, "scheduledCheckIn" = $4, "checkIn" = $5,
+        "checkOut" = $6, status = $7, "cardNumber" = $8
       WHERE id = $9
     `, [
       visitor.name,
@@ -1016,9 +1017,9 @@ router.post('/quotation-templates', authenticateToken, async (req, res) => {
   try {
     const template = req.body;
     const result = await query(`
-      INSERT INTO quotation_templates (title, description, line_items, total)
+      INSERT INTO quotation_templates (title, description, "lineItems", total)
       VALUES ($1, $2, $3, $4)
-      RETURNING id, title, description, line_items AS "lineItems", total, created_at AS "createdAt"
+      RETURNING id, title, description, "lineItems", total, "createdAt"
     `, [
       template.title,
       template.description || null,
@@ -1035,7 +1036,7 @@ router.put('/quotation-templates/:id', authenticateToken, async (req, res) => {
   try {
     const template = req.body;
     await query(`
-      UPDATE quotation_templates SET title = $1, description = $2, line_items = $3, total = $4
+      UPDATE quotation_templates SET title = $1, description = $2, "lineItems" = $3, total = $4
       WHERE id = $5
     `, [
       template.title,
@@ -1044,7 +1045,7 @@ router.put('/quotation-templates/:id', authenticateToken, async (req, res) => {
       template.total,
       req.params.id
     ]);
-    const result = await query('SELECT id, title, description, line_items AS "lineItems", total, created_at AS "createdAt" FROM quotation_templates WHERE id = $1', [req.params.id]);
+    const result = await query('SELECT id, title, description, "lineItems", total, "createdAt" FROM quotation_templates WHERE id = $1', [req.params.id]);
     res.json(result.rows[0]);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -1144,7 +1145,7 @@ router.put('/notifications/mark-all-read', authenticateToken, async (req, res) =
     await query(`
       UPDATE notifications SET read = true 
       WHERE "recipientUserIds"::jsonb @> $1::jsonb 
-      OR recipient_roles::jsonb @> $2::jsonb
+      OR "recipientRoles"::jsonb @> $2::jsonb
     `, [JSON.stringify([req.user.id]), JSON.stringify([req.user.role])]);
     res.json({ success: true });
   } catch (error) {

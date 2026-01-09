@@ -1,19 +1,29 @@
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
+import './load_env.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+const getSecret = () => {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('FATAL: JWT_SECRET is not defined in production environment!');
+    }
+    return 'your-secret-key-change-in-production';
+  }
+  return secret;
+};
 
 export function generateToken(user) {
   return jwt.sign(
     { id: user.id, email: user.email, role: user.role },
-    JWT_SECRET,
+    getSecret(),
     { expiresIn: '7d' }
   );
 }
 
 export function verifyToken(token) {
   try {
-    return jwt.verify(token, JWT_SECRET);
+    return jwt.verify(token, getSecret());
   } catch (error) {
     return null;
   }
@@ -47,8 +57,12 @@ export async function authenticateToken(req, res, next) {
     const { query } = await import('./database.js');
     const result = await query('SELECT role, permissions FROM users WHERE id = $1', [decoded.id]);
     if (result.rows.length > 0) {
-      req.user.role = result.rows[0].role;
-      req.user.permissions = result.rows[0].permissions || {};
+      const userDoc = result.rows[0];
+      req.user.role = userDoc.role;
+      // Ensure permissions are an object
+      req.user.permissions = typeof userDoc.permissions === 'string'
+        ? JSON.parse(userDoc.permissions)
+        : (userDoc.permissions || {});
     }
   } catch (error) {
     console.error('Error fetching user permissions:', error);

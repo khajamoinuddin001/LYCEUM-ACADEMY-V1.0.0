@@ -1,3 +1,6 @@
+import 'dotenv/config';
+
+
 import bcrypt from "bcryptjs";
 import pg from "pg";
 
@@ -27,7 +30,7 @@ async function createAdmin() {
   await pool.query(
     `
     INSERT INTO users 
-    (name, email, password, role, permissions, is_verified, must_reset_password)
+    (name, email, password, role, permissions, is_verified, "mustResetPassword")
     VALUES
     ($1, $2, $3, 'Admin', '{}', true, false)
     `,

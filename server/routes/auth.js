@@ -15,10 +15,46 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'Name, email, and password are required' });
     }
 
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters long' });
+    }
+
     // Check if user exists
     const existingResult = await query('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
+
     if (existingResult.rows.length > 0) {
-      return res.status(400).json({ error: 'Email already registered' });
+      const existingUser = existingResult.rows[0];
+
+      // If the user exists and is already verified, block registration
+      if (existingUser.is_verified) {
+        return res.status(400).json({ error: 'Email already registered' });
+      }
+
+      // If the user exists but is NOT verified, we allow "re-registration"
+      // This acts as a resend verification mechanism and allows correcting name/password
+      console.log(`🔄 Re-registration attempt for unverified email: ${email}`);
+
+      const hashedPassword = await hashPassword(password);
+      const crypto = await import('crypto');
+      const verificationToken = crypto.randomBytes(32).toString('hex');
+
+      await query(`
+        UPDATE users 
+        SET name = $1, password = $2, verification_token = $3, "createdAt" = CURRENT_TIMESTAMP
+        WHERE id = $4
+      `, [name, hashedPassword, verificationToken, existingUser.id]);
+
+      try {
+        const { sendVerificationEmail } = await import('../email.js');
+        await sendVerificationEmail(email.toLowerCase(), name, verificationToken);
+      } catch (emailError) {
+        console.warn('Failed to resend verification email:', emailError.message);
+      }
+
+      return res.json({
+        success: true,
+        message: 'Registration updated. A new verification email has been sent to your inbox.'
+      });
     }
 
     // Determine role based on email or admin key
@@ -68,7 +104,7 @@ router.post('/register', async (req, res) => {
     const userResult = await query(`
       INSERT INTO users (name, email, password, role, permissions, is_verified, verification_token)
       VALUES ($1, $2, $3, $4, $5, $6, $7)
-      RETURNING id, name, email, role, permissions, must_reset_password
+      RETURNING id, name, email, role, permissions, "mustResetPassword"
     `, [
       name,
       email.toLowerCase(),
@@ -85,7 +121,7 @@ router.post('/register', async (req, res) => {
     const contactId = `LA${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}${String(user.id).padStart(3, '0')}`;
 
     await query(`
-      INSERT INTO contacts (user_id, name, email, contact_id, department, major, notes, checklist, activity_log, recorded_sessions)
+      INSERT INTO contacts ("userId", name, email, "contactId", department, major, notes, checklist, "activityLog", "recordedSessions")
       VALUES ($1, $2, $3, $4, 'Unassigned', 'Unassigned', $5, $6, '[]', '[]')
       RETURNING *
     `, [
@@ -164,22 +200,27 @@ router.post('/login', async (req, res) => {
 
     const result = await query('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
     if (result.rows.length === 0) {
+      console.warn(`🔍 Login attempt failed: User not found (${email})`);
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
     const user = result.rows[0];
     const valid = await comparePassword(password, user.password);
     if (!valid) {
+      console.warn(`🔍 Login attempt failed: Incorrect password for ${email}`);
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
     // Check verification status
     if (user.is_verified === false) {
+      console.warn(`🔍 Login attempt blocked: Email not verified for ${email}`);
       return res.status(403).json({ error: 'Email not verified. Please check your inbox.' });
     }
 
     const { password: _, ...userWithoutPassword } = user;
     const token = generateToken(userWithoutPassword);
+
+    console.log(`✅ Successful login: ${email} (Role: ${user.role})`);
 
     // Format response
     const safeUser = {
@@ -187,7 +228,7 @@ router.post('/login', async (req, res) => {
       permissions: typeof userWithoutPassword.permissions === 'string'
         ? JSON.parse(userWithoutPassword.permissions)
         : userWithoutPassword.permissions,
-      mustResetPassword: userWithoutPassword.must_reset_password
+      mustResetPassword: userWithoutPassword.mustResetPassword
     };
 
     res.json({ user: safeUser, token });
@@ -201,7 +242,7 @@ router.post('/login', async (req, res) => {
 router.get('/me', authenticateToken, async (req, res) => {
   try {
     const result = await query(
-      'SELECT id, name, email, role, permissions, must_reset_password FROM users WHERE id = $1',
+      'SELECT id, name, email, role, permissions, "mustResetPassword" FROM users WHERE id = $1',
       [req.user.id]
     );
 
@@ -213,7 +254,7 @@ router.get('/me', authenticateToken, async (req, res) => {
     const safeUser = {
       ...user,
       permissions: typeof user.permissions === 'string' ? JSON.parse(user.permissions) : user.permissions,
-      mustResetPassword: user.must_reset_password
+      mustResetPassword: user.mustResetPassword
     };
 
     res.json({ user: safeUser });
@@ -241,7 +282,7 @@ router.post('/change-password', authenticateToken, async (req, res) => {
 
     const hashedPassword = await hashPassword(newPassword);
     await query(
-      'UPDATE users SET password = $1, must_reset_password = false WHERE id = $2',
+      'UPDATE users SET password = $1, "mustResetPassword" = false WHERE id = $2',
       [hashedPassword, req.user.id]
     );
 
@@ -341,7 +382,7 @@ router.post('/reset-password', async (req, res) => {
     // Update user password
     await query(`
       UPDATE users 
-      SET password = $1, must_reset_password = 0
+      SET password = $1, "mustResetPassword" = false
       WHERE email = $2
     `, [hashedPassword, email]);
 
@@ -411,9 +452,9 @@ router.post('/create-user', authenticateToken, async (req, res) => {
 
     // Create user (auto-verified, must reset password on first login)
     const userResult = await query(`
-      INSERT INTO users (name, email, password, role, permissions, is_verified, verification_token, must_reset_password)
+      INSERT INTO users (name, email, password, role, permissions, is_verified, verification_token, "mustResetPassword")
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-      RETURNING id, name, email, role, permissions, must_reset_password
+      RETURNING id, name, email, role, permissions, "mustResetPassword"
     `, [
       name,
       email.toLowerCase(),
@@ -431,7 +472,7 @@ router.post('/create-user', authenticateToken, async (req, res) => {
     const contactId = `LA${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}${String(user.id).padStart(3, '0')}`;
 
     await query(`
-      INSERT INTO contacts (user_id, name, email, contact_id, department, major, notes, checklist, activity_log, recorded_sessions)
+      INSERT INTO contacts ("userId", name, email, "contactId", department, major, notes, checklist, "activityLog", "recordedSessions")
       VALUES ($1, $2, $3, $4, 'Unassigned', 'Unassigned', $5, $6, '[]', '[]')
       RETURNING *
     `, [

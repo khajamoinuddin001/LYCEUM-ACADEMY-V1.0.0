@@ -80,7 +80,7 @@ async function createAdminUser() {
 
         // Create user
         const userResult = await pool.query(`
-      INSERT INTO users (name, email, password, role, permissions, must_reset_password)
+      INSERT INTO users (name, email, password, role, permissions, "mustResetPassword")
       VALUES ($1, $2, $3, 'Admin', $4, false)
       RETURNING id, name, email, role
     `, [name, email.toLowerCase(), hashedPassword, JSON.stringify({})]);
@@ -91,7 +91,7 @@ async function createAdminUser() {
         const contactId = `LA${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}${String(user.id).padStart(3, '0')}`;
 
         await pool.query(`
-      INSERT INTO contacts (user_id, name, email, contact_id, department, major, notes)
+      INSERT INTO contacts ("userId", name, email, "contactId", department, major, notes)
       VALUES ($1, $2, $3, $4, 'Administration', 'Admin', $5)
     `, [
             user.id,
