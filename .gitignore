@@ -45,5 +45,4 @@ temp/
 # Debug / one-time scripts
 server/diagnose_users.js
 server/list_columns.js
-server/load_env.js
 server/verify_fixes.js
