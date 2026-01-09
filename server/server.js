@@ -26,7 +26,55 @@ const app = express();
 app.set('trust proxy', 1);
 const PORT = process.env.PORT || 5002;
 
-// Request logging middleware
+// 1. Basic configuration & Parsing
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// 2. CORS configuration (Must be at the top)
+const allowedOrigins = [
+  'https://lyceumacad.com',
+  'https://www.lyceumacad.com',
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:3000'
+];
+
+app.use(cors({
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    // Allow any localhost for development
+    if (origin.startsWith('http://localhost:')) {
+      return callback(null, true);
+    }
+    return callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Requested-With', 'Origin'],
+  exposedHeaders: ['Set-Cookie']
+}));
+
+// Handle preflight
+app.options('*', cors());
+
+// 3. Security headers (Configured to play well with CORS)
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  crossOriginEmbedderPolicy: false
+}));
+
+// 4. Rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20000,
+  message: 'Too many requests from this IP, please try again later.'
+});
+app.use(limiter);
+
+// 5. Request logging
 app.use((req, res, next) => {
   const start = Date.now();
   res.on('finish', () => {
@@ -35,33 +83,6 @@ app.use((req, res, next) => {
   });
   next();
 });
-
-// CORS configuration
-app.use(cors({
-  origin: [
-    'https://lyceumacad.com',
-    'https://www.lyceumacad.com'
-  ],
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
-
-app.options('*', cors());
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-
-// Security middleware
-app.use(helmet());
-
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 20000, // Limit each IP to 20000 requests per windowMs (Scaled for 200+ users)
-  message: 'Too many requests from this IP, please try again later.'
-});
-
-app.use(limiter);
 
 
 // Initialize database (BLOCKING – correct)
