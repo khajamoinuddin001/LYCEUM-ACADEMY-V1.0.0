@@ -10,26 +10,9 @@
  *   node server/verify-user.js
  */
 
-import pg from 'pg';
+import '../load_env.js';
+import { query, closePool } from '../database.js';
 import readline from 'readline';
-import dotenv from 'dotenv';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Load environment variables
-const envFile = process.env.NODE_ENV === 'production' ? '.env.production' : '.env';
-dotenv.config({ path: path.resolve(__dirname, '..', envFile) });
-
-
-const { Pool } = pg;
-
-const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-});
 
 const rl = readline.createInterface({
     input: process.stdin,
@@ -53,12 +36,12 @@ async function verifyUser() {
         }
 
         // Check if user exists
-        const userResult = await pool.query('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
+        const userResult = await query('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
 
         if (userResult.rows.length === 0) {
             console.log('\n❌ User not found!');
             rl.close();
-            pool.end();
+            await closePool();
             return;
         }
 
@@ -67,7 +50,7 @@ async function verifyUser() {
         if (user.is_verified) {
             console.log(`\n⚠️  User '${user.name}' (${user.email}) is ALREADY verified.`);
         } else {
-            await pool.query('UPDATE users SET is_verified = true, verification_token = null WHERE id = $1', [user.id]);
+            await query('UPDATE users SET is_verified = true, verification_token = null WHERE id = $1', [user.id]);
             console.log(`\n🎉 Success! User '${user.name}' (${user.email}) has been verified.`);
             console.log('They should be able to log in now.');
         }
@@ -76,7 +59,7 @@ async function verifyUser() {
         console.error('\n❌ Error verifying user:', error.message);
     } finally {
         rl.close();
-        await pool.end();
+        await closePool();
     }
 }
 

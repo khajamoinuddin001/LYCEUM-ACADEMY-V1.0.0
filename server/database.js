@@ -31,6 +31,20 @@ export async function initDatabase() {
     console.log("✅ Connected to PostgreSQL database");
     await client.query("BEGIN");
 
+    // Helper for migrations
+    const migrateColumn = async (table, oldName, newName) => {
+      if (oldName === newName) return;
+      const res = await client.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = $1 AND column_name = $2
+      `, [table, oldName]);
+      if (res.rows.length > 0) {
+        console.log(`📡 [Migration] Renaming ${table}.${oldName} -> ${newName}`);
+        await client.query(`ALTER TABLE "${table}" RENAME COLUMN "${oldName}" TO "${newName}"`);
+      }
+    };
+
     // USERS
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
@@ -43,31 +57,32 @@ export async function initDatabase() {
         must_reset_password BOOLEAN DEFAULT false,
         is_verified BOOLEAN DEFAULT false,
         verification_token TEXT,
-        "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    await migrateColumn('users', 'createdAt', 'created_at');
 
     // CONTACTS
     await client.query(`
       CREATE TABLE IF NOT EXISTS contacts (
         id SERIAL PRIMARY KEY,
-        "userId" INTEGER REFERENCES users(id),
+        user_id INTEGER REFERENCES users(id),
         name TEXT NOT NULL,
-        "contactId" TEXT,
+        contact_id TEXT,
         email TEXT,
         phone TEXT,
         department TEXT,
         major TEXT,
         notes TEXT,
-        "fileStatus" TEXT,
-        "agentAssigned" TEXT,
+        file_status TEXT,
+        agent_assigned TEXT,
         checklist JSONB DEFAULT '[]',
-        "activityLog" JSONB DEFAULT '[]',
-        "recordedSessions" JSONB DEFAULT '[]',
+        activity_log JSONB DEFAULT '[]',
+        recorded_sessions JSONB DEFAULT '[]',
         documents JSONB DEFAULT '[]',
-        "visaInformation" JSONB DEFAULT '{}',
-        "lmsProgress" JSONB DEFAULT '{}',
-        "lmsNotes" JSONB DEFAULT '{}',
+        visa_information JSONB DEFAULT '{}',
+        lms_progress JSONB DEFAULT '{}',
+        lms_notes JSONB DEFAULT '{}',
         gpa REAL,
         advisor TEXT,
         courses JSONB DEFAULT '[]',
@@ -80,18 +95,34 @@ export async function initDatabase() {
         gstin TEXT,
         pan TEXT,
         tags TEXT,
-        "visaType" TEXT,
-        "countryOfApplication" TEXT,
+        visa_type TEXT,
+        country_of_application TEXT,
         source TEXT,
-        "contactType" TEXT,
+        contact_type TEXT,
         stream TEXT,
         intake TEXT,
-        "counselorAssigned" TEXT,
-        "applicationEmail" TEXT,
-        "applicationPassword" TEXT,
-        "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        counselor_assigned TEXT,
+        application_email TEXT,
+        application_password TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    await migrateColumn('contacts', 'userId', 'user_id');
+    await migrateColumn('contacts', 'contactId', 'contact_id');
+    await migrateColumn('contacts', 'fileStatus', 'file_status');
+    await migrateColumn('contacts', 'agentAssigned', 'agent_assigned');
+    await migrateColumn('contacts', 'activityLog', 'activity_log');
+    await migrateColumn('contacts', 'recordedSessions', 'recorded_sessions');
+    await migrateColumn('contacts', 'visaInformation', 'visa_information');
+    await migrateColumn('contacts', 'lmsProgress', 'lms_progress');
+    await migrateColumn('contacts', 'lmsNotes', 'lms_notes');
+    await migrateColumn('contacts', 'visaType', 'visa_type');
+    await migrateColumn('contacts', 'countryOfApplication', 'country_of_application');
+    await migrateColumn('contacts', 'contactType', 'contact_type');
+    await migrateColumn('contacts', 'counselorAssigned', 'counselor_assigned');
+    await migrateColumn('contacts', 'applicationEmail', 'application_email');
+    await migrateColumn('contacts', 'applicationPassword', 'application_password');
+    await migrateColumn('contacts', 'createdAt', 'created_at');
 
     // LEADS
     await client.query(`
@@ -105,26 +136,30 @@ export async function initDatabase() {
         email TEXT,
         phone TEXT,
         source TEXT,
-        "assignedTo" TEXT,
+        assigned_to TEXT,
         notes TEXT,
         quotations JSONB DEFAULT '[]',
-        "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    await migrateColumn('leads', 'assignedTo', 'assigned_to');
+    await migrateColumn('leads', 'createdAt', 'created_at');
 
     // Transactions table
     await client.query(`
       CREATE TABLE IF NOT EXISTS transactions (
         id TEXT PRIMARY KEY,
-        "customerName" TEXT NOT NULL,
+        customer_name TEXT NOT NULL,
         date TEXT NOT NULL,
         description TEXT,
         type TEXT NOT NULL CHECK(type IN ('Invoice', 'Bill', 'Payment')),
         status TEXT NOT NULL CHECK(status IN ('Paid', 'Pending', 'Overdue')),
         amount REAL NOT NULL,
-        "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    await migrateColumn('transactions', 'customerName', 'customer_name');
+    await migrateColumn('transactions', 'createdAt', 'created_at');
 
     // Events table
     await client.query(`
@@ -135,9 +170,10 @@ export async function initDatabase() {
         "end" TIMESTAMP NOT NULL,
         color TEXT NOT NULL CHECK(color IN ('blue', 'green', 'purple', 'red')),
         description TEXT,
-        "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    await migrateColumn('events', 'createdAt', 'created_at');
 
     // Tasks table
     await client.query(`
@@ -145,14 +181,80 @@ export async function initDatabase() {
         id SERIAL PRIMARY KEY,
         title TEXT NOT NULL,
         description TEXT,
-        "dueDate" TEXT NOT NULL,
+        due_date TEXT NOT NULL,
         status TEXT NOT NULL CHECK(status IN ('todo', 'inProgress', 'done')),
-        "userId" INTEGER REFERENCES users(id),
-        "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        user_id INTEGER REFERENCES users(id),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    await migrateColumn('tasks', 'dueDate', 'due_date');
+    await migrateColumn('tasks', 'userId', 'user_id');
+    await migrateColumn('tasks', 'createdAt', 'created_at');
 
-    // Channels table
+    // Visitors table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS visitors (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        company TEXT NOT NULL,
+        host TEXT NOT NULL,
+        scheduled_check_in TIMESTAMP,
+        check_in TIMESTAMP,
+        check_out TIMESTAMP,
+        status TEXT NOT NULL CHECK(status IN ('Scheduled', 'Checked-in', 'Checked-out')),
+        card_number TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await migrateColumn('visitors', 'scheduledCheckIn', 'scheduled_check_in');
+    await migrateColumn('visitors', 'checkIn', 'check_in');
+    await migrateColumn('visitors', 'checkOut', 'check_out');
+    await migrateColumn('visitors', 'cardNumber', 'card_number');
+    await migrateColumn('visitors', 'createdAt', 'created_at');
+
+    // Quotation Templates table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS quotation_templates (
+        id SERIAL PRIMARY KEY,
+        title TEXT NOT NULL,
+        description TEXT,
+        line_items JSONB DEFAULT '[]',
+        total REAL DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await migrateColumn('quotation_templates', 'lineItems', 'line_items');
+    await migrateColumn('quotation_templates', 'createdAt', 'created_at');
+
+    // Activity Log table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS activity_log (
+        id SERIAL PRIMARY KEY,
+        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        admin_name TEXT NOT NULL,
+        action TEXT NOT NULL
+      )
+    `);
+    await migrateColumn('activity_log', 'adminName', 'admin_name');
+
+    // Notifications table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS notifications (
+        id SERIAL PRIMARY KEY,
+        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL,
+        read BOOLEAN DEFAULT false,
+        link_to JSONB DEFAULT '{}',
+        recipient_user_ids JSONB DEFAULT '[]',
+        recipient_roles JSONB DEFAULT '[]'
+      )
+    `);
+    await migrateColumn('notifications', 'linkTo', 'link_to');
+    await migrateColumn('notifications', 'recipientUserIds', 'recipient_user_ids');
+    await migrateColumn('notifications', 'recipientRoles', 'recipient_roles');
+
+    // Channels table (ensure createdAt)
     await client.query(`
       CREATE TABLE IF NOT EXISTS channels (
         id TEXT PRIMARY KEY,
@@ -160,9 +262,10 @@ export async function initDatabase() {
         type TEXT NOT NULL CHECK(type IN ('public', 'private', 'dm')),
         members JSONB DEFAULT '[]',
         messages JSONB DEFAULT '[]',
-        "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    await migrateColumn('channels', 'createdAt', 'created_at');
 
     // Coupons table
     await client.query(`
@@ -174,7 +277,7 @@ export async function initDatabase() {
       )
     `);
 
-    // LMS Courses table
+    // LMS Courses (ensure createdAt)
     await client.query(`
       CREATE TABLE IF NOT EXISTS lms_courses (
         id TEXT PRIMARY KEY,
@@ -184,47 +287,10 @@ export async function initDatabase() {
         price REAL,
         modules JSONB DEFAULT '[]',
         discussions JSONB DEFAULT '[]',
-        "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
-
-    // Visitors table
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS visitors (
-        id SERIAL PRIMARY KEY,
-        name TEXT NOT NULL,
-        company TEXT NOT NULL,
-        host TEXT NOT NULL,
-        "scheduledCheckIn" TIMESTAMP,
-        "checkIn" TIMESTAMP,
-        "checkOut" TIMESTAMP,
-        status TEXT NOT NULL CHECK(status IN ('Scheduled', 'Checked-in', 'Checked-out')),
-        "cardNumber" TEXT,
-        "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    // Quotation Templates table
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS quotation_templates (
-        id SERIAL PRIMARY KEY,
-        title TEXT NOT NULL,
-        description TEXT,
-        "lineItems" JSONB DEFAULT '[]',
-        total REAL DEFAULT 0,
-        "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    // Activity Log table
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS activity_log (
-        id SERIAL PRIMARY KEY,
-        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        "adminName" TEXT NOT NULL,
-        action TEXT NOT NULL
-      )
-    `);
+    await migrateColumn('lms_courses', 'createdAt', 'created_at');
 
     // Payment Activity Log table
     await client.query(`
@@ -237,48 +303,22 @@ export async function initDatabase() {
       )
     `);
 
-    // Notifications table
+    // Password Reset Tokens table
     await client.query(`
-      CREATE TABLE IF NOT EXISTS notifications (
+      CREATE TABLE IF NOT EXISTS password_reset_tokens (
         id SERIAL PRIMARY KEY,
-        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        title TEXT NOT NULL,
-        description TEXT NOT NULL,
-        read BOOLEAN DEFAULT false,
-        "linkTo" JSONB DEFAULT '{}',
-        "recipientUserIds" JSONB DEFAULT '[]',
-        "recipientRoles" JSONB DEFAULT '[]'
+        email TEXT NOT NULL,
+        token TEXT NOT NULL,
+        expires_at TIMESTAMP NOT NULL,
+        used BOOLEAN DEFAULT false,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
-
-    // Documents table
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS documents (
-        id SERIAL PRIMARY KEY,
-        contact_id INTEGER REFERENCES contacts(id) ON DELETE CASCADE,
-        name TEXT NOT NULL,
-        type TEXT NOT NULL,
-        size INTEGER NOT NULL,
-        content BYTEA NOT NULL,
-        uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    // Videos table for recorded sessions
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS videos (
-        id SERIAL PRIMARY KEY,
-        contact_id INTEGER REFERENCES contacts(id) ON DELETE CASCADE,
-        session_id BIGINT NOT NULL UNIQUE,
-        content BYTEA NOT NULL,
-        mime_type TEXT NOT NULL,
-        size INTEGER NOT NULL,
-        uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
+    await migrateColumn('password_reset_tokens', 'expiresAt', 'expires_at');
+    await migrateColumn('password_reset_tokens', 'createdAt', 'created_at');
 
     await client.query("COMMIT");
-    console.log("✅ Database schema initialized successfully");
+    console.log("✅ Database schema initialized and migrated successfully");
   } catch (err) {
     if (client) await client.query("ROLLBACK");
     console.error("❌ Database init failed:", err);

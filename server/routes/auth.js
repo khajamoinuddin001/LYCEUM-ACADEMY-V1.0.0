@@ -40,7 +40,7 @@ router.post('/register', async (req, res) => {
 
       await query(`
         UPDATE users 
-        SET name = $1, password = $2, verification_token = $3, "createdAt" = CURRENT_TIMESTAMP
+        SET name = $1, password = $2, verification_token = $3, created_at = CURRENT_TIMESTAMP
         WHERE id = $4
       `, [name, hashedPassword, verificationToken, existingUser.id]);
 
@@ -121,7 +121,7 @@ router.post('/register', async (req, res) => {
     const contactId = `LA${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}${String(user.id).padStart(3, '0')}`;
 
     await query(`
-      INSERT INTO contacts ("userId", name, email, "contactId", department, major, notes, checklist, "activityLog", "recordedSessions")
+      INSERT INTO contacts (user_id, name, email, contact_id, department, major, notes, checklist, activity_log, recorded_sessions)
       VALUES ($1, $2, $3, $4, 'Unassigned', 'Unassigned', $5, $6, '[]', '[]')
       RETURNING *
     `, [
@@ -305,7 +305,7 @@ router.post('/forgot-password', async (req, res) => {
     // Check rate limiting - max 60 requests per hour per email
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
     const recentRequests = await query(
-      'SELECT COUNT(*) FROM password_reset_tokens WHERE email = $1 AND "createdAt" > $2',
+      'SELECT COUNT(*) FROM password_reset_tokens WHERE email = $1 AND created_at > $2',
       [email.toLowerCase(), oneHourAgo]
     );
 
@@ -330,7 +330,7 @@ router.post('/forgot-password', async (req, res) => {
 
       // Store token in database
       await query(`
-        INSERT INTO password_reset_tokens (email, token, "expiresAt")
+        INSERT INTO password_reset_tokens (email, token, expires_at)
         VALUES ($1, $2, $3)
       `, [email.toLowerCase(), resetToken, expiresAt]);
 
@@ -366,7 +366,7 @@ router.post('/reset-password', async (req, res) => {
     // Find valid token
     const tokenResult = await query(`
       SELECT * FROM password_reset_tokens 
-      WHERE token = $1 AND used = FALSE AND "expiresAt" > NOW()
+      WHERE token = $1 AND used = FALSE AND expires_at > NOW()
     `, [token]);
 
     if (tokenResult.rows.length === 0) {
@@ -472,7 +472,7 @@ router.post('/create-user', authenticateToken, async (req, res) => {
     const contactId = `LA${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}${String(user.id).padStart(3, '0')}`;
 
     await query(`
-      INSERT INTO contacts ("userId", name, email, "contactId", department, major, notes, checklist, "activityLog", "recordedSessions")
+      INSERT INTO contacts (user_id, name, email, contact_id, department, major, notes, checklist, activity_log, recorded_sessions)
       VALUES ($1, $2, $3, $4, 'Unassigned', 'Unassigned', $5, $6, '[]', '[]')
       RETURNING *
     `, [
