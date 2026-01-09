@@ -47,7 +47,7 @@ export async function initDatabase() {
         password TEXT NOT NULL,
         role TEXT NOT NULL CHECK(role IN ('Admin', 'Staff', 'Student')),
         permissions JSONB DEFAULT '{}',
-        "mustResetPassword" BOOLEAN DEFAULT false,
+        must_reset_password BOOLEAN DEFAULT false,
         is_verified BOOLEAN DEFAULT false,
         verification_token TEXT,
         "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP

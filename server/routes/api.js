@@ -94,8 +94,11 @@ router.get('/contacts/:id/documents', authenticateToken, async (req, res) => {
 // Users routes
 router.get('/users', authenticateToken, requireRole('Admin'), async (req, res) => {
   try {
-    const result = await query('SELECT id, name, email, role, permissions, "mustResetPassword", "createdAt" FROM users');
-    res.json(result.rows);
+    const result = await query('SELECT id, name, email, role, permissions, must_reset_password, "createdAt" FROM users');
+    res.json(result.rows.map(user => ({
+      ...user,
+      mustResetPassword: user.must_reset_password
+    })));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -137,12 +140,16 @@ router.put('/users/:id', authenticateToken, async (req, res) => {
     }
 
     // Return updated user
-    const result = await query('SELECT id, name, email, role, permissions, "mustResetPassword" FROM users WHERE id = $1', [req.params.id]);
+    const result = await query('SELECT id, name, email, role, permissions, must_reset_password FROM users WHERE id = $1', [req.params.id]);
     const user = result.rows[0];
 
     // Parse permissions JSON
     if (user && user.permissions) {
       user.permissions = typeof user.permissions === 'string' ? JSON.parse(user.permissions) : user.permissions;
+    }
+
+    if (user) {
+      user.mustResetPassword = user.must_reset_password;
     }
 
     res.json(user);

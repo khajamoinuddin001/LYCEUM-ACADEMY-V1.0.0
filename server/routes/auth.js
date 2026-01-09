@@ -104,7 +104,7 @@ router.post('/register', async (req, res) => {
     const userResult = await query(`
       INSERT INTO users (name, email, password, role, permissions, is_verified, verification_token)
       VALUES ($1, $2, $3, $4, $5, $6, $7)
-      RETURNING id, name, email, role, permissions, "mustResetPassword"
+      RETURNING id, name, email, role, permissions, must_reset_password
     `, [
       name,
       email.toLowerCase(),
@@ -228,7 +228,7 @@ router.post('/login', async (req, res) => {
       permissions: typeof userWithoutPassword.permissions === 'string'
         ? JSON.parse(userWithoutPassword.permissions)
         : userWithoutPassword.permissions,
-      mustResetPassword: userWithoutPassword.mustResetPassword
+      mustResetPassword: userWithoutPassword.must_reset_password
     };
 
     res.json({ user: safeUser, token });
@@ -242,7 +242,7 @@ router.post('/login', async (req, res) => {
 router.get('/me', authenticateToken, async (req, res) => {
   try {
     const result = await query(
-      'SELECT id, name, email, role, permissions, "mustResetPassword" FROM users WHERE id = $1',
+      'SELECT id, name, email, role, permissions, must_reset_password FROM users WHERE id = $1',
       [req.user.id]
     );
 
@@ -254,7 +254,7 @@ router.get('/me', authenticateToken, async (req, res) => {
     const safeUser = {
       ...user,
       permissions: typeof user.permissions === 'string' ? JSON.parse(user.permissions) : user.permissions,
-      mustResetPassword: user.mustResetPassword
+      mustResetPassword: user.must_reset_password
     };
 
     res.json({ user: safeUser });
@@ -282,7 +282,7 @@ router.post('/change-password', authenticateToken, async (req, res) => {
 
     const hashedPassword = await hashPassword(newPassword);
     await query(
-      'UPDATE users SET password = $1, "mustResetPassword" = false WHERE id = $2',
+      'UPDATE users SET password = $1, must_reset_password = false WHERE id = $2',
       [hashedPassword, req.user.id]
     );
 
@@ -382,7 +382,7 @@ router.post('/reset-password', async (req, res) => {
     // Update user password
     await query(`
       UPDATE users 
-      SET password = $1, "mustResetPassword" = false
+      SET password = $1, must_reset_password = false
       WHERE email = $2
     `, [hashedPassword, email]);
 
@@ -452,9 +452,9 @@ router.post('/create-user', authenticateToken, async (req, res) => {
 
     // Create user (auto-verified, must reset password on first login)
     const userResult = await query(`
-      INSERT INTO users (name, email, password, role, permissions, is_verified, verification_token, "mustResetPassword")
+      INSERT INTO users (name, email, password, role, permissions, is_verified, verification_token, must_reset_password)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-      RETURNING id, name, email, role, permissions, "mustResetPassword"
+      RETURNING id, name, email, role, permissions, must_reset_password
     `, [
       name,
       email.toLowerCase(),

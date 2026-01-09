@@ -1,10 +1,16 @@
 import express from 'express';
+import path from 'path';
 import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Load environment variables using absolute paths
-const envFile = process.env.NODE_ENV === 'production' ? '.env.production' : '.env';
+const envFile =
+  process.env.NODE_ENV === 'production'
+    ? '.env.production'
+    : '.env';
+
 const envPath = path.resolve(__dirname, envFile);
 dotenv.config({ path: envPath });
 
@@ -17,6 +23,7 @@ import authRoutes from './routes/auth.js';
 import apiRoutes from './routes/api.js';
 
 const app = express();
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 5002;
 
 // Request logging middleware
@@ -28,6 +35,21 @@ app.use((req, res, next) => {
   });
   next();
 });
+
+// CORS configuration
+app.use(cors({
+  origin: [
+    'https://lyceumacad.com',
+    'https://www.lyceumacad.com'
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
+app.options('*', cors());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Security middleware
 app.use(helmet());
@@ -41,32 +63,6 @@ const limiter = rateLimit({
 
 app.use(limiter);
 
-// CORS configuration
-const corsOptions = {
-  origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    // Allow any localhost or 127.0.0.1 origin
-    if (origin.match(/^http:\/\/(localhost|127\.0\.0\.1):\d+$/)) {
-      return callback(null, true);
-    }
-    // Allow specific production origin
-    if (process.env.CORS_ORIGIN && origin === process.env.CORS_ORIGIN) {
-      return callback(null, true);
-    }
-    // Fallback for development if CORS_ORIGIN is *
-    if (process.env.CORS_ORIGIN === '*') {
-      return callback(null, true);
-    }
-    callback(new Error('Not allowed by CORS'));
-  },
-  credentials: true,
-  optionsSuccessStatus: 200
-};
-
-app.use(cors(corsOptions));
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Initialize database (BLOCKING – correct)
 try {

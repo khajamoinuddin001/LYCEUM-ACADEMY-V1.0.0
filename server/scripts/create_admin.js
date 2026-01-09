@@ -64,7 +64,7 @@ async function createAdminUser() {
 
             if (update.toLowerCase() === 'yes' || update.toLowerCase() === 'y') {
                 const hashedPassword = await bcrypt.hash(password, 10);
-                await pool.query('UPDATE users SET role = $1, password = $2, "mustResetPassword" = false WHERE email = $3', ['Admin', hashedPassword, email.toLowerCase()]);
+                await pool.query('UPDATE users SET role = $1, password = $2, "must_reset_password" = false WHERE email = $3', ['Admin', hashedPassword, email.toLowerCase()]);
                 console.log('\n✅ User updated to Admin role and password reset successfully!');
             } else {
                 console.log('\n❌ Operation cancelled.');
@@ -80,7 +80,7 @@ async function createAdminUser() {
 
         // Create user
         const userResult = await pool.query(`
-      INSERT INTO users (name, email, password, role, permissions, "mustResetPassword")
+      INSERT INTO users (name, email, password, role, permissions, "must_reset_password")
       VALUES ($1, $2, $3, 'Admin', $4, false)
       RETURNING id, name, email, role
     `, [name, email.toLowerCase(), hashedPassword, JSON.stringify({})]);
