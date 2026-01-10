@@ -1,13 +1,14 @@
 import './load_env.js';
+import nodemailer from "nodemailer";
 
 export const createTransporter = () => {
-  const host = process.env.SMTP_HOST;
+  const host = process.env.SMTP_HOST || 'smtp.gmail.com';
   const port = Number(process.env.SMTP_PORT || 587);
   const user = process.env.SMTP_USER;
   const pass = process.env.SMTP_PASS;
 
   if (!host || !user || !pass) {
-    console.warn("⚠️ SMTP credentials not fully configured");
+    console.warn("⚠️ SMTP credentials not fully configured. Email sending will likely fail.");
   }
 
   return nodemailer.createTransport({
