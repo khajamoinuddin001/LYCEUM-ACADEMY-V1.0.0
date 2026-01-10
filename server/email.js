@@ -17,7 +17,7 @@ export const createTransporter = () => {
   const transporter = nodemailer.createTransport({
     host,
     port,
-    secure: port === 587, // true for 587, false for other ports
+    secure: port === 465, // true for 465 (SSL), false for 587 (STARTTLS)
     auth: {
       user,
       pass,
