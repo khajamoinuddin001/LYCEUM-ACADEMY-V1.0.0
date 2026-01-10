@@ -148,12 +148,33 @@ const DashboardLayout: React.FC = () => {
         }
 
         if (storedCurrentUser || localStorage.getItem('authToken')) {
+          const fetchWithFallback = async (promise: Promise<any>, fallback: any = []) => {
+            try {
+              return await promise;
+            } catch (err) {
+              console.error(`Data loading error:`, err);
+              return fallback;
+            }
+          };
+
           const [
             usersData, activityLogData, paymentLogData, contactsData, transactionsData, leadsData,
             templatesData, visitorsData, tasksData, eventsData, channelsData, couponsData, lmsCoursesData, notificationsData
           ] = await Promise.all([
-            api.getUsers(), api.getActivityLog(), api.getPaymentActivityLog(), api.getContacts(), api.getTransactions(), api.getLeads(),
-            api.getQuotationTemplates(), api.getVisitors(), api.getTasks(), api.getEvents(), api.getChannels(), api.getCoupons(), api.getLmsCourses(), api.getNotifications()
+            fetchWithFallback(api.getUsers()),
+            fetchWithFallback(api.getActivityLog()),
+            fetchWithFallback(api.getPaymentActivityLog()),
+            fetchWithFallback(api.getContacts()),
+            fetchWithFallback(api.getTransactions()),
+            fetchWithFallback(api.getLeads()),
+            fetchWithFallback(api.getQuotationTemplates()),
+            fetchWithFallback(api.getVisitors()),
+            fetchWithFallback(api.getTasks()),
+            fetchWithFallback(api.getEvents()),
+            fetchWithFallback(api.getChannels()),
+            fetchWithFallback(api.getCoupons()),
+            fetchWithFallback(api.getLmsCourses()),
+            fetchWithFallback(api.getNotifications())
           ]);
           setUsers(usersData); setActivityLog(activityLogData); setPaymentActivityLog(paymentLogData); setContacts(contactsData); setTransactions(transactionsData);
           setLeads(leadsData); setQuotationTemplates(templatesData); setVisitors(visitorsData); setTasks(tasksData); setRawEvents(eventsData);

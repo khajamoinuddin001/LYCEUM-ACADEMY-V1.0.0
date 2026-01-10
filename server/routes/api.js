@@ -94,7 +94,7 @@ router.get('/contacts/:id/documents', authenticateToken, async (req, res) => {
 });
 
 // Users routes
-router.get('/users', authenticateToken, requireRole('Admin'), async (req, res) => {
+router.get('/users', authenticateToken, requireRole('Admin', 'Staff'), async (req, res) => {
   try {
     const result = await query('SELECT id, name, email, role, permissions, must_reset_password, created_at FROM users');
     res.json(result.rows.map(user => ({
