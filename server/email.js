@@ -14,29 +14,31 @@ export const createTransporter = () => {
     console.warn("⚠️ SMTP credentials not fully configured. Email sending will likely fail.");
   }
 
-  return nodemailer.createTransport({
+  const transporter = nodemailer.createTransport({
     host,
     port,
-    secure: false, // MUST be false for 587
+    secure: port === 587, // true for 587, false for other ports
     auth: {
       user,
       pass,
     },
     tls: {
-      rejectUnauthorized: false,
+      rejectUnauthorized: false, // Useful for some hosting providers
     },
   });
+
+  return { transporter, from: from || user };
 };
 
 // Send password reset email
 export const sendPasswordResetEmail = async (email, name, resetToken) => {
   console.log(`📧 Attempting to send password reset email to: ${email}`);
   try {
-    const transporter = createTransporter();
+    const { transporter, from } = createTransporter();
     const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${resetToken}`;
 
     const mailOptions = {
-      from: process.env.MAIL_FROM,
+      from: from,
       to: email,
       subject: 'Reset Your Lyceum Academy Password',
       // ... (rest of mail options remain same)
@@ -134,11 +136,11 @@ export const sendPasswordResetEmail = async (email, name, resetToken) => {
 export const sendVerificationEmail = async (email, name, token) => {
   console.log(`📧 Attempting to send verification email to: ${email}`);
   try {
-    const transporter = createTransporter();
+    const { transporter, from } = createTransporter();
     const verifyUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/verify-email?token=${token}`;
 
     const mailOptions = {
-      from: process.env.MAIL_FROM,
+      from: from,
       to: email,
       subject: 'Verify Your Email - Lyceum Academy',
       html: `
@@ -229,7 +231,7 @@ export const sendVerificationEmail = async (email, name, token) => {
 export const testEmailConfig = async () => {
   try {
     console.log('🔍 Testing email configuration...');
-    const transporter = createTransporter();
+    const { transporter } = createTransporter();
     await transporter.verify();
     console.log('✅ Email server is ready to send messages');
     return true;
