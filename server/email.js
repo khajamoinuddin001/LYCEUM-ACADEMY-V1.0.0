@@ -1,8 +1,4 @@
-import nodemailer from "nodemailer";
-import dotenv from "dotenv";
-
-// Load env ONCE (server/.env)
-dotenv.config();
+import './load_env.js';
 
 export const createTransporter = () => {
   const host = process.env.SMTP_HOST;

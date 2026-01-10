@@ -28,7 +28,16 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ lead, onCancel, onS
   const [templateToEditInModal, setTemplateToEditInModal] = useState<QuotationTemplate | 'new' | null>(null);
 
   const isEditing = !!quotationToEdit;
-  const canWrite = user.role === 'Admin' || (isEditing ? user.permissions?.['CRM']?.update : user.permissions?.['CRM']?.create);
+  const canWrite = user.role === 'Admin' || user.permissions?.['CRM']?.update || user.permissions?.['CRM']?.create;
+
+  console.log('DEBUG Quotation Modal:', {
+    userRole: user.role,
+    crmPerms: user.permissions?.['CRM'],
+    canWrite,
+    title: quotation.title,
+    isTitleEmpty: !quotation.title?.trim(),
+    buttonDisabled: !canWrite || !quotation.title?.trim()
+  });
 
   useEffect(() => {
     if (isEditing) {

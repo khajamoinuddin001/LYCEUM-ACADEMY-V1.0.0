@@ -46,9 +46,14 @@ router.post('/register', async (req, res) => {
 
       try {
         const { sendVerificationEmail } = await import('../email.js');
-        await sendVerificationEmail(email.toLowerCase(), name, verificationToken);
+        const emailResult = await sendVerificationEmail(email.toLowerCase(), name, verificationToken);
+        if (!emailResult.success) {
+          console.error('❌ Failed to resend verification email:', emailResult.error);
+        } else {
+          console.log('✅ Verification email resent successfully');
+        }
       } catch (emailError) {
-        console.warn('Failed to resend verification email:', emailError.message);
+        console.error('❌ Failed to resend verification email (exception):', emailError.message);
       }
 
       return res.json({
@@ -137,10 +142,15 @@ router.post('/register', async (req, res) => {
     if (!isAdmin) {
       try {
         const { sendVerificationEmail } = await import('../email.js');
-        await sendVerificationEmail(email, name, verificationToken);
+        const emailResult = await sendVerificationEmail(email, name, verificationToken);
+        if (!emailResult.success) {
+          console.error('❌ Failed to send verification email during registration:', emailResult.error);
+        } else {
+          console.log('✅ Registration verification email sent successfully');
+        }
       } catch (emailError) {
         // Log but don't fail registration if email fails
-        console.warn('Failed to send verification email:', emailError.message);
+        console.error('❌ Failed to send verification email (exception):', emailError.message);
         console.log('User can still verify later or admin can manually verify');
       }
     }
@@ -336,7 +346,12 @@ router.post('/forgot-password', async (req, res) => {
 
       // Send reset email
       const { sendPasswordResetEmail } = await import('../email.js');
-      await sendPasswordResetEmail(email, user.name, resetToken);
+      const emailResult = await sendPasswordResetEmail(email, user.name, resetToken);
+      if (!emailResult.success) {
+        console.error('❌ Failed to send password reset email:', emailResult.error);
+      } else {
+        console.log('✅ Password reset email sent successfully');
+      }
     }
 
     // Always return success message (security best practice)

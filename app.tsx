@@ -590,7 +590,7 @@ const DashboardLayout: React.FC = () => {
   const handleSaveQuotation = async (quotationData: Omit<Quotation, 'id' | 'status' | 'date'> | Quotation) => {
     console.log('handleSaveQuotation called', { quotationData, currentUser, leadForQuotation });
 
-    if (!currentUser?.permissions['CRM']?.create && !currentUser?.permissions['CRM']?.update) {
+    if (currentUser?.role !== 'Admin' && !currentUser?.permissions['CRM']?.create && !currentUser?.permissions['CRM']?.update) {
       console.error('Permission denied: User lacks CRM create/update permissions');
       alert('You do not have permission to save quotations');
       return;
