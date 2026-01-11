@@ -1341,10 +1341,21 @@ const DashboardLayout: React.FC = () => {
             (() => { // Use an IIFE to allow if/return inside JSX
               if (activeApp === 'student_dashboard' || activeApp === 'dashboard') {
                 // Robustly find the student contact
+                console.log('🔍 [Student Dashboard] Looking for contact...');
+                console.log('Current User ID:', currentUser.id);
+                console.log('Current User Email:', currentUser.email);
+                console.log('Total Contacts:', contacts.length);
+
                 const studentContact = contacts.find(c =>
                   c.userId === currentUser.id ||
                   (c.email && currentUser.email && c.email.toLowerCase() === currentUser.email.toLowerCase())
                 );
+
+                console.log('Found Student Contact:', studentContact ? `Yes (ID: ${studentContact.id})` : 'No');
+                if (!studentContact) {
+                  console.log('Available contact user IDs:', contacts.map(c => ({ id: c.id, userId: c.userId, email: c.email })));
+                }
+
                 return <StudentDashboard student={studentContact} courses={lmsCourses} events={events} onAppSelect={handleAppSelect} />;
               }
               return renderAppContent();
