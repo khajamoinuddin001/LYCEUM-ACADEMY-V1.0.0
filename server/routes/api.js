@@ -220,6 +220,40 @@ router.get('/contacts', authenticateToken, async (req, res) => {
     if (req.user.role === 'Student') {
       sql = 'SELECT * FROM contacts WHERE user_id = $1';
       params = [req.user.id];
+
+      const result = await query(sql, params);
+
+      // Auto-create contact if student doesn't have one
+      if (result.rows.length === 0) {
+        console.log(`📝 Auto-creating contact for student user ${req.user.id} (${req.user.email})`);
+
+        const contactId = `LA${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}${String(req.user.id).padStart(3, '0')}`;
+        const defaultChecklist = [
+          { id: 0, text: 'Documents', completed: false, type: 'checkbox' },
+          { id: 1, text: 'Submit High School Transcript', completed: false, type: 'checkbox' },
+          { id: 2, text: 'Complete Personal Statement', completed: false, type: 'checkbox' },
+          { id: 3, text: 'Pay Application Fee', completed: false, type: 'checkbox' }
+        ];
+
+        const createResult = await query(`
+          INSERT INTO contacts (user_id, name, email, contact_id, department, major, notes, checklist, activity_log, recorded_sessions)
+          VALUES ($1, $2, $3, $4, 'Unassigned', 'Unassigned', $5, $6, '[]', '[]')
+          RETURNING *
+        `, [
+          req.user.id,
+          req.user.email.split('@')[0], // Use email prefix as name if not available
+          req.user.email,
+          contactId,
+          `Student contact auto-created on ${new Date().toLocaleDateString()}.`,
+          JSON.stringify(defaultChecklist)
+        ]);
+
+        const transformedContacts = createResult.rows.map(transformContact);
+        return res.json(transformedContacts);
+      }
+
+      const transformedContacts = result.rows.map(transformContact);
+      return res.json(transformedContacts);
     }
 
     const result = await query(sql, params);
