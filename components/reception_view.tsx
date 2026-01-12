@@ -194,8 +194,8 @@ const ReceptionView: React.FC<ReceptionViewProps> = ({ visitors, onNewVisitorCli
                                 <tr>
                                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Visitor</th>
                                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{activeTab === 'log' ? 'Check-in' : 'Scheduled For'}</th>
-                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{activeTab === 'log' ? 'Check-out' : 'Host'}</th>
-                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{activeTab === 'log' ? 'Host' : 'Status'}</th>
+                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{activeTab === 'log' ? 'Check-out' : 'Department'}</th>
+                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{activeTab === 'log' ? 'Department' : 'Status'}</th>
                                     {activeTab === 'log' && <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Card Number</th>}
                                     {activeTab === 'log' && <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Status</th>}
                                     <th scope="col" className="relative px-6 py-3"><span className="sr-only">Actions</span></th>

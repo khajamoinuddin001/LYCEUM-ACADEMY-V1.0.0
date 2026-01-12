@@ -115,8 +115,12 @@ const NewVisitorModal: React.FC<NewVisitorModalProps> = ({ isOpen, onClose, onSa
               <label htmlFor="visitor-host" className={labelClasses}>Department (Optional)</label>
               <select id="visitor-host" name="host" value={formData.host} onChange={handleChange} className={inputClasses} disabled={isDisabled}>
                 <option value="">-- Select Department (Optional) --</option>
-                <option value="Dept 1">Dept 1</option>
-                <option value="Dept 2">Dept 2</option>
+                <option value="Academic Director">Academic Director</option>
+                <option value="Admissions Department (Syed Nasir Ali)">Admissions Department (Syed Nasir Ali)</option>
+                <option value="Admissions Department (Mohammed Khaja Moinuddin)">Admissions Department (Mohammed Khaja Moinuddin)</option>
+                <option value="Sales Department (Abdul Samad)">Sales Department (Abdul Samad)</option>
+                <option value="Finance Department (Syed)">Finance Department (Syed)</option>
+                <option value="Instructor">Instructor</option>
               </select>
             </div>
             <div>

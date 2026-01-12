@@ -35,7 +35,7 @@ const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ isOpen, onClo
       setFormData({
         name: '',
         company: '',
-        host: staff.length > 0 ? staff[0].name : '',
+        host: '',
         scheduledCheckIn: getInitialDateTime(),
       });
       setError('');
@@ -56,8 +56,8 @@ const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ isOpen, onClo
   };
 
   const handleSave = () => {
-    if (!formData.name.trim() || !formData.company.trim() || !formData.host || !formData.scheduledCheckIn) {
-      setError('All fields are required.');
+    if (!formData.name.trim() || !formData.scheduledCheckIn) {
+      setError('Visitor name and scheduled time are required.');
       return;
     }
     const scheduledDate = new Date(formData.scheduledCheckIn);
@@ -103,15 +103,19 @@ const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ isOpen, onClo
               <input type="text" id="appt-name" name="name" className={inputClasses} value={formData.name} onChange={handleChange} placeholder="e.g., Jane Doe" disabled={!canCreate} />
             </div>
             <div>
-              <label htmlFor="appt-company" className={labelClasses}>Company</label>
-              <input type="text" id="appt-company" name="company" className={inputClasses} value={formData.company} onChange={handleChange} placeholder="e.g., Acme Corp" disabled={!canCreate} />
+              <label htmlFor="appt-company" className={labelClasses}>Mobile Number</label>
+              <input type="text" id="appt-company" name="company" className={inputClasses} value={formData.company} onChange={handleChange} placeholder="e.g., +91 98765 43210" disabled={!canCreate} />
             </div>
             <div>
-              <label htmlFor="appt-host" className={labelClasses}>Host (Staff Member)</label>
+              <label htmlFor="appt-host" className={labelClasses}>Department</label>
               <select id="appt-host" name="host" value={formData.host} onChange={handleChange} className={inputClasses} disabled={!canCreate}>
-                {staff.map(member => (
-                  <option key={member.id} value={member.name}>{member.name}</option>
-                ))}
+                <option value="">-- Select Department --</option>
+                <option value="Academic Director">Academic Director</option>
+                <option value="Admissions Department (Syed Nasir Ali)">Admissions Department (Syed Nasir Ali)</option>
+                <option value="Admissions Department (Mohammed Khaja Moinuddin)">Admissions Department (Mohammed Khaja Moinuddin)</option>
+                <option value="Sales Department (Abdul Samad)">Sales Department (Abdul Samad)</option>
+                <option value="Finance Department (Syed)">Finance Department (Syed)</option>
+                <option value="Instructor">Instructor</option>
               </select>
             </div>
             <div>
