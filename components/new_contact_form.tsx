@@ -13,6 +13,7 @@ interface NewContactFormProps {
     onNavigateToDocuments: () => void;
     onNavigateToVisa: () => void;
     onNavigateToChecklist: () => void;
+    onNavigateToVisits: () => void;
     onSave: (contact: Contact) => void;
     onComposeAIEmail: (prompt: string, contact: Contact) => void;
     user: User;
@@ -179,7 +180,7 @@ const initialFormState = {
 
 
 
-const NewContactForm: React.FC<NewContactFormProps> = ({ contact, contacts, onNavigateBack, onNavigateToDocuments, onNavigateToVisa, onNavigateToChecklist, onSave, onComposeAIEmail, user, onAddSessionVideo, onDeleteSessionVideo }) => {
+const NewContactForm: React.FC<NewContactFormProps> = ({ contact, contacts, onNavigateBack, onNavigateToDocuments, onNavigateToVisa, onNavigateToChecklist, onNavigateToVisits, onSave, onComposeAIEmail, user, onAddSessionVideo, onDeleteSessionVideo }) => {
     const [formData, setFormData] = useState(initialFormState);
     const [isSummarizing, setIsSummarizing] = useState(false);
     const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
@@ -421,6 +422,7 @@ const NewContactForm: React.FC<NewContactFormProps> = ({ contact, contacts, onNa
                 <button onClick={onNavigateToDocuments} disabled={!contact} className="ml-4 px-1 py-3 font-medium text-gray-500 dark:text-gray-400 hover:text-lyceum-blue disabled:opacity-50 disabled:cursor-not-allowed">Documents</button>
                 <button onClick={onNavigateToChecklist} disabled={!contact} className="ml-4 px-1 py-3 font-medium text-gray-500 dark:text-gray-400 hover:text-lyceum-blue disabled:opacity-50 disabled:cursor-not-allowed">Checklist</button>
                 <button onClick={onNavigateToVisa} disabled={!contact} className="ml-4 px-1 py-3 font-medium text-gray-500 dark:text-gray-400 hover:text-lyceum-blue disabled:opacity-50 disabled:cursor-not-allowed">Visa Filing</button>
+                <button onClick={onNavigateToVisits} disabled={!contact} className="ml-4 px-1 py-3 font-medium text-gray-500 dark:text-gray-400 hover:text-lyceum-blue disabled:opacity-50 disabled:cursor-not-allowed">Visits</button>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-16 gap-y-4 p-6">

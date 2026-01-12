@@ -576,7 +576,18 @@ export const getVisitors = async (): Promise<Visitor[]> => {
   return apiRequest<Visitor[]>('/visitors');
 };
 
-export const saveVisitor = async (data: { id?: number } & any): Promise<Visitor[]> => {
+export const saveVisitor = async (data: {
+  id?: number;
+  name: string;
+  company: string;
+  host: string;
+  cardNumber: string;
+  purpose?: string;
+  status?: 'Scheduled' | 'Checked-in' | 'Checked-out';
+  checkIn?: string;
+  checkOut?: string;
+  scheduledCheckIn?: string;
+}): Promise<Visitor[]> => {
   // Get current time in IST
   const now = new Date();
   const istTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
@@ -622,7 +633,8 @@ export const checkOutVisitor = async (id: number): Promise<{ allVisitors: Visito
     checkIn: visitor.checkIn,
     checkOut: istTime.toISOString(),
     status: 'Checked-out',
-    cardNumber: visitor.cardNumber
+    cardNumber: visitor.cardNumber,
+    purpose: visitor.purpose // Preserve purpose
   };
   console.log('API: Updating visitor with:', updateData);
 
@@ -637,12 +649,23 @@ export const checkOutVisitor = async (id: number): Promise<{ allVisitors: Visito
   return { allVisitors, checkedOutVisitor: updatedVisitor };
 };
 
-export const scheduleVisitor = async (data: any): Promise<Visitor[]> => {
+export const scheduleVisitor = async (data: { name: string; company: string; host: string; scheduledCheckIn: string; purpose?: string; }): Promise<Visitor[]> => {
   await apiRequest('/visitors', {
     method: 'POST',
     body: JSON.stringify({ ...data, status: 'Scheduled' }),
   });
   return getVisitors();
+};
+
+export const getContactVisits = async (contactId: number): Promise<Visitor[]> => {
+  return apiRequest<Visitor[]>(`/contacts/${contactId}/visits`);
+};
+
+export const updateVisitorPurpose = async (visitorId: number, purpose: string): Promise<Visitor> => {
+  return apiRequest<Visitor>(`/visitors/${visitorId}`, {
+    method: 'PUT',
+    body: JSON.stringify({ purpose })
+  });
 };
 
 export const checkInScheduledVisitor = async (id: number): Promise<{ allVisitors: Visitor[]; checkedInVisitor?: Visitor }> => {

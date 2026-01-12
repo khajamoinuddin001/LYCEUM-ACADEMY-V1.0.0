@@ -7,7 +7,7 @@ import type { User, Visitor } from '../types';
 interface NewVisitorModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (data: { id?: number; name: string; company: string; host: string; cardNumber: string; }) => Promise<void> | void;
+  onSave: (data: { id?: number; name: string; company: string; host: string; cardNumber: string; purpose?: string }) => Promise<void> | void;
   staff: User[];
   user: User;
   visitorToEdit?: Visitor | null;
@@ -16,7 +16,7 @@ interface NewVisitorModalProps {
 const NewVisitorModal: React.FC<NewVisitorModalProps> = ({ isOpen, onClose, onSave, staff, user, visitorToEdit }) => {
   const [isAnimatingOut, setIsAnimatingOut] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formData, setFormData] = useState({ name: '', company: '', host: '' });
+  const [formData, setFormData] = useState({ name: '', company: '', host: '', purpose: '' });
   const [cardNumber, setCardNumber] = useState('');
   const [error, setError] = useState('');
 
@@ -28,10 +28,10 @@ const NewVisitorModal: React.FC<NewVisitorModalProps> = ({ isOpen, onClose, onSa
   useEffect(() => {
     if (isOpen) {
       if (isEditing) {
-        setFormData({ name: visitorToEdit.name, company: visitorToEdit.company, host: visitorToEdit.host });
+        setFormData({ name: visitorToEdit.name, company: visitorToEdit.company, host: visitorToEdit.host, purpose: visitorToEdit.purpose || '' });
         setCardNumber(visitorToEdit.cardNumber || '');
       } else {
-        setFormData({ name: '', company: '', host: '' });
+        setFormData({ name: '', company: '', host: '', purpose: '' });
         setCardNumber('');
       }
       setError('');
@@ -46,7 +46,7 @@ const NewVisitorModal: React.FC<NewVisitorModalProps> = ({ isOpen, onClose, onSa
     }, 200);
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
@@ -63,6 +63,7 @@ const NewVisitorModal: React.FC<NewVisitorModalProps> = ({ isOpen, onClose, onSa
         name: formData.name,
         company: formData.company || 'N/A',
         host: formData.host || 'Walk-in',
+        purpose: formData.purpose,
         cardNumber,
       });
     } catch (e) {
@@ -126,6 +127,19 @@ const NewVisitorModal: React.FC<NewVisitorModalProps> = ({ isOpen, onClose, onSa
             <div>
               <label htmlFor="visitor-card-number" className={labelClasses}>Card Number (Optional)</label>
               <input type="text" id="visitor-card-number" name="cardNumber" className={inputClasses} value={cardNumber} onChange={(e) => setCardNumber(e.target.value)} placeholder="e.g., C12345" disabled={isDisabled} />
+            </div>
+            <div>
+              <label htmlFor="visitor-purpose" className={labelClasses}>Purpose of Visit</label>
+              <textarea
+                id="visitor-purpose"
+                name="purpose"
+                rows={3}
+                className={inputClasses}
+                value={formData.purpose}
+                onChange={handleChange}
+                placeholder="Enter purpose of visit..."
+                disabled={isDisabled}
+              />
             </div>
             {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
           </div>

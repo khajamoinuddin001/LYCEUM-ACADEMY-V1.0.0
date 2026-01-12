@@ -420,6 +420,9 @@ export interface Visitor {
   status: 'Scheduled' | 'Checked-in' | 'Checked-out';
   host: string; // Used for department
   cardNumber?: string;
+  purpose?: string;
+  contactId?: number;
+  createdAt?: string;
 }
 
 export interface Coupon {

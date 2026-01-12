@@ -1,8 +1,9 @@
 
 
-import React from 'react';
-import type { Contact, LmsCourse, CalendarEvent } from '../types';
-import { GraduationCap, BookOpen, CalendarClock, Paperclip, CheckCircle2, Circle, Trophy } from './icons';
+import React, { useEffect, useState } from 'react';
+import type { Contact, LmsCourse, CalendarEvent, Visitor } from '../types';
+import { GraduationCap, BookOpen, CalendarClock, Paperclip, CheckCircle2, Circle, Trophy, Calendar } from './icons';
+import * as api from '../utils/api';
 
 interface StudentDashboardProps {
     student?: Contact;
@@ -24,6 +25,13 @@ const InfoCard: React.FC<{ icon: React.ReactNode; title: string; children: React
 );
 
 const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, courses, events, onAppSelect }) => {
+    const [visits, setVisits] = useState<Visitor[]>([]);
+
+    useEffect(() => {
+        if (student) {
+            api.getContactVisits(student.id).then(setVisits).catch(console.error);
+        }
+    }, [student]);
 
     if (!student) {
         return (
@@ -89,6 +97,30 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, courses, e
                         <div className="mt-4 text-right">
                             <button onClick={() => onAppSelect('LMS')} className="text-sm font-medium text-lyceum-blue hover:underline">Go to LMS</button>
                         </div>
+                    </InfoCard>
+
+                    <InfoCard icon={<Calendar size={20} />} title="Campus Visits">
+                        {visits.length > 0 ? (
+                            <ul className="space-y-3">
+                                {visits.slice(0, 5).map(visit => (
+                                    <li key={visit.id} className="flex flex-col border-l-2 border-gray-200 dark:border-gray-700 pl-3">
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-sm font-medium text-gray-800 dark:text-gray-200">
+                                                {new Date(visit.checkIn || visit.createdAt!).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                                            </span>
+                                            <span className={`text-xs px-2 py-0.5 rounded-full ${visit.status === 'Checked-in' ? 'bg-green-100 text-green-800' :
+                                                    visit.status === 'Checked-out' ? 'bg-gray-100 text-gray-800' : 'bg-blue-100 text-blue-800'
+                                                }`}>{visit.status}</span>
+                                        </div>
+                                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                            Purpose: {visit.purpose || 'N/A'}
+                                        </p>
+                                    </li>
+                                ))}
+                            </ul>
+                        ) : (
+                            <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-2">No campus visits recorded.</p>
+                        )}
                     </InfoCard>
                 </div>
                 <div className="space-y-6">

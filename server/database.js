@@ -195,9 +195,11 @@ export async function initDatabase() {
     await client.query(`
       CREATE TABLE IF NOT EXISTS visitors (
         id SERIAL PRIMARY KEY,
+        contact_id INTEGER REFERENCES contacts(id),
         name TEXT NOT NULL,
         company TEXT NOT NULL,
         host TEXT NOT NULL,
+        purpose TEXT,
         scheduled_check_in TIMESTAMP,
         check_in TIMESTAMP,
         check_out TIMESTAMP,
@@ -211,6 +213,14 @@ export async function initDatabase() {
     await migrateColumn('visitors', 'checkOut', 'check_out');
     await migrateColumn('visitors', 'cardNumber', 'card_number');
     await migrateColumn('visitors', 'createdAt', 'created_at');
+
+    // Manual column additions for existing tables
+    try {
+      await client.query('ALTER TABLE visitors ADD COLUMN IF NOT EXISTS contact_id INTEGER REFERENCES contacts(id)');
+      await client.query('ALTER TABLE visitors ADD COLUMN IF NOT EXISTS purpose TEXT');
+    } catch (e) {
+      console.log('Columns contact_id/purpose might already exist');
+    }
 
     // Quotation Templates table
     await client.query(`

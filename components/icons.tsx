@@ -86,4 +86,5 @@ export {
   ChevronUp,
   Printer,
   Trophy,
+  AlertCircle,
 } from 'lucide-react';

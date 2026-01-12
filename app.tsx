@@ -41,6 +41,7 @@ import AIEmailComposerModal from './components/aiemail_composer_modal';
 import ContactChecklistView from './components/contact_checklist_view';
 import NewVisitorModal from './components/new_visitor_modal';
 import NewAppointmentModal from './components/new_appointment_modal';
+import ContactVisitsView from './components/contact_visits_view';
 import ResetPasswordView from './components/reset_password_view';
 import ForgotPasswordView from './components/forgot_password_view';
 import ResetPasswordForm from './components/reset_password_form';
@@ -56,7 +57,7 @@ import LandingPage from './components/landing_page';
 import AgentsView from './components/agents_view';
 
 
-type ContactViewMode = 'details' | 'documents' | 'visaFiling' | 'checklist';
+type ContactViewMode = 'details' | 'documents' | 'visaFiling' | 'checklist' | 'visits';
 
 // ... (keep existing imports)
 import { Routes, Route } from 'react-router-dom';
@@ -861,7 +862,7 @@ const DashboardLayout: React.FC = () => {
     }
   };
 
-  const handleSaveVisitor = async (visitorData: { id?: number; name: string; company: string; host: string; cardNumber: string; }) => {
+  const handleSaveVisitor = async (visitorData: { id?: number; name: string; company: string; host: string; cardNumber: string; purpose?: string; }) => {
     if (currentUser?.role !== 'Admin' && !currentUser?.permissions['Reception']?.create && !visitorData.id) {
       addNotification({ title: 'Permission Denied', description: 'You do not have permission to create visitors.', type: 'error' });
       return;
@@ -908,12 +909,12 @@ const DashboardLayout: React.FC = () => {
     }
   };
 
-  const handleScheduleVisitor = async (name: string, company: string, host: string, scheduledCheckIn: string) => {
+  const handleScheduleVisitor = async (name: string, company: string, host: string, scheduledCheckIn: string, purpose?: string) => {
     if (currentUser?.role !== 'Admin' && !currentUser?.permissions['Reception']?.create) {
       addNotification({ title: 'Permission Denied', description: 'You do not have permission to schedule visitors.', type: 'error' });
       return;
     }
-    const updatedVisitors = await api.scheduleVisitor({ name, company, host, scheduledCheckIn });
+    const updatedVisitors = await api.scheduleVisitor({ name, company, host, scheduledCheckIn, purpose });
     setVisitors(updatedVisitors);
     addNotification({
       title: 'Visitor Scheduled',
@@ -1236,10 +1237,11 @@ const DashboardLayout: React.FC = () => {
           if (contactData && contactViewMode === 'documents') return <ContactDocumentsView contact={contactData} onNavigateBack={() => setContactViewMode('details')} onAnalyze={handleAnalyzeDocument} />;
           if (contactData && contactViewMode === 'visaFiling') return <ContactVisaView user={currentUser} contact={contactData} onNavigateBack={() => setContactViewMode('details')} onSave={handleSaveContact} />;
           if (contactData && contactViewMode === 'checklist') return <ContactChecklistView user={currentUser} contact={contactData} onNavigateBack={() => setContactViewMode('details')} onUpdateChecklistItem={handleUpdateChecklistItem} onSave={handleSaveContact} />;
+          if (contactData && contactViewMode === 'visits') return <ContactVisitsView user={currentUser} contact={contactData} onNavigateBack={() => setContactViewMode('details')} />;
 
           // Render form if we have data OR if we are creating a new contact
           if (contactData || editingContact === 'new') {
-            return <NewContactForm user={currentUser} contact={contactData} contacts={contacts} onNavigateBack={handleBackToContacts} onNavigateToDocuments={() => setContactViewMode('documents')} onNavigateToVisa={() => setContactViewMode('visaFiling')} onNavigateToChecklist={() => setContactViewMode('checklist')} onSave={handleSaveContact} onComposeAIEmail={handleGenerateEmailDraft} onAddSessionVideo={handleAddSessionVideo} onDeleteSessionVideo={handleDeleteSessionVideo} />;
+            return <NewContactForm user={currentUser} contact={contactData} contacts={contacts} onNavigateBack={handleBackToContacts} onNavigateToDocuments={() => setContactViewMode('documents')} onNavigateToVisa={() => setContactViewMode('visaFiling')} onNavigateToChecklist={() => setContactViewMode('checklist')} onNavigateToVisits={() => setContactViewMode('visits')} onSave={handleSaveContact} onComposeAIEmail={handleGenerateEmailDraft} onAddSessionVideo={handleAddSessionVideo} onDeleteSessionVideo={handleDeleteSessionVideo} />;
           }
         }
         return <ContactsView contacts={contacts} onContactSelect={handleContactSelect} onNewContactClick={handleNewContactClick} user={currentUser} />;

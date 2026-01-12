@@ -977,31 +977,75 @@ router.get('/visitors', authenticateToken, async (req, res) => {
 
 router.post('/visitors', authenticateToken, async (req, res) => {
   try {
-    const { name, company, host, scheduledCheckIn, checkIn, checkOut, status, cardNumber } = req.body;
-    const result = await query(`
-      INSERT INTO visitors (name, company, host, scheduled_check_in, check_in, check_out, status, card_number)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-      RETURNING *
-    `, [
-      name,
-      company,
-      host,
-      scheduledCheckIn || null,
-      checkIn || null,
-      checkOut || null,
-      status || 'Scheduled',
-      cardNumber || null
-    ]);
+    const visitor = req.body;
+    let contactId = null;
+
+    // 1. Check if contact exists by NAME (case-insensitive)
+    const contactCheck = await query('SELECT id FROM contacts WHERE LOWER(name) = LOWER($1)', [visitor.name]);
+
+    if (contactCheck.rows.length > 0) {
+      // Found existing contact
+      contactId = contactCheck.rows[0].id;
+    } else {
+      // Create NEW contact
+      const newContactResult = await query(`
+        INSERT INTO contacts (name, phone, source, department)
+        VALUES ($1, $2, 'Reception', $3)
+        RETURNING id
+      `, [visitor.name, visitor.company, visitor.host]); // visitor.company is Mobile Number
+      contactId = newContactResult.rows[0].id;
+    }
+
+    // 2. Create Visitor Record
+    const result = await query(
+      `INSERT INTO visitors (
+        contact_id, name, company, host, purpose, scheduled_check_in, check_in, check_out, status, card_number
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+      [
+        contactId,
+        visitor.name,
+        visitor.company,
+        visitor.host,
+        visitor.purpose || null,
+        visitor.scheduledCheckIn || null,
+        visitor.checkIn || null,
+        visitor.checkOut || null,
+        visitor.status || 'Scheduled',
+        visitor.cardNumber || null
+      ]
+    );
     const v = result.rows[0];
-    const formattedVisitor = {
+    res.json({
       ...v,
       scheduledCheckIn: v.scheduled_check_in,
       checkIn: v.check_in,
       checkOut: v.check_out,
       cardNumber: v.card_number,
       createdAt: v.created_at
-    };
-    res.json(formattedVisitor);
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/contacts/:id/visits', authenticateToken, async (req, res) => {
+  try {
+    const result = await query(`
+      SELECT * FROM visitors 
+      WHERE contact_id = $1 
+      ORDER BY created_at DESC
+    `, [req.params.id]);
+
+    const formattedVisits = result.rows.map(v => ({
+      ...v,
+      scheduledCheckIn: v.scheduled_check_in,
+      checkIn: v.check_in,
+      checkOut: v.check_out,
+      cardNumber: v.card_number,
+      createdAt: v.created_at
+    }));
+
+    res.json(formattedVisits);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -1043,41 +1087,45 @@ router.put('/visitors/:id', authenticateToken, async (req, res) => {
     // Update with provided values or preserve existing ones
     await query(`
       UPDATE visitors SET
-        name = $1, company = $2, host = $3, scheduled_check_in = $4, check_in = $5,
-        check_out = $6, status = $7, card_number = $8
+        name = $1,
+        company = $2,
+        host = $3,
+        purpose = $4,
+        check_in = $5,
+        check_out = $6,
+        status = $7,
+        card_number = $8
       WHERE id = $9
     `, [
       visitor.name || current.name,
-      visitor.company !== undefined ? visitor.company : current.company,
-      visitor.host !== undefined ? visitor.host : current.host,
-      visitor.scheduledCheckIn !== undefined ? visitor.scheduledCheckIn : current.scheduled_check_in,
-      visitor.checkIn !== undefined ? visitor.checkIn : current.check_in,
-      visitor.checkOut !== undefined ? visitor.checkOut : current.check_out,
+      visitor.company || current.company,
+      visitor.host || current.host,
+      visitor.purpose || current.purpose,
+      visitor.checkIn || current.check_in,
+      visitor.checkOut || current.check_out,
       visitor.status || current.status,
-      visitor.cardNumber !== undefined ? visitor.cardNumber : current.card_number,
+      visitor.cardNumber || current.card_number,
       req.params.id
     ]);
 
     const result = await query('SELECT * FROM visitors WHERE id = $1', [req.params.id]);
     const v = result.rows[0];
-    const formattedVisitor = {
+    res.json({
       ...v,
       scheduledCheckIn: v.scheduled_check_in,
       checkIn: v.check_in,
       checkOut: v.check_out,
       cardNumber: v.card_number,
       createdAt: v.created_at
-    };
-    res.json(formattedVisitor);
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// Quotation Templates routes
 router.get('/quotation-templates', authenticateToken, async (req, res) => {
   try {
-    const result = await query('SELECT id, title, description, line_items, total, created_at FROM quotation_templates');
+    const result = await query('SELECT * FROM quotation_templates');
     res.json(result.rows.map(row => ({
       ...row,
       lineItems: row.line_items,
@@ -1092,10 +1140,10 @@ router.post('/quotation-templates', authenticateToken, async (req, res) => {
   try {
     const template = req.body;
     const result = await query(`
-      INSERT INTO quotation_templates (title, description, line_items, total)
-      VALUES ($1, $2, $3, $4)
+      INSERT INTO quotation_templates(title, description, line_items, total)
+      VALUES($1, $2, $3, $4)
       RETURNING id, title, description, line_items, total, created_at
-    `, [
+      `, [
       template.title,
       template.description || null,
       JSON.stringify(template.lineItems || []),
@@ -1118,7 +1166,7 @@ router.put('/quotation-templates/:id', authenticateToken, async (req, res) => {
     await query(`
       UPDATE quotation_templates SET title = $1, description = $2, line_items = $3, total = $4
       WHERE id = $5
-    `, [
+      `, [
       template.title,
       template.description,
       JSON.stringify(template.lineItems || []),
@@ -1160,10 +1208,10 @@ router.post('/activity-log', authenticateToken, async (req, res) => {
   try {
     const { adminName, action } = req.body;
     const result = await query(`
-      INSERT INTO activity_log (admin_name, action)
-      VALUES ($1, $2)
+      INSERT INTO activity_log(admin_name, action)
+      VALUES($1, $2)
       RETURNING *
-    `, [adminName, action]);
+      `, [adminName, action]);
     res.json(result.rows[0]);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -1184,10 +1232,10 @@ router.post('/payment-activity-log', authenticateToken, async (req, res) => {
   try {
     const { text, amount, type } = req.body;
     const result = await query(`
-      INSERT INTO payment_activity_log (text, amount, type)
-      VALUES ($1, $2, $3)
+      INSERT INTO payment_activity_log(text, amount, type)
+      VALUES($1, $2, $3)
       RETURNING *
-    `, [text, amount, type]);
+      `, [text, amount, type]);
     res.json(result.rows[0]);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -1208,10 +1256,10 @@ router.post('/notifications', authenticateToken, async (req, res) => {
   try {
     const notification = req.body;
     const result = await query(`
-      INSERT INTO notifications (title, description, read, link_to, recipient_user_ids, recipient_roles)
-      VALUES ($1, $2, $3, $4, $5, $6)
+      INSERT INTO notifications(title, description, read, link_to, recipient_user_ids, recipient_roles)
+      VALUES($1, $2, $3, $4, $5, $6)
       RETURNING *
-    `, [
+      `, [
       notification.title,
       notification.description,
       notification.read || false,
@@ -1229,9 +1277,9 @@ router.put('/notifications/mark-all-read', authenticateToken, async (req, res) =
   try {
     await query(`
       UPDATE notifications SET read = true 
-      WHERE recipient_user_ids::jsonb @> $1::jsonb 
-      OR recipient_roles::jsonb @> $2::jsonb
-    `, [JSON.stringify([req.user.id]), JSON.stringify([req.user.role])]);
+      WHERE recipient_user_ids:: jsonb @> $1:: jsonb 
+      OR recipient_roles:: jsonb @> $2:: jsonb
+      `, [JSON.stringify([req.user.id]), JSON.stringify([req.user.role])]);
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });

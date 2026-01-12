@@ -5,14 +5,14 @@ import type { User } from '../types';
 interface NewAppointmentModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (name: string, company: string, host: string, scheduledCheckIn: string) => void;
+  onSave: (name: string, company: string, host: string, scheduledCheckIn: string, purpose?: string) => void;
   staff: User[];
   user: User;
 }
 
 const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ isOpen, onClose, onSave, staff, user }) => {
   const [isAnimatingOut, setIsAnimatingOut] = useState(false);
-  const [formData, setFormData] = useState({ name: '', company: '', host: '', scheduledCheckIn: '' });
+  const [formData, setFormData] = useState({ name: '', company: '', host: '', scheduledCheckIn: '', purpose: '' });
   const [error, setError] = useState('');
 
   const canCreate = user.role === 'Admin' || !!user.permissions?.['Reception']?.create;
@@ -37,6 +37,7 @@ const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ isOpen, onClo
         company: '',
         host: '',
         scheduledCheckIn: getInitialDateTime(),
+        purpose: '',
       });
       setError('');
     }
@@ -50,7 +51,7 @@ const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ isOpen, onClo
     }, 200);
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
@@ -65,7 +66,7 @@ const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ isOpen, onClo
       setError('Scheduled time cannot be in the past.');
       return;
     }
-    onSave(formData.name, formData.company, formData.host, scheduledDate.toISOString());
+    onSave(formData.name, formData.company, formData.host, scheduledDate.toISOString(), formData.purpose);
   };
 
   if (!isOpen) return null;
@@ -121,6 +122,19 @@ const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ isOpen, onClo
             <div>
               <label htmlFor="appt-datetime" className={labelClasses}>Scheduled Check-in Time</label>
               <input type="datetime-local" id="appt-datetime" name="scheduledCheckIn" className={inputClasses} value={formData.scheduledCheckIn} onChange={handleChange} disabled={!canCreate} />
+            </div>
+            <div>
+              <label htmlFor="appt-purpose" className={labelClasses}>Purpose of Visit</label>
+              <textarea
+                id="appt-purpose"
+                name="purpose"
+                rows={3}
+                className={inputClasses}
+                value={formData.purpose}
+                onChange={handleChange}
+                placeholder="Enter purpose of visit..."
+                disabled={!canCreate}
+              />
             </div>
             {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
           </div>
