@@ -108,16 +108,15 @@ const NewVisitorModal: React.FC<NewVisitorModalProps> = ({ isOpen, onClose, onSa
               <input type="text" id="visitor-name" name="name" className={inputClasses} value={formData.name} onChange={handleChange} placeholder="e.g., John Doe" disabled={isDisabled} />
             </div>
             <div>
-              <label htmlFor="visitor-company" className={labelClasses}>Company (Optional)</label>
-              <input type="text" id="visitor-company" name="company" className={inputClasses} value={formData.company} onChange={handleChange} placeholder="e.g., Acme Corp" disabled={isDisabled} />
+              <label htmlFor="visitor-company" className={labelClasses}>Mobile Number (Optional)</label>
+              <input type="text" id="visitor-company" name="company" className={inputClasses} value={formData.company} onChange={handleChange} placeholder="e.g., +91 98765 43210" disabled={isDisabled} />
             </div>
             <div>
-              <label htmlFor="visitor-host" className={labelClasses}>Host (Optional)</label>
+              <label htmlFor="visitor-host" className={labelClasses}>Department (Optional)</label>
               <select id="visitor-host" name="host" value={formData.host} onChange={handleChange} className={inputClasses} disabled={isDisabled}>
-                <option value="">-- Select Host (Optional) --</option>
-                {staff.map(member => (
-                  <option key={member.id} value={member.name}>{member.name}</option>
-                ))}
+                <option value="">-- Select Department (Optional) --</option>
+                <option value="Dept 1">Dept 1</option>
+                <option value="Dept 2">Dept 2</option>
               </select>
             </div>
             <div>

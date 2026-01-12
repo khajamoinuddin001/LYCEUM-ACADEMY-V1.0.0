@@ -53,9 +53,23 @@ const ReceptionView: React.FC<ReceptionViewProps> = ({ visitors, onNewVisitorCli
     const { visitorsToday, currentlyCheckedIn, pendingAppointments, filteredVisitors, scheduledVisitors } = useMemo(() => {
         const todayStr = new Date().toDateString();
 
-        const visitorsToday = visitors.filter(v => v.checkIn && new Date(v.checkIn).toDateString() === todayStr).length;
+        const visitorsToday = visitors.filter(v => {
+            if (!v.checkIn) return false;
+            try {
+                return new Date(v.checkIn).toDateString() === todayStr;
+            } catch (e) {
+                return false;
+            }
+        }).length;
         const currentlyCheckedIn = visitors.filter(v => v.status === 'Checked-in').length;
-        const pendingAppointments = visitors.filter(v => v.status === 'Scheduled' && new Date(v.scheduledCheckIn).toDateString() === todayStr).length;
+        const pendingAppointments = visitors.filter(v => {
+            if (v.status !== 'Scheduled' || !v.scheduledCheckIn) return false;
+            try {
+                return new Date(v.scheduledCheckIn).toDateString() === todayStr;
+            } catch (e) {
+                return false;
+            }
+        }).length;
 
         let logVisitors = visitors.filter(v => v.status === 'Checked-in' || v.status === 'Checked-out');
         if (statusFilter !== 'All') {
@@ -148,7 +162,7 @@ const ReceptionView: React.FC<ReceptionViewProps> = ({ visitors, onNewVisitorCli
                             <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                             <input
                                 type="text"
-                                placeholder="Search by name, company, or host..."
+                                placeholder="Search by name, mobile number, or department..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 className="w-full pl-10 pr-4 py-2.5 md:py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-lyceum-blue focus:border-transparent dark:bg-gray-700 dark:text-white text-sm md:text-base"

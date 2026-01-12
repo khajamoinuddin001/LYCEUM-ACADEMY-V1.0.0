@@ -582,9 +582,18 @@ export const saveVisitor = async (data: { id?: number } & any): Promise<Visitor[
   const istTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
 
   if (data.id) {
+    // When editing, fetch current visitor to preserve status and timestamps
+    const currentVisitor = await apiRequest<Visitor>(`/visitors/${data.id}`, { method: 'GET' });
+
     await apiRequest(`/visitors/${data.id}`, {
       method: 'PUT',
-      body: JSON.stringify(data),
+      body: JSON.stringify({
+        ...data,
+        status: data.status || currentVisitor.status,
+        checkIn: data.checkIn || currentVisitor.checkIn,
+        checkOut: data.checkOut || currentVisitor.checkOut,
+        scheduledCheckIn: data.scheduledCheckIn || currentVisitor.scheduledCheckIn
+      }),
     });
   } else {
     await apiRequest('/visitors', {

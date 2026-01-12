@@ -1032,22 +1032,32 @@ router.get('/visitors/:id', authenticateToken, async (req, res) => {
 router.put('/visitors/:id', authenticateToken, async (req, res) => {
   try {
     const visitor = req.body;
+
+    // Fetch current visitor to preserve existing values
+    const currentResult = await query('SELECT * FROM visitors WHERE id = $1', [req.params.id]);
+    if (currentResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Visitor not found' });
+    }
+    const current = currentResult.rows[0];
+
+    // Update with provided values or preserve existing ones
     await query(`
       UPDATE visitors SET
         name = $1, company = $2, host = $3, scheduled_check_in = $4, check_in = $5,
         check_out = $6, status = $7, card_number = $8
       WHERE id = $9
     `, [
-      visitor.name,
-      visitor.company,
-      visitor.host,
-      visitor.scheduledCheckIn,
-      visitor.checkIn,
-      visitor.checkOut,
-      visitor.status,
-      visitor.cardNumber,
+      visitor.name || current.name,
+      visitor.company !== undefined ? visitor.company : current.company,
+      visitor.host !== undefined ? visitor.host : current.host,
+      visitor.scheduledCheckIn !== undefined ? visitor.scheduledCheckIn : current.scheduled_check_in,
+      visitor.checkIn !== undefined ? visitor.checkIn : current.check_in,
+      visitor.checkOut !== undefined ? visitor.checkOut : current.check_out,
+      visitor.status || current.status,
+      visitor.cardNumber !== undefined ? visitor.cardNumber : current.card_number,
       req.params.id
     ]);
+
     const result = await query('SELECT * FROM visitors WHERE id = $1', [req.params.id]);
     const v = result.rows[0];
     const formattedVisitor = {

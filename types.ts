@@ -413,12 +413,12 @@ export interface Notification {
 export interface Visitor {
   id: number;
   name: string;
-  company: string;
+  company: string; // Used for mobile number
   scheduledCheckIn: string;
   checkIn?: string;
   checkOut?: string;
   status: 'Scheduled' | 'Checked-in' | 'Checked-out';
-  host: string;
+  host: string; // Used for department
   cardNumber?: string;
 }
 
