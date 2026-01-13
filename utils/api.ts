@@ -576,6 +576,10 @@ export const getVisitors = async (): Promise<Visitor[]> => {
   return apiRequest<Visitor[]>('/visitors');
 };
 
+export const deleteVisitor = async (id: number): Promise<Visitor[]> => {
+  return await apiRequest<Visitor[]>(`/visitors/${id}`, { method: 'DELETE' });
+};
+
 export const saveVisitor = async (data: {
   id?: number;
   name: string;

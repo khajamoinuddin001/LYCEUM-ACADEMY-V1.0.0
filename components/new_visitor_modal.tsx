@@ -1,8 +1,7 @@
 
-
 import React, { useState, useEffect } from 'react';
 import { X } from './icons';
-import type { User, Visitor } from '../types';
+import type { User, Visitor, Contact } from '../types';
 
 interface NewVisitorModalProps {
   isOpen: boolean;
@@ -11,14 +10,17 @@ interface NewVisitorModalProps {
   staff: User[];
   user: User;
   visitorToEdit?: Visitor | null;
+  contacts?: Contact[];
 }
 
-const NewVisitorModal: React.FC<NewVisitorModalProps> = ({ isOpen, onClose, onSave, staff, user, visitorToEdit }) => {
+const NewVisitorModal: React.FC<NewVisitorModalProps> = ({ isOpen, onClose, onSave, staff, user, visitorToEdit, contacts = [] }) => {
   const [isAnimatingOut, setIsAnimatingOut] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({ name: '', company: '', host: '', purpose: '' });
   const [cardNumber, setCardNumber] = useState('');
   const [error, setError] = useState('');
+  const [suggestions, setSuggestions] = useState<Contact[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
 
   const isEditing = !!visitorToEdit;
   const canCreate = user.role === 'Admin' || user.permissions?.['Reception']?.create;
@@ -35,6 +37,8 @@ const NewVisitorModal: React.FC<NewVisitorModalProps> = ({ isOpen, onClose, onSa
         setCardNumber('');
       }
       setError('');
+      setSuggestions([]);
+      setShowSuggestions(false);
     }
   }, [isOpen, staff, isEditing, visitorToEdit]);
 
@@ -49,6 +53,27 @@ const NewVisitorModal: React.FC<NewVisitorModalProps> = ({ isOpen, onClose, onSa
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+
+    if (name === 'name') {
+      if (value.length > 1) {
+        const filtered = contacts.filter(c => c.name.toLowerCase().includes(value.toLowerCase())).slice(0, 5);
+        setSuggestions(filtered);
+        setShowSuggestions(true);
+      } else {
+        setSuggestions([]);
+        setShowSuggestions(false);
+      }
+    }
+  };
+
+  const handleSelectContact = (contact: Contact) => {
+    setFormData(prev => ({
+      ...prev,
+      name: contact.name,
+      company: contact.phone || prev.company,
+      host: contact.department || prev.host
+    }));
+    setShowSuggestions(false);
   };
 
   const handleSave = async () => {
@@ -92,7 +117,7 @@ const NewVisitorModal: React.FC<NewVisitorModalProps> = ({ isOpen, onClose, onSa
     >
       <div
         className={`bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md transform transition-all duration-200 ease-in-out ${modalAnimationClass}`}
-        onClick={(e) => e.stopPropagation()}
+        onClick={() => setShowSuggestions(false)}
       >
         <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
           <h2 id="new-visitor-title" className="text-lg font-semibold text-gray-800 dark:text-gray-100">
@@ -104,9 +129,38 @@ const NewVisitorModal: React.FC<NewVisitorModalProps> = ({ isOpen, onClose, onSa
         </div>
         <div className="p-6">
           <div className="space-y-4">
-            <div>
+            <div className="relative">
               <label htmlFor="visitor-name" className={labelClasses}>Visitor Name</label>
-              <input type="text" id="visitor-name" name="name" className={inputClasses} value={formData.name} onChange={handleChange} placeholder="e.g., John Doe" disabled={isDisabled} />
+              <input
+                type="text"
+                id="visitor-name"
+                name="name"
+                className={inputClasses}
+                value={formData.name}
+                onChange={handleChange}
+                onFocus={(e) => { if (e.target.value.length > 1) setShowSuggestions(true) }}
+                onClick={(e) => e.stopPropagation()}
+                placeholder="e.g., John Doe"
+                disabled={isDisabled}
+                autoComplete="off"
+              />
+              {showSuggestions && suggestions.length > 0 && (
+                <ul className="absolute z-10 w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto mt-1">
+                  {suggestions.map((contact) => (
+                    <li
+                      key={contact.id}
+                      className="px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer text-sm text-gray-700 dark:text-gray-200"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSelectContact(contact);
+                      }}
+                    >
+                      <div className="font-medium">{contact.name}</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">{contact.phone} • {contact.department || 'No Dept'}</div>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
             <div>
               <label htmlFor="visitor-company" className={labelClasses}>Mobile Number (Optional)</label>

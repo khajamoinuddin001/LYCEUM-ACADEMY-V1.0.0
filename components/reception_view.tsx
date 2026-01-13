@@ -1,7 +1,6 @@
 
-
 import React, { useState, useMemo } from 'react';
-import { Plus, Search, Users, LogIn, CalendarClock, Edit } from './icons';
+import { Plus, Search, Users, LogIn, CalendarClock, Edit, Trash2 } from './icons';
 import type { Visitor, User } from '../types';
 
 interface ReceptionViewProps {
@@ -11,6 +10,7 @@ interface ReceptionViewProps {
     onCheckOut: (visitorId: number) => void;
     onCheckInScheduled: (visitorId: number) => void;
     onEditVisitor: (visitor: Visitor) => void;
+    onDeleteVisitor: (visitorId: number) => void;
     user: User;
 }
 
@@ -22,12 +22,19 @@ const statusClasses: { [key in Visitor['status']]: string } = {
 
 const formatDateTime = (isoString?: string) => {
     if (!isoString) return '—';
-    const date = new Date(isoString);
-    return date.toLocaleString('en-IN', {
-        timeZone: 'Asia/Kolkata',
-        dateStyle: 'short',
-        timeStyle: 'short'
-    });
+    try {
+        const date = new Date(isoString);
+        if (isNaN(date.getTime())) return '—'; // Check for invalid date
+        return date.toLocaleString('en-IN', {
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+        });
+    } catch (e) {
+        return '—';
+    }
 }
 
 const StatCard: React.FC<{ title: string; value: string | number; icon: React.ReactNode }> = ({ title, value, icon }) => (
@@ -42,21 +49,31 @@ const StatCard: React.FC<{ title: string; value: string | number; icon: React.Re
     </div>
 );
 
-const ReceptionView: React.FC<ReceptionViewProps> = ({ visitors, onNewVisitorClick, onScheduleVisitorClick, onCheckOut, onCheckInScheduled, onEditVisitor, user }) => {
+const ReceptionView: React.FC<ReceptionViewProps> = ({ visitors, onNewVisitorClick, onScheduleVisitorClick, onCheckOut, onCheckInScheduled, onEditVisitor, onDeleteVisitor, user }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState<'All' | 'Checked-in' | 'Checked-out'>('All');
     const [activeTab, setActiveTab] = useState<'log' | 'appointments'>('log');
 
     const canCreate = user.role === 'Admin' || user.permissions?.['Reception']?.create;
     const canUpdate = user.role === 'Admin' || user.permissions?.['Reception']?.update;
+    const canDelete = user.role === 'Admin' || user.permissions?.['Reception']?.delete;
 
     const { visitorsToday, currentlyCheckedIn, pendingAppointments, filteredVisitors, scheduledVisitors } = useMemo(() => {
-        const todayStr = new Date().toDateString();
+        const today = new Date();
+        const todayStr = today.toDateString();
 
         const visitorsToday = visitors.filter(v => {
             if (!v.checkIn) return false;
+            // Robust date check: handle both ISO string and potential Date objects
             try {
-                return new Date(v.checkIn).toDateString() === todayStr;
+                const checkInDate = new Date(v.checkIn);
+                // Check if date is valid
+                if (isNaN(checkInDate.getTime())) return false;
+
+                // Compare year, month, day to ensure local date match
+                return checkInDate.getDate() === today.getDate() &&
+                    checkInDate.getMonth() === today.getMonth() &&
+                    checkInDate.getFullYear() === today.getFullYear();
             } catch (e) {
                 return false;
             }
@@ -65,7 +82,11 @@ const ReceptionView: React.FC<ReceptionViewProps> = ({ visitors, onNewVisitorCli
         const pendingAppointments = visitors.filter(v => {
             if (v.status !== 'Scheduled' || !v.scheduledCheckIn) return false;
             try {
-                return new Date(v.scheduledCheckIn).toDateString() === todayStr;
+                const scheduleDate = new Date(v.scheduledCheckIn);
+                if (isNaN(scheduleDate.getTime())) return false;
+                return scheduleDate.getDate() === today.getDate() &&
+                    scheduleDate.getMonth() === today.getMonth() &&
+                    scheduleDate.getFullYear() === today.getFullYear();
             } catch (e) {
                 return false;
             }
@@ -195,7 +216,11 @@ const ReceptionView: React.FC<ReceptionViewProps> = ({ visitors, onNewVisitorCli
                                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">#</th>
                                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Visitor</th>
                                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{activeTab === 'log' ? 'Check-in' : 'Scheduled For'}</th>
-                                    {/* ... */}
+                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{activeTab === 'log' ? 'Check-out' : 'Department'}</th>
+                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{activeTab === 'log' ? 'Host' : 'Status'}</th>
+                                    {activeTab === 'log' && <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Card Number</th>}
+                                    {activeTab === 'log' && <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Status</th>}
+                                    <th scope="col" className="relative px-6 py-3"><span className="sr-only">Actions</span></th>
                                 </tr>
                             </thead>
                             <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
@@ -218,6 +243,7 @@ const ReceptionView: React.FC<ReceptionViewProps> = ({ visitors, onNewVisitorCli
                                                 <div className="flex items-center justify-end gap-2 md:gap-4">
                                                     {canUpdate && <button onClick={() => onEditVisitor(visitor)} className="p-2 text-gray-400 hover:text-lyceum-blue touch-manipulation" title="Edit"><Edit size={18} /></button>}
                                                     {visitor.status === 'Checked-in' && canUpdate && (<button onClick={() => onCheckOut(visitor.id)} className="px-3 py-1.5 text-sm text-lyceum-blue hover:text-lyceum-blue-dark hover:bg-lyceum-blue/10 rounded touch-manipulation">Check-out</button>)}
+                                                    {canDelete && <button onClick={() => onDeleteVisitor(visitor.id)} className="p-2 text-gray-400 hover:text-red-600 touch-manipulation" title="Delete"><Trash2 size={18} /></button>}
                                                 </div>
                                             </td>
                                         </tr>
@@ -230,12 +256,13 @@ const ReceptionView: React.FC<ReceptionViewProps> = ({ visitors, onNewVisitorCli
                                                 <div className="text-xs text-gray-500 dark:text-gray-400">{visitor.company}</div>
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{formatDateTime(visitor.scheduledCheckIn)}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{visitor.host}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{visitor.department}</td>
                                             <td className="px-6 py-4 whitespace-nowrap text-sm"><span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusClasses[visitor.status]}`}>{visitor.status}</span></td>
                                             <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                                 <div className="flex items-center justify-end gap-2 md:gap-4">
                                                     {canUpdate && <button onClick={() => onEditVisitor(visitor)} className="p-2 text-gray-400 hover:text-lyceum-blue touch-manipulation" title="Edit"><Edit size={18} /></button>}
                                                     {visitor.status === 'Scheduled' && canUpdate && (<button onClick={() => onCheckInScheduled(visitor.id)} className="px-3 py-1.5 text-sm text-lyceum-blue hover:text-lyceum-blue-dark hover:bg-lyceum-blue/10 rounded touch-manipulation">Check-in</button>)}
+                                                    {canDelete && <button onClick={() => onDeleteVisitor(visitor.id)} className="p-2 text-gray-400 hover:text-red-600 touch-manipulation" title="Delete"><Trash2 size={18} /></button>}
                                                 </div>
                                             </td>
                                         </tr>

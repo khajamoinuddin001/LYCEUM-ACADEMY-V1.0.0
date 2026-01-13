@@ -947,6 +947,18 @@ const DashboardLayout: React.FC = () => {
     }
   };
 
+  const handleDeleteVisitor = async (visitorId: number) => {
+    if (currentUser?.role !== 'Admin' && !currentUser?.permissions['Reception']?.delete) {
+      addNotification({ title: 'Permission Denied', description: 'You do not have permission to delete visitors.', type: 'error' });
+      return;
+    }
+    if (window.confirm('Are you sure you want to delete this visitor?')) {
+      const updatedVisitors = await api.deleteVisitor(visitorId);
+      setVisitors(updatedVisitors);
+      addNotification({ title: 'Visitor Deleted', description: 'The visitor record has been permanently deleted.', type: 'info' });
+    }
+  };
+
   const handleRecordPayment = async (transactionId: string) => {
     const { allTransactions, paidTransaction } = await api.recordPayment(transactionId);
     setTransactions(allTransactions);
@@ -1253,7 +1265,7 @@ const DashboardLayout: React.FC = () => {
         return <CrmView user={currentUser} leads={leads} onLeadSelect={handleLeadSelect} onNewLeadClick={handleNewLeadClick} onUpdateLeadStage={handleUpdateLeadStage} onDeleteLead={handleDeleteLead} />;
       case 'Agents':
         return <AgentsView onNavigateBack={() => handleAppSelect('Apps')} />;
-      case 'Reception': return <ReceptionView visitors={visitors} onNewVisitorClick={() => setIsNewVisitorModalOpen(true)} onScheduleVisitorClick={() => setIsNewAppointmentModalOpen(true)} onCheckOut={handleVisitorCheckOut} onCheckInScheduled={handleCheckInScheduledVisitor} onEditVisitor={handleEditVisitor} user={currentUser} />;
+      case 'Reception': return <ReceptionView visitors={visitors} onNewVisitorClick={() => setIsNewVisitorModalOpen(true)} onScheduleVisitorClick={() => setIsNewAppointmentModalOpen(true)} onCheckOut={handleVisitorCheckOut} onCheckInScheduled={handleCheckInScheduledVisitor} onEditVisitor={handleEditVisitor} onDeleteVisitor={handleDeleteVisitor} user={currentUser} />;
       case 'Accounting': return <AccountingView user={currentUser} transactions={transactions} onNewInvoiceClick={() => setIsNewInvoiceModalOpen(true)} onRecordPayment={handleRecordPayment} />;
       case 'Profile':
         if (currentUser.role === 'Student' && studentContact) {
