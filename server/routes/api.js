@@ -967,6 +967,7 @@ router.get('/visitors', authenticateToken, async (req, res) => {
       checkIn: v.checkIn,
       checkOut: v.checkOut,
       cardNumber: v.cardNumber,
+      dailySequenceNumber: v.daily_sequence_number,
       createdAt: v.createdAt
     }));
     res.json(visitors);
@@ -996,11 +997,28 @@ router.post('/visitors', authenticateToken, async (req, res) => {
       contactId = newContactResult.rows[0].id;
     }
 
-    // 2. Create Visitor Record
+    // 2. Determine Daily Sequence Number if checking in now
+    let dailySequenceNumber = null;
+    if (visitor.status === 'Checked-in' || (!visitor.status && visitor.checkIn)) {
+      // It's a walk-in or immediate check-in
+      const dateToCheck = visitor.checkIn ? new Date(visitor.checkIn) : new Date();
+      // Format as YYYY-MM-DD for SQL comparison
+      // Note: simple current_date is easiest for today. 
+      // We will count visitors checked in TODAY.
+      const seqResult = await query(`
+        SELECT COUNT(*) as count 
+        FROM visitors 
+        WHERE daily_sequence_number IS NOT NULL 
+        AND check_in::date = CURRENT_DATE
+      `);
+      dailySequenceNumber = parseInt(seqResult.rows[0].count) + 1;
+    }
+
+    // 3. Create Visitor Record
     const result = await query(
       `INSERT INTO visitors (
-        contact_id, name, company, host, purpose, scheduled_check_in, check_in, check_out, status, card_number
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+        contact_id, name, company, host, purpose, scheduled_check_in, check_in, check_out, status, card_number, daily_sequence_number
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
       [
         contactId,
         visitor.name,
@@ -1011,7 +1029,8 @@ router.post('/visitors', authenticateToken, async (req, res) => {
         visitor.checkIn || null,
         visitor.checkOut || null,
         visitor.status || 'Scheduled',
-        visitor.cardNumber || null
+        visitor.cardNumber || null,
+        dailySequenceNumber
       ]
     );
     const v = result.rows[0];
@@ -1021,6 +1040,7 @@ router.post('/visitors', authenticateToken, async (req, res) => {
       checkIn: v.check_in,
       checkOut: v.check_out,
       cardNumber: v.card_number,
+      dailySequenceNumber: v.daily_sequence_number,
       createdAt: v.created_at
     });
   } catch (error) {
@@ -1042,6 +1062,7 @@ router.get('/contacts/:id/visits', authenticateToken, async (req, res) => {
       checkIn: v.check_in,
       checkOut: v.check_out,
       cardNumber: v.card_number,
+      dailySequenceNumber: v.daily_sequence_number,
       createdAt: v.created_at
     }));
 
@@ -1084,6 +1105,19 @@ router.put('/visitors/:id', authenticateToken, async (req, res) => {
     }
     const current = currentResult.rows[0];
 
+    // Determine Daily Sequence Number if checking in now
+    let dailySequenceNumber = current.daily_sequence_number;
+    if (!dailySequenceNumber && (visitor.status === 'Checked-in' || (!current.check_in && visitor.checkIn))) {
+      const dateToCheck = visitor.checkIn ? new Date(visitor.checkIn) : new Date();
+      const seqResult = await query(`
+        SELECT COUNT(*) as count 
+        FROM visitors 
+        WHERE daily_sequence_number IS NOT NULL 
+        AND check_in::date = CURRENT_DATE
+      `);
+      dailySequenceNumber = parseInt(seqResult.rows[0].count) + 1;
+    }
+
     // Update with provided values or preserve existing ones
     await query(`
       UPDATE visitors SET
@@ -1094,7 +1128,8 @@ router.put('/visitors/:id', authenticateToken, async (req, res) => {
         check_in = $5,
         check_out = $6,
         status = $7,
-        card_number = $8
+        card_number = $8,
+        daily_sequence_number = $10
       WHERE id = $9
     `, [
       visitor.name || current.name,
@@ -1105,7 +1140,8 @@ router.put('/visitors/:id', authenticateToken, async (req, res) => {
       visitor.checkOut || current.check_out,
       visitor.status || current.status,
       visitor.cardNumber || current.card_number,
-      req.params.id
+      req.params.id,
+      dailySequenceNumber
     ]);
 
     const result = await query('SELECT * FROM visitors WHERE id = $1', [req.params.id]);

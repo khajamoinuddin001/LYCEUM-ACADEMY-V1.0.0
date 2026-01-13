@@ -203,8 +203,10 @@ export async function initDatabase() {
         scheduled_check_in TIMESTAMP,
         check_in TIMESTAMP,
         check_out TIMESTAMP,
+        check_out TIMESTAMP,
         status TEXT NOT NULL CHECK(status IN ('Scheduled', 'Checked-in', 'Checked-out')),
         card_number TEXT,
+        daily_sequence_number INTEGER,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -218,8 +220,9 @@ export async function initDatabase() {
     try {
       await client.query('ALTER TABLE visitors ADD COLUMN IF NOT EXISTS contact_id INTEGER REFERENCES contacts(id)');
       await client.query('ALTER TABLE visitors ADD COLUMN IF NOT EXISTS purpose TEXT');
+      await client.query('ALTER TABLE visitors ADD COLUMN IF NOT EXISTS daily_sequence_number INTEGER');
     } catch (e) {
-      console.log('Columns contact_id/purpose might already exist');
+      console.log('Columns contact_id/purpose/daily_sequence_number might already exist');
     }
 
     // Quotation Templates table

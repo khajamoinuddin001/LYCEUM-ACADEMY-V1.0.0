@@ -422,6 +422,7 @@ export interface Visitor {
   cardNumber?: string;
   purpose?: string;
   contactId?: number;
+  dailySequenceNumber?: number;
   createdAt?: string;
 }
 
