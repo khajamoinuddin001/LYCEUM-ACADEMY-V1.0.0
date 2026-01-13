@@ -595,7 +595,6 @@ router.post('/leads', authenticateToken, async (req, res) => {
       JSON.stringify([{ id: 0, text: 'Documents', completed: false, type: 'checkbox' }])
     ]);
 
-    // 3. Send Notification (Placeholder for Request #4)
     // 3. Send Notification
     if (lead.assignedTo) {
       // Find user ID by name (assignedTo is name string)
@@ -612,7 +611,6 @@ router.post('/leads', authenticateToken, async (req, res) => {
           JSON.stringify({ type: 'lead', id: newLead.id }),
           JSON.stringify([userId])
         ]);
-        console.log(`[Notification] Lead assigned to ${lead.assignedTo} (User ID: ${userId})`);
       }
     }
 
@@ -620,6 +618,80 @@ router.post('/leads', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Error creating lead:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// Public Enquiry Route - No Authentication Required
+router.post('/public/enquiries', async (req, res) => {
+  try {
+    const enquiry = req.body;
+
+    // 1. Create Lead from Enquiry
+    const leadResult = await query(`
+      INSERT INTO leads (title, company, value, contact, stage, email, phone, source, assigned_to, notes, quotations)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      RETURNING *
+    `, [
+      `Website Enquiry: ${enquiry.name}`,  // Title
+      'Individual',                        // Company
+      0,                                   // Value
+      enquiry.name,                        // Contact Name
+      'New',                               // Stage
+      enquiry.email,                       // Email
+      enquiry.phone,                       // Phone
+      'Website',                           // Source
+      null,                                // Assigned To
+      `Interest: ${enquiry.interest}. Country: ${enquiry.country}. Message: ${enquiry.message}`, // Notes
+      JSON.stringify([])                   // Quotations
+    ]);
+
+    const newLead = leadResult.rows[0];
+
+    // 2. Automatically Create a Contact
+    // Generate Contact ID
+    const now = new Date();
+    const yy = now.getFullYear().toString().slice(-2);
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    const datePrefix = `LA${yy}${mm}${dd}`;
+
+    const todayContacts = await query(
+      "SELECT contact_id FROM contacts WHERE contact_id LIKE $1 ORDER BY contact_id DESC LIMIT 1",
+      [`${datePrefix}%`]
+    );
+
+    let sequence = 0;
+    if (todayContacts.rows.length > 0) {
+      const lastId = todayContacts.rows[0].contact_id;
+      sequence = parseInt(lastId.slice(-3)) + 1;
+    }
+    const newContactId = `${datePrefix}${String(sequence).padStart(3, '0')}`;
+
+    // Insert Contact
+    await query(`
+      INSERT INTO contacts (
+        name, contact_id, email, phone, department, major, notes, source, contact_type, checklist, created_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+    `, [
+      enquiry.name,
+      newContactId,
+      enquiry.email,
+      enquiry.phone,
+      'Unassigned',
+      'Unassigned',
+      `Auto-created from Website Enquiry: ${enquiry.interest}`,
+      'Website',
+      'Lead',
+      JSON.stringify([{ id: 0, text: 'Initial Inquiry Received', completed: true, type: 'checkbox' }])
+    ]);
+
+    // 3. Notify Admins (Optional - typically leads are unassigned initially)
+    // You could query all admins and notify them here if desired.
+
+    res.json({ success: true, message: 'Enquiry received successfully' });
+  } catch (error) {
+    console.error('Enquiry Error:', error);
+    res.status(500).json({ error: 'Failed to process enquiry' });
   }
 });
 

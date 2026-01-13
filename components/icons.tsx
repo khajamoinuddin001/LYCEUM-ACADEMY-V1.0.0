@@ -60,6 +60,8 @@ export {
   Lock,
   MailPlus,
   UserPlus,
+  UserCheck,
+  Send,
   Sun,
   Moon,
   ConciergeBell,
