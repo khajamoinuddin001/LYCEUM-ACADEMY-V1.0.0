@@ -60,7 +60,6 @@ export {
   Lock,
   MailPlus,
   UserPlus,
-  Trash2,
   Sun,
   Moon,
   ConciergeBell,
