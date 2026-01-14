@@ -229,7 +229,7 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, courses, e
                     )}
                 </InfoCard>
 
-                <InfoCard icon={<Calendar size={20} />} title="Campus Visits">
+                <InfoCard icon={<Calendar size={20} />} title="Office Visits">
                     {visits.length > 0 ? (
                         <ul className="space-y-3">
                             {visits.slice(0, 5).map(visit => (
@@ -242,11 +242,14 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, courses, e
                                                 visit.status === 'Checked-out' ? 'bg-gray-100 text-gray-800' : 'bg-blue-100 text-blue-800'
                                             }`}>{visit.status}</span>
                                     </div>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                        Purpose: {visit.purpose || 'N/A'}
+                                    </p>
                                 </li>
                             ))}
                         </ul>
                     ) : (
-                        <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-2">No campus visits recorded.</p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-2">No office visits recorded.</p>
                     )}
                 </InfoCard>
 

@@ -9,13 +9,13 @@ interface ContactVisitsViewProps {
     user: User;
 }
 
-const DEPARTMENTS = [
-    "Academic Director",
-    "Admissions Department (Syed Nasir Ali)",
-    "Admissions Department (Mohammed Khaja Moinuddin)",
-    "Sales Department (Abdul Samad)",
-    "Finance Department (Syed)",
-    "Instructor"
+const ACTIONS = [
+    "Counselling",
+    "DS-160 Started",
+    "DS-160 Reviewed",
+    "DS-160 Submitted",
+    "CGI Credentials Created",
+    "Documents Submitted"
 ];
 
 const ContactVisitsView: React.FC<ContactVisitsViewProps> = ({ contact, onNavigateBack, user }) => {
@@ -23,7 +23,7 @@ const ContactVisitsView: React.FC<ContactVisitsViewProps> = ({ contact, onNaviga
     const [isLoading, setIsLoading] = useState(true);
     const [updatingVisitId, setUpdatingVisitId] = useState<number | null>(null);
 
-    const canEdit = user.role === 'Admin' || user.permissions?.['Reception']?.update;
+    const canEdit = user.role !== 'Student';
 
     useEffect(() => {
         fetchVisits();
@@ -42,56 +42,16 @@ const ContactVisitsView: React.FC<ContactVisitsViewProps> = ({ contact, onNaviga
     };
 
     const handleActionChange = async (visit: Visitor, action: string) => {
+        // Just persist selected action on the latest segment; no checkout or extra logic
         if (!action) return;
         setUpdatingVisitId(visit.id);
-
         try {
-            // Logic:
-            // If action is "None" -> Check out
-            // If action is a Department -> Add new segment
-
-            if (action === 'none') {
-                if (visit.status !== 'Checked-out') {
-                    // Check out logic
-                    const updatedVisitor = await api.checkOutVisitor(visit.id);
-                    // Update local state is tricky with returned types, simpler to refetch or update manually
-                    setVisits(prev => prev.map(v => v.id === visit.id ? updatedVisitor.checkedOutVisitor || v : v));
-                    // Also need to ensure the last segment has action "none"
-                    // checkOutVisitor usually just sets status/checkout time.
-                    // We might want to explicitly set the action on the current segment.
-                }
-                // If already checked out, do nothing or just save action? 
-                // The requirement says "reception desk mark checkout time".
-                // api.checkOutVisitor handles time.
-            } else {
-                // Moving to another department
-                const currentSegments = visit.visitSegments && visit.visitSegments.length > 0
-                    ? [...visit.visitSegments]
-                    : [{ department: visit.host, purpose: visit.purpose || '', timestamp: visit.checkIn }];
-
-                // Update previous segment with action (close previous)
-                if (currentSegments.length > 0) {
-                    currentSegments[currentSegments.length - 1].action = 'none';
-                }
-
-                // Add new segment
-                currentSegments.push({
-                    department: action,
-                    purpose: '', // To be filled? Or just empty initially
-                    timestamp: new Date().toISOString()
-                });
-
-                // Call saveVisitor (which uses PUT for existing)
-                const updated = await api.saveVisitor({
-                    ...visit,
-                    visitSegments: currentSegments
-                    // Status remains Checked-in
-                });
-
-                // Refresh list
-                await fetchVisits();
-            }
-
+            const currentSegments = visit.visitSegments && visit.visitSegments.length > 0
+                ? [...visit.visitSegments]
+                : [{ department: visit.host, purpose: visit.purpose || '', timestamp: visit.checkIn }];
+            currentSegments[currentSegments.length - 1].action = action;
+            await api.saveVisitor({ ...visit, visitSegments: currentSegments });
+            await fetchVisits();
         } catch (error) {
             console.error("Failed to update visit action:", error);
             alert("Failed to update visit.");
@@ -208,22 +168,21 @@ const ContactVisitsView: React.FC<ContactVisitsViewProps> = ({ contact, onNaviga
                                                 <div className="relative inline-block w-64 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 h-10 rounded-md">
                                                     {isCheckedOut || segIdx < segments.length - 1 ? (
                                                         <div className="w-full h-full flex items-center px-2 font-bold">
-                                                            {segment.action || (segIdx < segments.length - 1 ? segments[segIdx + 1].department : 'none')}
+                                                            {segment.action || 'none'}
                                                             <div className="absolute right-2 top-1/2 transform -translate-y-1/2 pointer-events-none text-black dark:text-gray-300">
                                                                 <ChevronDown size={16} />
                                                             </div>
                                                         </div>
                                                     ) : (
-                                                        <select
-                                                            className="w-full h-full appearance-none bg-transparent px-2 font-bold focus:outline-none"
-                                                            value={segment.action || ''}
-                                                            onChange={(e) => handleActionChange(visit, e.target.value)}
-                                                            disabled={updatingVisitId === visit.id}
-                                                        >
-                                                            <option value="">Select Action...</option>
-                                                            <option value="none">none</option>
-                                                            {DEPARTMENTS.filter(d => d !== segment.department).map(d => (
-                                                                <option key={d} value={d}>{d}</option>
+                                                    <select
+                                                        className="w-full h-full appearance-none bg-transparent px-2 font-bold focus:outline-none"
+                                                        value={segment.action || ''}
+                                                        onChange={(e) => handleActionChange(visit, e.target.value)}
+                                                        disabled={!canEdit || updatingVisitId === visit.id}
+                                                    >
+                                                        <option value="">Select Action...</option>
+                                                            {ACTIONS.map(a => (
+                                                                <option key={a} value={a}>{a}</option>
                                                             ))}
                                                         </select>
                                                     )}

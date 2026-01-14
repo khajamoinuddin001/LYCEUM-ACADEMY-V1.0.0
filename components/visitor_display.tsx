@@ -109,9 +109,10 @@ const VisitorDisplay: React.FC = () => {
 
             <div className="grid grid-cols-1 gap-6">
                 {/* Table Header */}
-                <div className="grid grid-cols-3 gap-4 text-2xl font-bold text-gray-400 border-b border-gray-700 pb-4 px-6">
+                <div className="grid grid-cols-4 gap-4 text-2xl font-bold text-gray-400 border-b border-gray-700 pb-4 px-6">
                     <div>Visitor Name</div>
                     <div>Waiting For</div>
+                    <div>Purpose</div>
                     <div>Wait Time</div>
                 </div>
 
@@ -120,9 +121,9 @@ const VisitorDisplay: React.FC = () => {
                     <div className="text-center py-20 text-4xl text-gray-600">No visitors waiting</div>
                 ) : (
                     visitors.map((visitor, index) => (
-                        <div key={visitor.id} className={`grid grid-cols-3 gap-4 p-6 rounded-xl text-3xl font-medium items-center transition-all ${visitor.status === 'Called'
-                                ? 'bg-green-900/50 border-2 border-green-500 text-green-100 scale-105 shadow-lg shadow-green-900/20'
-                                : 'bg-gray-800 border border-gray-700 text-gray-100 hover:bg-gray-750'
+                        <div key={visitor.id} className={`grid grid-cols-4 gap-4 p-6 rounded-xl text-3xl font-medium items-center transition-all ${visitor.status === 'Called'
+                            ? 'bg-green-900/50 border-2 border-green-500 text-green-100 scale-105 shadow-lg shadow-green-900/20'
+                            : 'bg-gray-800 border border-gray-700 text-gray-100 hover:bg-gray-750'
                             }`}>
                             <div className="flex items-center gap-4">
                                 <span className="text-gray-500 text-xl font-bold">#{visitor.dailySequenceNumber}</span>
@@ -130,6 +131,9 @@ const VisitorDisplay: React.FC = () => {
                             </div>
                             <div className="text-lyceum-blue">
                                 {getWaitingFor(visitor)}
+                            </div>
+                            <div className="text-gray-200 truncate">
+                                {visitor.purpose || '-'}
                             </div>
                             <div className="flex items-center gap-3 text-yellow-400 font-mono">
                                 <Clock size={28} />

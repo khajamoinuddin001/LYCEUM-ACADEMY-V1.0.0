@@ -16,12 +16,10 @@ const upload = multer({
 // Document routes
 router.post('/documents', authenticateToken, async (req, res) => {
   try {
-    // Check permissions
-    const canCreate = req.user.role === 'Admin' || !!req.user.permissions?.['Contacts']?.create || !!req.user.permissions?.['Contacts']?.update;
-    // const canUpdate = req.user.role === 'Admin' || !!req.user.permissions?.['Contacts']?.update;
-    if (!canCreate) {
-      return res.status(403).json({ error: 'Unauthorized' });
-    }
+    // Check permissions:
+    // Admin or users with Contacts create/update can upload.
+    // Students can upload to their OWN contact.
+    const isAdminOrStaff = req.user.role === 'Admin' || !!req.user.permissions?.['Contacts']?.create || !!req.user.permissions?.['Contacts']?.update;
 
     upload.single('file')(req, res, async (err) => {
       if (err) return res.status(400).json({ error: err.message });
@@ -31,6 +29,18 @@ router.post('/documents', authenticateToken, async (req, res) => {
 
       if (!file) {
         return res.status(400).json({ error: 'No file uploaded' });
+      }
+
+      if (!isAdminOrStaff) {
+        // Student: verify ownership of contact
+        const contactRes = await query('SELECT user_id FROM contacts WHERE id = $1', [contactId]);
+        if (contactRes.rows.length === 0) {
+          return res.status(404).json({ error: 'Contact not found' });
+        }
+        const ownerUserId = contactRes.rows[0].user_id;
+        if (req.user.role !== 'Student' || ownerUserId !== req.user.id) {
+          return res.status(403).json({ error: 'Unauthorized' });
+        }
       }
 
       const result = await query(`
@@ -65,11 +75,6 @@ const DEFAULT_CHECKLIST_ITEMS = [
 
 router.get('/documents/:id', authenticateToken, async (req, res) => {
   try {
-    // Check permissions
-    if (req.user.role !== 'Admin' && !req.user.permissions?.['Contacts']?.read) {
-      return res.status(403).json({ error: 'Unauthorized' });
-    }
-
     const result = await query('SELECT * FROM documents WHERE id = $1', [req.params.id]);
 
     if (result.rows.length === 0) {
@@ -77,6 +82,15 @@ router.get('/documents/:id', authenticateToken, async (req, res) => {
     }
 
     const doc = result.rows[0];
+    // Students can download only their own documents
+    if (req.user.role === 'Student') {
+      const contactRes = await query('SELECT user_id FROM contacts WHERE id = $1', [doc.contact_id]);
+      if (contactRes.rows.length === 0 || contactRes.rows[0].user_id !== req.user.id) {
+        return res.status(403).json({ error: 'Unauthorized' });
+      }
+    } else if (!req.user.permissions?.['Contacts']?.read && req.user.role !== 'Admin') {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
     const isPreview = req.query.preview === 'true';
 
     res.setHeader('Content-Type', doc.type);
@@ -91,11 +105,15 @@ router.get('/documents/:id', authenticateToken, async (req, res) => {
 
 router.get('/contacts/:id/documents', authenticateToken, async (req, res) => {
   try {
-    // Check permissions
-    if (req.user.role !== 'Admin' && !req.user.permissions?.['Contacts']?.read) {
+    // Students can list only their own contact's documents
+    if (req.user.role === 'Student') {
+      const contactRes = await query('SELECT user_id FROM contacts WHERE id = $1', [req.params.id]);
+      if (contactRes.rows.length === 0 || contactRes.rows[0].user_id !== req.user.id) {
+        return res.status(403).json({ error: 'Unauthorized' });
+      }
+    } else if (!req.user.permissions?.['Contacts']?.read && req.user.role !== 'Admin') {
       return res.status(403).json({ error: 'Unauthorized' });
     }
-
     const result = await query('SELECT id, contact_id, name, type, size, uploaded_at FROM documents WHERE contact_id = $1 ORDER BY uploaded_at DESC', [req.params.id]);
     res.json(result.rows);
   } catch (error) {
@@ -208,7 +226,14 @@ const transformContact = (dbContact) => {
     applicationPassword: dbContact.application_password,
     createdAt: dbContact.created_at,
     // JSON fields
-    checklist: Array.isArray(dbContact.checklist) ? dbContact.checklist : JSON.parse(dbContact.checklist || '[]'),
+    checklist: (() => {
+      try {
+        const parsed = Array.isArray(dbContact.checklist) ? dbContact.checklist : JSON.parse(dbContact.checklist || '[]');
+        return (Array.isArray(parsed) && parsed.length > 0) ? parsed : DEFAULT_CHECKLIST_ITEMS;
+      } catch {
+        return DEFAULT_CHECKLIST_ITEMS;
+      }
+    })(),
     activityLog: Array.isArray(dbContact.activity_log) ? dbContact.activity_log : JSON.parse(dbContact.activity_log || '[]'),
     recordedSessions: Array.isArray(dbContact.recorded_sessions) ? dbContact.recorded_sessions : JSON.parse(dbContact.recorded_sessions || '[]'),
     documents: Array.isArray(dbContact.documents) ? dbContact.documents : JSON.parse(dbContact.documents || '[]'),
@@ -238,12 +263,7 @@ router.get('/contacts', authenticateToken, async (req, res) => {
         console.log(`📝 Auto-creating contact for student user ${req.user.id} (${req.user.email})`);
 
         const contactId = `LA${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}${String(req.user.id).padStart(3, '0')}`;
-        const defaultChecklist = [
-          { id: 0, text: 'Documents', completed: false, type: 'checkbox' },
-          { id: 1, text: 'Submit High School Transcript', completed: false, type: 'checkbox' },
-          { id: 2, text: 'Complete Personal Statement', completed: false, type: 'checkbox' },
-          { id: 3, text: 'Pay Application Fee', completed: false, type: 'checkbox' }
-        ];
+        const defaultChecklist = DEFAULT_CHECKLIST_ITEMS;
 
         const createResult = await query(`
           INSERT INTO contacts (user_id, name, email, contact_id, department, major, notes, checklist, activity_log, recorded_sessions)
@@ -602,7 +622,7 @@ router.post('/leads', authenticateToken, async (req, res) => {
       `Auto-created from Lead: ${lead.title}`,
       lead.source || 'CRM Lead',
       'Lead',
-      JSON.stringify([{ id: 0, text: 'Documents', completed: false, type: 'checkbox' }])
+      JSON.stringify(DEFAULT_CHECKLIST_ITEMS)
     ]);
 
     // 3. Send Notification

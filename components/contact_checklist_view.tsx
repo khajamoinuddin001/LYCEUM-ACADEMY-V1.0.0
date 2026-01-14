@@ -12,7 +12,7 @@ interface ContactChecklistViewProps {
 
 const ContactChecklistView: React.FC<ContactChecklistViewProps> = ({ contact, user, onNavigateBack, onUpdateChecklistItem, onSave }) => {
   const checklist = contact.checklist || [];
-  const canUpdate = user.permissions['Contacts']?.update;
+  const canUpdate = user.role !== 'Student';
   const completedCount = checklist.filter(item => item.completed).length;
   const totalCount = checklist.length;
   const progress = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
