@@ -1045,13 +1045,13 @@ router.get('/visitors', authenticateToken, async (req, res) => {
     const result = await query('SELECT * FROM visitors');
     const visitors = result.rows.map(v => ({
       ...v,
-      scheduledCheckIn: v.scheduledCheckIn,
-      checkIn: v.checkIn,
-      checkOut: v.checkOut,
-      cardNumber: v.cardNumber,
+      scheduledCheckIn: v.scheduled_check_in,
+      checkIn: v.check_in,
+      checkOut: v.check_out,
+      cardNumber: v.card_number,
       dailySequenceNumber: v.daily_sequence_number,
       visitSegments: v.visit_segments || [],
-      createdAt: v.createdAt
+      createdAt: v.created_at
     }));
     res.json(visitors);
   } catch (error) {
@@ -1111,7 +1111,6 @@ router.post('/visitors', authenticateToken, async (req, res) => {
         visitor.scheduledCheckIn || null,
         visitor.checkIn || null,
         visitor.checkOut || null,
-        visitor.status || 'Scheduled',
         visitor.status || 'Scheduled',
         visitor.cardNumber || null,
         dailySequenceNumber,

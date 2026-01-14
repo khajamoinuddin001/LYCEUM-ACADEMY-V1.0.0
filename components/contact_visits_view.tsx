@@ -69,9 +69,9 @@ const ContactVisitsView: React.FC<ContactVisitsViewProps> = ({ contact, onNaviga
                     ? [...visit.visitSegments]
                     : [{ department: visit.host, purpose: visit.purpose || '', timestamp: visit.checkIn }];
 
-                // Update previous segment with action (optional, but good for UI state)
+                // Update previous segment with action (close previous)
                 if (currentSegments.length > 0) {
-                    currentSegments[currentSegments.length - 1].action = action;
+                    currentSegments[currentSegments.length - 1].action = 'none';
                 }
 
                 // Add new segment
@@ -170,7 +170,7 @@ const ContactVisitsView: React.FC<ContactVisitsViewProps> = ({ contact, onNaviga
                         const isCheckedOut = visit.status === 'Checked-out';
 
                         return (
-                            <div key={visit.id} className="border-2 border-gray-900 dark:border-gray-600 p-6 bg-white dark:bg-gray-800 shadow-sm">
+                            <div key={visit.id} className="border border-gray-200 dark:border-gray-700 p-6 bg-white dark:bg-gray-800 shadow-sm rounded-lg">
                                 {/* Header */}
                                 <div className="flex flex-wrap justify-between items-start mb-6 font-bold text-lg text-gray-900 dark:text-gray-100">
                                     <div className="mb-2">
@@ -186,7 +186,7 @@ const ContactVisitsView: React.FC<ContactVisitsViewProps> = ({ contact, onNaviga
                                 {/* Segments */}
                                 <div className="space-y-4">
                                     {segments.map((segment, segIdx) => (
-                                        <div key={segIdx} className="border-2 border-gray-900 dark:border-gray-600 p-4">
+                                        <div key={segIdx} className="border border-gray-200 dark:border-gray-700 p-4 rounded-lg">
                                             <div className="mb-4">
                                                 <span className="font-bold mr-2">department:-</span>
                                                 <span>{segment.department || 'Reception Desk'}</span>
@@ -205,7 +205,7 @@ const ContactVisitsView: React.FC<ContactVisitsViewProps> = ({ contact, onNaviga
 
                                             <div className="flex items-center gap-2">
                                                 <span className="font-bold">Action</span>
-                                                <div className="relative inline-block w-64 border-2 border-black dark:border-gray-500 bg-white dark:bg-gray-700 h-10">
+                                                <div className="relative inline-block w-64 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 h-10 rounded-md">
                                                     {isCheckedOut || segIdx < segments.length - 1 ? (
                                                         <div className="w-full h-full flex items-center px-2 font-bold">
                                                             {segment.action || (segIdx < segments.length - 1 ? segments[segIdx + 1].department : 'none')}

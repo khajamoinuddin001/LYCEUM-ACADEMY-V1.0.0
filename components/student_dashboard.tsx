@@ -132,6 +132,18 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, courses, e
 
         return groups;
     })();
+    const sectionOrder = ['University Checklist', 'DS 160', 'CGI', 'Sevis fee', 'SEVIS Fee', 'Visa Interview Preparation', 'Post Visa Guidance', 'Application Checklist'];
+    const sectionHeaders = checklistGroups
+        .map(g => g.key)
+        .filter((v, i, arr) => arr.indexOf(v) === i)
+        .sort((a, b) => {
+            const ia = sectionOrder.indexOf(a);
+            const ib = sectionOrder.indexOf(b);
+            if (ia === -1 && ib === -1) return a.localeCompare(b);
+            if (ia === -1) return 1;
+            if (ib === -1) return -1;
+            return ia - ib;
+        });
 
     return (
         <div className="animate-fade-in space-y-6">
@@ -203,17 +215,12 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, courses, e
                                 </ol>
                             ) : (
                                 <ul className="mt-3 space-y-2 max-h-40 overflow-y-auto pr-1">
-                                    {checklist.slice(0, 5).map(item => (
-                                        <li key={item.id} className="flex items-center text-sm">
-                                            {item.completed ? <CheckCircle2 size={16} className="text-green-500 mr-2 flex-shrink-0" /> : <Circle size={16} className="text-gray-300 dark:text-gray-600 mr-2 flex-shrink-0" />}
-                                            <span className={`${item.completed ? 'line-through text-gray-500' : 'text-gray-800 dark:text-gray-200'}`}>{item.text}</span>
+                                    {sectionHeaders.map((section, idx) => (
+                                        <li key={section} className="flex items-center text-sm font-medium text-gray-800 dark:text-gray-200">
+                                            <CheckCircle2 size={16} className="text-lyceum-blue mr-2 flex-shrink-0" />
+                                            {idx + 1}. {section}
                                         </li>
                                     ))}
-                                    {totalCount > 5 && (
-                                        <li className="text-xs text-gray-500 dark:text-gray-400">
-                                            +{totalCount - 5} more items
-                                        </li>
-                                    )}
                                 </ul>
                             )}
                         </div>
@@ -235,9 +242,6 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, courses, e
                                                 visit.status === 'Checked-out' ? 'bg-gray-100 text-gray-800' : 'bg-blue-100 text-blue-800'
                                             }`}>{visit.status}</span>
                                     </div>
-                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                        Purpose: {visit.purpose || 'N/A'}
-                                    </p>
                                 </li>
                             ))}
                         </ul>
