@@ -117,7 +117,10 @@ const NewVisitorModal: React.FC<NewVisitorModalProps> = ({ isOpen, onClose, onSa
     >
       <div
         className={`bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md transform transition-all duration-200 ease-in-out ${modalAnimationClass}`}
-        onClick={() => setShowSuggestions(false)}
+        onClick={(e) => {
+          e.stopPropagation();
+          setShowSuggestions(false);
+        }}
       >
         <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
           <h2 id="new-visitor-title" className="text-lg font-semibold text-gray-800 dark:text-gray-100">

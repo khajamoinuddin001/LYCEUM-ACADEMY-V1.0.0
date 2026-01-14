@@ -86,4 +86,7 @@ export {
   Printer,
   Trophy,
   AlertCircle,
+  CheckCircle,
+  Volume2,
+  ArrowRight
 } from 'lucide-react';

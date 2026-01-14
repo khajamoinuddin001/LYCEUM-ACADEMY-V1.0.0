@@ -325,6 +325,27 @@ export const updateUser = async (userId: number, updates: { role?: UserRole; per
   }
   return response.json();
 };
+// Attendance API
+export const checkIn = async () => {
+  return await apiRequest('/attendance/check-in', { method: 'POST' });
+};
+
+export const checkOut = async () => {
+  return await apiRequest('/attendance/check-out', { method: 'POST' });
+};
+
+export const getAttendanceHistory = async () => {
+  return await apiRequest('/attendance/me', { method: 'GET' });
+};
+
+export const getHolidays = async () => {
+  return await apiRequest('/holidays', { method: 'GET' });
+};
+
+export const getPayrollReport = async (month: number, year: number) => {
+  return await apiRequest(`/attendance/payroll?month=${month}&year=${year}`, { method: 'GET' });
+};
+
 export const saveEvents = async (events: CalendarEvent[]): Promise<CalendarEvent[]> => {
   // Save each event individually
   for (const event of events) {
@@ -585,12 +606,13 @@ export const saveVisitor = async (data: {
   name: string;
   company: string;
   host: string;
-  cardNumber: string;
+  cardNumber?: string;
   purpose?: string;
-  status?: 'Scheduled' | 'Checked-in' | 'Checked-out';
+  status?: 'Scheduled' | 'Checked-in' | 'Checked-out' | 'Called';
   checkIn?: string;
   checkOut?: string;
   scheduledCheckIn?: string;
+  visitSegments?: { department: string; purpose: string; action?: string; timestamp?: string }[];
 }): Promise<Visitor[]> => {
   // Get current time in IST
   const now = new Date();
@@ -607,7 +629,8 @@ export const saveVisitor = async (data: {
         status: data.status || currentVisitor.status,
         checkIn: data.checkIn || currentVisitor.checkIn,
         checkOut: data.checkOut || currentVisitor.checkOut,
-        scheduledCheckIn: data.scheduledCheckIn || currentVisitor.scheduledCheckIn
+        scheduledCheckIn: data.scheduledCheckIn || currentVisitor.scheduledCheckIn,
+        visitSegments: data.visitSegments || currentVisitor.visitSegments
       }),
     });
   } else {

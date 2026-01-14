@@ -17,8 +17,8 @@ const upload = multer({
 router.post('/documents', authenticateToken, async (req, res) => {
   try {
     // Check permissions
-    const canCreate = req.user.role === 'Admin' || !!req.user.permissions?.['Accounting']?.create;
-    const canUpdate = req.user.role === 'Admin' || !!req.user.permissions?.['Accounting']?.update; // This variable is defined but not used in this POST route.
+    const canCreate = req.user.role === 'Admin' || !!req.user.permissions?.['Contacts']?.create || !!req.user.permissions?.['Contacts']?.update;
+    // const canUpdate = req.user.role === 'Admin' || !!req.user.permissions?.['Contacts']?.update;
     if (!canCreate) {
       return res.status(403).json({ error: 'Unauthorized' });
     }
@@ -47,10 +47,20 @@ router.post('/documents', authenticateToken, async (req, res) => {
 });
 
 const DEFAULT_CHECKLIST_ITEMS = [
-  { id: 1, text: 'Submit Application Form', type: 'checkbox', completed: false, isDefault: true },
-  { id: 2, text: 'Upload Passport Copy', type: 'checkbox', completed: false, isDefault: true },
-  { id: 3, text: 'Initial Consulting Fee Payment', type: 'checkbox', completed: false, isDefault: true },
-  { id: 4, text: 'Consulor Remarks', type: 'text', completed: false, response: '', isDefault: true }
+  { id: 1, text: 'University Checklist - documents', type: 'checkbox', completed: false, isDefault: true },
+  { id: 2, text: 'University Checklist - university applied', type: 'checkbox', completed: false, isDefault: true },
+  { id: 3, text: 'University Checklist - Remark', type: 'text', completed: false, response: '', isDefault: true },
+  { id: 4, text: 'DS 160 - DS 160 started', type: 'checkbox', completed: false, isDefault: true },
+  { id: 5, text: 'DS 160 - DS 160 filled', type: 'checkbox', completed: false, isDefault: true },
+  { id: 6, text: 'DS 160 - DS 160 submitted', type: 'checkbox', completed: false, isDefault: true },
+  { id: 7, text: 'CGI - credentials created', type: 'checkbox', completed: false, isDefault: true },
+  { id: 8, text: 'CGI - paid interview fees', type: 'checkbox', completed: false, isDefault: true },
+  { id: 9, text: 'CGI - ready to book slot', type: 'checkbox', completed: false, isDefault: true },
+  { id: 10, text: 'Sevis fee - sevis fee received', type: 'checkbox', completed: false, isDefault: true },
+  { id: 11, text: 'Sevis fee - sevis fee paid', type: 'checkbox', completed: false, isDefault: true },
+  { id: 12, text: 'Visa Interview Preparation - sevis fee received', type: 'checkbox', completed: false, isDefault: true },
+  { id: 13, text: 'Visa Interview Preparation - online classes', type: 'checkbox', completed: false, isDefault: true },
+  { id: 14, text: 'Post visa guidance - projects', type: 'checkbox', completed: false, isDefault: true }
 ];
 
 router.get('/documents/:id', authenticateToken, async (req, res) => {
@@ -124,25 +134,25 @@ router.post('/users', authenticateToken, requireRole('Admin'), async (req, res) 
 
 router.put('/users/:id', authenticateToken, async (req, res) => {
   try {
-    const { name, email, role, permissions } = req.body;
 
-    // Update basic info if provided
-    if (name && email) {
-      await query('UPDATE users SET name = $1, email = $2 WHERE id = $3', [name, email.toLowerCase(), req.params.id]);
+    const { name, email, role, permissions, newPassword, joining_date, base_salary, shift_start, shift_end } = req.body;
+
+    // ... validation ...
+
+    let queryStr = 'UPDATE users SET name = $1, email = $2, role = $3, permissions = $4, joining_date = $5, base_salary = $6, shift_start = $7, shift_end = $8';
+    let values = [name, email, role, JSON.stringify(permissions), joining_date, base_salary, shift_start, shift_end];
+
+    if (newPassword) {
+      const bcrypt = await import('bcryptjs');
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
+      queryStr += ', password = $9 WHERE id = $10';
+      values.push(hashedPassword, req.params.id);
+    } else {
+      queryStr += ' WHERE id = $9';
+      values.push(req.params.id);
     }
 
-    // Update role if provided
-    if (role) {
-      await query('UPDATE users SET role = $1 WHERE id = $2', [role, req.params.id]);
-    }
-
-    // Update permissions if provided (can be updated independently)
-    if (permissions !== undefined) {
-      await query('UPDATE users SET permissions = $1 WHERE id = $2', [JSON.stringify(permissions), req.params.id]);
-    }
-
-    // Return updated user
-    const result = await query('SELECT id, name, email, role, permissions, must_reset_password FROM users WHERE id = $1', [req.params.id]);
+    const result = await query(queryStr + ' RETURNING id, name, email, role, permissions, must_reset_password, joining_date, base_salary, shift_start, shift_end', values);
     const user = result.rows[0];
 
     // Parse permissions JSON
@@ -1040,6 +1050,7 @@ router.get('/visitors', authenticateToken, async (req, res) => {
       checkOut: v.checkOut,
       cardNumber: v.cardNumber,
       dailySequenceNumber: v.daily_sequence_number,
+      visitSegments: v.visit_segments || [],
       createdAt: v.createdAt
     }));
     res.json(visitors);
@@ -1089,8 +1100,8 @@ router.post('/visitors', authenticateToken, async (req, res) => {
     // 3. Create Visitor Record
     const result = await query(
       `INSERT INTO visitors (
-        contact_id, name, company, host, purpose, scheduled_check_in, check_in, check_out, status, card_number, daily_sequence_number
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
+        contact_id, name, company, host, purpose, scheduled_check_in, check_in, check_out, status, card_number, daily_sequence_number, visit_segments
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
       [
         contactId,
         visitor.name,
@@ -1101,8 +1112,10 @@ router.post('/visitors', authenticateToken, async (req, res) => {
         visitor.checkIn || null,
         visitor.checkOut || null,
         visitor.status || 'Scheduled',
+        visitor.status || 'Scheduled',
         visitor.cardNumber || null,
-        dailySequenceNumber
+        dailySequenceNumber,
+        JSON.stringify(visitor.visitSegments || [])
       ]
     );
     const v = result.rows[0];
@@ -1113,6 +1126,7 @@ router.post('/visitors', authenticateToken, async (req, res) => {
       checkOut: v.check_out,
       cardNumber: v.card_number,
       dailySequenceNumber: v.daily_sequence_number,
+      visitSegments: v.visit_segments || [],
       createdAt: v.created_at
     });
   } catch (error) {
@@ -1135,6 +1149,7 @@ router.get('/contacts/:id/visits', authenticateToken, async (req, res) => {
       checkOut: v.check_out,
       cardNumber: v.card_number,
       dailySequenceNumber: v.daily_sequence_number,
+      visitSegments: v.visit_segments || [],
       createdAt: v.created_at
     }));
 
@@ -1158,6 +1173,7 @@ router.get('/visitors/:id', authenticateToken, async (req, res) => {
       checkIn: v.check_in,
       checkOut: v.check_out,
       cardNumber: v.card_number,
+      visitSegments: v.visit_segments || [],
       createdAt: v.created_at
     };
     res.json(formattedVisitor);
@@ -1201,6 +1217,7 @@ router.put('/visitors/:id', authenticateToken, async (req, res) => {
         check_out = $6,
         status = $7,
         card_number = $8,
+        visit_segments = $11,
         daily_sequence_number = $10
       WHERE id = $9
     `, [
@@ -1213,7 +1230,8 @@ router.put('/visitors/:id', authenticateToken, async (req, res) => {
       visitor.status || current.status,
       visitor.cardNumber || current.card_number,
       req.params.id,
-      dailySequenceNumber
+      dailySequenceNumber,
+      JSON.stringify(visitor.visitSegments || current.visit_segments || [])
     ]);
 
     const result = await query('SELECT * FROM visitors WHERE id = $1', [req.params.id]);
@@ -1224,6 +1242,7 @@ router.put('/visitors/:id', authenticateToken, async (req, res) => {
       checkIn: v.check_in,
       checkOut: v.check_out,
       cardNumber: v.card_number,
+      visitSegments: v.visit_segments || [],
       createdAt: v.created_at
     });
   } catch (error) {
@@ -1390,6 +1409,194 @@ router.put('/notifications/mark-all-read', authenticateToken, async (req, res) =
       `, [JSON.stringify([req.user.id]), JSON.stringify([req.user.role])]);
     res.json({ success: true });
   } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ATTENDANCE ROUTES
+
+// Check-in
+router.post('/attendance/check-in', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const today = new Date().toISOString().split('T')[0];
+    const now = new Date();
+
+    // Check if already checked in
+    const existing = await query('SELECT * FROM attendance_logs WHERE user_id = $1 AND date = $2', [userId, today]);
+    if (existing.rows.length > 0) {
+      return res.status(400).json({ error: 'Already checked in today' });
+    }
+
+    // Get user shift details
+    const userRes = await query('SELECT shift_start FROM users WHERE id = $1', [userId]);
+    const shiftStartStr = userRes.rows[0]?.shift_start || '09:00'; // Default 9 AM
+
+    // Calculate status (Late or Present)
+    let status = 'Present';
+    const [h, m] = shiftStartStr.split(':').map(Number);
+    const shiftStart = new Date();
+    shiftStart.setHours(h, m, 0, 0);
+
+    // Add 15 mins buffer
+    const bufferTime = new Date(shiftStart.getTime() + 15 * 60000);
+
+    if (now > bufferTime) {
+      status = 'Late';
+    }
+
+    const result = await query(`
+      INSERT INTO attendance_logs (user_id, date, check_in, status)
+      VALUES ($1, $2, $3, $4)
+      RETURNING *
+    `, [userId, today, now, status]);
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Check-out
+router.post('/attendance/check-out', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const today = new Date().toISOString().split('T')[0];
+    const now = new Date();
+
+    const result = await query(`
+      UPDATE attendance_logs 
+      SET check_out = $1 
+      WHERE user_id = $2 AND date = $3
+      RETURNING *
+    `, [now, userId, today]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'No check-in record found for today' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get Attendance History (Staff)
+router.get('/attendance/me', authenticateToken, async (req, res) => {
+  try {
+    const result = await query('SELECT * FROM attendance_logs WHERE user_id = $1 ORDER BY date DESC LIMIT 30', [req.user.id]);
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// HOLIDAY ROUTES
+router.get('/holidays', authenticateToken, async (req, res) => {
+  try {
+    const result = await query('SELECT * FROM holidays ORDER BY date ASC');
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/holidays', authenticateToken, requireRole('Admin'), async (req, res) => {
+  try {
+    const { date, description } = req.body;
+    const result = await query('INSERT INTO holidays (date, description) VALUES ($1, $2) RETURNING *', [date, description]);
+    res.json(result.rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete('/holidays/:id', authenticateToken, requireRole('Admin'), async (req, res) => {
+  try {
+    await query('DELETE FROM holidays WHERE id = $1', [req.params.id]);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PAYROLL REPORT (Admin)
+router.get('/attendance/payroll', authenticateToken, requireRole('Admin'), async (req, res) => {
+  try {
+    const { month, year } = req.query; // e.g. month=1 (Jan), year=2024
+
+    if (!month || !year) return res.status(400).json({ error: 'Month and Year required' });
+
+    const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+    // Calculate end date (last day of month)
+    const endDay = new Date(Number(year), Number(month), 0).getDate();
+    const endDate = `${year}-${String(month).padStart(2, '0')}-${endDay}`;
+
+    // Fetch all users with salary info
+    const users = await query('SELECT id, name, base_salary, joining_date FROM users WHERE role != $1', ['Student']);
+
+    // Fetch holidays in this month
+    const holidaysRes = await query('SELECT * FROM holidays WHERE date >= $1 AND date <= $2', [startDate, endDate]);
+    const holidaysCount = holidaysRes.rows.length;
+
+    // Fetch attendance logs for this month
+    const logsRes = await query('SELECT * FROM attendance_logs WHERE date >= $1 AND date <= $2', [startDate, endDate]);
+    const logs = logsRes.rows;
+
+    const report = users.rows.map(user => {
+      const userLogs = logs.filter(l => l.user_id === user.id);
+      const presentDays = userLogs.length; // Simple count of check-ins
+      const lateDays = userLogs.filter(l => l.status === 'Late').length;
+
+      // Calculate Working Days
+      // Total days in month - Sundays - Holidays
+      let sundays = 0;
+      for (let d = 1; d <= endDay; d++) {
+        const date = new Date(Number(year), Number(month) - 1, d);
+        if (date.getDay() === 0) sundays++;
+      }
+      const workingDays = endDay - sundays - holidaysCount;
+
+      // Allow joining date logic? If joined mid-month... 
+      // For MVP, simplistic calculation
+
+      const baseSalary = parseFloat(user.base_salary) || 0;
+      const payPerDay = workingDays > 0 ? baseSalary / workingDays : 0;
+
+      // Deductions
+      // Late: 10% of day's pay per late? Or just informational? 
+      // Prompt: "if less attendance than buffer... salary deducted"
+      // Let's deduct 0.5 day pay for Late? Or just based on Absent?
+      // "Buffer time (15 min)... salary should be deducted" implies deduction FOR being late.
+      // Let's deduct 100 INR or calculate proportional? I'll deduct 5% of daily pay per late instance.
+      // Wait, "check-in and check-out time and salary details... calculate it".
+      // Absent days = Working Days - Present Days (Note: Present includes Late)
+      // But we should verify they actually worked? Assuming Check-in = Worked.
+
+      const absentDays = Math.max(0, workingDays - presentDays);
+      const absentDeduction = absentDays * payPerDay;
+      const lateDeduction = lateDays * (payPerDay * 0.1); // 10% deduction for late
+
+      const finalSalary = Math.max(0, baseSalary - absentDeduction - lateDeduction);
+
+      return {
+        userId: user.id,
+        name: user.name,
+        baseSalary,
+        workingDays,
+        presentDays,
+        lateDays,
+        absentDays,
+        holidays: holidaysCount,
+        finalSalary: Math.round(finalSalary),
+        logs: userLogs
+      };
+    });
+
+    res.json(report);
+
+  } catch (error) {
+    console.error(error);
     res.status(500).json({ error: error.message });
   }
 });

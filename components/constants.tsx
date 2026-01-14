@@ -22,6 +22,8 @@ import {
   ConciergeBell,
   BookOpen,
   UserCheck,
+  CheckCircle,
+  Clock,
 } from './icons';
 
 export const ODOO_APPS: OdooApp[] = [
@@ -133,6 +135,24 @@ export const ODOO_APPS: OdooApp[] = [
     bgColor: 'bg-red-100',
     iconColor: 'text-red-600',
   },
+  {
+    name: 'Visitor Display',
+    icon: <Users size={36} />,
+    bgColor: 'bg-purple-100',
+    iconColor: 'text-purple-600',
+  },
+  {
+    name: 'Department Dashboard',
+    icon: <CheckCircle size={36} />,
+    bgColor: 'bg-blue-100',
+    iconColor: 'text-blue-600',
+  },
+  {
+    name: 'Attendance',
+    icon: <Clock size={36} />,
+    bgColor: 'bg-pink-100',
+    iconColor: 'text-pink-600',
+  },
 ];
 
 export const STAFF_ROLES: UserRole[] = ['Admin', 'Staff'];
@@ -145,7 +165,7 @@ const adminPermissions = ODOO_APPS.reduce((acc, app) => {
   return acc;
 }, {} as { [appName: string]: AppPermissions });
 
-const employeeFullAccessApps = new Set(['Contacts', 'CRM', 'Agents', 'Calendar', 'Discuss', 'To-do', 'Reception', 'Sales', 'Marketing', 'LMS']);
+const employeeFullAccessApps = new Set(['Contacts', 'CRM', 'Agents', 'Calendar', 'Discuss', 'To-do', 'Reception', 'Sales', 'Marketing', 'LMS', 'Visitor Display', 'Department Dashboard', 'Attendance']);
 const employeeReadOnlyApps = new Set(['dashboard', 'Accounting', 'Inventory', 'Manufacturing', 'Website', 'Point of Sale']);
 const employeePermissions: { [appName: string]: AppPermissions } = ODOO_APPS.reduce((acc, app) => {
   if (employeeFullAccessApps.has(app.name)) {
@@ -165,12 +185,20 @@ export const DEFAULT_PERMISSIONS: Record<UserRole, { [appName: string]: AppPermi
 };
 
 export const DEFAULT_CHECKLIST: ChecklistItem[] = [
-  { id: 0, text: 'Documents', completed: false, type: 'checkbox' },
-  { id: 1, text: 'Submit High School Transcript', completed: false, type: 'checkbox' },
-  { id: 2, text: 'Complete Personal Statement', completed: false, type: 'checkbox' },
-  { id: 3, text: 'Pay Application Fee', completed: false, type: 'checkbox' },
-  { id: 4, text: 'Submit Letters of Recommendation', completed: false, type: 'checkbox' },
-  { id: 5, text: 'Pay SEVIS Fee', completed: false, type: 'checkbox' },
+  { id: 0, text: 'University Checklist - documents', completed: false, type: 'checkbox' },
+  { id: 1, text: 'University Checklist - university applied', completed: false, type: 'checkbox' },
+  { id: 2, text: 'University Checklist - Remark', completed: false, type: 'text', response: '' },
+  { id: 3, text: 'DS 160 - DS 160 started', completed: false, type: 'checkbox' },
+  { id: 4, text: 'DS 160 - DS 160 filled', completed: false, type: 'checkbox' },
+  { id: 5, text: 'DS 160 - DS 160 submitted', completed: false, type: 'checkbox' },
+  { id: 6, text: 'CGI - credentials created', completed: false, type: 'checkbox' },
+  { id: 7, text: 'CGI - paid interview fees', completed: false, type: 'checkbox' },
+  { id: 8, text: 'CGI - ready to book slot', completed: false, type: 'checkbox' },
+  { id: 9, text: 'Sevis fee - sevis fee received', completed: false, type: 'checkbox' },
+  { id: 10, text: 'Sevis fee - sevis fee paid', completed: false, type: 'checkbox' },
+  { id: 11, text: 'Visa Interview Preparation - sevis fee received', completed: false, type: 'checkbox' },
+  { id: 12, text: 'Visa Interview Preparation - online classes', completed: false, type: 'checkbox' },
+  { id: 13, text: 'Post visa guidance - projects', completed: false, type: 'checkbox' },
 ];
 
 export const INITIAL_QUOTATION_TEMPLATES: QuotationTemplate[] = [];

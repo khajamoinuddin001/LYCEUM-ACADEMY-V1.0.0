@@ -221,6 +221,7 @@ export async function initDatabase() {
       await client.query('ALTER TABLE visitors ADD COLUMN IF NOT EXISTS contact_id INTEGER REFERENCES contacts(id)');
       await client.query('ALTER TABLE visitors ADD COLUMN IF NOT EXISTS purpose TEXT');
       await client.query('ALTER TABLE visitors ADD COLUMN IF NOT EXISTS daily_sequence_number INTEGER');
+      await client.query('ALTER TABLE visitors ADD COLUMN IF NOT EXISTS visit_segments JSONB DEFAULT \'[]\'');
     } catch (e) {
       console.log('Columns contact_id/purpose/daily_sequence_number might already exist');
     }
@@ -331,7 +332,46 @@ export async function initDatabase() {
     await migrateColumn('password_reset_tokens', 'createdAt', 'created_at');
 
     await client.query("COMMIT");
-    console.log("✅ Database schema initialized and migrated successfully");
+    // ATTENDANCE & PAYROLL
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS attendance_logs (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id),
+        date DATE NOT NULL,
+        check_in TIMESTAMP,
+        check_out TIMESTAMP,
+        status TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS holidays (
+        id SERIAL PRIMARY KEY,
+        date DATE UNIQUE NOT NULL,
+        description TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Add columns to users if they don't exist
+    const userColumns = ['joining_date', 'base_salary', 'shift_start', 'shift_end'];
+    for (const col of userColumns) {
+      const checkCol = await client.query(`
+        SELECT column_name FROM information_schema.columns 
+        WHERE table_name = 'users' AND column_name = $1
+      `, [col]);
+
+      if (checkCol.rows.length === 0) {
+        let type = 'TEXT';
+        if (col === 'base_salary') type = 'NUMERIC';
+        if (col === 'joining_date') type = 'DATE';
+        console.log(`📡 Adding column ${col} to users table`);
+        await client.query(`ALTER TABLE users ADD COLUMN ${col} ${type}`);
+      }
+    }
+
+    console.log("✅ Database initialized successfully");
   } catch (err) {
     if (client) await client.query("ROLLBACK");
     console.error("❌ Database init failed:", err);

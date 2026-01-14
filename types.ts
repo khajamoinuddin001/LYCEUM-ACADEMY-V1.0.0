@@ -417,13 +417,19 @@ export interface Visitor {
   scheduledCheckIn: string;
   checkIn?: string;
   checkOut?: string;
-  status: 'Scheduled' | 'Checked-in' | 'Checked-out';
+  status: 'Scheduled' | 'Checked-in' | 'Checked-out' | 'Called';
   host: string; // Used for department
   cardNumber?: string;
   purpose?: string;
   contactId?: number;
   dailySequenceNumber?: number;
   createdAt?: string;
+  visitSegments?: {
+    department: string;
+    purpose: string;
+    action?: string;
+    timestamp?: string;
+  }[];
 }
 
 export interface Coupon {

@@ -18,6 +18,7 @@ const statusClasses: { [key in Visitor['status']]: string } = {
     'Scheduled': 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300',
     'Checked-in': 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300',
     'Checked-out': 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300',
+    'Called': 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300',
 };
 
 const formatDateTime = (isoString?: string) => {

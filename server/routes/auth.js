@@ -97,12 +97,20 @@ router.post('/register', async (req, res) => {
     };
 
     const defaultChecklist = [
-      { id: 0, text: 'Documents', completed: false, type: 'checkbox' },
-      { id: 1, text: 'Submit High School Transcript', completed: false, type: 'checkbox' },
-      { id: 2, text: 'Complete Personal Statement', completed: false, type: 'checkbox' },
-      { id: 3, text: 'Pay Application Fee', completed: false, type: 'checkbox' },
-      { id: 4, text: 'Submit Letters of Recommendation', completed: false, type: 'checkbox' },
-      { id: 5, text: 'Pay SEVIS Fee', completed: false, type: 'checkbox' }
+      { id: 0, text: 'University Checklist - documents', completed: false, type: 'checkbox' },
+      { id: 1, text: 'University Checklist - university applied', completed: false, type: 'checkbox' },
+      { id: 2, text: 'University Checklist - Remark', completed: false, type: 'text', response: '' },
+      { id: 3, text: 'DS 160 - DS 160 started', completed: false, type: 'checkbox' },
+      { id: 4, text: 'DS 160 - DS 160 filled', completed: false, type: 'checkbox' },
+      { id: 5, text: 'DS 160 - DS 160 submitted', completed: false, type: 'checkbox' },
+      { id: 6, text: 'CGI - credentials created', completed: false, type: 'checkbox' },
+      { id: 7, text: 'CGI - paid interview fees', completed: false, type: 'checkbox' },
+      { id: 8, text: 'CGI - ready to book slot', completed: false, type: 'checkbox' },
+      { id: 9, text: 'Sevis fee - sevis fee received', completed: false, type: 'checkbox' },
+      { id: 10, text: 'Sevis fee - sevis fee paid', completed: false, type: 'checkbox' },
+      { id: 11, text: 'Visa Interview Preparation - sevis fee received', completed: false, type: 'checkbox' },
+      { id: 12, text: 'Visa Interview Preparation - online classes', completed: false, type: 'checkbox' },
+      { id: 13, text: 'Post visa guidance - projects', completed: false, type: 'checkbox' }
     ];
 
     // Create user (auto-verify admins)

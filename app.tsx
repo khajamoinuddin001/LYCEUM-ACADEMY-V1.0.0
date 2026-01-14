@@ -55,6 +55,9 @@ import LmsPlayerView from './components/lms_player_view';
 import EventModal from './components/event_modal';
 import LandingPage from './components/landing_page';
 import AgentsView from './components/agents_view';
+import VisitorDisplay from './components/visitor_display';
+import DepartmentDashboard from './components/department_dashboard';
+import AttendanceView from './components/attendance_view';
 
 
 type ContactViewMode = 'details' | 'documents' | 'visaFiling' | 'checklist' | 'visits';
@@ -1274,6 +1277,9 @@ const DashboardLayout: React.FC = () => {
         return <ProfileView user={currentUser} onNavigateBack={() => handleAppSelect(currentUser.role === 'Admin' || currentUser.role === 'Staff' ? 'Apps' : 'student_dashboard')} />;
       case 'Settings': return <SettingsView user={currentUser} onNavigateBack={() => handleAppSelect('Apps')} quotationTemplates={quotationTemplates} onSaveTemplate={handleSaveQuotationTemplate} onDeleteTemplate={handleDeleteQuotationTemplate} onUpdateProfile={handleUpdateProfile} onChangePassword={handleChangePassword} darkMode={darkMode} setDarkMode={setDarkMode} coupons={coupons} onSaveCoupon={handleSaveCoupon} onDeleteCoupon={handleDeleteCoupon} courses={lmsCourses} />;
       case 'Access Control': return <AccessControlView users={users} activityLog={activityLog} onUpdateUserRole={handleUpdateUserRole} onUpdateUserPermissions={handleUpdateUserPermissions} onNavigateBack={() => handleAppSelect('Apps')} currentUser={currentUser} onNewStaffClick={() => setIsNewStaffModalOpen(true)} onStartImpersonation={handleStartImpersonation} />;
+      case 'Visitor Display': return <VisitorDisplay />;
+      case 'Department Dashboard': return <DepartmentDashboard user={currentUser} />;
+      case 'Attendance': return <AttendanceView user={currentUser} />;
       default: return <AppView appName={activeApp} onNavigateBack={() => handleAppSelect('Apps')} />;
     }
   }
@@ -1337,7 +1343,6 @@ const DashboardLayout: React.FC = () => {
         />
       );
     }
-
     if (activeApp === 'ResetPassword') {
       return <ResetPasswordView onBack={() => setActiveApp('Login')} />;
     }
