@@ -3,6 +3,7 @@ import React from 'react';
 import type { User } from '../types';
 
 interface WelcomeHeaderProps {
+    yes
     user: User;
 }
 
