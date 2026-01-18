@@ -1,41 +1,59 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { Visitor } from '../types';
 import * as api from '../utils/api';
-import { Bell, Users, Clock } from './icons';
+import { Users, Clock, Filter, Monitor } from './icons';
+
+const DEPARTMENTS = ['All', 'Admission', 'Accounts', 'Visa', 'LMS', 'Reception', 'Counseling'];
+const ALERT_DURATION_MS = 15000; // 15 seconds
 
 const VisitorDisplay: React.FC = () => {
     const [visitors, setVisitors] = useState<Visitor[]>([]);
     const [lastCalledVisitor, setLastCalledVisitor] = useState<Visitor | null>(null);
     const [flashing, setFlashing] = useState(false);
+    const [selectedDept, setSelectedDept] = useState('All');
     const audioRef = useRef<HTMLAudioElement | null>(null);
 
     useEffect(() => {
         // Initialize audio
-        audioRef.current = new Audio('/notification-beep.mp3'); // Need to ensure this file exists or use a standard URL
+        audioRef.current = new Audio('/notification-beep.mp3');
     }, []);
 
     useEffect(() => {
-        const intervalId = setInterval(fetchVisitors, 5000);
+        const intervalId = setInterval(fetchVisitors, 3000); // Poll every 3s for faster updates
         fetchVisitors(); // Initial fetch
-
         return () => clearInterval(intervalId);
-    }, []);
+    }, [selectedDept]);
 
     const fetchVisitors = async () => {
         try {
             const allVisitors = await api.getVisitors();
 
-            // Filter for Checked-in or Called visitors
-            const waitingVisitors = allVisitors.filter(v =>
-                v.status === 'Checked-in' || v.status === 'Called'
-            ).sort((a, b) => {
-                // Sort by checkIn time ascending (first come first served)
+            // Filter Logic
+            const filtered = allVisitors.filter(v => {
+                const targetDept = getWaitingFor(v);
+
+                // Department Filter
+                if (selectedDept !== 'All' && targetDept !== selectedDept) return false;
+
+                // Status Filter
+                if (v.status === 'Checked-in' || (v.status as any) === 'Scheduled') return true;
+
+                // Show 'Called' visitors for 15s generally, or until flash ends
+                if (v.status === 'Called' && v.calledAt) {
+                    const calledTime = new Date(v.calledAt).getTime();
+                    return (Date.now() - calledTime) < ALERT_DURATION_MS;
+                }
+                return false;
+            }).sort((a, b) => {
+                // Sort by check-in time, but push "Called" to the very top if active
+                if (a.status === 'Called' && b.status !== 'Called') return -1;
+                if (b.status === 'Called' && a.status !== 'Called') return 1;
                 return new Date(a.checkIn || '').getTime() - new Date(b.checkIn || '').getTime();
             });
 
-            setVisitors(waitingVisitors);
+            // Limit to 6
+            setVisitors(filtered.slice(0, 6));
 
-            // Check for newly called visitors to trigger alert
             checkForAlerts(allVisitors);
 
         } catch (error) {
@@ -43,15 +61,24 @@ const VisitorDisplay: React.FC = () => {
         }
     };
 
-    const checkForAlerts = (currentVisitors: Visitor[]) => {
-        // Find a visitor who was "Called" very recently (e.g., within last 10 seconds)
-        // We might need to rely on a 'calledAt' timestamp which we haven't strictly added yet.
-        // Or we can rely on local state comparison if we keep track of previous 'Called' visitors.
-        // For simplicity, let's assume if status is 'Called' and we haven't flashed for them yet.
+    const getWaitingFor = (visitor: Visitor) => {
+        if (visitor.visitSegments && visitor.visitSegments.length > 0) {
+            return visitor.visitSegments[visitor.visitSegments.length - 1].department;
+        }
+        return visitor.host;
+    };
 
-        // Better approach: Look for 'Called' status in segments with recent timestamp?
-        // Let's iterate and find if anyone is 'Called' and different from lastCalledVisitor
-        const justCalled = currentVisitors.find(v => v.status === 'Called');
+    const checkForAlerts = (currentVisitors: Visitor[]) => {
+        // Check for ANY visitor called in the last few seconds globally (or for this dept)
+        const justCalled = currentVisitors.find(v => {
+            if (v.status !== 'Called' || !v.calledAt) return false;
+
+            // If viewing specific dept, only alert for that dept
+            if (selectedDept !== 'All' && getWaitingFor(v) !== selectedDept) return false;
+
+            const calledTime = new Date(v.calledAt).getTime();
+            return (Date.now() - calledTime) < ALERT_DURATION_MS;
+        });
 
         if (justCalled && justCalled.id !== lastCalledVisitor?.id) {
             triggerAlert(justCalled);
@@ -60,89 +87,136 @@ const VisitorDisplay: React.FC = () => {
     };
 
     const triggerAlert = (visitor: Visitor) => {
-        // Play Sound
         if (audioRef.current) {
             audioRef.current.play().catch(e => console.log("Audio play failed", e));
         }
-
-        // Flash Screen
         setFlashing(true);
-        setTimeout(() => setFlashing(false), 5000); // Flash for 5 seconds
-    };
-
-    const getWaitingFor = (visitor: Visitor) => {
-        // Get the last department from segments
-        if (visitor.visitSegments && visitor.visitSegments.length > 0) {
-            return visitor.visitSegments[visitor.visitSegments.length - 1].department;
-        }
-        return visitor.host; // Default to host/department initially selected
+        setTimeout(() => setFlashing(false), ALERT_DURATION_MS);
     };
 
     const getWaitTime = (checkInTime?: string) => {
         if (!checkInTime) return '-';
         const diff = Date.now() - new Date(checkInTime).getTime();
         const mins = Math.floor(diff / 60000);
-        return `${mins} mins`;
+        return `${mins} min${mins !== 1 ? 's' : ''}`;
     };
 
     return (
-        <div className={`min-h-screen bg-gray-900 text-white p-8 ${flashing ? 'animate-pulse bg-red-900' : ''}`}>
-            <div className="flex justify-between items-center mb-12 border-b border-gray-700 pb-6">
-                <div className="flex items-center gap-4">
-                    <Users size={48} className="text-lyceum-blue" />
-                    <h1 className="text-5xl font-bold tracking-wider">Visitor Queue</h1>
+        <div className={`min-h-screen ${flashing ? 'bg-red-600 animate-pulse' : 'bg-gray-900'} text-white transition-colors duration-500`}>
+            {/* Top Bar / Header */}
+            <div className="flex justify-between items-center p-8 border-b border-gray-700 bg-gray-900/50 backdrop-blur-sm">
+                <div className="flex items-center gap-6">
+                    <Monitor size={56} className="text-lyceum-blue" />
+                    <div>
+                        <h1 className="text-5xl font-bold tracking-tight">Visitor Queue</h1>
+                        <p className="text-xl text-gray-400 mt-2 font-medium bg-gray-800 px-3 py-1 rounded inline-block">
+                            {selectedDept === 'All' ? 'All Departments' : `${selectedDept} Department`}
+                        </p>
+                    </div>
                 </div>
-                <div className="text-3xl text-gray-400 font-mono">
-                    {new Date().toLocaleTimeString()}
+                <div className="flex items-center gap-8">
+                    <div className="text-right">
+                        <div className="text-6xl font-mono font-bold tracking-widest">{new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                        <div className="text-gray-400 text-xl font-medium mt-1">{new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</div>
+                    </div>
                 </div>
             </div>
 
+            {/* Department Filter Bar (Clickable) */}
+            <div className="flex justify-center gap-4 py-6 bg-gray-800/30 overflow-x-auto px-8">
+                {DEPARTMENTS.map(dept => (
+                    <button
+                        key={dept}
+                        onClick={() => setSelectedDept(dept)}
+                        className={`px-6 py-2 rounded-full text-lg font-bold transition-all whitespace-nowrap ${selectedDept === dept
+                                ? 'bg-lyceum-blue text-white shadow-lg shadow-lyceum-blue/30 scale-105'
+                                : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'
+                            }`}
+                    >
+                        {dept}
+                    </button>
+                ))}
+            </div>
+
+            {/* Full Screen Alert Overlay */}
             {flashing && lastCalledVisitor && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
-                    <div className="text-center animate-bounce">
-                        <h2 className="text-6xl font-bold text-white mb-4">CALLING</h2>
-                        <h1 className="text-9xl font-bold text-lyceum-blue mb-8">{lastCalledVisitor.name}</h1>
-                        <h3 className="text-5xl text-gray-300">Please proceed to {getWaitingFor(lastCalledVisitor)}</h3>
+                <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-red-600 text-white animate-bounce-subtle">
+                    <div className="text-[150px] font-black leading-none mb-8 animate-pulse text-yellow-300">CALLING</div>
+                    <div className="text-[120px] font-bold text-center leading-tight mb-12 drop-shadow-lg">{lastCalledVisitor.name}</div>
+                    <div className="bg-white text-red-600 px-16 py-8 rounded-3xl text-6xl font-bold shadow-2xl skew-x-[-10deg]">
+                        Proceed to {getWaitingFor(lastCalledVisitor)}
                     </div>
                 </div>
             )}
 
-            <div className="grid grid-cols-1 gap-6">
-                {/* Table Header */}
-                <div className="grid grid-cols-4 gap-4 text-2xl font-bold text-gray-400 border-b border-gray-700 pb-4 px-6">
-                    <div>Visitor Name</div>
-                    <div>Waiting For</div>
-                    <div>Purpose</div>
-                    <div>Wait Time</div>
-                </div>
-
-                {/* List */}
+            {/* Main Content */}
+            <div className="p-8 max-w-[1920px] mx-auto">
                 {visitors.length === 0 ? (
-                    <div className="text-center py-20 text-4xl text-gray-600">No visitors waiting</div>
+                    <div className="flex flex-col items-center justify-center h-[50vh] text-gray-600">
+                        <Users size={120} className="mb-8 opacity-20" />
+                        <h2 className="text-5xl font-bold opacity-30">No Visitors Waiting</h2>
+                        <p className="text-2xl mt-4 opacity-30">The queue is currently empty.</p>
+                    </div>
                 ) : (
-                    visitors.map((visitor, index) => (
-                        <div key={visitor.id} className={`grid grid-cols-4 gap-4 p-6 rounded-xl text-3xl font-medium items-center transition-all ${visitor.status === 'Called'
-                            ? 'bg-green-900/50 border-2 border-green-500 text-green-100 scale-105 shadow-lg shadow-green-900/20'
-                            : 'bg-gray-800 border border-gray-700 text-gray-100 hover:bg-gray-750'
-                            }`}>
-                            <div className="flex items-center gap-4">
-                                <span className="text-gray-500 text-xl font-bold">#{visitor.dailySequenceNumber}</span>
-                                {visitor.name}
-                            </div>
-                            <div className="text-lyceum-blue">
-                                {getWaitingFor(visitor)}
-                            </div>
-                            <div className="text-gray-200 truncate">
-                                {visitor.purpose || '-'}
-                            </div>
-                            <div className="flex items-center gap-3 text-yellow-400 font-mono">
-                                <Clock size={28} />
-                                {getWaitTime(visitor.checkIn)}
-                            </div>
-                        </div>
-                    ))
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        {visitors.map((visitor, index) => {
+                            const isCalled = visitor.status === 'Called';
+                            return (
+                                <div
+                                    key={visitor.id}
+                                    className={`relative overflow-hidden rounded-2xl border-2 shadow-2xl transition-all duration-500 ${isCalled
+                                            ? 'bg-green-600 border-green-400 transform scale-105 z-10'
+                                            : 'bg-gray-800/80 border-gray-700/50 backdrop-blur-md'
+                                        }`}
+                                >
+                                    {isCalled && <div className="absolute inset-0 bg-green-500 opacity-20 animate-pulse"></div>}
+
+                                    <div className="flex h-40">
+                                        {/* Sequence Number */}
+                                        <div className={`w-32 flex items-center justify-center text-5xl font-black ${isCalled ? 'bg-green-700 text-white' : 'bg-gray-700/50 text-gray-400'}`}>
+                                            #{visitor.dailySequenceNumber}
+                                        </div>
+
+                                        {/* Details */}
+                                        <div className="flex-1 p-6 flex flex-col justify-center">
+                                            <h2 className="text-5xl font-bold truncate tracking-tight mb-2">{visitor.name}</h2>
+                                            <div className="flex items-center justify-between mt-2">
+                                                <div className={`px-4 py-1 rounded-lg text-xl font-bold uppercase tracking-wider ${isCalled ? 'bg-white text-green-700' : 'bg-lyceum-blue/20 text-blue-300'}`}>
+                                                    {getWaitingFor(visitor)}
+                                                </div>
+
+                                                {!isCalled && (
+                                                    <div className="flex items-center gap-3 text-2xl font-mono text-yellow-400/90 font-bold bg-black/20 px-4 py-1 rounded-lg">
+                                                        <Clock size={28} />
+                                                        {getWaitTime(visitor.checkIn)}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Status Bar */}
+                                    {isCalled && (
+                                        <div className="bg-green-800 text-center py-2 text-xl font-bold tracking-widest uppercase text-green-100 animate-pulse">
+                                            Please Proceed Immediately
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
                 )}
             </div>
+
+            <style>{`
+                @keyframes bounce-subtle {
+                    0%, 100% { transform: translateY(-2%); }
+                    50% { transform: translateY(2%); }
+                }
+                .animate-bounce-subtle {
+                    animation: bounce-subtle 2s infinite ease-in-out;
+                }
+            `}</style>
         </div>
     );
 };

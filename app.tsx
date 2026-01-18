@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import Sidebar from './components/sidebar';
 import Header from './components/header';
@@ -6,7 +5,8 @@ import AppsGridView from './components/apps_grid_view';
 import Dashboard from './components/dashboard';
 import DiscussView from './components/discuss_view';
 import AppView from './components/app_view';
-import TodoView from './hooks/todo_view';
+import TasksView from './components/tasks_view';
+import TaskModal from './components/task_modal';
 import ContactsView from './components/contacts_view';
 import ProfileView from './components/profile_view';
 import StudentProfileView from './components/student_profile_view';
@@ -22,13 +22,14 @@ import NewContactForm from './components/new_contact_form';
 import ContactDocumentsView from './components/contact_documents_view';
 import ContactVisaView from './components/contact_visa_view';
 import LeadDetailsModal from './components/lead_details_modal';
-import NewInvoiceModal from './components/new_invoice_modal';
+import TransactionModal from './components/transaction_modal';
+import PrintTransaction from './components/print_transaction';
 import NewLeadModal from './components/new_lead_modal';
 import NewQuotationPage from './components/new_quotation_modal';
 import useLocalStorage from './components/use_local_storage';
 import { saveVideo, deleteVideo } from './utils/db';
 import * as api from './utils/api';
-import type { CalendarEvent, Contact, CrmLead, AccountingTransaction, CrmStage, Quotation, User, UserRole, AppPermissions, ActivityLog, DocumentAnalysisResult, Document as Doc, ChecklistItem, QuotationTemplate, Visitor, TodoTask, PaymentActivityLog, LmsCourse, LmsLesson, LmsModule, Coupon, ContactActivity, ContactActivityAction, DiscussionPost, DiscussionThread, RecordedSession, Channel, Notification } from './types';
+import type { CalendarEvent, Contact, CrmLead, AccountingTransaction, TransactionType, TransactionStatus, CrmStage, Quotation, User, UserRole, AppPermissions, ActivityLog, DocumentAnalysisResult, Document as Doc, ChecklistItem, QuotationTemplate, Visitor, TodoTask, PaymentActivityLog, LmsCourse, LmsLesson, LmsModule, Coupon, ContactActivity, ContactActivityAction, DiscussionPost, DiscussionThread, RecordedSession, Channel, Notification } from './types';
 import LoginView from './components/login_view';
 import StudentDashboard from './components/student_dashboard';
 import AccessControlView from './components/access_control_view';
@@ -78,7 +79,10 @@ const DashboardLayout: React.FC = () => {
   const [activeApp, setActiveApp] = useState('Apps');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isQuickCreateOpen, setIsQuickCreateOpen] = useState(false);
-  const [isNewInvoiceModalOpen, setIsNewInvoiceModalOpen] = useState(false);
+  const [isTransactionModalOpen, setIsTransactionModalOpen] = useState(false);
+  const [editingTransaction, setEditingTransaction] = useState<AccountingTransaction | null>(null);
+  const [transactionTypeForModal, setTransactionTypeForModal] = useState<TransactionType>('Invoice');
+  const [printingTransaction, setPrintingTransaction] = useState<AccountingTransaction | null>(null);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
   const [activityLog, setActivityLog] = useState<ActivityLog[]>([]);
@@ -105,6 +109,9 @@ const DashboardLayout: React.FC = () => {
   const [isNewVisitorModalOpen, setIsNewVisitorModalOpen] = useState(false);
   const [isNewAppointmentModalOpen, setIsNewAppointmentModalOpen] = useState(false);
   const [editingVisitor, setEditingVisitor] = useState<Visitor | null>(null);
+  const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState<TodoTask | null>(null);
+  const [taskFilters, setTaskFilters] = useState<{ userId?: number; all?: boolean }>({});
   const [isEventModalOpen, setIsEventModalOpen] = useState(false);
   const [selectedEventInfo, setSelectedEventInfo] = useState<{ event?: CalendarEvent, date?: Date } | null>(null);
   const [isAnalysisModalOpen, setIsAnalysisModalOpen] = useState(false);
@@ -191,7 +198,39 @@ const DashboardLayout: React.FC = () => {
       }
     };
     loadData();
-  }, []);
+
+    // Real-time Polling
+    const pollInterval = setInterval(async () => {
+      if (storedCurrentUser || localStorage.getItem('authToken')) {
+        try {
+          // Parallel fetch of volatile data
+          const [freshLeads, freshTasks, freshVisitors, freshNotifications] = await Promise.all([
+            api.getLeads().catch(() => leads),
+            api.getTasks().catch(() => tasks),
+            api.getVisitors().catch(() => visitors),
+            api.getNotifications().catch(() => notifications)
+          ]);
+
+          // Simple state updates (React will handle diffing)
+          setLeads(prev => JSON.stringify(prev) !== JSON.stringify(freshLeads) ? freshLeads : prev);
+          setTasks(prev => JSON.stringify(prev) !== JSON.stringify(freshTasks) ? freshTasks : prev);
+          setVisitors(prev => JSON.stringify(prev) !== JSON.stringify(freshVisitors) ? freshVisitors : prev);
+          setNotifications(prev => JSON.stringify(prev) !== JSON.stringify(freshNotifications) ? freshNotifications : prev);
+
+        } catch (e) {
+          console.log("Polling error silently ignored");
+        }
+      }
+    }, 5000); // 5 seconds
+
+    return () => clearInterval(pollInterval);
+  }, []); // Run once on mount (setup both initial load and interval)
+
+  useEffect(() => {
+    if (currentUser) {
+      api.getTasks(taskFilters).then(setTasks).catch(console.error);
+    }
+  }, [currentUser, taskFilters]);
 
   // Set default app based on role upon initial load or user change
   useEffect(() => {
@@ -312,7 +351,7 @@ const DashboardLayout: React.FC = () => {
 
     setContacts(prevContacts => prevContacts.map(c => {
       if (c.id === contactId) {
-        const updatedLog = [newActivity, ...(c.activityLog || [])].slice(0, 20);
+        const updatedLog = [newActivity, ...(c.activityLog || [])];
         const updatedContact = { ...c, activityLog: updatedLog };
         if (editingContact && typeof editingContact !== 'string' && editingContact.id === contactId) {
           setEditingContact(updatedContact);
@@ -500,20 +539,40 @@ const DashboardLayout: React.FC = () => {
   const handleLeadSelect = (lead: CrmLead) => setSelectedLead(lead);
   const handleCloseLeadDetails = () => setSelectedLead(null);
 
-  const handleSaveInvoice = async (newInvoice: Omit<AccountingTransaction, 'id'>) => {
-    if (!currentUser?.permissions['Accounting']?.create) return;
-    const { transaction: invoiceToAdd, allTransactions } = await api.saveInvoice(newInvoice);
-    setTransactions(allTransactions);
+  const handleSaveTransaction = async (data: Omit<AccountingTransaction, 'id'> & { id?: string }) => {
+    try {
+      if (data.id) {
+        // Update existing
+        const { allTransactions } = await api.updateTransaction(data.id, data);
+        setTransactions(allTransactions);
+        logActivity(`Updated ${data.type} ${data.id}.`);
+      } else {
+        // Create new
+        const { transaction: tx, allTransactions } = await api.saveTransaction(data);
+        setTransactions(allTransactions);
+        addNotification({
+          title: `New ${tx.type} Created`,
+          description: `${tx.type} ${tx.id} for ${tx.customerName} has been created.`,
+          recipientRoles: ['Admin', 'Staff']
+        });
+        await api.logPaymentActivity(`${tx.type} ${tx.id} for ${tx.customerName} was created.`, tx.amount, 'invoice_created');
+        logActivity(`Created ${tx.type} ${tx.id}.`);
+      }
+      setIsTransactionModalOpen(false);
+      setEditingTransaction(null);
+    } catch (error) {
+      console.error('Failed to save transaction:', error);
+    }
+  };
 
-    setIsNewInvoiceModalOpen(false);
-    addNotification({
-      title: 'New Invoice Created',
-      description: `Invoice ${invoiceToAdd.id} for ${invoiceToAdd.customerName} has been created.`,
-      recipientRoles: ['Admin', 'Staff']
-    });
-
-    const newPaymentLog = await api.logPaymentActivity(`Invoice ${invoiceToAdd.id} for ${invoiceToAdd.customerName} was created.`, invoiceToAdd.amount, 'invoice_created');
-    setPaymentActivityLog(newPaymentLog);
+  const handleDeleteTransaction = async (id: string) => {
+    try {
+      const allTransactions = await api.deleteTransaction(id);
+      setTransactions(allTransactions);
+      logActivity(`Deleted transaction ${id}.`);
+    } catch (error) {
+      console.error('Failed to delete transaction:', error);
+    }
   };
 
   const handleNewLeadClick = () => {
@@ -670,6 +729,22 @@ const DashboardLayout: React.FC = () => {
     }
   };
 
+  const handleUpdateUser = async (userId: number, updates: Partial<User>) => {
+    try {
+      const updatedUser = await api.updateUser(userId, updates);
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, ...updatedUser } : u));
+      if (storedCurrentUser?.id === userId) {
+        setStoredCurrentUser(prev => prev ? { ...prev, ...updatedUser } : null);
+      }
+      if (impersonatingUser?.id === userId) {
+        setImpersonatingUser(prev => prev ? { ...prev, ...updatedUser } : null);
+      }
+    } catch (error) {
+      console.error('Failed to update user:', error);
+      throw error;
+    }
+  };
+
   const handleAddNewUser = async (newUser: Omit<User, 'id' | 'permissions'>) => {
     if (!currentUser?.permissions['Access Control']?.create) return;
     const { allUsers, addedUser } = await api.addUser(newUser);
@@ -680,6 +755,23 @@ const DashboardLayout: React.FC = () => {
       description: `${addedUser.name} has been added as a new ${addedUser.role}.`,
       recipientRoles: ['Admin']
     });
+  };
+
+  const handleViewContactVisits = (contactId?: number, contactName?: string) => {
+    let contact;
+    if (contactId) {
+      contact = contacts.find(c => c.id === contactId);
+    } else if (contactName) {
+      contact = contacts.find(c => c.name.toLowerCase() === contactName.toLowerCase());
+    }
+
+    if (contact) {
+      setEditingContact(contact);
+      setContactViewMode('visits');
+      setActiveApp('Contacts');
+    } else {
+      alert("Contact record not found for this visitor.");
+    }
   };
 
   const handleUpdateProfile = async (userId: number, name: string, email: string) => {
@@ -1167,15 +1259,6 @@ const DashboardLayout: React.FC = () => {
     });
   };
 
-  const handleSaveTask = async (taskData: Omit<TodoTask, 'id'>) => {
-    const updatedTasks = await api.saveTask(taskData);
-    setTasks(updatedTasks);
-    addNotification({
-      title: 'New Task Created',
-      description: `A new task "${taskData.title}" has been added to your to-do list.`, // Placeholder, need to read end of file first.
-      recipientUserIds: [currentUser!.id]
-    });
-  };
 
   const handleQuickCreateSave = async (type: 'todo' | 'contact' | 'lead', data: any) => {
     if (type === 'todo') {
@@ -1220,6 +1303,28 @@ const DashboardLayout: React.FC = () => {
       });
     }
   };
+
+  const handleSaveTask = async (taskData: Partial<TodoTask>) => {
+    try {
+      const updatedTasks = await api.saveTask(taskData);
+      setTasks(updatedTasks);
+      // Ensure current filters are respected
+      api.getTasks(taskFilters).then(setTasks);
+    } catch (err) {
+      console.error("Save task error", err);
+    }
+  };
+
+  const handleDeleteTask = async (taskId: number) => {
+    try {
+      const updatedTasks = await api.deleteTask(taskId);
+      setTasks(updatedTasks);
+      api.getTasks(taskFilters).then(setTasks);
+    } catch (err) {
+      console.error("Delete task error", err);
+    }
+  };
+
   const renderAppContent = () => {
     if (!currentUser) return null;
     const studentContact = contacts.find(c => c.userId === currentUser.id);
@@ -1236,7 +1341,18 @@ const DashboardLayout: React.FC = () => {
       case 'Apps': return <AppsGridView onAppSelect={handleAppSelect} user={currentUser} />;
       case 'dashboard': return <Dashboard onNavigateBack={() => handleAppSelect('Apps')} transactions={transactions} user={currentUser} tasks={tasks} onAppSelect={handleAppSelect} paymentActivityLog={paymentActivityLog} contacts={contacts} leads={leads} />;
       case 'Discuss': return <DiscussView user={currentUser} users={users} isMobile={isMobile} channels={channels} setChannels={(value) => api.saveChannels(typeof value === 'function' ? value(channels) : value).then(setChannels)} onCreateGroup={handleCreateGroupChannel} />;
-      case 'To-do': return <TodoView tasks={tasks} onSaveTask={handleSaveTask} />;
+      case 'Tasks':
+      case 'To-do': return (
+        <TasksView
+          tasks={tasks}
+          onNewTaskClick={() => { setEditingTask(null); setIsTaskModalOpen(true); }}
+          onEditTask={(task) => { setEditingTask(task); setIsTaskModalOpen(true); }}
+          onDeleteTask={handleDeleteTask}
+          onStatusChange={(task, newStatus) => handleSaveTask({ ...task, status: newStatus })}
+          user={currentUser}
+          onFilterChange={setTaskFilters}
+        />
+      );
       case 'LMS':
         const isEnrolled = activeCourse && studentContact && studentContact.lmsProgress?.[activeCourse.id];
         if (isEnrolled) {
@@ -1249,14 +1365,14 @@ const DashboardLayout: React.FC = () => {
       case 'Contacts':
         if (editingContact) {
           const contactData = editingContact === 'new' ? undefined : editingContact;
-          if (contactData && contactViewMode === 'documents') return <ContactDocumentsView contact={contactData} onNavigateBack={() => setContactViewMode('details')} onAnalyze={handleAnalyzeDocument} />;
+          if (contactData && contactViewMode === 'documents') return <ContactDocumentsView contact={contactData} user={currentUser} onNavigateBack={() => setContactViewMode('details')} onAnalyze={handleAnalyzeDocument} />;
           if (contactData && contactViewMode === 'visaFiling') return <ContactVisaView user={currentUser} contact={contactData} onNavigateBack={() => setContactViewMode('details')} onSave={handleSaveContact} />;
           if (contactData && contactViewMode === 'checklist') return <ContactChecklistView user={currentUser} contact={contactData} onNavigateBack={() => setContactViewMode('details')} onUpdateChecklistItem={handleUpdateChecklistItem} onSave={handleSaveContact} />;
           if (contactData && contactViewMode === 'visits') return <ContactVisitsView user={currentUser} contact={contactData} onNavigateBack={() => setContactViewMode('details')} />;
 
           // Render form if we have data OR if we are creating a new contact
           if (contactData || editingContact === 'new') {
-            return <NewContactForm user={currentUser} contact={contactData} contacts={contacts} onNavigateBack={handleBackToContacts} onNavigateToDocuments={() => setContactViewMode('documents')} onNavigateToVisa={() => setContactViewMode('visaFiling')} onNavigateToChecklist={() => setContactViewMode('checklist')} onNavigateToVisits={() => setContactViewMode('visits')} onSave={handleSaveContact} onComposeAIEmail={handleGenerateEmailDraft} onAddSessionVideo={handleAddSessionVideo} onDeleteSessionVideo={handleDeleteSessionVideo} />;
+            return <NewContactForm user={currentUser} contact={contactData} contacts={contacts} transactions={transactions} onNavigateBack={handleBackToContacts} onNavigateToDocuments={() => setContactViewMode('documents')} onNavigateToVisa={() => setContactViewMode('visaFiling')} onNavigateToChecklist={() => setContactViewMode('checklist')} onNavigateToVisits={() => setContactViewMode('visits')} onSave={handleSaveContact} onComposeAIEmail={handleGenerateEmailDraft} onAddSessionVideo={handleAddSessionVideo} onDeleteSessionVideo={handleDeleteSessionVideo} />;
           }
         }
         return <ContactsView contacts={contacts} onContactSelect={handleContactSelect} onNewContactClick={handleNewContactClick} user={currentUser} />;
@@ -1269,17 +1385,48 @@ const DashboardLayout: React.FC = () => {
       case 'Agents':
         return <AgentsView onNavigateBack={() => handleAppSelect('Apps')} />;
       case 'Reception': return <ReceptionView visitors={visitors} onNewVisitorClick={() => setIsNewVisitorModalOpen(true)} onScheduleVisitorClick={() => setIsNewAppointmentModalOpen(true)} onCheckOut={handleVisitorCheckOut} onCheckInScheduled={handleCheckInScheduledVisitor} onEditVisitor={handleEditVisitor} onDeleteVisitor={handleDeleteVisitor} user={currentUser} />;
-      case 'Accounting': return <AccountingView user={currentUser} transactions={transactions} onNewInvoiceClick={() => setIsNewInvoiceModalOpen(true)} onRecordPayment={handleRecordPayment} />;
+      case 'Accounting': return (
+        <AccountingView
+          user={currentUser}
+          transactions={transactions}
+          onNewInvoiceClick={() => { setTransactionTypeForModal('Invoice'); setEditingTransaction(null); setIsTransactionModalOpen(true); }}
+          onNewBillClick={() => { setTransactionTypeForModal('Bill'); setEditingTransaction(null); setIsTransactionModalOpen(true); }}
+          onRecordPayment={handleRecordPayment}
+          onEditTransaction={(tx) => { setEditingTransaction(tx); setIsTransactionModalOpen(true); }}
+          onDeleteTransaction={handleDeleteTransaction}
+          onPrintTransaction={setPrintingTransaction}
+          contacts={contacts}
+        />
+      );
       case 'Profile':
         if (currentUser.role === 'Student' && studentContact) {
           return <StudentProfileView student={studentContact} user={currentUser} onNavigateBack={() => handleAppSelect('student_dashboard')} onUpdateProfile={handleUpdateProfile} onChangePassword={handleChangePassword} />;
         }
         return <ProfileView user={currentUser} onNavigateBack={() => handleAppSelect(currentUser.role === 'Admin' || currentUser.role === 'Staff' ? 'Apps' : 'student_dashboard')} />;
       case 'Settings': return <SettingsView user={currentUser} onNavigateBack={() => handleAppSelect('Apps')} quotationTemplates={quotationTemplates} onSaveTemplate={handleSaveQuotationTemplate} onDeleteTemplate={handleDeleteQuotationTemplate} onUpdateProfile={handleUpdateProfile} onChangePassword={handleChangePassword} darkMode={darkMode} setDarkMode={setDarkMode} coupons={coupons} onSaveCoupon={handleSaveCoupon} onDeleteCoupon={handleDeleteCoupon} courses={lmsCourses} />;
-      case 'Access Control': return <AccessControlView users={users} activityLog={activityLog} onUpdateUserRole={handleUpdateUserRole} onUpdateUserPermissions={handleUpdateUserPermissions} onNavigateBack={() => handleAppSelect('Apps')} currentUser={currentUser} onNewStaffClick={() => setIsNewStaffModalOpen(true)} onStartImpersonation={handleStartImpersonation} />;
+      case 'Access Control': return (
+        <AccessControlView
+          users={users}
+          activityLog={activityLog}
+          onUpdateUserRole={handleUpdateUserRole}
+          onUpdateUserPermissions={handleUpdateUserPermissions}
+          onDeleteUser={(userId) => {
+            setUsers(prev => prev.filter(u => u.id !== userId));
+            logActivity(`Deleted user account (ID: ${userId}).`);
+          }}
+          onUserCreated={(data) => {
+            setUsers(data.allUsers);
+            logActivity(`Created new user: ${data.addedUser.name}.`);
+          }}
+          onNavigateBack={() => handleAppSelect('Apps')}
+          currentUser={currentUser}
+          onNewStaffClick={() => setIsNewStaffModalOpen(true)}
+          onStartImpersonation={handleStartImpersonation}
+        />
+      );
       case 'Visitor Display': return <VisitorDisplay />;
-      case 'Department Dashboard': return <DepartmentDashboard user={currentUser} />;
-      case 'Attendance': return <AttendanceView user={currentUser} />;
+      case 'Department Dashboard': return <DepartmentDashboard user={currentUser} onViewVisits={handleViewContactVisits} />;
+      case 'Attendance': return <AttendanceView user={currentUser} users={users} onUpdateUser={handleUpdateUser} />;
       default: return <AppView appName={activeApp} onNavigateBack={() => handleAppSelect('Apps')} />;
     }
   }
@@ -1384,12 +1531,37 @@ const DashboardLayout: React.FC = () => {
           )}
         </main>
       </div>
-      <SearchModal isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} contacts={contacts} leads={leads} onResultSelect={handleSearchResultSelect} />
+
+      <TaskModal
+        isOpen={isTaskModalOpen}
+        onClose={() => setIsTaskModalOpen(false)}
+        onSave={handleSaveTask}
+        editTask={editingTask}
+        currentUserId={currentUser.id}
+      />
+
+      <SearchModal
+        isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} contacts={contacts} leads={leads} onResultSelect={handleSearchResultSelect} />
       <QuickCreateModal isOpen={isQuickCreateOpen} onClose={() => setIsQuickCreateOpen(false)} onSave={handleQuickCreateSave} />
 
       {currentUser.role !== 'Student' && (
         <>
-          <NewInvoiceModal isOpen={isNewInvoiceModalOpen} onClose={() => setIsNewInvoiceModalOpen(false)} onSave={handleSaveInvoice} contacts={contacts} user={currentUser} />
+          <TransactionModal
+            isOpen={isTransactionModalOpen}
+            onClose={() => { setIsTransactionModalOpen(false); setEditingTransaction(null); }}
+            onSave={handleSaveTransaction}
+            contacts={contacts}
+            user={currentUser}
+            editTransaction={editingTransaction}
+            initialType={transactionTypeForModal}
+          />
+          {printingTransaction && (
+            <PrintTransaction
+              transaction={printingTransaction}
+              contact={contacts.find(c => c.id === printingTransaction.contactId)}
+              onClose={() => setPrintingTransaction(null)}
+            />
+          )}
           <NewLeadModal isOpen={isNewLeadModalOpen} onClose={() => { setIsNewLeadModalOpen(false); setEditingLead(null); }} onSave={handleSaveLead} lead={editingLead === 'new' ? undefined : editingLead} agents={users.filter(u => u.role !== 'Student').map(u => u.name)} user={currentUser} />
           <LeadDetailsModal lead={selectedLead} onClose={handleCloseLeadDetails} onEdit={handleEditLeadClick} onNewQuotation={handleNewQuotationClick} onEditQuotation={handleEditQuotationClick} user={currentUser} />
           <NewStaffModal isOpen={isNewStaffModalOpen} onClose={() => setIsNewStaffModalOpen(false)} onSave={handleAddNewUser} user={currentUser} />

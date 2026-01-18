@@ -185,19 +185,6 @@ const NewVisitorModal: React.FC<NewVisitorModalProps> = ({ isOpen, onClose, onSa
               <label htmlFor="visitor-card-number" className={labelClasses}>Card Number (Optional)</label>
               <input type="text" id="visitor-card-number" name="cardNumber" className={inputClasses} value={cardNumber} onChange={(e) => setCardNumber(e.target.value)} placeholder="e.g., C12345" disabled={isDisabled} />
             </div>
-            <div>
-              <label htmlFor="visitor-purpose" className={labelClasses}>Purpose of Visit</label>
-              <textarea
-                id="visitor-purpose"
-                name="purpose"
-                rows={3}
-                className={inputClasses}
-                value={formData.purpose}
-                onChange={handleChange}
-                placeholder="Enter purpose of visit..."
-                disabled={isDisabled}
-              />
-            </div>
             {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
           </div>
         </div>

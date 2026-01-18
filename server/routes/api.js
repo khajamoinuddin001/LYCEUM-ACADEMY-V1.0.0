@@ -16,38 +16,51 @@ const upload = multer({
 // Document routes
 router.post('/documents', authenticateToken, async (req, res) => {
   try {
-    // Check permissions:
-    // Admin or users with Contacts create/update can upload.
-    // Students can upload to their OWN contact.
-    const isAdminOrStaff = req.user.role === 'Admin' || !!req.user.permissions?.['Contacts']?.create || !!req.user.permissions?.['Contacts']?.update;
-
     upload.single('file')(req, res, async (err) => {
       if (err) return res.status(400).json({ error: err.message });
 
-      const { contactId } = req.body;
+      const contactId = parseInt(req.body.contactId);
+      const isPrivate = req.body.isPrivate === 'true';
       const file = req.file;
 
       if (!file) {
         return res.status(400).json({ error: 'No file uploaded' });
       }
 
-      if (!isAdminOrStaff) {
-        // Student: verify ownership of contact
+      if (isNaN(contactId)) {
+        return res.status(400).json({ error: 'Invalid contact ID' });
+      }
+
+      // Check permissions:
+      // Admin or users with Contacts update can upload to anyone.
+      // Everyone else (including Students) can ONLY upload to their OWN contact record.
+      const canUpdateAnyContact = req.user.role === 'Admin' || !!req.user.permissions?.['Contacts']?.update;
+      const isStudent = req.user.role === 'Student';
+
+      // Students cannot upload private documents
+      if (isStudent && isPrivate) {
+        return res.status(403).json({ error: 'Unauthorized: Students cannot upload private documents.' });
+      }
+
+      if (!canUpdateAnyContact) {
+        // Verify ownership of contact
         const contactRes = await query('SELECT user_id FROM contacts WHERE id = $1', [contactId]);
         if (contactRes.rows.length === 0) {
           return res.status(404).json({ error: 'Contact not found' });
         }
         const ownerUserId = contactRes.rows[0].user_id;
-        if (req.user.role !== 'Student' || ownerUserId !== req.user.id) {
-          return res.status(403).json({ error: 'Unauthorized' });
+
+        // Strictly check if the current user is the owner
+        if (ownerUserId !== req.user.id) {
+          return res.status(403).json({ error: 'Unauthorized: You can only upload documents to your own record.' });
         }
       }
 
       const result = await query(`
-        INSERT INTO documents (contact_id, name, type, size, content)
-        VALUES ($1, $2, $3, $4, $5)
-        RETURNING id, contact_id, name, type, size, uploaded_at
-      `, [contactId, file.originalname, file.mimetype, file.size, file.buffer]);
+        INSERT INTO documents (contact_id, name, type, size, content, is_private)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING id, contact_id, name, type, size, uploaded_at, is_private
+      `, [contactId, file.originalname, file.mimetype, file.size, file.buffer, isPrivate]);
 
       res.json(result.rows[0]);
     });
@@ -82,6 +95,12 @@ router.get('/documents/:id', authenticateToken, async (req, res) => {
     }
 
     const doc = result.rows[0];
+
+    // Check if document is private and user is student
+    if (doc.is_private && req.user.role === 'Student') {
+      return res.status(403).json({ error: 'Unauthorized: Restricted document' });
+    }
+
     // Students can download only their own documents
     if (req.user.role === 'Student') {
       const contactRes = await query('SELECT user_id FROM contacts WHERE id = $1', [doc.contact_id]);
@@ -114,7 +133,17 @@ router.get('/contacts/:id/documents', authenticateToken, async (req, res) => {
     } else if (!req.user.permissions?.['Contacts']?.read && req.user.role !== 'Admin') {
       return res.status(403).json({ error: 'Unauthorized' });
     }
-    const result = await query('SELECT id, contact_id, name, type, size, uploaded_at FROM documents WHERE contact_id = $1 ORDER BY uploaded_at DESC', [req.params.id]);
+
+    let queryText = 'SELECT id, contact_id, name, type, size, uploaded_at, is_private FROM documents WHERE contact_id = $1';
+
+    // Filter private docs for students
+    if (req.user.role === 'Student') {
+      queryText += ' AND (is_private IS NULL OR is_private = false)';
+    }
+
+    queryText += ' ORDER BY uploaded_at DESC';
+
+    const result = await query(queryText, [req.params.id]);
     res.json(result.rows);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -127,6 +156,7 @@ router.get('/users', authenticateToken, requireRole('Admin', 'Staff'), async (re
     const result = await query('SELECT id, name, email, role, permissions, must_reset_password, created_at FROM users');
     res.json(result.rows.map(user => ({
       ...user,
+      permissions: typeof user.permissions === 'string' ? JSON.parse(user.permissions || '{}') : (user.permissions || {}),
       mustResetPassword: user.must_reset_password
     })));
   } catch (error) {
@@ -144,7 +174,12 @@ router.post('/users', authenticateToken, requireRole('Admin'), async (req, res) 
       VALUES ($1, $2, $3, $4, $5)
       RETURNING id, name, email, role, permissions
     `, [name, email.toLowerCase(), hashedPassword, role, JSON.stringify({})]);
-    res.json(result.rows[0]);
+
+    const user = result.rows[0];
+    if (user && typeof user.permissions === 'string') {
+      user.permissions = JSON.parse(user.permissions);
+    }
+    res.json(user);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -152,32 +187,67 @@ router.post('/users', authenticateToken, requireRole('Admin'), async (req, res) 
 
 router.put('/users/:id', authenticateToken, async (req, res) => {
   try {
+    const userIdToUpdate = parseInt(req.params.id);
+
+    // Permission Check:
+    // Only Admin can update other users' roles/permissions.
+    // Users can update their own profile (name, email, password) but NOT role/permissions.
+    const isSelf = req.user.id === userIdToUpdate;
+    const isAdmin = req.user.role === 'Admin';
+
+    if (!isSelf && !isAdmin) {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
 
     const { name, email, role, permissions, newPassword, joining_date, base_salary, shift_start, shift_end } = req.body;
 
-    // ... validation ...
+    // If not admin, prevent role/permission/salary changes
+    if (!isAdmin) {
+      // In a real app we'd fetch current and only allowed updates
+    }
 
-    let queryStr = 'UPDATE users SET name = $1, email = $2, role = $3, permissions = $4, joining_date = $5, base_salary = $6, shift_start = $7, shift_end = $8';
-    let values = [name, email, role, JSON.stringify(permissions), joining_date, base_salary, shift_start, shift_end];
+    const updates = [];
+    const values = [];
+    let pCount = 1;
+
+    const addUpdate = (col, val) => {
+      if (val !== undefined) {
+        updates.push(`${col} = $${pCount++}`);
+        values.push(val);
+      }
+    };
+
+    addUpdate('name', name);
+    addUpdate('email', email);
+    if (isAdmin) {
+      addUpdate('role', role);
+      if (permissions) addUpdate('permissions', JSON.stringify(permissions));
+      addUpdate('joining_date', joining_date);
+      addUpdate('base_salary', base_salary);
+      addUpdate('shift_start', shift_start);
+      addUpdate('shift_end', shift_end);
+    }
 
     if (newPassword) {
       const bcrypt = await import('bcryptjs');
       const hashedPassword = await bcrypt.hash(newPassword, 10);
-      queryStr += ', password = $9 WHERE id = $10';
-      values.push(hashedPassword, req.params.id);
-    } else {
-      queryStr += ' WHERE id = $9';
-      values.push(req.params.id);
+      addUpdate('password', hashedPassword);
     }
 
-    const result = await query(queryStr + ' RETURNING id, name, email, role, permissions, must_reset_password, joining_date, base_salary, shift_start, shift_end', values);
-    const user = result.rows[0];
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No fields provided for update' });
+    }
 
-    // Parse permissions JSON
+    values.push(userIdToUpdate);
+    const result = await query(
+      `UPDATE users SET ${updates.join(', ')} WHERE id = $${pCount} RETURNING id, name, email, role, permissions, must_reset_password, joining_date, base_salary, shift_start, shift_end`,
+      values
+    );
+
+    const user = result.rows[0];
     if (user && user.permissions) {
       user.permissions = typeof user.permissions === 'string' ? JSON.parse(user.permissions) : user.permissions;
     }
-
     if (user) {
       user.mustResetPassword = user.must_reset_password;
     }
@@ -260,21 +330,21 @@ router.get('/contacts', authenticateToken, async (req, res) => {
 
       // Auto-create contact if student doesn't have one
       if (result.rows.length === 0) {
-        console.log(`📝 Auto-creating contact for student user ${req.user.id} (${req.user.email})`);
+        console.log(`📝 Auto - creating contact for student user ${req.user.id} (${req.user.email})`);
 
-        const contactId = `LA${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}${String(req.user.id).padStart(3, '0')}`;
+        const contactId = `LA${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}${String(req.user.id).padStart(3, '0')} `;
         const defaultChecklist = DEFAULT_CHECKLIST_ITEMS;
 
         const createResult = await query(`
-          INSERT INTO contacts (user_id, name, email, contact_id, department, major, notes, checklist, activity_log, recorded_sessions)
-          VALUES ($1, $2, $3, $4, 'Unassigned', 'Unassigned', $5, $6, '[]', '[]')
-          RETURNING *
-        `, [
+          INSERT INTO contacts(user_id, name, email, contact_id, department, major, notes, checklist, activity_log, recorded_sessions)
+VALUES($1, $2, $3, $4, 'Unassigned', 'Unassigned', $5, $6, '[]', '[]')
+RETURNING *
+  `, [
           req.user.id,
           req.user.email.split('@')[0], // Use email prefix as name if not available
           req.user.email,
           contactId,
-          `Student contact auto-created on ${new Date().toLocaleDateString()}.`,
+          `Student contact auto - created on ${new Date().toLocaleDateString()}.`,
           JSON.stringify(defaultChecklist)
         ]);
 
@@ -310,12 +380,12 @@ router.post('/contacts', authenticateToken, async (req, res) => {
       const yy = now.getFullYear().toString().slice(-2);
       const mm = String(now.getMonth() + 1).padStart(2, '0');
       const dd = String(now.getDate()).padStart(2, '0');
-      const datePrefix = `LA${yy}${mm}${dd}`;
+      const datePrefix = `LA${yy}${mm}${dd} `;
 
       // Find highest sequence for today
       const todayContacts = await query(
         "SELECT \"contactId\" FROM contacts WHERE \"contactId\" LIKE $1 ORDER BY \"contactId\" DESC LIMIT 1",
-        [`${datePrefix}%`]
+        [`${datePrefix}% `]
       );
 
       let sequence = 0;
@@ -324,19 +394,19 @@ router.post('/contacts', authenticateToken, async (req, res) => {
         sequence = parseInt(lastId.slice(-3)) + 1;
       }
 
-      contactId = `${datePrefix}${String(sequence).padStart(3, '0')}`;
+      contactId = `${datePrefix}${String(sequence).padStart(3, '0')} `;
     }
 
     const result = await query(`
-      INSERT INTO contacts (
-        user_id, name, contact_id, email, phone, department, major, notes, file_status,
-        agent_assigned, checklist, activity_log, recorded_sessions, documents, visa_information,
-        lms_progress, lms_notes, gpa, advisor, courses, street1, street2, city, state, zip,
-        country, gstin, pan, tags, visa_type, country_of_application, source, contact_type,
-        stream, intake, counselor_assigned, application_email, application_password
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38)
-      RETURNING *
-    `, [
+      INSERT INTO contacts(
+    user_id, name, contact_id, email, phone, department, major, notes, file_status,
+    agent_assigned, checklist, activity_log, recorded_sessions, documents, visa_information,
+    lms_progress, lms_notes, gpa, advisor, courses, street1, street2, city, state, zip,
+    country, gstin, pan, tags, visa_type, country_of_application, source, contact_type,
+    stream, intake, counselor_assigned, application_email, application_password
+  ) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38)
+RETURNING *
+  `, [
       contact.userId || null,
       contact.name,
       contactId,
@@ -387,16 +457,16 @@ router.put('/contacts/:id', authenticateToken, async (req, res) => {
     const contact = req.body;
     await query(`
       UPDATE contacts SET
-        name = $1, email = $2, phone = $3, department = $4, major = $5, notes = $6,
-        file_status = $7, agent_assigned = $8, checklist = $9, activity_log = $10,
-        recorded_sessions = $11, documents = $12, visa_information = $13, lms_progress = $14,
-        lms_notes = $15, gpa = $16, advisor = $17, courses = $18, street1 = $19, street2 = $20,
-        city = $21, state = $22, zip = $23, country = $24, gstin = $25, pan = $26, tags = $27,
-        visa_type = $28, country_of_application = $29, source = $30, contact_type = $31,
-        stream = $32, intake = $33, counselor_assigned = $34, application_email = $35,
-        application_password = $36
+name = $1, email = $2, phone = $3, department = $4, major = $5, notes = $6,
+  file_status = $7, agent_assigned = $8, checklist = $9, activity_log = $10,
+  recorded_sessions = $11, documents = $12, visa_information = $13, lms_progress = $14,
+  lms_notes = $15, gpa = $16, advisor = $17, courses = $18, street1 = $19, street2 = $20,
+  city = $21, state = $22, zip = $23, country = $24, gstin = $25, pan = $26, tags = $27,
+  visa_type = $28, country_of_application = $29, source = $30, contact_type = $31,
+  stream = $32, intake = $33, counselor_assigned = $34, application_email = $35,
+  application_password = $36
       WHERE id = $37
-    `, [
+  `, [
       contact.name,
       contact.email,
       contact.phone,
@@ -442,53 +512,16 @@ router.put('/contacts/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// Helper to transform lead keys
+
 // Helper to transform lead keys
 const transformLead = (lead) => {
   const { assignedTo, createdAt, ...rest } = lead;
   return {
     ...rest,
-    assignedTo,
-    createdAt
+    assignedTo: assignedTo || lead.assigned_to,
+    createdAt: createdAt || lead.created_at
   };
 };
-
-// Leads routes
-router.put('/users/:id', authenticateToken, async (req, res) => {
-  try {
-    // Only admin can update users
-    if (req.user.role !== 'Admin') {
-      return res.status(403).json({ error: 'Unauthorized' });
-    }
-
-    const updateFields = [];
-    const values = [];
-    let paramCount = 1;
-
-    if (req.body.role) {
-      updateFields.push(`role = $${paramCount++}`);
-      values.push(req.body.role);
-    }
-
-    if (!updateFields.length) {
-      return res.status(400).json({ error: 'No fields to update' });
-    }
-
-    values.push(req.params.id);
-    const result = await query(
-      `UPDATE users SET ${updateFields.join(', ')} WHERE id = $${paramCount} RETURNING id, name, email, role, permissions`,
-      values
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    res.json(result.rows[0]);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
 
 // Delete user (Admin only) - PRESERVES all business data
 router.delete('/users/:id', authenticateToken, async (req, res) => {
@@ -568,10 +601,10 @@ router.post('/leads', authenticateToken, async (req, res) => {
 
     // 1. Create the Lead
     const leadResult = await query(`
-      INSERT INTO leads (title, company, value, contact, stage, email, phone, source, assigned_to, notes, quotations)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-      RETURNING *
-    `, [
+      INSERT INTO leads(title, company, value, contact, stage, email, phone, source, assigned_to, notes, quotations)
+VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+RETURNING *
+  `, [
       lead.title,
       lead.company,
       lead.value || 0,
@@ -593,11 +626,11 @@ router.post('/leads', authenticateToken, async (req, res) => {
     const yy = now.getFullYear().toString().slice(-2);
     const mm = String(now.getMonth() + 1).padStart(2, '0');
     const dd = String(now.getDate()).padStart(2, '0');
-    const datePrefix = `LA${yy}${mm}${dd}`;
+    const datePrefix = `LA${yy}${mm}${dd} `;
 
     const todayContacts = await query(
       "SELECT contact_id FROM contacts WHERE contact_id LIKE $1 ORDER BY contact_id DESC LIMIT 1",
-      [`${datePrefix}%`]
+      [`${datePrefix}% `]
     );
 
     let sequence = 0;
@@ -605,13 +638,13 @@ router.post('/leads', authenticateToken, async (req, res) => {
       const lastId = todayContacts.rows[0].contact_id;
       sequence = parseInt(lastId.slice(-3)) + 1;
     }
-    const newContactId = `${datePrefix}${String(sequence).padStart(3, '0')}`;
+    const newContactId = `${datePrefix}${String(sequence).padStart(3, '0')} `;
 
     // Insert Contact
     await query(`
-      INSERT INTO contacts (
-        name, contact_id, email, phone, department, major, notes, source, contact_type, checklist, created_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+      INSERT INTO contacts(
+    name, contact_id, email, phone, department, major, notes, source, contact_type, checklist, created_at
+  ) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
     `, [
       lead.contact, // Contact Name
       newContactId,
@@ -619,7 +652,7 @@ router.post('/leads', authenticateToken, async (req, res) => {
       lead.phone || null,
       'Unassigned',
       'Unassigned',
-      `Auto-created from Lead: ${lead.title}`,
+      `Auto - created from Lead: ${lead.title} `,
       lead.source || 'CRM Lead',
       'Lead',
       JSON.stringify(DEFAULT_CHECKLIST_ITEMS)
@@ -632,11 +665,11 @@ router.post('/leads', authenticateToken, async (req, res) => {
       if (assignedUserResult.rows.length > 0) {
         const userId = assignedUserResult.rows[0].id;
         await query(`
-          INSERT INTO notifications (title, description, read, link_to, recipient_user_ids, timestamp)
-          VALUES ($1, $2, $3, $4, $5, NOW())
+          INSERT INTO notifications(title, description, read, link_to, recipient_user_ids, timestamp)
+VALUES($1, $2, $3, $4, $5, NOW())
         `, [
           'New Lead Assigned',
-          `You have been assigned a new lead: ${lead.title}`,
+          `You have been assigned a new lead: ${lead.title} `,
           false,
           JSON.stringify({ type: 'lead', id: newLead.id }),
           JSON.stringify([userId])
@@ -658,11 +691,11 @@ router.post('/public/enquiries', async (req, res) => {
 
     // 1. Create Lead from Enquiry
     const leadResult = await query(`
-      INSERT INTO leads (title, company, value, contact, stage, email, phone, source, assigned_to, notes, quotations)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-      RETURNING *
-    `, [
-      `Website Enquiry: ${enquiry.name}`,  // Title
+      INSERT INTO leads(title, company, value, contact, stage, email, phone, source, assigned_to, notes, quotations)
+VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+RETURNING *
+  `, [
+      `Website Enquiry: ${enquiry.name} `,  // Title
       'Individual',                        // Company
       0,                                   // Value
       enquiry.name,                        // Contact Name
@@ -671,7 +704,7 @@ router.post('/public/enquiries', async (req, res) => {
       enquiry.phone,                       // Phone
       'Website',                           // Source
       null,                                // Assigned To
-      `Interest: ${enquiry.interest}. Country: ${enquiry.country}. Message: ${enquiry.message}`, // Notes
+      `Interest: ${enquiry.interest}.Country: ${enquiry.country}.Message: ${enquiry.message} `, // Notes
       JSON.stringify([])                   // Quotations
     ]);
 
@@ -683,11 +716,11 @@ router.post('/public/enquiries', async (req, res) => {
     const yy = now.getFullYear().toString().slice(-2);
     const mm = String(now.getMonth() + 1).padStart(2, '0');
     const dd = String(now.getDate()).padStart(2, '0');
-    const datePrefix = `LA${yy}${mm}${dd}`;
+    const datePrefix = `LA${yy}${mm}${dd} `;
 
     const todayContacts = await query(
       "SELECT contact_id FROM contacts WHERE contact_id LIKE $1 ORDER BY contact_id DESC LIMIT 1",
-      [`${datePrefix}%`]
+      [`${datePrefix}% `]
     );
 
     let sequence = 0;
@@ -695,13 +728,13 @@ router.post('/public/enquiries', async (req, res) => {
       const lastId = todayContacts.rows[0].contact_id;
       sequence = parseInt(lastId.slice(-3)) + 1;
     }
-    const newContactId = `${datePrefix}${String(sequence).padStart(3, '0')}`;
+    const newContactId = `${datePrefix}${String(sequence).padStart(3, '0')} `;
 
     // Insert Contact
     await query(`
-      INSERT INTO contacts (
-        name, contact_id, email, phone, department, major, notes, source, contact_type, checklist, created_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+      INSERT INTO contacts(
+    name, contact_id, email, phone, department, major, notes, source, contact_type, checklist, created_at
+  ) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
     `, [
       enquiry.name,
       newContactId,
@@ -709,7 +742,7 @@ router.post('/public/enquiries', async (req, res) => {
       enquiry.phone,
       'Unassigned',
       'Unassigned',
-      `Auto-created from Website Enquiry: ${enquiry.interest}`,
+      `Auto - created from Website Enquiry: ${enquiry.interest} `,
       'Website',
       'Lead',
       JSON.stringify([{ id: 0, text: 'Initial Inquiry Received', completed: true, type: 'checkbox' }])
@@ -738,10 +771,10 @@ router.put('/leads/:id', authenticateToken, async (req, res) => {
 
     await query(`
       UPDATE leads SET
-        title = $1, company = $2, value = $3, contact = $4, stage = $5,
-        email = $6, phone = $7, source = $8, assigned_to = $9, notes = $10, quotations = $11
+title = $1, company = $2, value = $3, contact = $4, stage = $5,
+  email = $6, phone = $7, source = $8, assigned_to = $9, notes = $10, quotations = $11
       WHERE id = $12
-    `, [
+  `, [
       lead.title,
       lead.company,
       lead.value,
@@ -787,13 +820,14 @@ router.get('/transactions', authenticateToken, async (req, res) => {
 router.post('/transactions', authenticateToken, async (req, res) => {
   try {
     const transaction = req.body;
-    const id = transaction.id || `INV-${String(Date.now()).slice(-6)}`;
+    const id = transaction.id || `${transaction.type === 'Bill' ? 'BILL' : 'INV'}-${String(Date.now()).slice(-6)}`;
     const result = await query(`
-      INSERT INTO transactions (id, customer_name, date, description, type, status, amount)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      INSERT INTO transactions(id, contact_id, customer_name, date, description, type, status, amount)
+      VALUES($1, $2, $3, $4, $5, $6, $7, $8)
       RETURNING *
     `, [
       id,
+      transaction.contactId || null,
       transaction.customerName,
       transaction.date,
       transaction.description || null,
@@ -812,9 +846,10 @@ router.put('/transactions/:id', authenticateToken, async (req, res) => {
     const transaction = req.body;
     await query(`
       UPDATE transactions SET
-        customer_name = $1, date = $2, description = $3, type = $4, status = $5, amount = $6
-      WHERE id = $7
+      contact_id = $1, customer_name = $2, date = $3, description = $4, type = $5, status = $6, amount = $7
+      WHERE id = $8
     `, [
+      transaction.contactId || null,
       transaction.customerName,
       transaction.date,
       transaction.description,
@@ -825,6 +860,15 @@ router.put('/transactions/:id', authenticateToken, async (req, res) => {
     ]);
     const result = await query('SELECT * FROM transactions WHERE id = $1', [req.params.id]);
     res.json(result.rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete('/transactions/:id', authenticateToken, async (req, res) => {
+  try {
+    await query('DELETE FROM transactions WHERE id = $1', [req.params.id]);
+    res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -844,10 +888,10 @@ router.post('/events', authenticateToken, async (req, res) => {
   try {
     const event = req.body;
     const result = await query(`
-      INSERT INTO events (title, start, "end", color, description)
-      VALUES ($1, $2, $3, $4, $5)
-      RETURNING *
-    `, [
+      INSERT INTO events(title, start, "end", color, description)
+VALUES($1, $2, $3, $4, $5)
+RETURNING *
+  `, [
       event.title,
       event.start,
       event.end,
@@ -866,7 +910,7 @@ router.put('/events/:id', authenticateToken, async (req, res) => {
     await query(`
       UPDATE events SET title = $1, start = $2, "end" = $3, color = $4, description = $5
       WHERE id = $6
-    `, [
+  `, [
       event.title,
       event.start,
       event.end,
@@ -893,12 +937,25 @@ router.delete('/events/:id', authenticateToken, async (req, res) => {
 // Tasks routes
 router.get('/tasks', authenticateToken, async (req, res) => {
   try {
-    const result = await query('SELECT * FROM tasks WHERE user_id = $1 OR user_id IS NULL', [req.user.id]);
-    res.json(result.rows.map(t => ({
-      ...t,
-      userId: t.userId,
-      dueDate: t.dueDate
-    })));
+    let q = 'SELECT * FROM tasks';
+    const params = [];
+
+    if (req.user.role === 'Admin') {
+      if (req.query.userId) {
+        q += ' WHERE assigned_to = $1';
+        params.push(req.query.userId);
+      } else if (req.query.all !== 'true') {
+        q += ' WHERE assigned_to = $1';
+        params.push(req.user.id);
+      }
+    } else {
+      q += ' WHERE assigned_to = $1';
+      params.push(req.user.id);
+    }
+
+    q += ' ORDER BY created_at DESC';
+    const result = await query(q, params);
+    res.json(result.rows.map(transformTask));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -908,24 +965,127 @@ router.post('/tasks', authenticateToken, async (req, res) => {
   try {
     const task = req.body;
     const result = await query(`
-      INSERT INTO tasks (title, description, due_date, status, user_id)
-      VALUES ($1, $2, $3, $4, $5)
+      INSERT INTO tasks(title, description, due_date, status, assigned_to, assigned_by, priority)
+      VALUES($1, $2, $3, $4, $5, $6, $7)
       RETURNING *
     `, [
       task.title,
       task.description || null,
       task.dueDate,
       task.status || 'todo',
-      req.user.id
+      task.assignedTo || req.user.id,
+      req.user.id,
+      task.priority || 'Medium'
     ]);
-    res.json(result.rows[0]);
+    res.json(transformTask(result.rows[0]));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Transformation helper for tasks
+const transformTask = (task) => ({
+  ...task,
+  dueDate: task.due_date,
+  createdAt: task.created_at,
+  assignedTo: task.assigned_to,
+  assignedBy: task.assigned_by,
+  completedBy: task.completed_by,
+  completedAt: task.completed_at
+});
+
+
+router.put('/tasks/:id', authenticateToken, async (req, res) => {
+  try {
+    const task = req.body;
+
+    // If marking as done, record who and when
+    let completedBy = null;
+    let completedAt = null;
+
+    if (task.status === 'done') {
+      // Fetch existing task to check if it was already done
+      const existing = await query('SELECT status FROM tasks WHERE id = $1', [req.params.id]);
+      if (existing.rows.length > 0 && existing.rows[0].status !== 'done') {
+        completedBy = req.user.id;
+        completedAt = new Date().toISOString();
+      }
+    }
+
+    let updateQuery = `
+      UPDATE tasks SET
+      title = $1, description = $2, due_date = $3, status = $4, assigned_to = $5, priority = $6
+    `;
+    const params = [
+      task.title,
+      task.description,
+      task.dueDate,
+      task.status,
+      task.assignedTo,
+      task.priority,
+      req.params.id
+    ];
+
+    if (completedBy) {
+      updateQuery += `, completed_by = $${params.length + 1}, completed_at = $${params.length + 2}`;
+      params.push(completedBy, completedAt);
+    }
+
+    updateQuery += ` WHERE id = $${params.length + 1 - (completedBy ? 0 : 2)}`; // Adjust param index logic if needed, simpler to just overwrite params logic
+
+    // Re-doing params construction for clarity
+    const updateFields = [
+      'title = $1', 'description = $2', 'due_date = $3', 'status = $4', 'assigned_to = $5', 'priority = $6'
+    ];
+    const updateParams = [
+      task.title, task.description, task.dueDate, task.status, task.assignedTo, task.priority
+    ];
+
+    if (completedBy) {
+      updateFields.push(`completed_by = $${updateParams.length + 1}`);
+      updateParams.push(completedBy);
+      updateFields.push(`completed_at = $${updateParams.length + 1}`);
+      updateParams.push(completedAt);
+    }
+
+    // If status is NOT done, clear completion (optional, user asked?) - user said "record if done", implies history. 
+    // If reopening, maybe clear? Let's assume reopening clears completion info for accurate current status.
+    if (task.status !== 'done') {
+      updateFields.push(`completed_by = NULL`);
+      updateFields.push(`completed_at = NULL`);
+    }
+
+    updateParams.push(req.params.id);
+    const finalQuery = `UPDATE tasks SET ${updateFields.join(', ')} WHERE id = $${updateParams.length}`;
+
+    await query(finalQuery, updateParams);
+    const result = await query('SELECT * FROM tasks WHERE id = $1', [req.params.id]);
+    res.json(transformTask(result.rows[0]));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete('/tasks/:id', authenticateToken, async (req, res) => {
+  try {
+    await query('DELETE FROM tasks WHERE id = $1', [req.params.id]);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/staff-members', authenticateToken, async (req, res) => {
+  try {
+    const result = await query('SELECT id, name, role FROM users WHERE role IN ($1, $2)', ['Admin', 'Staff']);
+    res.json(result.rows);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
 // Channels routes
-router.get('/channels', authenticateToken, async (req, res) => {
+router.get('/channels', authenticateToken, requireRole('Admin', 'Staff'), async (req, res) => {
   try {
     const result = await query('SELECT * FROM channels');
     res.json(result.rows);
@@ -937,12 +1097,12 @@ router.get('/channels', authenticateToken, async (req, res) => {
 router.post('/channels', authenticateToken, async (req, res) => {
   try {
     const channel = req.body;
-    const id = channel.id || `channel-${Date.now()}`;
+    const id = channel.id || `channel - ${Date.now()} `;
     const result = await query(`
-      INSERT INTO channels (id, name, type, members, messages)
-      VALUES ($1, $2, $3, $4, $5)
-      RETURNING *
-    `, [
+      INSERT INTO channels(id, name, type, members, messages)
+VALUES($1, $2, $3, $4, $5)
+RETURNING *
+  `, [
       id,
       channel.name,
       channel.type || 'public',
@@ -961,7 +1121,7 @@ router.put('/channels/:id', authenticateToken, async (req, res) => {
     await query(`
       UPDATE channels SET name = $1, type = $2, members = $3, messages = $4
       WHERE id = $5
-    `, [
+  `, [
       channel.name,
       channel.type,
       JSON.stringify(channel.members || []),
@@ -989,12 +1149,12 @@ router.post('/coupons', authenticateToken, async (req, res) => {
   try {
     const coupon = req.body;
     const result = await query(`
-      INSERT INTO coupons (code, discount_percentage, is_active, applicable_course_ids)
-      VALUES ($1, $2, $3, $4)
-      ON CONFLICT (code) DO UPDATE SET
-        discount_percentage = $2, is_active = $3, applicable_course_ids = $4
-      RETURNING *
-    `, [
+      INSERT INTO coupons(code, discount_percentage, is_active, applicable_course_ids)
+VALUES($1, $2, $3, $4)
+      ON CONFLICT(code) DO UPDATE SET
+discount_percentage = $2, is_active = $3, applicable_course_ids = $4
+RETURNING *
+  `, [
       coupon.code,
       coupon.discountPercentage,
       coupon.isActive,
@@ -1028,14 +1188,14 @@ router.get('/lms-courses', authenticateToken, async (req, res) => {
 router.post('/lms-courses', authenticateToken, async (req, res) => {
   try {
     const course = req.body;
-    const id = course.id || `course-${Date.now()}`;
+    const id = course.id || `course - ${Date.now()} `;
     const result = await query(`
-      INSERT INTO lms_courses (id, title, description, instructor, price, modules, discussions)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
-      ON CONFLICT (id) DO UPDATE SET
-        title = $2, description = $3, instructor = $4, price = $5, modules = $6, discussions = $7
-      RETURNING *
-    `, [
+      INSERT INTO lms_courses(id, title, description, instructor, price, modules, discussions)
+VALUES($1, $2, $3, $4, $5, $6, $7)
+      ON CONFLICT(id) DO UPDATE SET
+title = $2, description = $3, instructor = $4, price = $5, modules = $6, discussions = $7
+RETURNING *
+  `, [
       id,
       course.title,
       course.description || null,
@@ -1071,6 +1231,7 @@ router.get('/visitors', authenticateToken, async (req, res) => {
       cardNumber: v.card_number,
       dailySequenceNumber: v.daily_sequence_number,
       visitSegments: v.visit_segments || [],
+      calledAt: v.called_at,
       createdAt: v.created_at
     }));
     res.json(visitors);
@@ -1093,10 +1254,10 @@ router.post('/visitors', authenticateToken, async (req, res) => {
     } else {
       // Create NEW contact
       const newContactResult = await query(`
-        INSERT INTO contacts (name, phone, source, department)
-        VALUES ($1, $2, 'Reception', $3)
+        INSERT INTO contacts(name, phone, source, department)
+VALUES($1, $2, 'Reception', $3)
         RETURNING id
-      `, [visitor.name, visitor.company, visitor.host]); // visitor.company is Mobile Number
+  `, [visitor.name, visitor.company, visitor.host]); // visitor.company is Mobile Number
       contactId = newContactResult.rows[0].id;
     }
 
@@ -1112,16 +1273,16 @@ router.post('/visitors', authenticateToken, async (req, res) => {
         SELECT COUNT(*) as count 
         FROM visitors 
         WHERE daily_sequence_number IS NOT NULL 
-        AND check_in::date = CURRENT_DATE
-      `);
+        AND check_in:: date = CURRENT_DATE
+  `);
       dailySequenceNumber = parseInt(seqResult.rows[0].count) + 1;
     }
 
     // 3. Create Visitor Record
     const result = await query(
-      `INSERT INTO visitors (
-        contact_id, name, company, host, purpose, scheduled_check_in, check_in, check_out, status, card_number, daily_sequence_number, visit_segments
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
+      `INSERT INTO visitors(
+    contact_id, name, company, host, purpose, scheduled_check_in, check_in, check_out, status, card_number, daily_sequence_number, visit_segments
+  ) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING * `,
       [
         contactId,
         visitor.name,
@@ -1146,6 +1307,7 @@ router.post('/visitors', authenticateToken, async (req, res) => {
       cardNumber: v.card_number,
       dailySequenceNumber: v.daily_sequence_number,
       visitSegments: v.visit_segments || [],
+      calledAt: v.called_at,
       createdAt: v.created_at
     });
   } catch (error) {
@@ -1156,10 +1318,10 @@ router.post('/visitors', authenticateToken, async (req, res) => {
 router.get('/contacts/:id/visits', authenticateToken, async (req, res) => {
   try {
     const result = await query(`
-      SELECT * FROM visitors 
+SELECT * FROM visitors 
       WHERE contact_id = $1 
       ORDER BY created_at DESC
-    `, [req.params.id]);
+  `, [req.params.id]);
 
     const formattedVisits = result.rows.map(v => ({
       ...v,
@@ -1169,6 +1331,7 @@ router.get('/contacts/:id/visits', authenticateToken, async (req, res) => {
       cardNumber: v.card_number,
       dailySequenceNumber: v.daily_sequence_number,
       visitSegments: v.visit_segments || [],
+      calledAt: v.called_at,
       createdAt: v.created_at
     }));
 
@@ -1220,26 +1383,27 @@ router.put('/visitors/:id', authenticateToken, async (req, res) => {
         SELECT COUNT(*) as count 
         FROM visitors 
         WHERE daily_sequence_number IS NOT NULL 
-        AND check_in::date = CURRENT_DATE
-      `);
+        AND check_in:: date = CURRENT_DATE
+  `);
       dailySequenceNumber = parseInt(seqResult.rows[0].count) + 1;
     }
 
     // Update with provided values or preserve existing ones
     await query(`
       UPDATE visitors SET
-        name = $1,
-        company = $2,
-        host = $3,
-        purpose = $4,
-        check_in = $5,
-        check_out = $6,
-        status = $7,
-        card_number = $8,
-        visit_segments = $11,
-        daily_sequence_number = $10
+name = $1,
+  company = $2,
+  host = $3,
+  purpose = $4,
+  check_in = $5,
+  check_out = $6,
+  status = $7,
+  card_number = $8,
+  visit_segments = $11,
+  daily_sequence_number = $10,
+  called_at = $12
       WHERE id = $9
-    `, [
+  `, [
       visitor.name || current.name,
       visitor.company || current.company,
       visitor.host || current.host,
@@ -1250,7 +1414,8 @@ router.put('/visitors/:id', authenticateToken, async (req, res) => {
       visitor.cardNumber || current.card_number,
       req.params.id,
       dailySequenceNumber,
-      JSON.stringify(visitor.visitSegments || current.visit_segments || [])
+      JSON.stringify(visitor.visitSegments || current.visit_segments || []),
+      visitor.calledAt || current.called_at
     ]);
 
     const result = await query('SELECT * FROM visitors WHERE id = $1', [req.params.id]);
@@ -1261,6 +1426,7 @@ router.put('/visitors/:id', authenticateToken, async (req, res) => {
       checkIn: v.check_in,
       checkOut: v.check_out,
       cardNumber: v.card_number,
+      calledAt: v.called_at,
       visitSegments: v.visit_segments || [],
       createdAt: v.created_at
     });
@@ -1287,9 +1453,9 @@ router.post('/quotation-templates', authenticateToken, async (req, res) => {
     const template = req.body;
     const result = await query(`
       INSERT INTO quotation_templates(title, description, line_items, total)
-      VALUES($1, $2, $3, $4)
+VALUES($1, $2, $3, $4)
       RETURNING id, title, description, line_items, total, created_at
-      `, [
+  `, [
       template.title,
       template.description || null,
       JSON.stringify(template.lineItems || []),
@@ -1312,7 +1478,7 @@ router.put('/quotation-templates/:id', authenticateToken, async (req, res) => {
     await query(`
       UPDATE quotation_templates SET title = $1, description = $2, line_items = $3, total = $4
       WHERE id = $5
-      `, [
+  `, [
       template.title,
       template.description,
       JSON.stringify(template.lineItems || []),
@@ -1355,9 +1521,9 @@ router.post('/activity-log', authenticateToken, async (req, res) => {
     const { adminName, action } = req.body;
     const result = await query(`
       INSERT INTO activity_log(admin_name, action)
-      VALUES($1, $2)
-      RETURNING *
-      `, [adminName, action]);
+VALUES($1, $2)
+RETURNING *
+  `, [adminName, action]);
     res.json(result.rows[0]);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -1379,9 +1545,9 @@ router.post('/payment-activity-log', authenticateToken, async (req, res) => {
     const { text, amount, type } = req.body;
     const result = await query(`
       INSERT INTO payment_activity_log(text, amount, type)
-      VALUES($1, $2, $3)
-      RETURNING *
-      `, [text, amount, type]);
+VALUES($1, $2, $3)
+RETURNING *
+  `, [text, amount, type]);
     res.json(result.rows[0]);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -1403,9 +1569,9 @@ router.post('/notifications', authenticateToken, async (req, res) => {
     const notification = req.body;
     const result = await query(`
       INSERT INTO notifications(title, description, read, link_to, recipient_user_ids, recipient_roles)
-      VALUES($1, $2, $3, $4, $5, $6)
-      RETURNING *
-      `, [
+VALUES($1, $2, $3, $4, $5, $6)
+RETURNING *
+  `, [
       notification.title,
       notification.description,
       notification.read || false,
@@ -1425,7 +1591,7 @@ router.put('/notifications/mark-all-read', authenticateToken, async (req, res) =
       UPDATE notifications SET read = true 
       WHERE recipient_user_ids:: jsonb @> $1:: jsonb 
       OR recipient_roles:: jsonb @> $2:: jsonb
-      `, [JSON.stringify([req.user.id]), JSON.stringify([req.user.role])]);
+  `, [JSON.stringify([req.user.id]), JSON.stringify([req.user.role])]);
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -1465,10 +1631,10 @@ router.post('/attendance/check-in', authenticateToken, async (req, res) => {
     }
 
     const result = await query(`
-      INSERT INTO attendance_logs (user_id, date, check_in, status)
-      VALUES ($1, $2, $3, $4)
-      RETURNING *
-    `, [userId, today, now, status]);
+      INSERT INTO attendance_logs(user_id, date, check_in, status)
+VALUES($1, $2, $3, $4)
+RETURNING *
+  `, [userId, today, now, status]);
 
     res.json(result.rows[0]);
   } catch (error) {
@@ -1487,8 +1653,8 @@ router.post('/attendance/check-out', authenticateToken, async (req, res) => {
       UPDATE attendance_logs 
       SET check_out = $1 
       WHERE user_id = $2 AND date = $3
-      RETURNING *
-    `, [now, userId, today]);
+RETURNING *
+  `, [now, userId, today]);
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'No check-in record found for today' });
@@ -1546,10 +1712,10 @@ router.get('/attendance/payroll', authenticateToken, requireRole('Admin'), async
 
     if (!month || !year) return res.status(400).json({ error: 'Month and Year required' });
 
-    const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+    const startDate = `${year} -${String(month).padStart(2, '0')}-01`;
     // Calculate end date (last day of month)
     const endDay = new Date(Number(year), Number(month), 0).getDate();
-    const endDate = `${year}-${String(month).padStart(2, '0')}-${endDay}`;
+    const endDate = `${year} -${String(month).padStart(2, '0')} -${endDay} `;
 
     // Fetch all users with salary info
     const users = await query('SELECT id, name, base_salary, joining_date FROM users WHERE role != $1', ['Student']);
@@ -1572,29 +1738,20 @@ router.get('/attendance/payroll', authenticateToken, requireRole('Admin'), async
       let sundays = 0;
       for (let d = 1; d <= endDay; d++) {
         const date = new Date(Number(year), Number(month) - 1, d);
-        if (date.getDay() === 0) sundays++;
+        if (date.getDay() === 0) sundays++; // Sunday
       }
       const workingDays = endDay - sundays - holidaysCount;
-
-      // Allow joining date logic? If joined mid-month... 
-      // For MVP, simplistic calculation
 
       const baseSalary = parseFloat(user.base_salary) || 0;
       const payPerDay = workingDays > 0 ? baseSalary / workingDays : 0;
 
       // Deductions
-      // Late: 10% of day's pay per late? Or just informational? 
-      // Prompt: "if less attendance than buffer... salary deducted"
-      // Let's deduct 0.5 day pay for Late? Or just based on Absent?
-      // "Buffer time (15 min)... salary should be deducted" implies deduction FOR being late.
-      // Let's deduct 100 INR or calculate proportional? I'll deduct 5% of daily pay per late instance.
-      // Wait, "check-in and check-out time and salary details... calculate it".
-      // Absent days = Working Days - Present Days (Note: Present includes Late)
-      // But we should verify they actually worked? Assuming Check-in = Worked.
-
+      // Absent days = workingDays - presentDays
       const absentDays = Math.max(0, workingDays - presentDays);
       const absentDeduction = absentDays * payPerDay;
-      const lateDeduction = lateDays * (payPerDay * 0.1); // 10% deduction for late
+
+      // Late deduction: 50 INR per late arrival (customizable but hardcoded for now)
+      const lateDeduction = lateDays * 50;
 
       const finalSalary = Math.max(0, baseSalary - absentDeduction - lateDeduction);
 
@@ -1606,16 +1763,12 @@ router.get('/attendance/payroll', authenticateToken, requireRole('Admin'), async
         presentDays,
         lateDays,
         absentDays,
-        holidays: holidaysCount,
-        finalSalary: Math.round(finalSalary),
-        logs: userLogs
+        finalSalary: Math.round(finalSalary)
       };
     });
 
     res.json(report);
-
   } catch (error) {
-    console.error(error);
     res.status(500).json({ error: error.message });
   }
 });

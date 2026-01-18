@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import type { Contact, Document as Doc } from '../types';
+import type { Contact, Document as Doc, User } from '../types';
 import { Paperclip, Upload, Download, ArrowLeft, Sparkles, Trash2, Eye } from './icons';
 import * as api from '../utils/api';
 
@@ -7,14 +7,71 @@ interface ContactDocumentsViewProps {
   contact: Contact;
   onNavigateBack: () => void;
   onAnalyze: (doc: Doc) => Promise<void>;
+  user?: User | null;
 }
 
-const ContactDocumentsView: React.FC<ContactDocumentsViewProps> = ({ contact, onNavigateBack, onAnalyze }) => {
-  const [documents, setDocuments] = useState<any[]>([]);
+const DocumentItem = ({ doc, analyzingDocId, handleAnalyzeClick, handleDownload }: any) => (
+  <li className="py-4 flex items-center justify-between">
+    <div className="flex items-center">
+      <Paperclip className="w-6 h-6 text-gray-400 mr-4" />
+      <div>
+        <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{doc.name}</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          {(doc.size / 1024).toFixed(1)} KB - Uploaded on {new Date(doc.uploaded_at).toLocaleDateString()}
+          {doc.is_private && <span className="ml-2 text-xs text-red-500 font-bold border border-red-200 px-1 rounded">Private</span>}
+        </p>
+      </div>
+    </div>
+    <div className="flex items-center space-x-2">
+      <button
+        onClick={() => handleAnalyzeClick(doc)}
+        disabled={analyzingDocId === doc.id}
+        className="inline-flex items-center px-3 py-1.5 text-xs font-semibold text-lyceum-blue bg-lyceum-blue/10 rounded-md hover:bg-lyceum-blue/20 disabled:opacity-50 disabled:cursor-wait"
+      >
+        <Sparkles size={14} className={`mr-1.5 ${analyzingDocId === doc.id ? 'animate-pulse' : ''}`} />
+        {analyzingDocId === doc.id ? 'Analyzing...' : 'Analyze with AI'}
+      </button>
+      <button
+        onClick={() => {
+          const tokenStr = api.getToken() || '';
+          fetch(`${import.meta.env.VITE_API_URL}/documents/${doc.id}?preview=true`, {
+            headers: { 'Authorization': `Bearer ${tokenStr}` }
+          })
+            .then(res => res.blob())
+            .then(blob => {
+              const url = URL.createObjectURL(blob);
+              window.open(url, '_blank');
+            });
+        }}
+        className="inline-flex items-center px-3 py-1.5 text-xs font-semibold text-lyceum-blue bg-lyceum-blue/10 rounded-md hover:bg-lyceum-blue/20 mr-2"
+      >
+        <Eye size={14} className="mr-1.5" />
+        Preview
+      </button>
+      <button
+        onClick={() => handleDownload(doc)}
+        className="inline-flex items-center px-3 py-1.5 text-xs font-semibold text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600"
+      >
+        <Download size={14} className="mr-1.5" />
+        Download
+      </button>
+    </div>
+  </li>
+);
+
+const ContactDocumentsView: React.FC<ContactDocumentsViewProps> = ({ contact, onNavigateBack, onAnalyze, user }) => {
+  const [documents, setDocuments] = useState<Doc[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [analyzingDocId, setAnalyzingDocId] = useState<number | null>(null);
+  const [isPrivate, setIsPrivate] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const isStaffOrAdmin = user?.role === 'Admin' || user?.role === 'Staff';
+
+  // Separate documents
+  const commonDocs = documents.filter(d => !d.is_private);
+  const privateDocs = documents.filter(d => d.is_private);
 
   useEffect(() => {
     loadDocuments();
@@ -38,8 +95,9 @@ const ContactDocumentsView: React.FC<ContactDocumentsViewProps> = ({ contact, on
 
     try {
       setUploading(true);
-      await api.uploadDocument(contact.id, file);
+      await api.uploadDocument(contact.id, file, isPrivate);
       await loadDocuments();
+      setIsPrivate(false); // Reset
     } catch (error) {
       console.error('Failed to upload document:', error);
       alert('Failed to upload document. Please try again.');
@@ -81,7 +139,19 @@ const ContactDocumentsView: React.FC<ContactDocumentsViewProps> = ({ contact, on
             Documents for {contact.name}
           </h1>
         </div>
-        <div>
+        <div className="flex items-center gap-4">
+          {isStaffOrAdmin && (
+            <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={isPrivate}
+                onChange={(e) => setIsPrivate(e.target.checked)}
+                className="rounded text-lyceum-blue focus:ring-lyceum-blue"
+              />
+              Private / Staff Only
+            </label>
+          )}
+
           <input
             type="file"
             ref={fileInputRef}
@@ -94,7 +164,7 @@ const ContactDocumentsView: React.FC<ContactDocumentsViewProps> = ({ contact, on
             className={`inline-flex items-center px-4 py-2 bg-lyceum-blue text-white rounded-md shadow-sm hover:bg-lyceum-blue-dark cursor-pointer ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
             <Upload size={16} className="mr-2" />
-            {uploading ? 'Uploading...' : 'Upload Document'}
+            {uploading ? 'Uploading...' : `Upload ${isPrivate ? 'Private ' : ''}Document`}
           </label>
         </div>
       </div>
@@ -104,60 +174,52 @@ const ContactDocumentsView: React.FC<ContactDocumentsViewProps> = ({ contact, on
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-lyceum-blue mx-auto"></div>
           <p className="mt-2 text-gray-500">Loading documents...</p>
         </div>
-      ) : documents.length > 0 ? (
-        <ul className="divide-y divide-gray-200 dark:divide-gray-700">
-          {documents.map((doc) => (
-            <li key={doc.id} className="py-4 flex items-center justify-between">
-              <div className="flex items-center">
-                <Paperclip className="w-6 h-6 text-gray-400 mr-4" />
-                <div>
-                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{doc.name}</p>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    {(doc.size / 1024).toFixed(1)} KB - Uploaded on {new Date(doc.uploaded_at).toLocaleDateString()}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={() => handleAnalyzeClick(doc)}
-                  disabled={analyzingDocId === doc.id}
-                  className="inline-flex items-center px-3 py-1.5 text-xs font-semibold text-lyceum-blue bg-lyceum-blue/10 rounded-md hover:bg-lyceum-blue/20 disabled:opacity-50 disabled:cursor-wait"
-                >
-                  <Sparkles size={14} className={`mr-1.5 ${analyzingDocId === doc.id ? 'animate-pulse' : ''}`} />
-                  {analyzingDocId === doc.id ? 'Analyzing...' : 'Analyze with AI'}
-                </button>
-                <button
-                  onClick={() => {
-                    const token = localStorage.getItem('authToken');
-                    const tokenStr = token ? JSON.parse(token).token : '';
-                    fetch(`${import.meta.env.VITE_API_URL}/documents/${doc.id}?preview=true`, {
-                      headers: { 'Authorization': `Bearer ${tokenStr}` }
-                    })
-                      .then(res => res.blob())
-                      .then(blob => {
-                        const url = URL.createObjectURL(blob);
-                        window.open(url, '_blank');
-                      });
-                  }}
-                  className="inline-flex items-center px-3 py-1.5 text-xs font-semibold text-lyceum-blue bg-lyceum-blue/10 rounded-md hover:bg-lyceum-blue/20 mr-2"
-                >
-                  <Eye size={14} className="mr-1.5" />
-                  Preview
-                </button>
-                <button
-                  onClick={() => handleDownload(doc)}
-                  className="inline-flex items-center px-3 py-1.5 text-xs font-semibold text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600"
-                >
-                  <Download size={14} className="mr-1.5" />
-                  Download
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
       ) : (
-        <div className="text-center py-12">
-          <p className="text-gray-500 dark:text-gray-400">No documents found for this contact.</p>
+        <div className="space-y-8">
+          {/* Common Section */}
+          <div>
+            {isStaffOrAdmin && <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-2">Common Documents (Visible to Student)</h3>}
+            {commonDocs.length > 0 ? (
+              <ul className="divide-y divide-gray-200 dark:divide-gray-700 bg-gray-50 dark:bg-gray-700/30 rounded-lg px-4">
+                {commonDocs.map((doc) => (
+                  <DocumentItem
+                    key={doc.id}
+                    doc={doc}
+                    analyzingDocId={analyzingDocId}
+                    handleAnalyzeClick={handleAnalyzeClick}
+                    handleDownload={handleDownload}
+                  />
+                ))}
+              </ul>
+            ) : (
+              <p className="text-gray-500 italic text-sm p-4">No common documents.</p>
+            )}
+          </div>
+
+          {/* Private Section */}
+          {isStaffOrAdmin && (
+            <div>
+              <h3 className="text-sm font-bold text-red-500 uppercase tracking-wider mb-2 flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-red-500"></div>
+                Internal / Staff Only Documents
+              </h3>
+              {privateDocs.length > 0 ? (
+                <ul className="divide-y divide-gray-200 dark:divide-gray-700 bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/30 rounded-lg px-4">
+                  {privateDocs.map((doc) => (
+                    <DocumentItem
+                      key={doc.id}
+                      doc={doc}
+                      analyzingDocId={analyzingDocId}
+                      handleAnalyzeClick={handleAnalyzeClick}
+                      handleDownload={handleDownload}
+                    />
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-gray-500 italic text-sm p-4">No internal documents.</p>
+              )}
+            </div>
+          )}
         </div>
       )}
 

@@ -37,6 +37,19 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, courses, e
         if (student) {
             api.getContactVisits(student.id).then(setVisits).catch(console.error);
             loadDocuments(student.id);
+
+            const interval = setInterval(() => {
+                api.getContactVisits(student.id).then(v => {
+                    setVisits(prev => JSON.stringify(prev) !== JSON.stringify(v) ? v : prev);
+                }).catch(console.error);
+
+                // Silent document reload (no spinner)
+                api.getContactDocuments(student.id).then(d => {
+                    setDocuments(prev => JSON.stringify(prev) !== JSON.stringify(d) ? d : prev);
+                }).catch(console.error);
+            }, 5000);
+
+            return () => clearInterval(interval);
         }
     }, [student]);
 
@@ -239,7 +252,7 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, courses, e
                                             {new Date(visit.checkIn || visit.createdAt!).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
                                         </span>
                                         <span className={`text-xs px-2 py-0.5 rounded-full ${visit.status === 'Checked-in' ? 'bg-green-100 text-green-800' :
-                                                visit.status === 'Checked-out' ? 'bg-gray-100 text-gray-800' : 'bg-blue-100 text-blue-800'
+                                            visit.status === 'Checked-out' ? 'bg-gray-100 text-gray-800' : 'bg-blue-100 text-blue-800'
                                             }`}>{visit.status}</span>
                                     </div>
                                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">

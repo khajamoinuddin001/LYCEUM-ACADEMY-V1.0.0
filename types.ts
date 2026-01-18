@@ -26,6 +26,7 @@ export interface Channel {
 }
 
 export type TodoStatus = 'todo' | 'inProgress' | 'done';
+export type TaskPriority = 'Low' | 'Medium' | 'High';
 
 export interface TodoTask {
   id: number;
@@ -33,6 +34,12 @@ export interface TodoTask {
   description: string;
   dueDate: string;
   status: TodoStatus;
+  assignedTo?: number;
+  assignedBy?: number;
+  priority?: TaskPriority;
+  createdAt?: string;
+  completedBy?: number;
+  completedAt?: string;
 }
 
 export interface Document {
@@ -40,6 +47,7 @@ export interface Document {
   name: string;
   size: string;
   uploadDate: string;
+  is_private?: boolean;
 }
 
 export interface UniversityApplicationDetails {
@@ -348,6 +356,7 @@ export type TransactionStatus = 'Paid' | 'Pending' | 'Overdue';
 
 export interface AccountingTransaction {
   id: string;
+  contactId?: number;
   customerName: string;
   date: string;
   description: string;
@@ -374,6 +383,10 @@ export interface User {
     [appName: string]: AppPermissions;
   };
   mustResetPassword?: boolean;
+  joining_date?: string;
+  base_salary?: number;
+  shift_start?: string;
+  shift_end?: string;
 }
 
 export interface ActivityLog {
@@ -430,6 +443,7 @@ export interface Visitor {
     action?: string;
     timestamp?: string;
   }[];
+  calledAt?: string;
 }
 
 export interface Coupon {

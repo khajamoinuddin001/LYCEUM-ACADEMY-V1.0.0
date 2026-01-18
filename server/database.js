@@ -149,6 +149,7 @@ export async function initDatabase() {
     await client.query(`
       CREATE TABLE IF NOT EXISTS transactions (
         id TEXT PRIMARY KEY,
+        contact_id INTEGER REFERENCES contacts(id),
         customer_name TEXT NOT NULL,
         date TEXT NOT NULL,
         description TEXT,
@@ -183,12 +184,16 @@ export async function initDatabase() {
         description TEXT,
         due_date TEXT NOT NULL,
         status TEXT NOT NULL CHECK(status IN ('todo', 'inProgress', 'done')),
-        user_id INTEGER REFERENCES users(id),
+        assigned_to INTEGER REFERENCES users(id),
+        assigned_by INTEGER REFERENCES users(id),
+        priority TEXT NOT NULL DEFAULT 'Medium' CHECK(priority IN ('Low', 'Medium', 'High')),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
     await migrateColumn('tasks', 'dueDate', 'due_date');
-    await migrateColumn('tasks', 'userId', 'user_id');
+    await migrateColumn('tasks', 'userId', 'assigned_to');
+    await migrateColumn('tasks', 'assignedTo', 'assigned_to');
+    await migrateColumn('tasks', 'assignedBy', 'assigned_by');
     await migrateColumn('tasks', 'createdAt', 'created_at');
 
     // Visitors table
@@ -222,8 +227,16 @@ export async function initDatabase() {
       await client.query('ALTER TABLE visitors ADD COLUMN IF NOT EXISTS purpose TEXT');
       await client.query('ALTER TABLE visitors ADD COLUMN IF NOT EXISTS daily_sequence_number INTEGER');
       await client.query('ALTER TABLE visitors ADD COLUMN IF NOT EXISTS visit_segments JSONB DEFAULT \'[]\'');
+      await client.query('ALTER TABLE visitors ADD COLUMN IF NOT EXISTS called_at TIMESTAMP');
+      await client.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS contact_id INTEGER REFERENCES contacts(id)');
+      await client.query('ALTER TABLE tasks ADD COLUMN IF NOT EXISTS assigned_by INTEGER REFERENCES users(id)');
+      await client.query('ALTER TABLE tasks ADD COLUMN IF NOT EXISTS assigned_by INTEGER REFERENCES users(id)');
+      await client.query('ALTER TABLE tasks ADD COLUMN IF NOT EXISTS priority TEXT DEFAULT \'Medium\'');
+      await client.query('ALTER TABLE tasks ADD COLUMN IF NOT EXISTS completed_by INTEGER REFERENCES users(id)');
+      await client.query('ALTER TABLE tasks ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP');
+      await client.query('ALTER TABLE documents ADD COLUMN IF NOT EXISTS is_private BOOLEAN DEFAULT false');
     } catch (e) {
-      console.log('Columns contact_id/purpose/daily_sequence_number might already exist');
+      console.log('Columns might already exist');
     }
 
     // Quotation Templates table

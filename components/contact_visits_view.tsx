@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import type { Contact, Visitor, User } from '../types';
 import { ArrowLeft, Clock, Calendar, MessageSquare, AlertCircle, ChevronDown, CheckCircle } from './icons';
 import * as api from '../utils/api';
@@ -22,6 +22,7 @@ const ContactVisitsView: React.FC<ContactVisitsViewProps> = ({ contact, onNaviga
     const [visits, setVisits] = useState<Visitor[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [updatingVisitId, setUpdatingVisitId] = useState<number | null>(null);
+    const purposeTimers = useRef<{ [key: string]: any }>({});
 
     const canEdit = user.role !== 'Student';
 
@@ -42,7 +43,6 @@ const ContactVisitsView: React.FC<ContactVisitsViewProps> = ({ contact, onNaviga
     };
 
     const handleActionChange = async (visit: Visitor, action: string) => {
-        // Just persist selected action on the latest segment; no checkout or extra logic
         if (!action) return;
         setUpdatingVisitId(visit.id);
         try {
@@ -60,27 +60,37 @@ const ContactVisitsView: React.FC<ContactVisitsViewProps> = ({ contact, onNaviga
         }
     };
 
-    const handlePurposeChange = async (visit: Visitor, segmentIndex: number, newPurpose: string) => {
+    const handlePurposeChange = (visit: Visitor, segmentIndex: number, newPurpose: string) => {
+        const timerKey = `${visit.id}-${segmentIndex}`;
+
+        // Phase 1: Optimistic UI update
         const segments = visit.visitSegments && visit.visitSegments.length > 0
             ? [...visit.visitSegments]
             : [{ department: visit.host, purpose: visit.purpose || '', timestamp: visit.checkIn }];
 
         if (segments[segmentIndex]) {
             segments[segmentIndex].purpose = newPurpose;
-            // Sync root purpose if it's the first segment for backward/database compatibility
             const rootPurpose = segmentIndex === 0 ? newPurpose : visit.purpose;
 
-            try {
-                await api.saveVisitor({
-                    ...visit,
-                    purpose: rootPurpose,
-                    visitSegments: segments
-                });
-                // Optimistic update
-                setVisits(prev => prev.map(v => v.id === visit.id ? { ...v, visitSegments: segments, purpose: rootPurpose } : v));
-            } catch (e) {
-                console.error("Failed to save purpose", e);
+            setVisits(prev => prev.map(v => v.id === visit.id ? { ...v, visitSegments: segments, purpose: rootPurpose } : v));
+
+            // Phase 2: Debounced API call
+            if (purposeTimers.current[timerKey]) {
+                clearTimeout(purposeTimers.current[timerKey]);
             }
+
+            purposeTimers.current[timerKey] = setTimeout(async () => {
+                try {
+                    await api.saveVisitor({
+                        ...visit,
+                        purpose: rootPurpose,
+                        visitSegments: segments
+                    });
+                    console.log(`Synced purpose for visit ${visit.id} segment ${segmentIndex}`);
+                } catch (e) {
+                    console.error("Failed to sync purpose", e);
+                }
+            }, 1000);
         }
     };
 
@@ -159,21 +169,13 @@ const ContactVisitsView: React.FC<ContactVisitsViewProps> = ({ contact, onNaviga
                                                     value={segment.purpose}
                                                     onChange={(e) => handlePurposeChange(visit, segIdx, e.target.value)}
                                                     placeholder="Enter purpose..."
-                                                    disabled={!canEdit || isCheckedOut}
+                                                    disabled={!canEdit}
                                                 />
                                             </div>
 
                                             <div className="flex items-center gap-2">
                                                 <span className="font-bold">Action</span>
                                                 <div className="relative inline-block w-64 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 h-10 rounded-md">
-                                                    {isCheckedOut || segIdx < segments.length - 1 ? (
-                                                        <div className="w-full h-full flex items-center px-2 font-bold">
-                                                            {segment.action || 'none'}
-                                                            <div className="absolute right-2 top-1/2 transform -translate-y-1/2 pointer-events-none text-black dark:text-gray-300">
-                                                                <ChevronDown size={16} />
-                                                            </div>
-                                                        </div>
-                                                    ) : (
                                                     <select
                                                         className="w-full h-full appearance-none bg-transparent px-2 font-bold focus:outline-none"
                                                         value={segment.action || ''}
@@ -181,13 +183,11 @@ const ContactVisitsView: React.FC<ContactVisitsViewProps> = ({ contact, onNaviga
                                                         disabled={!canEdit || updatingVisitId === visit.id}
                                                     >
                                                         <option value="">Select Action...</option>
-                                                            {ACTIONS.map(a => (
-                                                                <option key={a} value={a}>{a}</option>
-                                                            ))}
-                                                        </select>
-                                                    )}
-                                                    {/* Custom Arrow for consistency with design */}
-                                                    {(!isCheckedOut && segIdx === segments.length - 1) && (
+                                                        {ACTIONS.map(a => (
+                                                            <option key={a} value={a}>{a}</option>
+                                                        ))}
+                                                    </select>
+                                                    {canEdit && (
                                                         <div className="absolute right-2 top-1/2 transform -translate-y-1/2 pointer-events-none text-xs text-black dark:text-gray-300">
                                                             <ChevronDown size={16} />
                                                         </div>

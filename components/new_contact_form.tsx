@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { HelpCircle, Sparkles, MailPlus, Flag, PlusCircle, StickyNote, Video as VideoIcon, CheckCircle2, VideoOff, Camera, Plus, Trash2, ChevronDown, Upload } from './icons';
-import type { Contact, FileStatus, User, ContactActivity, ContactActivityAction, RecordedSession } from '../types';
+import type { Contact, FileStatus, User, ContactActivity, ContactActivityAction, RecordedSession, AccountingTransaction } from '../types';
 import { summarizeText } from '../utils/gemini';
 import VideoRecordingModal from './video_recording_modal';
 import CameraModal from './camera_modal';
@@ -19,6 +19,7 @@ interface NewContactFormProps {
     user: User;
     onAddSessionVideo: (contactId: number, videoBlob: Blob) => Promise<void>;
     onDeleteSessionVideo: (contactId: number, sessionId: number) => Promise<void>;
+    transactions?: AccountingTransaction[];
 }
 
 const SessionPlayer: React.FC<{
@@ -180,7 +181,8 @@ const initialFormState = {
 
 
 
-const NewContactForm: React.FC<NewContactFormProps> = ({ contact, contacts, onNavigateBack, onNavigateToDocuments, onNavigateToVisa, onNavigateToChecklist, onNavigateToVisits, onSave, onComposeAIEmail, user, onAddSessionVideo, onDeleteSessionVideo }) => {
+const NewContactForm: React.FC<NewContactFormProps> = ({ contact, contacts, onNavigateBack, onNavigateToDocuments, onNavigateToVisa, onNavigateToChecklist, onNavigateToVisits, onSave, onComposeAIEmail, user, onAddSessionVideo, onDeleteSessionVideo, transactions = [] }) => {
+    const [currentTab, setCurrentTab] = useState<'details' | 'finance'>('details');
     const [formData, setFormData] = useState(initialFormState);
     const [isSummarizing, setIsSummarizing] = useState(false);
     const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
@@ -417,96 +419,151 @@ const NewContactForm: React.FC<NewContactFormProps> = ({ contact, contacts, onNa
                 </div>
             </div>
 
-            <div className="flex border-b border-gray-200 dark:border-gray-700 px-6">
-                <button className="px-1 py-3 font-semibold text-lyceum-blue border-b-2 border-lyceum-blue -mb-px" aria-current="page">Details</button>
+            <div className="flex border-b border-gray-200 dark:border-gray-700 px-6 overflow-x-auto whitespace-nowrap">
+                <button
+                    onClick={() => setCurrentTab('details')}
+                    className={`px-1 py-3 font-semibold transition-colors ${currentTab === 'details' ? 'text-lyceum-blue border-b-2 border-lyceum-blue' : 'text-gray-500 dark:text-gray-400 hover:text-lyceum-blue'}`}
+                >
+                    Details
+                </button>
+                <button
+                    onClick={() => setCurrentTab('finance')}
+                    disabled={!contact}
+                    className={`ml-4 px-1 py-3 font-semibold transition-colors disabled:opacity-50 ${currentTab === 'finance' ? 'text-lyceum-blue border-b-2 border-lyceum-blue' : 'text-gray-500 dark:text-gray-400 hover:text-lyceum-blue'}`}
+                >
+                    Finance
+                </button>
                 <button onClick={onNavigateToDocuments} disabled={!contact} className="ml-4 px-1 py-3 font-medium text-gray-500 dark:text-gray-400 hover:text-lyceum-blue disabled:opacity-50 disabled:cursor-not-allowed">Documents</button>
                 <button onClick={onNavigateToChecklist} disabled={!contact} className="ml-4 px-1 py-3 font-medium text-gray-500 dark:text-gray-400 hover:text-lyceum-blue disabled:opacity-50 disabled:cursor-not-allowed">Checklist</button>
                 <button onClick={onNavigateToVisa} disabled={!contact} className="ml-4 px-1 py-3 font-medium text-gray-500 dark:text-gray-400 hover:text-lyceum-blue disabled:opacity-50 disabled:cursor-not-allowed">Visa Filing</button>
                 <button onClick={onNavigateToVisits} disabled={!contact} className="ml-4 px-1 py-3 font-medium text-gray-500 dark:text-gray-400 hover:text-lyceum-blue disabled:opacity-50 disabled:cursor-not-allowed">Visits</button>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-16 gap-y-4 p-6">
-                {/* Left Column */}
-                <div className="space-y-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-start py-2">
-                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300 pt-1">Address</label>
-                        <div className="sm:col-span-2 space-y-2">
-                            <FormInput name="street1" value={formData.street1} onChange={handleChange} placeholder="Street..." disabled={!canWrite} />
-                            <FormInput name="street2" value={formData.street2} onChange={handleChange} placeholder="Street 2..." disabled={!canWrite} />
-                            <div className="flex gap-2">
-                                <FormInput name="city" value={formData.city} onChange={handleChange} placeholder="City" disabled={!canWrite} />
-                                <FormInput name="state" value={formData.state} onChange={handleChange} placeholder="State" disabled={!canWrite} />
+            {currentTab === 'details' ? (
+                <>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-16 gap-y-4 p-6">
+                        {/* Left Column */}
+                        <div className="space-y-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-start py-2">
+                                <label className="text-sm font-medium text-gray-700 dark:text-gray-300 pt-1">Address</label>
+                                <div className="sm:col-span-2 space-y-2">
+                                    <FormInput name="street1" value={formData.street1} onChange={handleChange} placeholder="Street..." disabled={!canWrite} />
+                                    <FormInput name="street2" value={formData.street2} onChange={handleChange} placeholder="Street 2..." disabled={!canWrite} />
+                                    <div className="flex gap-2">
+                                        <FormInput name="city" value={formData.city} onChange={handleChange} placeholder="City" disabled={!canWrite} />
+                                        <FormInput name="state" value={formData.state} onChange={handleChange} placeholder="State" disabled={!canWrite} />
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <FormInput name="zip" value={formData.zip} onChange={handleChange} placeholder="ZIP" disabled={!canWrite} />
+                                        <FormInput name="country" value={formData.country} onChange={handleChange} placeholder="Country" disabled={!canWrite} />
+                                    </div>
+                                </div>
                             </div>
-                            <div className="flex gap-2">
-                                <FormInput name="zip" value={formData.zip} onChange={handleChange} placeholder="ZIP" disabled={!canWrite} />
-                                <FormInput name="country" value={formData.country} onChange={handleChange} placeholder="Country" disabled={!canWrite} />
-                            </div>
+                            <FormRow label="GSTIN">
+                                <FormInput name="gstin" value={formData.gstin} onChange={handleChange} disabled={!canWrite} />
+                            </FormRow>
+                            <FormRow label="Reference Number">
+                                <FormInput name="referenceNumber" value={formData.referenceNumber} onChange={handleChange} disabled />
+                            </FormRow>
+                            <FormRow label="PAN" helpText="Permanent Account Number">
+                                <FormInput name="pan" value={formData.pan} onChange={handleChange} placeholder="e.g. ABCDE1234F" disabled={!canWrite} />
+                            </FormRow>
+                        </div>
+
+                        {/* Right Column */}
+                        <div className="space-y-2 divide-y divide-gray-200 dark:divide-gray-700/50">
+                            <FormRow label="Phone"><FormInput name="phone" value={formData.phone} onChange={handleChange} disabled={!canWrite} /></FormRow>
+                            <FormRow label="Email"><FormInput name="email" value={formData.email} onChange={handleChange} disabled={!canWrite} /></FormRow>
+                            <FormRow label="Tags"><FormInput name="tags" value={formData.tags} onChange={handleChange} placeholder='e.g. "B2B", "VIP", "Consulting", ...' disabled={!canWrite} /></FormRow>
+                            <FormRow label="Visa Type"><FormInput name="visaType" value={formData.visaType} onChange={handleChange} disabled={!canWrite} /></FormRow>
+                            <FormRow label="Country"><FormInput name="countryOfApplication" value={formData.countryOfApplication} onChange={handleChange} disabled={!canWrite} /></FormRow>
+                            <FormRow label="Source"><FormInput name="source" value={formData.source} onChange={handleChange} disabled={!canWrite} /></FormRow>
+                            <FormRow label="Type"><FormInput name="contactType" value={formData.contactType} onChange={handleChange} disabled={!canWrite} /></FormRow>
+                            <FormRow label="Majors"><FormInput name="majors" value={formData.majors} onChange={handleChange} disabled={!canWrite} /></FormRow>
+                            <FormRow label="Stream"><FormInput name="stream" value={formData.stream} onChange={handleChange} disabled={!canWrite} /></FormRow>
+                            <FormRow label="Course"><FormInput name="course" value={formData.course} onChange={handleChange} disabled={!canWrite} /></FormRow>
+                            <FormRow label="Intake"><FormInput name="intake" value={formData.intake} onChange={handleChange} disabled={!canWrite} /></FormRow>
+                            <FormRow label="Counselor Assigned"><FormInput name="counselorAssigned" value={formData.counselorAssigned} onChange={handleChange} disabled={!canWrite} /></FormRow>
+                            <FormRow label="Agent Assigned">
+                                <select name="agentAssigned" value={formData.agentAssigned} onChange={handleChange} disabled={!canWrite} className="w-full bg-transparent text-gray-800 dark:text-gray-200 text-sm focus:outline-none dark:bg-gray-800 disabled:opacity-70 disabled:cursor-not-allowed">
+                                    <option value="">Select an Agent</option><option value="Agent A">Agent A</option><option value="Agent B">Agent B</option><option value="Agent C">Agent C</option>
+                                </select>
+                            </FormRow>
+                            <FormRow label="Application Email"><FormInput name="applicationEmail" value={formData.applicationEmail} onChange={handleChange} disabled={!canWrite} /></FormRow>
+                            <FormRow label="Application Password"><FormInput name="applicationPassword" value={formData.applicationPassword} onChange={handleChange} disabled={!canWrite} /></FormRow>
+                            <FormRow label="File Status">
+                                <select name="fileStatus" value={formData.fileStatus} onChange={handleChange} disabled={!canWrite} className="w-full bg-transparent text-gray-800 dark:text-gray-200 text-sm focus:outline-none dark:bg-gray-800 disabled:opacity-70 disabled:cursor-not-allowed">
+                                    <option value="">Select Status</option><option value="In progress">In progress</option><option value="Closed">Closed</option><option value="On hold">On hold</option>
+                                </select>
+                            </FormRow>
                         </div>
                     </div>
-                    <FormRow label="GSTIN">
-                        <FormInput name="gstin" value={formData.gstin} onChange={handleChange} disabled={!canWrite} />
-                    </FormRow>
-                    <FormRow label="Reference Number">
-                        <FormInput name="referenceNumber" value={formData.referenceNumber} onChange={handleChange} disabled />
-                    </FormRow>
-                    <FormRow label="PAN" helpText="Permanent Account Number">
-                        <FormInput name="pan" value={formData.pan} onChange={handleChange} placeholder="e.g. ABCDE1234F" disabled={!canWrite} />
-                    </FormRow>
-                </div>
 
-                {/* Right Column */}
-                <div className="space-y-2 divide-y divide-gray-200 dark:divide-gray-700/50">
-                    <FormRow label="Phone"><FormInput name="phone" value={formData.phone} onChange={handleChange} disabled={!canWrite} /></FormRow>
-                    <FormRow label="Email"><FormInput name="email" value={formData.email} onChange={handleChange} disabled={!canWrite} /></FormRow>
-                    <FormRow label="Tags"><FormInput name="tags" value={formData.tags} onChange={handleChange} placeholder='e.g. "B2B", "VIP", "Consulting", ...' disabled={!canWrite} /></FormRow>
-                    <FormRow label="Visa Type"><FormInput name="visaType" value={formData.visaType} onChange={handleChange} disabled={!canWrite} /></FormRow>
-                    <FormRow label="Country"><FormInput name="countryOfApplication" value={formData.countryOfApplication} onChange={handleChange} disabled={!canWrite} /></FormRow>
-                    <FormRow label="Source"><FormInput name="source" value={formData.source} onChange={handleChange} disabled={!canWrite} /></FormRow>
-                    <FormRow label="Type"><FormInput name="contactType" value={formData.contactType} onChange={handleChange} disabled={!canWrite} /></FormRow>
-                    <FormRow label="Majors"><FormInput name="majors" value={formData.majors} onChange={handleChange} disabled={!canWrite} /></FormRow>
-                    <FormRow label="Stream"><FormInput name="stream" value={formData.stream} onChange={handleChange} disabled={!canWrite} /></FormRow>
-                    <FormRow label="Course"><FormInput name="course" value={formData.course} onChange={handleChange} disabled={!canWrite} /></FormRow>
-                    <FormRow label="Intake"><FormInput name="intake" value={formData.intake} onChange={handleChange} disabled={!canWrite} /></FormRow>
-                    <FormRow label="Counselor Assigned"><FormInput name="counselorAssigned" value={formData.counselorAssigned} onChange={handleChange} disabled={!canWrite} /></FormRow>
-                    <FormRow label="Agent Assigned">
-                        <select name="agentAssigned" value={formData.agentAssigned} onChange={handleChange} disabled={!canWrite} className="w-full bg-transparent text-gray-800 dark:text-gray-200 text-sm focus:outline-none dark:bg-gray-800 disabled:opacity-70 disabled:cursor-not-allowed">
-                            <option value="">Select an Agent</option><option value="Agent A">Agent A</option><option value="Agent B">Agent B</option><option value="Agent C">Agent C</option>
-                        </select>
-                    </FormRow>
-                    <FormRow label="Application Email"><FormInput name="applicationEmail" value={formData.applicationEmail} onChange={handleChange} disabled={!canWrite} /></FormRow>
-                    <FormRow label="Application Password"><FormInput name="applicationPassword" value={formData.applicationPassword} onChange={handleChange} disabled={!canWrite} /></FormRow>
-                    <FormRow label="File Status">
-                        <select name="fileStatus" value={formData.fileStatus} onChange={handleChange} disabled={!canWrite} className="w-full bg-transparent text-gray-800 dark:text-gray-200 text-sm focus:outline-none dark:bg-gray-800 disabled:opacity-70 disabled:cursor-not-allowed">
-                            <option value="">Select Status</option><option value="In progress">In progress</option><option value="Closed">Closed</option><option value="On hold">On hold</option>
-                        </select>
-                    </FormRow>
-                </div>
-            </div>
-
-            {/* Notes Section */}
-            <div className="px-6 py-4">
-                <div className="p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-                    <div className="flex items-center justify-between mb-1">
-                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Notes</label>
-                        <div className="flex items-center gap-2">
-                            <button onClick={handleSummarize} disabled={isSummarizing || !formData.notes || !canWrite} className="flex items-center px-2 py-1 text-xs font-semibold text-lyceum-blue rounded-md hover:bg-lyceum-blue/10 disabled:opacity-50 disabled:cursor-not-allowed" title="Summarize with AI">
-                                <Sparkles size={14} className="mr-1" />
-                                {isSummarizing ? 'Summarizing...' : 'Summarize with AI'}
-                            </button>
-                            <button
-                                onClick={handleComposeEmail}
-                                disabled={isNew || !canWrite}
-                                className="flex items-center px-2 py-1 text-xs font-semibold text-lyceum-blue rounded-md hover:bg-lyceum-blue/10 disabled:opacity-50 disabled:cursor-not-allowed"
-                                title={isNew ? "Save contact to use AI Email Assistant" : "Draft an email with AI"}
-                            >
-                                <MailPlus size={14} className="mr-1" />
-                                AI Email
-                            </button>
+                    {/* Notes Section */}
+                    <div className="px-6 py-4">
+                        <div className="p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+                            <div className="flex items-center justify-between mb-1">
+                                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Notes</label>
+                                <div className="flex items-center gap-2">
+                                    <button onClick={handleSummarize} disabled={isSummarizing || !formData.notes || !canWrite} className="flex items-center px-2 py-1 text-xs font-semibold text-lyceum-blue rounded-md hover:bg-lyceum-blue/10 disabled:opacity-50 disabled:cursor-not-allowed" title="Summarize with AI">
+                                        <Sparkles size={14} className="mr-1" />
+                                        {isSummarizing ? 'Summarizing...' : 'Summarize with AI'}
+                                    </button>
+                                    <button
+                                        onClick={handleComposeEmail}
+                                        disabled={isNew || !canWrite}
+                                        className="flex items-center px-2 py-1 text-xs font-semibold text-lyceum-blue rounded-md hover:bg-lyceum-blue/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        title={isNew ? "Save contact to use AI Email Assistant" : "Draft an email with AI"}
+                                    >
+                                        <MailPlus size={14} className="mr-1" />
+                                        AI Email
+                                    </button>
+                                </div>
+                            </div>
+                            <textarea name="notes" value={formData.notes} onChange={handleChange} rows={5} disabled={!canWrite} placeholder="Add notes about the student..." className="w-full bg-transparent text-gray-800 dark:text-gray-200 text-sm mt-1 focus:outline-none placeholder:text-gray-400 resize-y disabled:opacity-70 disabled:cursor-not-allowed" />
                         </div>
                     </div>
-                    <textarea name="notes" value={formData.notes} onChange={handleChange} rows={5} disabled={!canWrite} placeholder="Add notes about the student..." className="w-full bg-transparent text-gray-800 dark:text-gray-200 text-sm mt-1 focus:outline-none placeholder:text-gray-400 resize-y disabled:opacity-70 disabled:cursor-not-allowed" />
+                </>
+            ) : (
+                <div className="p-6">
+                    <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                            <thead className="bg-gray-100 dark:bg-gray-700">
+                                <tr>
+                                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Date</th>
+                                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">ID</th>
+                                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Description</th>
+                                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Status</th>
+                                    <th className="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                                {transactions.filter(tx => tx.contactId === contact?.id).length > 0 ? (
+                                    transactions.filter(tx => tx.contactId === contact?.id).map(tx => (
+                                        <tr key={tx.id} className="text-sm">
+                                            <td className="px-6 py-4 whitespace-nowrap text-gray-500">{tx.date}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900 dark:text-gray-100">{tx.id}</td>
+                                            <td className="px-6 py-4 text-gray-500 max-w-xs truncate">{tx.description}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${tx.status === 'Paid' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                                                    {tx.status}
+                                                </span>
+                                            </td>
+                                            <td className={`px-6 py-4 whitespace-nowrap text-right font-bold ${tx.amount > 0 ? 'text-green-600' : 'text-red-500'}`}>
+                                                ₹{Math.abs(tx.amount).toLocaleString('en-IN')}
+                                            </td>
+                                        </tr>
+                                    ))
+                                ) : (
+                                    <tr>
+                                        <td colSpan={5} className="px-6 py-8 text-center text-gray-500">No financial history found for this contact.</td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
-            </div>
+            )}
 
             {/* Activity and Sessions Section */}
             <div className="px-6 py-4 mt-6">

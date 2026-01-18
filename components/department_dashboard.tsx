@@ -5,12 +5,18 @@ import { Users, CheckCircle, Clock, Volume2, ArrowRight } from './icons';
 
 interface DepartmentDashboardProps {
     user: User;
+    onViewVisits?: (contactId?: number, contactName?: string) => void;
 }
 
-const DepartmentDashboard: React.FC<DepartmentDashboardProps> = ({ user }) => {
+const DepartmentDashboard: React.FC<DepartmentDashboardProps> = ({ user, onViewVisits }) => {
     const [visitors, setVisitors] = useState<Visitor[]>([]);
     const [myTasks, setMyTasks] = useState<TodoTask[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [followUpVisitor, setFollowUpVisitor] = useState<Visitor | null>(null);
+    const [targetDepartment, setTargetDepartment] = useState('');
+
+    // Hardcoded departments list for now, ideally fetch from backend or config
+    const departments = ['Admission', 'Accounts', 'Visa', 'LMS', 'Reception', 'Counseling'];
 
     const userDepartment = user.role === 'Admin' ? 'All' : (user.permissions?.department || 'Unassigned');
 
@@ -28,8 +34,8 @@ const DepartmentDashboard: React.FC<DepartmentDashboardProps> = ({ user }) => {
                 api.getTasks() // Assuming this returns tasks for current user
             ]);
 
-            // Filter visitors waiting for THIS department
-            // Logic: Visit active (Checked-in) AND (current segment department matches OR host matches if no segments)
+            // Filter visitors waiting waiting or recently called for THIS department
+            // Logic: Visit active AND (current segment department matches)
             const waiting = allVisitors.filter(v => {
                 if (v.status === 'Checked-out') return false;
 
@@ -38,17 +44,17 @@ const DepartmentDashboard: React.FC<DepartmentDashboardProps> = ({ user }) => {
                     targetDept = v.visitSegments[v.visitSegments.length - 1].department;
                 }
 
-                // Admin sees all? Or should Admin select a view? For now Admin sees all waiting.
-                if (user.role === 'Admin') return true;
-
                 // Match department
-                // Note: user.permissions.department is not standard, we might need to rely on Name matching "host" 
-                // or we need to add a proper department field to User. 
-                // For this impl, I will match simply if the User's Name is mentioned in department string 
-                // OR if we assume the user object serves as the identity.
-                // Let's assume strict string match for now, user needs to ensure names match.
-                // Or "Finance Department (Syed)" -> user name "Syed" matches?
-                return targetDept.includes(user.name) || targetDept === userDepartment;
+                const isForMyDept = user.role === 'Admin' || targetDept.includes(user.name) || targetDept === userDepartment;
+                if (!isForMyDept) return false;
+
+                // Status check: Checked-in OR (Called AND < 2 mins ago)
+                if (v.status === 'Checked-in' || (v.status as any) === 'Scheduled') return true;
+                if (v.status === 'Called' && v.calledAt) {
+                    const diff = new Date().getTime() - new Date(v.calledAt).getTime();
+                    return diff < 120000; // 2 minutes
+                }
+                return false;
             }).sort((a, b) => new Date(a.checkIn || '').getTime() - new Date(b.checkIn || '').getTime());
 
             setVisitors(waiting);
@@ -57,6 +63,30 @@ const DepartmentDashboard: React.FC<DepartmentDashboardProps> = ({ user }) => {
             console.error("Fetch error", error);
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const handleCallVisitor = async (visitor: Visitor) => {
+        try {
+            const currentSegments = visitor.visitSegments && visitor.visitSegments.length > 0
+                ? [...visitor.visitSegments]
+                : [{ department: visitor.host, purpose: visitor.purpose || '', timestamp: visitor.checkIn }];
+
+            // Mark current segment action as 'Called'
+            if (currentSegments.length > 0) {
+                currentSegments[currentSegments.length - 1].action = 'Called';
+            }
+
+            await api.saveVisitor({
+                ...visitor,
+                status: 'Called' as any,
+                calledAt: new Date().toISOString(),
+                visitSegments: currentSegments
+            });
+
+            fetchData();
+        } catch (error) {
+            console.error("Failed to call visitor", error);
         }
     };
 
@@ -69,41 +99,50 @@ const DepartmentDashboard: React.FC<DepartmentDashboardProps> = ({ user }) => {
             return;
         }
 
+        handleCallVisitor(nextVisitor);
+    };
+
+    const handleFollowUpClick = (visitor: Visitor) => {
+        setFollowUpVisitor(visitor);
+        setTargetDepartment(departments[0]);
+    };
+
+    const handleConfirmFollowUp = async () => {
+        if (!followUpVisitor || !targetDepartment) return;
+
         try {
-            // Update visitor status to 'Called' (using visitSegments or simple status if supported)
-            // We defined 'Called' status in logic but not strictly in types yet.
-            // Let's use the 'Action' logic.
+            const currentSegments = followUpVisitor.visitSegments && followUpVisitor.visitSegments.length > 0
+                ? [...followUpVisitor.visitSegments]
+                : [{ department: followUpVisitor.host, purpose: followUpVisitor.purpose || '', timestamp: followUpVisitor.checkIn, action: 'Called' }];
 
-            const currentSegments = nextVisitor.visitSegments && nextVisitor.visitSegments.length > 0
-                ? [...nextVisitor.visitSegments]
-                : [{ department: nextVisitor.host, purpose: nextVisitor.purpose || '', timestamp: nextVisitor.checkIn }];
-
-            // Mark current segment action as 'Called'
-            if (currentSegments.length > 0) {
-                currentSegments[currentSegments.length - 1].action = 'Called';
-            }
-
-            await api.saveVisitor({
-                ...nextVisitor,
-                status: 'Called' as any, // We need to allow 'Called' in types or map it.
-                // Actually I should update backend API to accept 'Called' if strict check exists.
-                // For now, let's keep status 'Checked-in' but action 'Called' which the display looks for?
-                // The Display looked for status 'Called'. 
-                // I will update the type Visitor status to include 'Called'.
-                visitSegments: currentSegments
+            // Add new segment for the next department
+            currentSegments.push({
+                department: targetDepartment,
+                purpose: `Follow up from ${user.name} (${userDepartment})`,
+                timestamp: new Date().toISOString()
             });
 
+            await api.saveVisitor({
+                ...followUpVisitor,
+                status: 'Checked-in', // Status remains checked-in so they appear in next department's dashboard
+                visitSegments: currentSegments,
+                checklist: followUpVisitor.checklist // Preserve checklist if any
+            });
+
+            setFollowUpVisitor(null);
             fetchData();
         } catch (error) {
-            console.error("Failed to call visitor", error);
+            console.error("Failed to process follow up", error);
         }
     };
 
-    const handleTaskDone = async (taskId: number) => {
-        // Implement saveTask update
-        // Assuming api.saveTask exists or can be done via PUT /tasks
-        // api.saveTask is defined in api.ts
-        // But getTasks returns TodoTask type, checking logic...
+    const handleTaskDone = async (task: TodoTask) => {
+        try {
+            await api.saveTask({ ...task, status: 'done' });
+            fetchData();
+        } catch (error) {
+            console.error("Failed to mark task as done", error);
+        }
     };
 
     return (
@@ -155,7 +194,52 @@ const DepartmentDashboard: React.FC<DepartmentDashboardProps> = ({ user }) => {
                                         <div className="flex justify-between items-start">
                                             <div>
                                                 <div className="font-bold text-lg">#{v.dailySequenceNumber} {v.name}</div>
-                                                <div className="text-sm text-gray-500">{v.purpose}</div>
+                                                <div className="text-sm text-gray-500 max-w-md">
+                                                    {v.visitSegments && v.visitSegments.length > 1 ? (
+                                                        <div className="flex flex-wrap gap-1 items-center mt-1">
+                                                            Visit Journey:
+                                                            {v.visitSegments.map((seg, idx) => (
+                                                                <span key={idx} className="flex items-center text-xs font-semibold bg-gray-200 dark:bg-gray-600 px-2 py-0.5 rounded text-gray-700 dark:text-gray-200">
+                                                                    {seg.department}
+                                                                    {idx < (v.visitSegments?.length || 0) - 1 && <ArrowRight size={10} className="ml-1 text-gray-400" />}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    ) : (
+                                                        v.purpose
+                                                    )}
+                                                </div>
+                                                <div className="flex gap-2 mt-2">
+                                                    {v.status === 'Called' ? (
+                                                        <span className="flex items-center gap-1 text-xs font-bold text-green-600 bg-green-100 px-2 py-0.5 rounded animate-pulse">
+                                                            <Volume2 size={14} />
+                                                            Calling...
+                                                        </span>
+                                                    ) : (
+                                                        <button
+                                                            onClick={() => handleCallVisitor(v)}
+                                                            className="flex items-center gap-1 text-xs font-semibold text-white bg-green-600 hover:bg-green-700 px-3 py-1 rounded shadow-sm hover:shadow active:scale-95 transition-all"
+                                                        >
+                                                            <Volume2 size={14} />
+                                                            Call
+                                                        </button>
+                                                    )}
+                                                    {onViewVisits && (
+                                                        <button
+                                                            onClick={() => onViewVisits(v.contactId, v.name)}
+                                                            className="flex items-center gap-1 text-xs font-semibold text-lyceum-blue hover:text-lyceum-blue-dark px-2 py-1 rounded hover:bg-lyceum-blue/5"
+                                                        >
+                                                            <ArrowRight size={14} />
+                                                            Details
+                                                        </button>
+                                                    )}
+                                                    <button
+                                                        onClick={() => handleFollowUpClick(v)}
+                                                        className="flex items-center gap-1 text-xs font-semibold text-lyceum-blue hover:text-lyceum-blue-dark border border-lyceum-blue/30 px-2 py-1 rounded hover:bg-lyceum-blue/5"
+                                                    >
+                                                        Forward
+                                                    </button>
+                                                </div>
                                             </div>
                                             <div className="flex items-center gap-2 text-gray-500 text-sm">
                                                 <Clock size={16} />
@@ -169,6 +253,43 @@ const DepartmentDashboard: React.FC<DepartmentDashboardProps> = ({ user }) => {
                     </div>
                 </div>
 
+                {followUpVisitor && (
+                    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md p-6 animate-fade-in">
+                            <h3 className="text-xl font-bold mb-4 text-gray-800 dark:text-white">Forward Visitor</h3>
+                            <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
+                                Select the department you want to refer <b>{followUpVisitor.name}</b> to for follow up.
+                            </p>
+
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Target Department</label>
+                            <select
+                                value={targetDepartment}
+                                onChange={(e) => setTargetDepartment(e.target.value)}
+                                className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded mb-6 dark:bg-gray-700 dark:text-white outline-none focus:ring-2 focus:ring-lyceum-blue"
+                            >
+                                {departments.map(dept => (
+                                    <option key={dept} value={dept}>{dept}</option>
+                                ))}
+                            </select>
+
+                            <div className="flex justify-end gap-3">
+                                <button
+                                    onClick={() => setFollowUpVisitor(null)}
+                                    className="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleConfirmFollowUp}
+                                    className="px-4 py-2 bg-lyceum-blue text-white rounded hover:bg-lyceum-blue-dark transition-colors font-semibold"
+                                >
+                                    Confirm Forward
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {/* Tasks Section */}
                 <div className="space-y-6">
                     <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 h-full">
@@ -181,12 +302,24 @@ const DepartmentDashboard: React.FC<DepartmentDashboardProps> = ({ user }) => {
                         ) : (
                             <div className="space-y-3">
                                 {myTasks.map(task => (
-                                    <div key={task.id} className="flex gap-3 items-start p-3 bg-gray-50 dark:bg-gray-700/30 rounded-lg">
-                                        <input type="checkbox" className="mt-1" />
-                                        <div>
-                                            <div className="font-medium text-sm">{task.title}</div>
-                                            <div className="text-xs text-gray-500">{task.description}</div>
-                                            <div className="text-xs text-red-500 mt-1">Due: {task.dueDate}</div>
+                                    <div key={task.id} className="group flex gap-3 items-start p-3 bg-gray-50 dark:bg-gray-700/30 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                                        <input
+                                            type="checkbox"
+                                            onChange={() => handleTaskDone(task)}
+                                            className="mt-1.5 w-4 h-4 rounded border-gray-300 text-lyceum-blue focus:ring-lyceum-blue"
+                                        />
+                                        <div className="flex-1 min-w-0">
+                                            <div className="font-bold text-sm text-gray-800 dark:text-gray-100 truncate">{task.title}</div>
+                                            {task.description && <div className="text-xs text-gray-500 line-clamp-1">{task.description}</div>}
+                                            <div className="flex items-center gap-2 mt-2">
+                                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase ${task.priority === 'High' ? 'bg-red-100 text-red-600' :
+                                                    task.priority === 'Low' ? 'bg-blue-100 text-blue-600' :
+                                                        'bg-yellow-100 text-yellow-600'
+                                                    }`}>
+                                                    {task.priority || 'Med'}
+                                                </span>
+                                                <span className="text-[10px] text-gray-400 font-medium">Due: {task.dueDate}</span>
+                                            </div>
                                         </div>
                                     </div>
                                 ))}

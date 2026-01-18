@@ -130,21 +130,33 @@ router.post('/register', async (req, res) => {
 
     const user = userResult.rows[0];
 
-    // Create contact
-    const contactId = `LA${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}${String(user.id).padStart(3, '0')}`;
+    // Create or Link contact
+    const existingContactRes = await query('SELECT id FROM contacts WHERE email = $1', [email.toLowerCase()]);
 
-    await query(`
-      INSERT INTO contacts (user_id, name, email, contact_id, department, major, notes, checklist, activity_log, recorded_sessions)
-      VALUES ($1, $2, $3, $4, 'Unassigned', 'Unassigned', $5, $6, '[]', '[]')
-      RETURNING *
-    `, [
-      user.id,
-      name,
-      email.toLowerCase(),
-      contactId,
-      `Student registered on ${new Date().toLocaleDateString()}.`,
-      JSON.stringify(defaultChecklist) // Apply to all contacts created via registration
-    ]);
+    if (existingContactRes.rows.length > 0) {
+      // Link existing contact
+      console.log(`🔗 Linking existing contact (ID: ${existingContactRes.rows[0].id}) to new user ${user.id}`);
+      await query(`
+        UPDATE contacts 
+        SET user_id = $1, name = $2, checklist = CASE WHEN checklist IS NULL OR checklist = '[]'::jsonb THEN $3 ELSE checklist END
+        WHERE id = $4
+      `, [user.id, name, JSON.stringify(defaultChecklist), existingContactRes.rows[0].id]);
+    } else {
+      // Create new contact
+      const contactId = `LA${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}${String(user.id).padStart(3, '0')}`;
+      console.log(`📝 Creating new contact record for user ${user.id}`);
+      await query(`
+        INSERT INTO contacts (user_id, name, email, contact_id, department, major, notes, checklist, activity_log, recorded_sessions)
+        VALUES ($1, $2, $3, $4, 'Unassigned', 'Unassigned', $5, $6, '[]', '[]')
+      `, [
+        user.id,
+        name,
+        email.toLowerCase(),
+        contactId,
+        `Student registered on ${new Date().toLocaleDateString()}.`,
+        JSON.stringify(defaultChecklist)
+      ]);
+    }
 
     // Send verification email (skip for admins)
     if (!isAdmin) {

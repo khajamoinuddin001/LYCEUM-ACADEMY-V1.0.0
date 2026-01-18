@@ -88,5 +88,6 @@ export {
   AlertCircle,
   CheckCircle,
   Volume2,
-  ArrowRight
+  ArrowRight,
+  Monitor
 } from 'lucide-react';

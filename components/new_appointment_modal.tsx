@@ -123,19 +123,6 @@ const NewAppointmentModal: React.FC<NewAppointmentModalProps> = ({ isOpen, onClo
               <label htmlFor="appt-datetime" className={labelClasses}>Scheduled Check-in Time</label>
               <input type="datetime-local" id="appt-datetime" name="scheduledCheckIn" className={inputClasses} value={formData.scheduledCheckIn} onChange={handleChange} disabled={!canCreate} />
             </div>
-            <div>
-              <label htmlFor="appt-purpose" className={labelClasses}>Purpose of Visit</label>
-              <textarea
-                id="appt-purpose"
-                name="purpose"
-                rows={3}
-                className={inputClasses}
-                value={formData.purpose}
-                onChange={handleChange}
-                placeholder="Enter purpose of visit..."
-                disabled={!canCreate}
-              />
-            </div>
             {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
           </div>
         </div>

@@ -4,7 +4,7 @@ import { DEFAULT_PERMISSIONS, DEFAULT_CHECKLIST } from '../components/constants'
 const API_BASE_URL = import.meta.env.VITE_API_URL;
 
 // Get auth token from storage
-function getToken(): string | null {
+export function getToken(): string | null {
   // Check localStorage first
   const localData = localStorage.getItem('authToken');
   if (localData) {
@@ -158,10 +158,11 @@ export const addUser = async (newUser: Omit<User, 'id' | 'permissions'>): Promis
 };
 
 // Document endpoints
-export const uploadDocument = async (contactId: number, file: File): Promise<any> => {
+export const uploadDocument = async (contactId: number, file: File, isPrivate: boolean = false): Promise<any> => {
   const formData = new FormData();
   formData.append('contactId', contactId.toString());
   formData.append('file', file);
+  formData.append('isPrivate', isPrivate.toString());
 
   const token = getToken();
   const headers: HeadersInit = {
@@ -285,22 +286,34 @@ export const getTransactions = async (): Promise<AccountingTransaction[]> => {
   return apiRequest<AccountingTransaction[]>('/transactions');
 };
 
-export const saveInvoice = async (newInvoice: Omit<AccountingTransaction, 'id'>): Promise<{ transaction: AccountingTransaction; allTransactions: AccountingTransaction[] }> => {
+export const saveTransaction = async (newTransaction: Omit<AccountingTransaction, 'id'>): Promise<{ transaction: AccountingTransaction; allTransactions: AccountingTransaction[] }> => {
   const transaction = await apiRequest<AccountingTransaction>('/transactions', {
     method: 'POST',
-    body: JSON.stringify(newInvoice),
+    body: JSON.stringify(newTransaction),
   });
   const allTransactions = await getTransactions();
   return { transaction, allTransactions };
 };
 
-export const recordPayment = async (id: string): Promise<{ allTransactions: AccountingTransaction[]; paidTransaction?: AccountingTransaction }> => {
-  const transaction = await apiRequest<AccountingTransaction>(`/transactions/${id}`, { method: 'GET' });
-  const paidTransaction = await apiRequest<AccountingTransaction>(`/transactions/${id}`, {
+export const saveInvoice = saveTransaction; // Alias for backward compatibility
+
+export const updateTransaction = async (id: string, updates: Partial<AccountingTransaction>): Promise<{ transaction: AccountingTransaction; allTransactions: AccountingTransaction[] }> => {
+  const transaction = await apiRequest<AccountingTransaction>(`/transactions/${id}`, {
     method: 'PUT',
-    body: JSON.stringify({ ...transaction, status: 'Paid' }),
+    body: JSON.stringify(updates),
   });
   const allTransactions = await getTransactions();
+  return { transaction, allTransactions };
+};
+
+export const deleteTransaction = async (id: string): Promise<AccountingTransaction[]> => {
+  await apiRequest<{ success: boolean }>(`/transactions/${id}`, { method: 'DELETE' });
+  return getTransactions();
+};
+
+export const recordPayment = async (id: string): Promise<{ allTransactions: AccountingTransaction[]; paidTransaction?: AccountingTransaction }> => {
+  const transaction = await apiRequest<AccountingTransaction>(`/transactions/${id}`, { method: 'GET' });
+  const { transaction: paidTransaction, allTransactions } = await updateTransaction(id, { ...transaction, status: 'Paid' });
   return { allTransactions, paidTransaction };
 };
 
@@ -310,7 +323,7 @@ export const getEvents = async (): Promise<CalendarEvent[]> => {
 };
 
 // User management
-export const updateUser = async (userId: number, updates: { role?: UserRole; permissions?: any }): Promise<User> => {
+export const updateUser = async (userId: number, updates: Partial<User>): Promise<User> => {
   const response = await fetch(`${API_BASE_URL}/users/${userId}`, {
     method: 'PUT',
     headers: {
@@ -340,6 +353,17 @@ export const getAttendanceHistory = async () => {
 
 export const getHolidays = async () => {
   return await apiRequest('/holidays', { method: 'GET' });
+};
+
+export const saveHoliday = async (holiday: { date: string; description: string }) => {
+  return await apiRequest('/holidays', {
+    method: 'POST',
+    body: JSON.stringify(holiday)
+  });
+};
+
+export const deleteHoliday = async (id: number) => {
+  return await apiRequest(`/holidays/${id}`, { method: 'DELETE' });
 };
 
 export const getPayrollReport = async (month: number, year: number) => {
@@ -385,16 +409,39 @@ export const deleteEvent = async (eventId: number): Promise<CalendarEvent[]> => 
 };
 
 // Tasks
-export const getTasks = async (): Promise<TodoTask[]> => {
-  return apiRequest<TodoTask[]>('/tasks');
+export const getTasks = async (filters?: { userId?: number; all?: boolean }): Promise<TodoTask[]> => {
+  let url = '/tasks';
+  if (filters) {
+    const params = new URLSearchParams();
+    if (filters.userId) params.append('userId', filters.userId.toString());
+    if (filters.all) params.append('all', 'true');
+    url += `?${params.toString()}`;
+  }
+  return apiRequest<TodoTask[]>(url);
 };
 
-export const saveTask = async (task: Omit<TodoTask, 'id'>): Promise<TodoTask[]> => {
-  await apiRequest('/tasks', {
-    method: 'POST',
-    body: JSON.stringify(task),
-  });
+export const saveTask = async (task: Partial<TodoTask>): Promise<TodoTask[]> => {
+  if (task.id) {
+    await apiRequest(`/tasks/${task.id}`, {
+      method: 'PUT',
+      body: JSON.stringify(task),
+    });
+  } else {
+    await apiRequest('/tasks', {
+      method: 'POST',
+      body: JSON.stringify(task),
+    });
+  }
   return getTasks();
+};
+
+export const deleteTask = async (taskId: number): Promise<TodoTask[]> => {
+  await apiRequest(`/tasks/${taskId}`, { method: 'DELETE' });
+  return getTasks();
+};
+
+export const getStaffMembers = async (): Promise<{ id: number; name: string; role: string }[]> => {
+  return apiRequest('/staff-members');
 };
 
 // Channels
@@ -613,6 +660,7 @@ export const saveVisitor = async (data: {
   checkOut?: string;
   scheduledCheckIn?: string;
   visitSegments?: { department: string; purpose: string; action?: string; timestamp?: string }[];
+  calledAt?: string;
 }): Promise<Visitor[]> => {
   // Get current time in IST
   const now = new Date();

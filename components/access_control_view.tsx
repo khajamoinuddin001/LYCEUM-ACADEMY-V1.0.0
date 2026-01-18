@@ -89,7 +89,7 @@ const ManageAppsModal: React.FC<ManageAppsModalProps> = ({ user, onClose, onSave
 
     return (
         <div
-            className="fixed inset-0 z-50 grid place-items-center p-4 sm:p-6 overflow-y-auto"
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
             onClick={onClose}
         >
             <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm transition-opacity" aria-hidden="true" />
@@ -220,13 +220,15 @@ interface AccessControlViewProps {
     activityLog: ActivityLog[];
     onUpdateUserRole: (userId: number, role: UserRole) => void;
     onUpdateUserPermissions: (userId: number, permissions: { [key: string]: AppPermissions }) => void;
+    onDeleteUser: (userId: number) => void;
+    onUserCreated: (newUserData: { allUsers: User[], addedUser: User, temporaryPassword?: string }) => void;
     onNavigateBack: () => void;
     currentUser: User;
     onNewStaffClick: () => void;
     onStartImpersonation: (user: User) => void;
 }
 
-const AccessControlView: React.FC<AccessControlViewProps> = ({ users, activityLog, onUpdateUserRole, onUpdateUserPermissions, onNavigateBack, currentUser, onNewStaffClick, onStartImpersonation }) => {
+const AccessControlView: React.FC<AccessControlViewProps> = ({ users, activityLog, onUpdateUserRole, onUpdateUserPermissions, onDeleteUser, onUserCreated, onNavigateBack, currentUser, onNewStaffClick, onStartImpersonation }) => {
     const [modalUser, setModalUser] = useState<User | null>(null);
     const [activeTab, setActiveTab] = useState('staff');
     const [showNewUserModal, setShowNewUserModal] = useState(false);
@@ -254,11 +256,17 @@ const AccessControlView: React.FC<AccessControlViewProps> = ({ users, activityLo
         try {
             const result = await api.createUser(newUserForm.name, newUserForm.email, newUserForm.role, {});
             setCreatedPassword(result.temporaryPassword);
-            // Refresh users list (parent will handle)
+
+            // Update parent state
+            onUserCreated({
+                allUsers: await api.getUsers(), // Fetch fresh list
+                addedUser: result.user,
+                temporaryPassword: result.temporaryPassword
+            });
+
             alert(`✅ User created successfully!\n\nTemporary Password: ${result.temporaryPassword}\n\nPlease save this password and share it securely with the user.`);
             setNewUserForm({ name: '', email: '', role: 'Staff' });
             setShowNewUserModal(false);
-            // Optionally trigger parent refresh
         } catch (error: any) {
             console.error('Failed to create user:', error);
             alert('❌ Failed to create user: ' + (error?.message || 'Unknown error'));
@@ -280,8 +288,7 @@ const AccessControlView: React.FC<AccessControlViewProps> = ({ users, activityLo
         try {
             await api.deleteUser(userId);
             alert('✅ User deleted successfully. All business data has been preserved.');
-            // Refresh the page to update user list
-            window.location.reload();
+            onDeleteUser(userId); // Update parent state without reload
         } catch (error: any) {
             console.error('Failed to delete user:', error);
             alert('❌ Failed to delete user: ' + (error?.message || 'Unknown error'));
@@ -446,7 +453,7 @@ const AccessControlView: React.FC<AccessControlViewProps> = ({ users, activityLo
 
             {/* New User Modal */}
             {showNewUserModal && (
-                <div className="fixed inset-0 z-50 grid place-items-center p-4 overflow-y-auto" onClick={() => !isCreating && setShowNewUserModal(false)}>
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => !isCreating && setShowNewUserModal(false)}>
                     <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm" />
                     <div className="relative bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-between mb-4">
