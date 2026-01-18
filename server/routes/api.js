@@ -10,7 +10,7 @@ const router = express.Router();
 import multer from 'multer';
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 25 * 1024 * 1024 } // 25MB limit
+  limits: { fileSize: 50 * 1024 * 1024 } // 50MB limit
 });
 
 // Document routes
@@ -225,7 +225,9 @@ router.put('/users/:id', authenticateToken, async (req, res) => {
       addUpdate('joining_date', joining_date);
       addUpdate('base_salary', base_salary);
       addUpdate('shift_start', shift_start);
+      addUpdate('shift_start', shift_start);
       addUpdate('shift_end', shift_end);
+      addUpdate('working_days', working_days ? JSON.stringify(working_days) : undefined);
     }
 
     if (newPassword) {
@@ -240,7 +242,7 @@ router.put('/users/:id', authenticateToken, async (req, res) => {
 
     values.push(userIdToUpdate);
     const result = await query(
-      `UPDATE users SET ${updates.join(', ')} WHERE id = $${pCount} RETURNING id, name, email, role, permissions, must_reset_password, joining_date, base_salary, shift_start, shift_end`,
+      `UPDATE users SET ${updates.join(', ')} WHERE id = $${pCount} RETURNING id, name, email, role, permissions, must_reset_password, joining_date, base_salary, shift_start, shift_end, working_days`,
       values
     );
 
@@ -1077,7 +1079,7 @@ router.delete('/tasks/:id', authenticateToken, async (req, res) => {
 
 router.get('/staff-members', authenticateToken, async (req, res) => {
   try {
-    const result = await query('SELECT id, name, role FROM users WHERE role IN ($1, $2)', ['Admin', 'Staff']);
+    const result = await query('SELECT id, name, email, role FROM users WHERE role IN ($1, $2)', ['Admin', 'Staff']);
     res.json(result.rows);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -1768,6 +1770,19 @@ router.get('/attendance/payroll', authenticateToken, requireRole('Admin'), async
     });
 
     res.json(report);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// VISITOR DELETE ROUTE
+router.delete('/visitors/:id', authenticateToken, async (req, res) => {
+  try {
+    const result = await query('DELETE FROM visitors WHERE id = $1 RETURNING *', [req.params.id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Visitor not found' });
+    }
+    res.json({ success: true, deletedVisitor: result.rows[0] });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

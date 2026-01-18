@@ -387,6 +387,7 @@ export interface User {
   base_salary?: number;
   shift_start?: string;
   shift_end?: string;
+  working_days?: string[];
 }
 
 export interface ActivityLog {

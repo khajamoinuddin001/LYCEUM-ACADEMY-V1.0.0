@@ -143,22 +143,24 @@ const DashboardLayout: React.FC = () => {
       try {
         // Check if user is authenticated
         const token = localStorage.getItem('authToken');
+        let effectiveUser = storedCurrentUser;
         if (token) {
           try {
             const currentUserData = await api.getCurrentUser();
             setStoredCurrentUser(currentUserData);
+            effectiveUser = currentUserData;
           } catch (error) {
             console.error('Failed to refresh session:', error);
-            // Only remove token if it's a 401, which api.ts handles usually, but safe to keep check
-            if (localStorage.getItem('authToken')) {
-              // checking if token is invalid or just network error? 
-              // api.getCurrentUser throws if not ok.
-              // let's rely on api.ts handling 401 redirect
-            }
+            setStoredCurrentUser(null);
+            localStorage.removeItem('authToken');
+            effectiveUser = null;
           }
+        } else {
+          effectiveUser = null;
+          setStoredCurrentUser(null);
         }
 
-        if (storedCurrentUser || localStorage.getItem('authToken')) {
+        if (effectiveUser) {
           const fetchWithFallback = async (promise: Promise<any>, fallback: any = []) => {
             try {
               return await promise;

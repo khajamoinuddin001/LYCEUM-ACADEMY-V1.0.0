@@ -14,8 +14,8 @@ app.set('trust proxy', 1);
 const PORT = process.env.PORT || 5002;
 
 // 1. Basic configuration & Parsing
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // 2. CORS configuration (Must be at the top)
 const allowedOrigins = [

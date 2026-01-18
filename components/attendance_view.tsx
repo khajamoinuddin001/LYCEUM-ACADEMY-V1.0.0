@@ -302,6 +302,31 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ user, users = [], onUpd
                                             onBlur={(e) => handleUpdateStaff(s.id, { shift_end: e.target.value })}
                                         />
                                     </td>
+                                    <td className="px-6 py-4">
+                                        <div className="flex flex-wrap gap-1 max-w-[150px]">
+                                            {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => {
+                                                const days = s.working_days || ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+                                                const isActive = days.includes(day);
+                                                return (
+                                                    <button
+                                                        key={day}
+                                                        onClick={() => {
+                                                            const newDays = isActive
+                                                                ? days.filter(d => d !== day)
+                                                                : [...days, day];
+                                                            handleUpdateStaff(s.id, { working_days: newDays });
+                                                        }}
+                                                        className={`text-[10px] px-1.5 py-0.5 rounded border ${isActive
+                                                            ? 'bg-lyceum-blue text-white border-lyceum-blue'
+                                                            : 'bg-white text-gray-500 border-gray-200 hover:border-lyceum-blue'
+                                                            }`}
+                                                    >
+                                                        {day.slice(0, 1)}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </td>
                                     <td className="px-6 py-4 text-right">
                                         <button className="p-2 text-lyceum-blue hover:bg-lyceum-blue/10 rounded-lg transition-colors">
                                             <UserCircle size={18} />
