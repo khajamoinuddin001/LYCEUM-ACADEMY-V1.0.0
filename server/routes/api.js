@@ -1086,6 +1086,24 @@ router.get('/staff-members', authenticateToken, async (req, res) => {
   }
 });
 
+// Get staff members for visitor assignment (Reception and Admin only)
+router.get('/users/staff', authenticateToken, async (req, res) => {
+  try {
+    // Only Admin and Reception can access staff list
+    if (req.user.role !== 'Admin' && !req.user.permissions?.['Reception']?.read) {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+
+    const result = await query(
+      'SELECT id, name, email, role, permissions FROM users WHERE role = $1 ORDER BY name ASC',
+      ['Staff']
+    );
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Channels routes
 router.get('/channels', authenticateToken, requireRole('Admin', 'Staff'), async (req, res) => {
   try {
@@ -1230,6 +1248,45 @@ router.delete('/lms-courses/:id', authenticateToken, async (req, res) => {
 });
 
 // Visitors routes
+// Get visitors assigned to current staff member
+router.get('/visitors/my-visitors', authenticateToken, async (req, res) => {
+  try {
+    // Staff can only see their own visitors
+    if (req.user.role !== 'Staff' && req.user.role !== 'Admin') {
+      return res.status(403).json({ error: 'Only staff members can access this endpoint' });
+    }
+
+    const statusFilter = req.query.status; // Optional: filter by status
+    let queryText = 'SELECT * FROM visitors WHERE staff_email = $1';
+    const params = [req.user.email];
+
+    if (statusFilter) {
+      queryText += ' AND status = $2';
+      params.push(statusFilter);
+    }
+
+    queryText += ' ORDER BY check_in DESC, scheduled_check_in DESC';
+
+    const result = await query(queryText, params);
+    const visitors = result.rows.map(v => ({
+      ...v,
+      scheduledCheckIn: v.scheduled_check_in,
+      checkIn: v.check_in,
+      checkOut: v.check_out,
+      cardNumber: v.card_number,
+      dailySequenceNumber: v.daily_sequence_number,
+      visitSegments: v.visit_segments || [],
+      calledAt: v.called_at,
+      staffEmail: v.staff_email,
+      staffName: v.staff_name,
+      createdAt: v.created_at
+    }));
+    res.json(visitors);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.get('/visitors', authenticateToken, async (req, res) => {
   try {
     const result = await query('SELECT * FROM visitors');
@@ -1242,6 +1299,8 @@ router.get('/visitors', authenticateToken, async (req, res) => {
       dailySequenceNumber: v.daily_sequence_number,
       visitSegments: v.visit_segments || [],
       calledAt: v.called_at,
+      staffEmail: v.staff_email,
+      staffName: v.staff_name,
       createdAt: v.created_at
     }));
     res.json(visitors);
@@ -1291,8 +1350,8 @@ VALUES($1, $2, 'Reception', $3)
     // 3. Create Visitor Record
     const result = await query(
       `INSERT INTO visitors(
-    contact_id, name, company, host, purpose, scheduled_check_in, check_in, check_out, status, card_number, daily_sequence_number, visit_segments
-  ) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING * `,
+    contact_id, name, company, host, purpose, scheduled_check_in, check_in, check_out, status, card_number, daily_sequence_number, visit_segments, staff_email, staff_name
+  ) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING * `,
       [
         contactId,
         visitor.name,
@@ -1305,7 +1364,9 @@ VALUES($1, $2, 'Reception', $3)
         visitor.status || 'Scheduled',
         visitor.cardNumber || null,
         dailySequenceNumber,
-        JSON.stringify(visitor.visitSegments || [])
+        JSON.stringify(visitor.visitSegments || []),
+        visitor.staffEmail || null,
+        visitor.staffName || null
       ]
     );
     const v = result.rows[0];
@@ -1318,6 +1379,8 @@ VALUES($1, $2, 'Reception', $3)
       dailySequenceNumber: v.daily_sequence_number,
       visitSegments: v.visit_segments || [],
       calledAt: v.called_at,
+      staffEmail: v.staff_email,
+      staffName: v.staff_name,
       createdAt: v.created_at
     });
   } catch (error) {
@@ -1401,19 +1464,21 @@ router.put('/visitors/:id', authenticateToken, async (req, res) => {
     // Update with provided values or preserve existing ones
     await query(`
       UPDATE visitors SET
-name = $1,
-  company = $2,
-  host = $3,
-  purpose = $4,
-  check_in = $5,
-  check_out = $6,
-  status = $7,
-  card_number = $8,
-  visit_segments = $11,
-  daily_sequence_number = $10,
-  called_at = $12
+        name = $1,
+        company = $2,
+        host = $3,
+        purpose = $4,
+        check_in = $5,
+        check_out = $6,
+        status = $7,
+        card_number = $8,
+        visit_segments = $11,
+        daily_sequence_number = $10,
+        called_at = $12,
+        staff_email = $13,
+        staff_name = $14
       WHERE id = $9
-  `, [
+    `, [
       visitor.name || current.name,
       visitor.company || current.company,
       visitor.host || current.host,
@@ -1425,7 +1490,9 @@ name = $1,
       req.params.id,
       dailySequenceNumber,
       JSON.stringify(visitor.visitSegments || current.visit_segments || []),
-      visitor.calledAt || current.called_at
+      visitor.calledAt || current.called_at,
+      visitor.staffEmail !== undefined ? visitor.staffEmail : current.staff_email,
+      visitor.staffName !== undefined ? visitor.staffName : current.staff_name
     ]);
 
     const result = await query('SELECT * FROM visitors WHERE id = $1', [req.params.id]);

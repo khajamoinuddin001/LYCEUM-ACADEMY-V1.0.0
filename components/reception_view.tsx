@@ -277,7 +277,18 @@ const ReceptionView: React.FC<ReceptionViewProps> = ({ visitors, onNewVisitorCli
                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
                                                 {activeTab === 'appointments' ? (
                                                     <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusClasses[visitor.status]}`}>{visitor.status}</span>
-                                                ) : visitor.host}
+                                                ) : (
+                                                    visitor.staffName ? (
+                                                        <div className="flex flex-col">
+                                                            <span className="font-medium text-gray-800 dark:text-gray-200">{visitor.staffName}</span>
+                                                            {visitor.staffEmail && (
+                                                                <span className="text-xs text-gray-500 dark:text-gray-400">{visitor.staffEmail}</span>
+                                                            )}
+                                                        </div>
+                                                    ) : (
+                                                        visitor.host || 'N/A'
+                                                    )
+                                                )}
                                             </td>
 
                                             {activeTab !== 'appointments' && (

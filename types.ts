@@ -437,6 +437,8 @@ export interface Visitor {
   purpose?: string;
   contactId?: number;
   dailySequenceNumber?: number;
+  staffEmail?: string; // Email of assigned staff member from Access Control
+  staffName?: string; // Name of assigned staff member
   createdAt?: string;
   visitSegments?: {
     department: string;

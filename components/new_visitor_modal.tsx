@@ -6,7 +6,7 @@ import type { User, Visitor, Contact } from '../types';
 interface NewVisitorModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (data: { id?: number; name: string; company: string; host: string; cardNumber: string; purpose?: string }) => Promise<void> | void;
+  onSave: (data: { id?: number; name: string; company: string; host: string; cardNumber: string; purpose?: string; staffEmail?: string; staffName?: string }) => Promise<void> | void;
   staff: User[];
   user: User;
   visitorToEdit?: Visitor | null;
@@ -18,6 +18,9 @@ const NewVisitorModal: React.FC<NewVisitorModalProps> = ({ isOpen, onClose, onSa
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({ name: '', company: '', host: '', purpose: '' });
   const [cardNumber, setCardNumber] = useState('');
+  const [selectedStaff, setSelectedStaff] = useState<User | null>(null);
+  const [staffSearch, setStaffSearch] = useState('');
+  const [showStaffDropdown, setShowStaffDropdown] = useState(false);
   const [error, setError] = useState('');
   const [suggestions, setSuggestions] = useState<Contact[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -32,13 +35,24 @@ const NewVisitorModal: React.FC<NewVisitorModalProps> = ({ isOpen, onClose, onSa
       if (isEditing) {
         setFormData({ name: visitorToEdit.name, company: visitorToEdit.company, host: visitorToEdit.host, purpose: visitorToEdit.purpose || '' });
         setCardNumber(visitorToEdit.cardNumber || '');
+        // Find staff member if staffEmail exists
+        if (visitorToEdit.staffEmail) {
+          const staffMember = staff.find(s => s.email === visitorToEdit.staffEmail);
+          if (staffMember) {
+            setSelectedStaff(staffMember);
+            setStaffSearch(staffMember.name);
+          }
+        }
       } else {
         setFormData({ name: '', company: '', host: '', purpose: '' });
         setCardNumber('');
+        setSelectedStaff(null);
+        setStaffSearch('');
       }
       setError('');
       setSuggestions([]);
       setShowSuggestions(false);
+      setShowStaffDropdown(false);
     }
   }, [isOpen, staff, isEditing, visitorToEdit]);
 
@@ -90,6 +104,8 @@ const NewVisitorModal: React.FC<NewVisitorModalProps> = ({ isOpen, onClose, onSa
         host: formData.host || 'Walk-in',
         purpose: formData.purpose,
         cardNumber,
+        staffEmail: selectedStaff?.email,
+        staffName: selectedStaff?.name,
       });
     } catch (e) {
       console.error(e);
@@ -98,6 +114,11 @@ const NewVisitorModal: React.FC<NewVisitorModalProps> = ({ isOpen, onClose, onSa
       setIsSubmitting(false);
     }
   };
+
+  const filteredStaff = staff.filter(s =>
+    s.name.toLowerCase().includes(staffSearch.toLowerCase()) ||
+    s.email.toLowerCase().includes(staffSearch.toLowerCase())
+  );
 
   if (!isOpen) return null;
 
@@ -169,17 +190,59 @@ const NewVisitorModal: React.FC<NewVisitorModalProps> = ({ isOpen, onClose, onSa
               <label htmlFor="visitor-company" className={labelClasses}>Mobile Number (Optional)</label>
               <input type="text" id="visitor-company" name="company" className={inputClasses} value={formData.company} onChange={handleChange} placeholder="e.g., +91 98765 43210" disabled={isDisabled} />
             </div>
-            <div>
-              <label htmlFor="visitor-host" className={labelClasses}>Department (Optional)</label>
-              <select id="visitor-host" name="host" value={formData.host} onChange={handleChange} className={inputClasses} disabled={isDisabled}>
-                <option value="">-- Select Department (Optional) --</option>
-                <option value="Academic Director">Academic Director</option>
-                <option value="Admissions Department (Syed Nasir Ali)">Admissions Department (Syed Nasir Ali)</option>
-                <option value="Admissions Department (Mohammed Khaja Moinuddin)">Admissions Department (Mohammed Khaja Moinuddin)</option>
-                <option value="Sales Department (Abdul Samad)">Sales Department (Abdul Samad)</option>
-                <option value="Finance Department (Syed)">Finance Department (Syed)</option>
-                <option value="Instructor">Instructor</option>
-              </select>
+            <div className="relative">
+              <label htmlFor="visitor-staff" className={labelClasses}>Staff Member (Optional)</label>
+              <input
+                type="text"
+                id="visitor-staff"
+                className={inputClasses}
+                value={staffSearch}
+                onChange={(e) => {
+                  setStaffSearch(e.target.value);
+                  setShowStaffDropdown(true);
+                }}
+                onFocus={() => setShowStaffDropdown(true)}
+                onClick={(e) => e.stopPropagation()}
+                placeholder="Search staff by name or email..."
+                disabled={isDisabled}
+                autoComplete="off"
+              />
+              {showStaffDropdown && filteredStaff.length > 0 && (
+                <ul className="absolute z-10 w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto mt-1">
+                  {filteredStaff.map((staffMember) => (
+                    <li
+                      key={staffMember.id}
+                      className="px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer text-sm text-gray-700 dark:text-gray-200"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedStaff(staffMember);
+                        setStaffSearch(staffMember.name);
+                        setShowStaffDropdown(false);
+                      }}
+                    >
+                      <div className="font-medium">{staffMember.name}</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">{staffMember.email}</div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {selectedStaff && (
+                <div className="mt-2 flex items-center justify-between bg-lyceum-blue/10 dark:bg-lyceum-blue/20 px-3 py-2 rounded text-sm text-lyceum-blue">
+                  <div>
+                    <div className="font-medium">{selectedStaff.name}</div>
+                    <div className="text-xs">{selectedStaff.email}</div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setSelectedStaff(null);
+                      setStaffSearch('');
+                    }}
+                    className="text-lyceum-blue hover:text-lyceum-blue-dark"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              )}
             </div>
             <div>
               <label htmlFor="visitor-card-number" className={labelClasses}>Card Number (Optional)</label>
