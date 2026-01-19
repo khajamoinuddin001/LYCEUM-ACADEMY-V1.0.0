@@ -13,14 +13,23 @@ const DepartmentDashboard: React.FC<DepartmentDashboardProps> = ({ user, onViewV
     const [myTasks, setMyTasks] = useState<TodoTask[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [followUpVisitor, setFollowUpVisitor] = useState<Visitor | null>(null);
-    const [targetDepartment, setTargetDepartment] = useState('');
-
-    // Hardcoded departments list for now, ideally fetch from backend or config
-    const departments = ['Admission', 'Accounts', 'Visa', 'LMS', 'Reception', 'Counseling'];
+    const [targetStaff, setTargetStaff] = useState('');
+    const [staffMembers, setStaffMembers] = useState<User[]>([]);
 
     const userDepartment = user.role === 'Admin' ? 'All' : (user.permissions?.department || 'Unassigned');
 
     useEffect(() => {
+        const fetchStaff = async () => {
+            try {
+                const users = await api.getUsers();
+                const staff = users.filter(u => u.role === 'Staff');
+                setStaffMembers(staff);
+            } catch (error) {
+                console.error('Failed to load staff:', error);
+            }
+        };
+        fetchStaff();
+
         const intervalId = setInterval(fetchData, 10000); // Auto-refresh every 10s
         fetchData();
         return () => clearInterval(intervalId);
@@ -104,29 +113,35 @@ const DepartmentDashboard: React.FC<DepartmentDashboardProps> = ({ user, onViewV
 
     const handleFollowUpClick = (visitor: Visitor) => {
         setFollowUpVisitor(visitor);
-        setTargetDepartment(departments[0]);
+        if (staffMembers.length > 0) {
+            setTargetStaff(staffMembers[0].email);
+        }
     };
 
     const handleConfirmFollowUp = async () => {
-        if (!followUpVisitor || !targetDepartment) return;
+        if (!followUpVisitor || !targetStaff) return;
 
         try {
+            const selectedStaff = staffMembers.find(s => s.email === targetStaff);
+            if (!selectedStaff) return;
+
             const currentSegments = followUpVisitor.visitSegments && followUpVisitor.visitSegments.length > 0
                 ? [...followUpVisitor.visitSegments]
                 : [{ department: followUpVisitor.host, purpose: followUpVisitor.purpose || '', timestamp: followUpVisitor.checkIn, action: 'Called' }];
 
-            // Add new segment for the next department
+            // Add new segment for the next staff member
             currentSegments.push({
-                department: targetDepartment,
-                purpose: `Follow up from ${user.name} (${userDepartment})`,
+                department: selectedStaff.name,
+                purpose: `Follow up from ${user.name}`,
                 timestamp: new Date().toISOString()
             });
 
             await api.saveVisitor({
                 ...followUpVisitor,
-                status: 'Checked-in', // Status remains checked-in so they appear in next department's dashboard
-                visitSegments: currentSegments,
-                checklist: followUpVisitor.checklist // Preserve checklist if any
+                status: 'Checked-in', // Status remains checked-in so they appear in next staff's dashboard
+                staffEmail: selectedStaff.email,
+                staffName: selectedStaff.name,
+                visitSegments: currentSegments
             });
 
             setFollowUpVisitor(null);
@@ -233,12 +248,6 @@ const DepartmentDashboard: React.FC<DepartmentDashboardProps> = ({ user, onViewV
                                                             Details
                                                         </button>
                                                     )}
-                                                    <button
-                                                        onClick={() => handleFollowUpClick(v)}
-                                                        className="flex items-center gap-1 text-xs font-semibold text-lyceum-blue hover:text-lyceum-blue-dark border border-lyceum-blue/30 px-2 py-1 rounded hover:bg-lyceum-blue/5"
-                                                    >
-                                                        Forward
-                                                    </button>
                                                 </div>
                                             </div>
                                             <div className="flex items-center gap-2 text-gray-500 text-sm">
@@ -261,14 +270,16 @@ const DepartmentDashboard: React.FC<DepartmentDashboardProps> = ({ user, onViewV
                                 Select the department you want to refer <b>{followUpVisitor.name}</b> to for follow up.
                             </p>
 
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Target Department</label>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Target Staff Member</label>
                             <select
-                                value={targetDepartment}
-                                onChange={(e) => setTargetDepartment(e.target.value)}
+                                value={targetStaff}
+                                onChange={(e) => setTargetStaff(e.target.value)}
                                 className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded mb-6 dark:bg-gray-700 dark:text-white outline-none focus:ring-2 focus:ring-lyceum-blue"
                             >
-                                {departments.map(dept => (
-                                    <option key={dept} value={dept}>{dept}</option>
+                                {staffMembers.map(staff => (
+                                    <option key={staff.id} value={staff.email}>
+                                        {staff.name} ({staff.email})
+                                    </option>
                                 ))}
                             </select>
 

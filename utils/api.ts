@@ -670,6 +670,8 @@ export const saveVisitor = async (data: {
   scheduledCheckIn?: string;
   visitSegments?: { department: string; purpose: string; action?: string; timestamp?: string }[];
   calledAt?: string;
+  staffEmail?: string;
+  staffName?: string;
 }): Promise<Visitor[]> => {
   // Get current time in IST
   const now = new Date();
@@ -687,7 +689,10 @@ export const saveVisitor = async (data: {
         checkIn: data.checkIn || currentVisitor.checkIn,
         checkOut: data.checkOut || currentVisitor.checkOut,
         scheduledCheckIn: data.scheduledCheckIn || currentVisitor.scheduledCheckIn,
-        visitSegments: data.visitSegments || currentVisitor.visitSegments
+        visitSegments: data.visitSegments || currentVisitor.visitSegments,
+        calledAt: data.calledAt || currentVisitor.calledAt,
+        staffEmail: data.staffEmail !== undefined ? data.staffEmail : currentVisitor.staffEmail,
+        staffName: data.staffName !== undefined ? data.staffName : currentVisitor.staffName
       }),
     });
   } else {
