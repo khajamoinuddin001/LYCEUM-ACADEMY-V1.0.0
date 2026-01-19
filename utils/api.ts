@@ -644,6 +644,15 @@ export const getVisitors = async (): Promise<Visitor[]> => {
   return apiRequest<Visitor[]>('/visitors');
 };
 
+// Get visitors assigned to current staff member
+export const getMyVisitors = async (status?: string): Promise<Visitor[]> => {
+  let url = '/visitors/my-visitors';
+  if (status) {
+    url += `?status=${encodeURIComponent(status)}`;
+  }
+  return apiRequest<Visitor[]>(url);
+};
+
 export const deleteVisitor = async (id: number): Promise<Visitor[]> => {
   return await apiRequest<Visitor[]>(`/visitors/${id}`, { method: 'DELETE' });
 };
