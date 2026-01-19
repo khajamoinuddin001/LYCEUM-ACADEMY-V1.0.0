@@ -20,7 +20,7 @@ const highlightMatch = (text: string, query: string): React.ReactNode => {
   const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const regex = new RegExp(`(${escapedQuery})`, 'gi');
   const parts = text.split(regex);
-  
+
   return (
     <span>
       {parts.filter(part => part).map((part, i) =>
@@ -37,9 +37,9 @@ const highlightMatch = (text: string, query: string): React.ReactNode => {
 };
 
 interface CategorizedResults {
-    apps: OdooApp[];
-    contacts: Contact[];
-    leads: CrmLead[];
+  apps: OdooApp[];
+  contacts: Contact[];
+  leads: CrmLead[];
 }
 
 
@@ -58,9 +58,9 @@ const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose, contacts, le
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-        if (event.key === 'Escape') {
-            onClose();
-        }
+      if (event.key === 'Escape') {
+        onClose();
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
@@ -71,27 +71,27 @@ const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose, contacts, le
       setResults({ apps: [], contacts: [], leads: [] });
     } else {
       const lowerQuery = query.toLowerCase();
-      
+
       const filteredApps = ODOO_APPS.filter(app =>
         app.name.toLowerCase().includes(lowerQuery)
       );
 
       const filteredContacts = contacts.filter(contact =>
-        contact.name.toLowerCase().includes(lowerQuery) ||
-        contact.email.toLowerCase().includes(lowerQuery) ||
-        contact.contactId.toLowerCase().includes(lowerQuery)
+        (contact.name?.toLowerCase() || '').includes(lowerQuery) ||
+        (contact.email?.toLowerCase() || '').includes(lowerQuery) ||
+        (contact.contactId?.toLowerCase() || '').includes(lowerQuery)
       );
 
       const filteredLeads = leads.filter(lead =>
-        lead.title.toLowerCase().includes(lowerQuery) ||
-        lead.company.toLowerCase().includes(lowerQuery) ||
-        lead.contact.toLowerCase().includes(lowerQuery)
+        (lead.title?.toLowerCase() || '').includes(lowerQuery) ||
+        (lead.company?.toLowerCase() || '').includes(lowerQuery) ||
+        (lead.contact?.toLowerCase() || '').includes(lowerQuery)
       );
 
-      setResults({ 
-          apps: filteredApps, 
-          contacts: filteredContacts, 
-          leads: filteredLeads 
+      setResults({
+        apps: filteredApps,
+        contacts: filteredContacts,
+        leads: filteredLeads
       });
     }
   }, [query, contacts, leads]);
@@ -101,14 +101,14 @@ const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose, contacts, le
   const hasResults = results.apps.length > 0 || results.contacts.length > 0 || results.leads.length > 0;
 
   return (
-    <div 
-        className="fixed inset-0 bg-gray-900 bg-opacity-60 z-50 flex justify-center items-start pt-20 animate-fade-in-fast"
-        onClick={onClose}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="search-modal-title"
+    <div
+      className="fixed inset-0 bg-gray-900 bg-opacity-60 z-50 flex justify-center items-start pt-20 animate-fade-in-fast"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="search-modal-title"
     >
-      <div 
+      <div
         className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-lg mx-4 transform transition-all duration-300 ease-in-out"
         onClick={(e) => e.stopPropagation()}
       >
@@ -141,12 +141,12 @@ const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose, contacts, le
                   <li className="px-3 pt-3 pb-1 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Applications</li>
                   {results.apps.map(app => (
                     <li key={app.name}>
-                        <button onClick={() => onResultSelect({ type: 'app', id: app.name })} className="flex items-center p-3 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors w-full text-left">
-                            <div className={`w-10 h-10 rounded-md flex items-center justify-center ${app.bgColor} dark:bg-opacity-20 mr-4 flex-shrink-0`}>
-                                <span className={`${app.iconColor} w-6 h-6`}>{React.cloneElement(app.icon, { size: 24 })}</span>
-                            </div>
-                            <span className="font-medium text-gray-800 dark:text-gray-200">{highlightMatch(app.name, query)}</span>
-                        </button>
+                      <button onClick={() => onResultSelect({ type: 'app', id: app.name })} className="flex items-center p-3 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors w-full text-left">
+                        <div className={`w-10 h-10 rounded-md flex items-center justify-center ${app.bgColor} dark:bg-opacity-20 mr-4 flex-shrink-0`}>
+                          <span className={`${app.iconColor} w-6 h-6`}>{React.cloneElement(app.icon, { size: 24 })}</span>
+                        </div>
+                        <span className="font-medium text-gray-800 dark:text-gray-200">{highlightMatch(app.name, query)}</span>
+                      </button>
                     </li>
                   ))}
                 </>
@@ -156,15 +156,15 @@ const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose, contacts, le
                   <li className="px-3 pt-3 pb-1 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Contacts</li>
                   {results.contacts.map(contact => (
                     <li key={`contact-${contact.id}`}>
-                        <button onClick={() => onResultSelect({ type: 'contact', id: contact.id })} className="flex items-center p-3 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors w-full text-left">
-                            <div className="w-10 h-10 rounded-md flex items-center justify-center bg-yellow-100 dark:bg-yellow-900/50 mr-4 flex-shrink-0">
-                                <ContactIcon size={24} className="text-yellow-600 dark:text-yellow-300" />
-                            </div>
-                            <div>
-                                <span className="font-medium text-gray-800 dark:text-gray-200">{highlightMatch(contact.name, query)}</span>
-                                <p className="text-xs text-gray-500 dark:text-gray-400">{highlightMatch(contact.email, query)}</p>
-                            </div>
-                        </button>
+                      <button onClick={() => onResultSelect({ type: 'contact', id: contact.id })} className="flex items-center p-3 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors w-full text-left">
+                        <div className="w-10 h-10 rounded-md flex items-center justify-center bg-yellow-100 dark:bg-yellow-900/50 mr-4 flex-shrink-0">
+                          <ContactIcon size={24} className="text-yellow-600 dark:text-yellow-300" />
+                        </div>
+                        <div>
+                          <span className="font-medium text-gray-800 dark:text-gray-200">{highlightMatch(contact.name, query)}</span>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">{highlightMatch(contact.email, query)}</p>
+                        </div>
+                      </button>
                     </li>
                   ))}
                 </>
@@ -174,15 +174,15 @@ const SearchModal: React.FC<SearchModalProps> = ({ isOpen, onClose, contacts, le
                   <li className="px-3 pt-3 pb-1 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Leads</li>
                   {results.leads.map(lead => (
                     <li key={`lead-${lead.id}`}>
-                        <button onClick={() => onResultSelect({ type: 'lead', id: lead.id })} className="flex items-center p-3 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors w-full text-left">
-                            <div className="w-10 h-10 rounded-md flex items-center justify-center bg-indigo-100 dark:bg-indigo-900/50 mr-4 flex-shrink-0">
-                                <CrmIcon size={24} className="text-indigo-600 dark:text-indigo-300" />
-                            </div>
-                            <div>
-                                <span className="font-medium text-gray-800 dark:text-gray-200">{highlightMatch(lead.title, query)}</span>
-                                <p className="text-xs text-gray-500 dark:text-gray-400">{highlightMatch(lead.company, query)}</p>
-                            </div>
-                        </button>
+                      <button onClick={() => onResultSelect({ type: 'lead', id: lead.id })} className="flex items-center p-3 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors w-full text-left">
+                        <div className="w-10 h-10 rounded-md flex items-center justify-center bg-indigo-100 dark:bg-indigo-900/50 mr-4 flex-shrink-0">
+                          <CrmIcon size={24} className="text-indigo-600 dark:text-indigo-300" />
+                        </div>
+                        <div>
+                          <span className="font-medium text-gray-800 dark:text-gray-200">{highlightMatch(lead.title, query)}</span>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">{highlightMatch(lead.company, query)}</p>
+                        </div>
+                      </button>
                     </li>
                   ))}
                 </>

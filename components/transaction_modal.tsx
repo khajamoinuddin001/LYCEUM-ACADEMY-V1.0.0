@@ -94,8 +94,8 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
     if (!isOpen) return null;
 
     const filteredContacts = contacts.filter(c =>
-        c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        c.contactId.toLowerCase().includes(searchTerm.toLowerCase())
+        (c.name?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+        (c.contactId?.toLowerCase() || '').includes(searchTerm.toLowerCase())
     );
 
     const animationClass = isAnimatingOut ? 'animate-fade-out-fast' : 'animate-fade-in-fast';

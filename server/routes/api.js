@@ -199,7 +199,7 @@ router.put('/users/:id', authenticateToken, async (req, res) => {
       return res.status(403).json({ error: 'Unauthorized' });
     }
 
-    const { name, email, role, permissions, newPassword, joining_date, base_salary, shift_start, shift_end } = req.body;
+    const { name, email, role, permissions, newPassword, joining_date, base_salary, shift_start, shift_end, working_days } = req.body;
 
     // If not admin, prevent role/permission/salary changes
     if (!isAdmin) {
@@ -1099,12 +1099,19 @@ router.get('/channels', authenticateToken, requireRole('Admin', 'Staff'), async 
 router.post('/channels', authenticateToken, async (req, res) => {
   try {
     const channel = req.body;
-    const id = channel.id || `channel - ${Date.now()} `;
+    const id = channel.id || `channel-${Date.now()}`;
+
+    // Check if channel already exists (for DM channels)
+    const existingChannel = await query('SELECT * FROM channels WHERE id = $1', [id]);
+    if (existingChannel.rows.length > 0) {
+      return res.json(existingChannel.rows[0]);
+    }
+
     const result = await query(`
       INSERT INTO channels(id, name, type, members, messages)
-VALUES($1, $2, $3, $4, $5)
-RETURNING *
-  `, [
+      VALUES($1, $2, $3, $4, $5)
+      RETURNING *
+    `, [
       id,
       channel.name,
       channel.type || 'public',
@@ -1113,6 +1120,7 @@ RETURNING *
     ]);
     res.json(result.rows[0]);
   } catch (error) {
+    console.error('Error creating channel:', error);
     res.status(500).json({ error: error.message });
   }
 });
