@@ -22,11 +22,25 @@ const ContactVisitsView: React.FC<ContactVisitsViewProps> = ({ contact, onNaviga
     const [visits, setVisits] = useState<Visitor[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [updatingVisitId, setUpdatingVisitId] = useState<number | null>(null);
+    const [staffMembers, setStaffMembers] = useState<User[]>([]);
+    const [followUpVisitor, setFollowUpVisitor] = useState<Visitor | null>(null);
+    const [selectedStaff, setSelectedStaff] = useState<string>('');
+    const [followUpPurpose, setFollowUpPurpose] = useState<string>('');
     const purposeTimers = useRef<{ [key: string]: any }>({});
 
     const canEdit = user.role !== 'Student';
 
     useEffect(() => {
+        const fetchStaff = async () => {
+            try {
+                const users = await api.getUsers();
+                const staff = users.filter(u => u.role === 'Staff');
+                setStaffMembers(staff);
+            } catch (error) {
+                console.error('Failed to load staff:', error);
+            }
+        };
+        fetchStaff();
         fetchVisits();
     }, [contact.id]);
 
@@ -91,6 +105,52 @@ const ContactVisitsView: React.FC<ContactVisitsViewProps> = ({ contact, onNaviga
                     console.error("Failed to sync purpose", e);
                 }
             }, 1000);
+        }
+    };
+
+    const handleFollowUpClick = (visit: Visitor) => {
+        setFollowUpVisitor(visit);
+        if (staffMembers.length > 0) {
+            setSelectedStaff(staffMembers[0].email);
+        }
+        setFollowUpPurpose('');
+    };
+
+    const handleConfirmFollowUp = async () => {
+        if (!followUpVisitor || !selectedStaff || !followUpPurpose.trim()) {
+            alert('Please select a staff member and enter a purpose for the follow-up.');
+            return;
+        }
+
+        try {
+            const selectedStaffMember = staffMembers.find(s => s.email === selectedStaff);
+            if (!selectedStaffMember) return;
+
+            const currentSegments = followUpVisitor.visitSegments && followUpVisitor.visitSegments.length > 0
+                ? [...followUpVisitor.visitSegments]
+                : [{ department: followUpVisitor.host, purpose: followUpVisitor.purpose || '', timestamp: followUpVisitor.checkIn }];
+
+            // Add new segment for the follow-up
+            currentSegments.push({
+                department: selectedStaffMember.name,
+                purpose: followUpPurpose,
+                timestamp: new Date().toISOString()
+            });
+
+            await api.saveVisitor({
+                ...followUpVisitor,
+                status: 'Checked-in',
+                staffEmail: selectedStaffMember.email,
+                staffName: selectedStaffMember.name,
+                visitSegments: currentSegments
+            });
+
+            setFollowUpVisitor(null);
+            setFollowUpPurpose('');
+            await fetchVisits();
+        } catch (error) {
+            console.error("Failed to process follow up", error);
+            alert('Failed to forward visitor.');
         }
     };
 
@@ -193,6 +253,15 @@ const ContactVisitsView: React.FC<ContactVisitsViewProps> = ({ contact, onNaviga
                                                         </div>
                                                     )}
                                                 </div>
+
+                                                {canEdit && (
+                                                    <button
+                                                        onClick={() => handleFollowUpClick(visit)}
+                                                        className="ml-4 px-4 py-2 bg-lyceum-blue text-white rounded-md hover:bg-lyceum-blue-dark transition-colors font-semibold text-sm"
+                                                    >
+                                                        Follow Up
+                                                    </button>
+                                                )}
                                             </div>
                                         </div>
                                     ))}
@@ -202,6 +271,55 @@ const ContactVisitsView: React.FC<ContactVisitsViewProps> = ({ contact, onNaviga
                     })}
                 </div>
             )}
+
+            {/* Follow Up Modal */}
+            {followUpVisitor && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md p-6 animate-fade-in">
+                        <h3 className="text-xl font-bold mb-4 text-gray-800 dark:text-white">Forward Visitor</h3>
+                        <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
+                            Forward <b>{followUpVisitor.name}</b> to a staff member for follow-up.
+                        </p>
+
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Select Staff Member</label>
+                        <select
+                            value={selectedStaff}
+                            onChange={(e) => setSelectedStaff(e.target.value)}
+                            className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded mb-4 dark:bg-gray-700 dark:text-white outline-none focus:ring-2 focus:ring-lyceum-blue"
+                        >
+                            {staffMembers.map(staff => (
+                                <option key={staff.id} value={staff.email}>
+                                    {staff.name} ({staff.email})
+                                </option>
+                            ))}
+                        </select>
+
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Purpose of Follow-Up</label>
+                        <textarea
+                            value={followUpPurpose}
+                            onChange={(e) => setFollowUpPurpose(e.target.value)}
+                            placeholder="Enter the purpose for this follow-up visit..."
+                            className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded mb-6 dark:bg-gray-700 dark:text-white outline-none focus:ring-2 focus:ring-lyceum-blue min-h-[100px]"
+                        />
+
+                        <div className="flex justify-end gap-3">
+                            <button
+                                onClick={() => setFollowUpVisitor(null)}
+                                className="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleConfirmFollowUp}
+                                className="px-4 py-2 bg-lyceum-blue text-white rounded hover:bg-lyceum-blue-dark transition-colors font-semibold"
+                            >
+                                Confirm Forward
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <style>{`
                 .animate-fade-in { animation: fadeIn 0.3s ease-in-out; }
                 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
