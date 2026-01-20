@@ -1,4 +1,4 @@
-import type { CalendarEvent, Contact, CrmLead, AccountingTransaction, CrmStage, Quotation, User, UserRole, AppPermissions, ActivityLog, DocumentAnalysisResult, Document as Doc, ChecklistItem, QuotationTemplate, Visitor, TodoTask, PaymentActivityLog, LmsCourse, LmsLesson, LmsModule, Coupon, ContactActivity, ContactActivityAction, DiscussionPost, DiscussionThread, RecordedSession, Channel, Notification } from '../types';
+import type { CalendarEvent, Contact, CrmLead, AccountingTransaction, CrmStage, Quotation, User, UserRole, AppPermissions, ActivityLog, DocumentAnalysisResult, Document as Doc, ChecklistItem, QuotationTemplate, Visitor, TodoTask, Ticket, PaymentActivityLog, LmsCourse, LmsLesson, LmsModule, Coupon, ContactActivity, ContactActivityAction, DiscussionPost, DiscussionThread, RecordedSession, Channel, Notification } from '../types';
 import { DEFAULT_PERMISSIONS, DEFAULT_CHECKLIST } from '../components/constants';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL;
@@ -423,35 +423,71 @@ export const deleteEvent = async (eventId: number): Promise<CalendarEvent[]> => 
 
 // Tasks
 export const getTasks = async (filters?: { userId?: number; all?: boolean }): Promise<TodoTask[]> => {
-  let url = '/tasks';
-  if (filters) {
-    const params = new URLSearchParams();
-    if (filters.userId) params.append('userId', filters.userId.toString());
-    if (filters.all) params.append('all', 'true');
-    url += `?${params.toString()}`;
-  }
-  return apiRequest<TodoTask[]>(url);
+  const params = new URLSearchParams();
+  if (filters?.userId) params.append('userId', filters.userId.toString());
+  if (filters?.all) params.append('all', 'true');
+
+  const queryString = params.toString();
+  return apiRequest<TodoTask[]>(`/tasks${queryString ? `?${queryString}` : ''}`);
 };
 
-export const saveTask = async (task: Partial<TodoTask>): Promise<TodoTask[]> => {
+export const saveTask = async (task: Partial<TodoTask>): Promise<TodoTask> => {
   if (task.id) {
-    await apiRequest(`/tasks/${task.id}`, {
+    return apiRequest<TodoTask>(`/tasks/${task.id}`, {
       method: 'PUT',
       body: JSON.stringify(task),
     });
   } else {
-    await apiRequest('/tasks', {
+    return apiRequest<TodoTask>('/tasks', {
       method: 'POST',
       body: JSON.stringify(task),
     });
   }
-  return getTasks();
 };
 
-export const deleteTask = async (taskId: number): Promise<TodoTask[]> => {
+export const deleteTask = async (taskId: number): Promise<void> => {
   await apiRequest(`/tasks/${taskId}`, { method: 'DELETE' });
-  return getTasks();
 };
+
+// ===== TICKETS API =====
+
+export const getTickets = async (): Promise<Ticket[]> => {
+  return apiRequest<Ticket[]>('/tickets');
+};
+
+export const getTicket = async (ticketId: number): Promise<Ticket> => {
+  return apiRequest<Ticket>(`/tickets/${ticketId}`);
+};
+
+export const createTicket = async (ticketData: {
+  contactId: number;
+  subject: string;
+  description: string;
+  priority?: 'Low' | 'Medium' | 'High' | 'Urgent';
+}): Promise<Ticket> => {
+  return apiRequest<Ticket>('/tickets', {
+    method: 'POST',
+    body: JSON.stringify(ticketData),
+  });
+};
+
+export const updateTicket = async (ticketId: number, updates: {
+  status?: 'Open' | 'In Progress' | 'Resolved' | 'Closed';
+  priority?: 'Low' | 'Medium' | 'High' | 'Urgent';
+  assignedTo?: number;
+  resolutionNotes?: string;
+}): Promise<Ticket> => {
+  return apiRequest<Ticket>(`/tickets/${ticketId}`, {
+    method: 'PUT',
+    body: JSON.stringify(updates),
+  });
+};
+
+export const deleteTicket = async (ticketId: number): Promise<void> => {
+  await apiRequest(`/tickets/${ticketId}`, { method: 'DELETE' });
+};
+
+// ===== END TICKETS API =====
 
 export const getStaffMembers = async (): Promise<{ id: number; name: string; role: string }[]> => {
   return apiRequest('/staff-members');

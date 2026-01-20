@@ -32,15 +32,32 @@ export interface TodoTask {
   id: number;
   taskId?: string;
   title: string;
-  description: string;
-  dueDate: string;
-  status: TodoStatus;
-  assignedTo?: number;
-  assignedBy?: number;
-  priority?: TaskPriority;
+  description?: string;
+  dueDate?: string;
+  status: 'To Do' | 'In Progress' | 'Done';
+  assignedTo?: string;
+  assignedBy?: string;
+  priority?: 'Low' | 'Medium' | 'High';
   createdAt?: string;
-  completedBy?: number;
-  completedAt?: string;
+  updatedAt?: string;
+}
+
+export interface Ticket {
+  id: number;
+  ticketId: string;
+  contactId: number;
+  contactName?: string;
+  subject: string;
+  description: string;
+  status: 'Open' | 'In Progress' | 'Resolved' | 'Closed';
+  priority: 'Low' | 'Medium' | 'High' | 'Urgent';
+  assignedTo?: number;
+  assignedToName?: string;
+  createdBy: number;
+  createdByName?: string;
+  resolutionNotes?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Document {

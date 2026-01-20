@@ -94,6 +94,12 @@ export const ODOO_APPS: OdooApp[] = [
     iconColor: 'text-blue-600',
   },
   {
+    name: 'Tickets',
+    icon: <FileText size={36} />,
+    bgColor: 'bg-amber-100',
+    iconColor: 'text-amber-600',
+  },
+  {
     name: 'Reception',
     icon: <ConciergeBell size={36} />,
     bgColor: 'bg-emerald-100',
@@ -141,7 +147,7 @@ const adminPermissions = ODOO_APPS.reduce((acc, app) => {
   return acc;
 }, {} as { [appName: string]: AppPermissions });
 
-const employeeFullAccessApps = new Set(['Contacts', 'CRM', 'Agents', 'Calendar', 'Discuss', 'Tasks', 'Reception', 'Sales', 'Marketing', 'LMS', 'Visitor Display', 'Department Dashboard', 'Attendance']);
+const employeeFullAccessApps = new Set(['Contacts', 'CRM', 'Agents', 'Calendar', 'Discuss', 'Tasks', 'Tickets', 'Reception', 'Sales', 'Marketing', 'LMS', 'Visitor Display', 'Department Dashboard', 'Attendance']);
 const employeeReadOnlyApps = new Set(['dashboard', 'Accounting']);
 const employeePermissions: { [appName: string]: AppPermissions } = ODOO_APPS.reduce((acc, app) => {
   if (employeeFullAccessApps.has(app.name)) {

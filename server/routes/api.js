@@ -1365,6 +1365,193 @@ router.delete('/tasks/:id', authenticateToken, async (req, res) => {
   }
 });
 
+// ===== TICKETS ROUTES =====
+
+// Helper function to transform ticket from DB
+const transformTicket = (ticket) => ({
+  id: ticket.id,
+  ticketId: ticket.ticket_id,
+  contactId: ticket.contact_id,
+  subject: ticket.subject,
+  description: ticket.description,
+  status: ticket.status,
+  priority: ticket.priority,
+  assignedTo: ticket.assigned_to,
+  createdBy: ticket.created_by,
+  resolutionNotes: ticket.resolution_notes,
+  createdAt: ticket.created_at,
+  updatedAt: ticket.updated_at
+});
+
+// Create ticket
+router.post('/tickets', authenticateToken, async (req, res) => {
+  try {
+    const { contactId, subject, description, priority } = req.body;
+
+    // Generate unique ticket ID
+    let ticketId;
+    let isUnique = false;
+    while (!isUnique) {
+      const randomNum = Math.floor(Math.random() * 900000) + 100000; // 6-digit number
+      ticketId = `TKT-${randomNum}`;
+
+      const existing = await query('SELECT id FROM tickets WHERE ticket_id = $1', [ticketId]);
+      if (existing.rows.length === 0) {
+        isUnique = true;
+      }
+    }
+
+    // Get contact's assigned counselor
+    const contactResult = await query('SELECT counselor_assigned FROM contacts WHERE id = $1', [contactId]);
+    let assignedTo = null;
+
+    if (contactResult.rows.length > 0 && contactResult.rows[0].counselor_assigned) {
+      // Find user ID by counselor name
+      const counselorResult = await query('SELECT id FROM users WHERE name = $1', [contactResult.rows[0].counselor_assigned]);
+      if (counselorResult.rows.length > 0) {
+        assignedTo = counselorResult.rows[0].id;
+      }
+    }
+
+    const result = await query(`
+      INSERT INTO tickets(ticket_id, contact_id, subject, description, priority, assigned_to, created_by, status)
+      VALUES($1, $2, $3, $4, $5, $6, $7, $8)
+      RETURNING *
+    `, [ticketId, contactId, subject, description, priority || 'Medium', assignedTo, req.user.id, 'Open']);
+
+    res.json(transformTicket(result.rows[0]));
+  } catch (error) {
+    console.error('Error creating ticket:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get tickets (filtered by user role)
+router.get('/tickets', authenticateToken, async (req, res) => {
+  try {
+    let queryText;
+    let params = [];
+
+    if (req.user.role === 'Admin') {
+      // Admin sees all tickets
+      queryText = `
+        SELECT t.*, c.name as contact_name, u1.name as assigned_to_name, u2.name as created_by_name
+        FROM tickets t
+        LEFT JOIN contacts c ON t.contact_id = c.id
+        LEFT JOIN users u1 ON t.assigned_to = u1.id
+        LEFT JOIN users u2 ON t.created_by = u2.id
+        ORDER BY t.created_at DESC
+      `;
+    } else if (req.user.role === 'Staff') {
+      // Staff sees tickets assigned to them
+      queryText = `
+        SELECT t.*, c.name as contact_name, u1.name as assigned_to_name, u2.name as created_by_name
+        FROM tickets t
+        LEFT JOIN contacts c ON t.contact_id = c.id
+        LEFT JOIN users u1 ON t.assigned_to = u1.id
+        LEFT JOIN users u2 ON t.created_by = u2.id
+        WHERE t.assigned_to = $1
+        ORDER BY t.created_at DESC
+      `;
+      params = [req.user.id];
+    } else if (req.user.role === 'Student') {
+      // Students see their own tickets
+      const contactResult = await query('SELECT id FROM contacts WHERE user_id = $1', [req.user.id]);
+      if (contactResult.rows.length === 0) {
+        return res.json([]);
+      }
+
+      queryText = `
+        SELECT t.*, c.name as contact_name, u1.name as assigned_to_name, u2.name as created_by_name
+        FROM tickets t
+        LEFT JOIN contacts c ON t.contact_id = c.id
+        LEFT JOIN users u1 ON t.assigned_to = u1.id
+        LEFT JOIN users u2 ON t.created_by = u2.id
+        WHERE t.contact_id = $1
+        ORDER BY t.created_at DESC
+      `;
+      params = [contactResult.rows[0].id];
+    }
+
+    const result = await query(queryText, params);
+    const tickets = result.rows.map(row => ({
+      ...transformTicket(row),
+      contactName: row.contact_name,
+      assignedToName: row.assigned_to_name,
+      createdByName: row.created_by_name
+    }));
+
+    res.json(tickets);
+  } catch (error) {
+    console.error('Error fetching tickets:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get single ticket
+router.get('/tickets/:id', authenticateToken, async (req, res) => {
+  try {
+    const result = await query(`
+      SELECT t.*, c.name as contact_name, u1.name as assigned_to_name, u2.name as created_by_name
+      FROM tickets t
+      LEFT JOIN contacts c ON t.contact_id = c.id
+      LEFT JOIN users u1 ON t.assigned_to = u1.id
+      LEFT JOIN users u2 ON t.created_by = u2.id
+      WHERE t.id = $1
+    `, [req.params.id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Ticket not found' });
+    }
+
+    const ticket = {
+      ...transformTicket(result.rows[0]),
+      contactName: result.rows[0].contact_name,
+      assignedToName: result.rows[0].assigned_to_name,
+      createdByName: result.rows[0].created_by_name
+    };
+
+    res.json(ticket);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update ticket
+router.put('/tickets/:id', authenticateToken, async (req, res) => {
+  try {
+    const { status, priority, assignedTo, resolutionNotes } = req.body;
+
+    const result = await query(`
+      UPDATE tickets 
+      SET status = $1, priority = $2, assigned_to = $3, resolution_notes = $4, updated_at = CURRENT_TIMESTAMP
+      WHERE id = $5
+      RETURNING *
+    `, [status, priority, assignedTo, resolutionNotes, req.params.id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Ticket not found' });
+    }
+
+    res.json(transformTicket(result.rows[0]));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete ticket
+router.delete('/tickets/:id', authenticateToken, async (req, res) => {
+  try {
+    await query('DELETE FROM tickets WHERE id = $1', [req.params.id]);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ===== END TICKETS ROUTES =====
+
+
 router.get('/staff-members', authenticateToken, async (req, res) => {
   try {
     const result = await query('SELECT id, name, email, role FROM users WHERE role IN ($1, $2)', ['Admin', 'Staff']);

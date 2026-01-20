@@ -159,6 +159,24 @@ export async function initDatabase() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    // Tickets table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS tickets (
+        id SERIAL PRIMARY KEY,
+        ticket_id TEXT UNIQUE NOT NULL,
+        contact_id INTEGER REFERENCES contacts(id),
+        subject TEXT NOT NULL,
+        description TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'Open' CHECK(status IN ('Open', 'In Progress', 'Resolved', 'Closed')),
+        priority TEXT NOT NULL DEFAULT 'Medium' CHECK(priority IN ('Low', 'Medium', 'High', 'Urgent')),
+        assigned_to INTEGER REFERENCES users(id),
+        created_by INTEGER REFERENCES users(id),
+        resolution_notes TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
     await migrateColumn('transactions', 'customerName', 'customer_name');
     await migrateColumn('transactions', 'createdAt', 'created_at');
 

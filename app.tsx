@@ -29,7 +29,7 @@ import NewQuotationPage from './components/new_quotation_modal';
 import useLocalStorage from './components/use_local_storage';
 import { saveVideo, deleteVideo } from './utils/db';
 import * as api from './utils/api';
-import type { CalendarEvent, Contact, CrmLead, AccountingTransaction, TransactionType, TransactionStatus, CrmStage, Quotation, User, UserRole, AppPermissions, ActivityLog, DocumentAnalysisResult, Document as Doc, ChecklistItem, QuotationTemplate, Visitor, TodoTask, PaymentActivityLog, LmsCourse, LmsLesson, LmsModule, Coupon, ContactActivity, ContactActivityAction, DiscussionPost, DiscussionThread, RecordedSession, Channel, Notification } from './types';
+import type { CalendarEvent, Contact, CrmLead, AccountingTransaction, TransactionType, TransactionStatus, CrmStage, Quotation, User, UserRole, AppPermissions, ActivityLog, DocumentAnalysisResult, Document as Doc, ChecklistItem, QuotationTemplate, Visitor, TodoTask, Ticket, PaymentActivityLog, LmsCourse, LmsLesson, LmsModule, Coupon, ContactActivity, ContactActivityAction, DiscussionPost, DiscussionThread, RecordedSession, Channel, Notification } from './types';
 import LoginView from './components/login_view';
 import StudentDashboard from './components/student_dashboard';
 import AccessControlView from './components/access_control_view';
@@ -55,6 +55,8 @@ import PaymentGatewayView from './components/payment_gateway_view';
 import LmsPlayerView from './components/lms_player_view';
 import EventModal from './components/event_modal';
 import LandingPage from './components/landing_page';
+import TicketsView from './components/tickets_view';
+import StudentTicketsView from './components/student_tickets_view';
 import AgentsView from './components/agents_view';
 import VisitorDisplay from './components/visitor_display';
 import DepartmentDashboard from './components/department_dashboard';
@@ -93,6 +95,7 @@ const DashboardLayout: React.FC = () => {
   const [quotationTemplates, setQuotationTemplates] = useState<QuotationTemplate[]>([]);
   const [visitors, setVisitors] = useState<Visitor[]>([]);
   const [tasks, setTasks] = useState<TodoTask[]>([]);
+  const [tickets, setTickets] = useState<Ticket[]>([]);
   const [rawEvents, setRawEvents] = useState<CalendarEvent[]>([]);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [coupons, setCoupons] = useState<Coupon[]>([]);
@@ -212,11 +215,12 @@ const DashboardLayout: React.FC = () => {
       if (storedCurrentUser || localStorage.getItem('authToken')) {
         try {
           // Parallel fetch of volatile data
-          const [freshLeads, freshTasks, freshVisitors, freshNotifications] = await Promise.all([
+          const [freshLeads, freshTasks, freshVisitors, freshNotifications, freshTickets] = await Promise.all([
             api.getLeads().catch(() => leads),
             api.getTasks(taskFiltersRef.current).catch(() => tasks), // Use ref to get latest taskFilters
             api.getVisitors().catch(() => visitors),
-            api.getNotifications().catch(() => notifications)
+            api.getNotifications().catch(() => notifications),
+            api.getTickets().catch(() => tickets)
           ]);
 
           // Simple state updates (React will handle diffing)
@@ -224,6 +228,7 @@ const DashboardLayout: React.FC = () => {
           setTasks(prev => JSON.stringify(prev) !== JSON.stringify(freshTasks) ? freshTasks : prev);
           setVisitors(prev => JSON.stringify(prev) !== JSON.stringify(freshVisitors) ? freshVisitors : prev);
           setNotifications(prev => JSON.stringify(prev) !== JSON.stringify(freshNotifications) ? freshNotifications : prev);
+          setTickets(prev => JSON.stringify(prev) !== JSON.stringify(freshTickets) ? freshTickets : prev);
 
         } catch (e) {
           console.log("Polling error silently ignored");
@@ -1274,7 +1279,7 @@ const DashboardLayout: React.FC = () => {
         title: data.summary,
         description: data.details,
         dueDate: new Date().toISOString().split('T')[0],
-        status: 'todo'
+        status: 'To Do'
       });
     } else if (type === 'contact') {
       const newContact: Contact = {
@@ -1315,7 +1320,13 @@ const DashboardLayout: React.FC = () => {
   const handleSaveTask = async (taskData: Partial<TodoTask>) => {
     try {
       const updatedTasks = await api.saveTask(taskData);
-      setTasks(updatedTasks);
+      setTasks(prev => {
+        const existing = prev.find(t => t.id === updatedTasks.id);
+        if (existing) {
+          return prev.map(t => t.id === updatedTasks.id ? updatedTasks : t);
+        }
+        return [...prev, updatedTasks];
+      });
       // Ensure current filters are respected
       api.getTasks(taskFilters).then(setTasks);
     } catch (err) {
@@ -1358,6 +1369,14 @@ const DashboardLayout: React.FC = () => {
           onStatusChange={(task, newStatus) => handleSaveTask({ ...task, status: newStatus })}
           user={currentUser}
           onFilterChange={setTaskFilters}
+        />
+      );
+      case 'Tickets': return (
+        <TicketsView
+          tickets={tickets}
+          onUpdate={() => api.getTickets().then(setTickets)}
+          user={currentUser}
+          contacts={contacts}
         />
       );
       case 'LMS':
