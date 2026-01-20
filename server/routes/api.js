@@ -317,6 +317,40 @@ const transformContact = (dbContact) => {
   return contact;
 };
 
+// Delete document
+router.delete('/documents/:id', authenticateToken, async (req, res) => {
+  try {
+    const documentId = parseInt(req.params.id);
+
+    // Get document info first
+    const docResult = await query('SELECT * FROM documents WHERE id = $1', [documentId]);
+
+    if (docResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+
+    const document = docResult.rows[0];
+
+    // Delete from database
+    await query('DELETE FROM documents WHERE id = $1', [documentId]);
+
+    // Also remove from contact's documents array if needed
+    if (document.contact_id) {
+      const contactResult = await query('SELECT documents FROM contacts WHERE id = $1', [document.contact_id]);
+      if (contactResult.rows.length > 0) {
+        const contact = contactResult.rows[0];
+        const updatedDocs = (contact.documents || []).filter((doc) => doc.id !== documentId);
+        await query('UPDATE contacts SET documents = $1 WHERE id = $2', [JSON.stringify(updatedDocs), document.contact_id]);
+      }
+    }
+
+    res.json({ success: true, message: 'Document deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting document:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Contacts routes
 router.get('/contacts', authenticateToken, async (req, res) => {
   try {

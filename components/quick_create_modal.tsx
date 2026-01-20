@@ -11,7 +11,7 @@ interface QuickCreateModalProps {
 }
 
 const recordTypes = [
-  { id: 'todo', name: 'To-do Task' },
+  { id: 'todo', name: 'Task' },
   { id: 'contact', name: 'Contact' },
   { id: 'lead', name: 'Sales Lead' },
 ];
@@ -34,9 +34,9 @@ const QuickCreateModal: React.FC<QuickCreateModalProps> = ({ isOpen, onClose, on
     if (isOpen) {
       window.addEventListener('keydown', handleKeyDown);
     } else {
-        setTodoState({ summary: '', details: '' });
-        setContactState({ name: '', email: '', phone: '' });
-        setLeadState({ company: '', contact: '', value: '' });
+      setTodoState({ summary: '', details: '' });
+      setContactState({ name: '', email: '', phone: '' });
+      setLeadState({ company: '', contact: '', value: '' });
     }
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen]);
@@ -52,40 +52,40 @@ const QuickCreateModal: React.FC<QuickCreateModalProps> = ({ isOpen, onClose, on
   const handleSave = () => {
     let dataToSave;
     switch (recordType) {
-        case 'todo': 
-            if (!todoState.summary) return;
-            dataToSave = todoState; 
-            break;
-        case 'contact': 
-            if (!contactState.name || !contactState.email) return;
-            dataToSave = contactState; 
-            break;
-        case 'lead': 
-            if (!leadState.company || !leadState.contact || !leadState.value) return;
-            dataToSave = { ...leadState, value: parseFloat(leadState.value) || 0 }; 
-            break;
+      case 'todo':
+        if (!todoState.summary) return;
+        dataToSave = todoState;
+        break;
+      case 'contact':
+        if (!contactState.name || !contactState.email) return;
+        dataToSave = contactState;
+        break;
+      case 'lead':
+        if (!leadState.company || !leadState.contact || !leadState.value) return;
+        dataToSave = { ...leadState, value: parseFloat(leadState.value) || 0 };
+        break;
     }
     if (dataToSave) {
-        onSave(recordType, dataToSave);
+      onSave(recordType, dataToSave);
     }
     handleClose();
   };
-  
+
   const renderFormFields = () => {
     const inputClasses = "w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-lyceum-blue focus:border-lyceum-blue sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white";
     const labelClasses = "block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1";
-    
+
     switch (recordType) {
       case 'todo':
         return (
           <>
             <div>
               <label htmlFor="todo-summary" className={labelClasses}>Summary</label>
-              <input type="text" id="todo-summary" className={inputClasses} placeholder="e.g., Follow up with client" value={todoState.summary} onChange={e => setTodoState(s => ({...s, summary: e.target.value}))} />
+              <input type="text" id="todo-summary" className={inputClasses} placeholder="e.g., Follow up with client" value={todoState.summary} onChange={e => setTodoState(s => ({ ...s, summary: e.target.value }))} />
             </div>
             <div>
               <label htmlFor="todo-details" className={labelClasses}>Details (Optional)</label>
-              <textarea id="todo-details" rows={3} className={inputClasses} placeholder="Add more details..." value={todoState.details} onChange={e => setTodoState(s => ({...s, details: e.target.value}))}></textarea>
+              <textarea id="todo-details" rows={3} className={inputClasses} placeholder="Add more details..." value={todoState.details} onChange={e => setTodoState(s => ({ ...s, details: e.target.value }))}></textarea>
             </div>
           </>
         );
@@ -94,15 +94,15 @@ const QuickCreateModal: React.FC<QuickCreateModalProps> = ({ isOpen, onClose, on
           <>
             <div>
               <label htmlFor="contact-name" className={labelClasses}>Name</label>
-              <input type="text" id="contact-name" className={inputClasses} placeholder="Jane Doe" value={contactState.name} onChange={e => setContactState(s => ({...s, name: e.target.value}))} />
+              <input type="text" id="contact-name" className={inputClasses} placeholder="Jane Doe" value={contactState.name} onChange={e => setContactState(s => ({ ...s, name: e.target.value }))} />
             </div>
             <div>
               <label htmlFor="contact-email" className={labelClasses}>Email</label>
-              <input type="email" id="contact-email" className={inputClasses} placeholder="jane.doe@example.com" value={contactState.email} onChange={e => setContactState(s => ({...s, email: e.target.value}))} />
+              <input type="email" id="contact-email" className={inputClasses} placeholder="jane.doe@example.com" value={contactState.email} onChange={e => setContactState(s => ({ ...s, email: e.target.value }))} />
             </div>
-             <div>
+            <div>
               <label htmlFor="contact-phone" className={labelClasses}>Phone</label>
-              <input type="tel" id="contact-phone" className={inputClasses} placeholder="+1 (555) 123-4567" value={contactState.phone} onChange={e => setContactState(s => ({...s, phone: e.target.value}))} />
+              <input type="tel" id="contact-phone" className={inputClasses} placeholder="+1 (555) 123-4567" value={contactState.phone} onChange={e => setContactState(s => ({ ...s, phone: e.target.value }))} />
             </div>
           </>
         );
@@ -111,15 +111,15 @@ const QuickCreateModal: React.FC<QuickCreateModalProps> = ({ isOpen, onClose, on
           <>
             <div>
               <label htmlFor="lead-company" className={labelClasses}>Company Name</label>
-              <input type="text" id="lead-company" className={inputClasses} placeholder="Acme Corporation" value={leadState.company} onChange={e => setLeadState(s => ({...s, company: e.target.value}))} />
+              <input type="text" id="lead-company" className={inputClasses} placeholder="Acme Corporation" value={leadState.company} onChange={e => setLeadState(s => ({ ...s, company: e.target.value }))} />
             </div>
             <div>
               <label htmlFor="lead-contact" className={labelClasses}>Contact Name</label>
-              <input type="text" id="lead-contact" className={inputClasses} placeholder="John Smith" value={leadState.contact} onChange={e => setLeadState(s => ({...s, contact: e.target.value}))} />
+              <input type="text" id="lead-contact" className={inputClasses} placeholder="John Smith" value={leadState.contact} onChange={e => setLeadState(s => ({ ...s, contact: e.target.value }))} />
             </div>
             <div>
               <label htmlFor="lead-value" className={labelClasses}>Estimated Value (₹)</label>
-              <input type="number" id="lead-value" className={inputClasses} placeholder="5000" value={leadState.value} onChange={e => setLeadState(s => ({...s, value: e.target.value}))} />
+              <input type="number" id="lead-value" className={inputClasses} placeholder="5000" value={leadState.value} onChange={e => setLeadState(s => ({ ...s, value: e.target.value }))} />
             </div>
           </>
         );
@@ -178,14 +178,14 @@ const QuickCreateModal: React.FC<QuickCreateModalProps> = ({ isOpen, onClose, on
           </div>
         </div>
         <div className="flex items-center justify-end p-4 bg-gray-50 dark:bg-gray-800/50 border-t border-gray-200 dark:border-gray-700 rounded-b-lg">
-          <button 
-            type="button" 
+          <button
+            type="button"
             onClick={handleClose}
             className="px-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-800 focus:ring-lyceum-blue"
           >
             Cancel
           </button>
-          <button 
+          <button
             type="button"
             onClick={handleSave}
             className="ml-3 px-4 py-2 bg-lyceum-blue border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-lyceum-blue-dark focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-800 focus:ring-lyceum-blue"

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Sidebar from './components/sidebar';
 import Header from './components/header';
 import AppsGridView from './components/apps_grid_view';
@@ -112,6 +112,12 @@ const DashboardLayout: React.FC = () => {
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<TodoTask | null>(null);
   const [taskFilters, setTaskFilters] = useState<{ userId?: number; all?: boolean }>({});
+  const taskFiltersRef = useRef(taskFilters);
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    taskFiltersRef.current = taskFilters;
+  }, [taskFilters]);
   const [isEventModalOpen, setIsEventModalOpen] = useState(false);
   const [selectedEventInfo, setSelectedEventInfo] = useState<{ event?: CalendarEvent, date?: Date } | null>(null);
   const [isAnalysisModalOpen, setIsAnalysisModalOpen] = useState(false);
@@ -208,7 +214,7 @@ const DashboardLayout: React.FC = () => {
           // Parallel fetch of volatile data
           const [freshLeads, freshTasks, freshVisitors, freshNotifications] = await Promise.all([
             api.getLeads().catch(() => leads),
-            api.getTasks().catch(() => tasks),
+            api.getTasks(taskFiltersRef.current).catch(() => tasks), // Use ref to get latest taskFilters
             api.getVisitors().catch(() => visitors),
             api.getNotifications().catch(() => notifications)
           ]);
@@ -1343,8 +1349,7 @@ const DashboardLayout: React.FC = () => {
       case 'Apps': return <AppsGridView onAppSelect={handleAppSelect} user={currentUser} />;
       case 'dashboard': return <Dashboard onNavigateBack={() => handleAppSelect('Apps')} transactions={transactions} user={currentUser} tasks={tasks} onAppSelect={handleAppSelect} paymentActivityLog={paymentActivityLog} contacts={contacts} leads={leads} />;
       case 'Discuss': return <DiscussView user={currentUser} users={users} isMobile={isMobile} channels={channels} setChannels={(value) => api.saveChannels(typeof value === 'function' ? value(channels) : value).then(setChannels)} onCreateGroup={handleCreateGroupChannel} />;
-      case 'Tasks':
-      case 'To-do': return (
+      case 'Tasks': return (
         <TasksView
           tasks={tasks}
           onNewTaskClick={() => { setEditingTask(null); setIsTaskModalOpen(true); }}

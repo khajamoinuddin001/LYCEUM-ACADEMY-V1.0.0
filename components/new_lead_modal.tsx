@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X } from './icons';
-import type { CrmLead, User } from '../types';
+import type { CrmLead, User, Contact } from '../types';
+import * as api from '../utils/api';
 
 interface NewLeadModalProps {
   isOpen: boolean;
@@ -14,9 +15,10 @@ interface NewLeadModalProps {
 const NewLeadModal: React.FC<NewLeadModalProps> = ({ isOpen, onClose, onSave, lead, agents, user }) => {
   const [isAnimatingOut, setIsAnimatingOut] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [contactSearchQuery, setContactSearchQuery] = useState('');
+  const [showContactDropdown, setShowContactDropdown] = useState(false);
   const [formData, setFormData] = useState({
-    title: '',
-    company: '',
     contact: '',
     email: '',
     phone: '',
@@ -30,12 +32,17 @@ const NewLeadModal: React.FC<NewLeadModalProps> = ({ isOpen, onClose, onSave, le
   const isEditing = !!lead;
   const canWrite = user.role === 'Admin' || (isEditing ? user.permissions['CRM']?.update : user.permissions['CRM']?.create);
 
+  // Fetch contacts
+  useEffect(() => {
+    if (isOpen) {
+      api.getContacts().then(setContacts).catch(console.error);
+    }
+  }, [isOpen]);
+
   useEffect(() => {
     if (isOpen) {
       if (isEditing) {
         setFormData({
-          title: lead.title || '',
-          company: lead.company || '',
           contact: lead.contact || '',
           email: lead.email || '',
           phone: lead.phone || '',
@@ -46,13 +53,42 @@ const NewLeadModal: React.FC<NewLeadModalProps> = ({ isOpen, onClose, onSave, le
         });
       } else {
         setFormData({
-          title: '', company: '', contact: '', email: '', phone: '',
+          contact: '', email: '', phone: '',
           value: '', source: '', assignedTo: agents[0] || '', notes: ''
         });
       }
       setError('');
+      setContactSearchQuery('');
     }
   }, [isOpen, lead, agents, isEditing]);
+
+  const handleContactSelect = (contact: Contact) => {
+    setFormData(prev => ({
+      ...prev,
+      contact: contact.name,
+      email: contact.email || '',
+      phone: contact.phone || ''
+    }));
+    setContactSearchQuery('');
+    setShowContactDropdown(false);
+  };
+
+  const handleContactSearch = (value: string) => {
+    setContactSearchQuery(value);
+    setFormData(prev => ({ ...prev, contact: value }));
+    setShowContactDropdown(value.length > 0);
+
+    // Auto-fill if exact match found
+    const exactMatch = contacts.find(c => c.name.toLowerCase() === value.toLowerCase());
+    if (exactMatch) {
+      setFormData(prev => ({
+        ...prev,
+        contact: exactMatch.name,
+        email: exactMatch.email || prev.email,
+        phone: exactMatch.phone || prev.phone
+      }));
+    }
+  };
 
   const handleClose = () => {
     setIsAnimatingOut(true);
@@ -69,30 +105,55 @@ const NewLeadModal: React.FC<NewLeadModalProps> = ({ isOpen, onClose, onSave, le
 
   const handleSave = async () => {
     setError('');
-    // User requirements: Name (contact), Mobile (phone), Value (value), Notes (notes)
-    if (!formData.contact.trim() || !formData.phone.trim() || !formData.value || !formData.notes.trim()) {
-      setError('Contact Person, Phone, Estimated Value, and Notes are required.');
+
+    // Validate required fields
+    if (!formData.contact.trim() || !formData.phone.trim()) {
+      setError('Contact name and phone are required.');
       return;
     }
+
+    if (!formData.value || !formData.notes.trim()) {
+      setError('Estimated Value and Notes are required.');
+      return;
+    }
+
     const parsedValue = parseFloat(formData.value);
     if (isNaN(parsedValue) || parsedValue < 0) {
       setError('Please enter a valid, non-negative value.');
       return;
     }
 
-    const leadToSave = {
-      ...formData,
-      // Auto-fill Title and Company if empty to satisfy DB constraints
-      title: formData.title.trim() || `${formData.contact}'s Opportunity`,
-      company: formData.company.trim() || 'N/A',
-      value: parsedValue,
-      id: isEditing ? lead.id : undefined,
-    };
-
     setIsSubmitting(true);
     try {
+      // Check if contact exists, if not create it
+      const existingContact = contacts.find(c =>
+        c.name.toLowerCase() === formData.contact.trim().toLowerCase()
+      );
+
+      if (!existingContact) {
+        // Create new contact automatically
+        await api.saveContact({
+          name: formData.contact.trim(),
+          email: formData.email.trim() || undefined,
+          phone: formData.phone.trim(),
+        } as Contact, true); // true = isNew
+      }
+
+      const leadToSave = {
+        contact: formData.contact.trim(),
+        email: formData.email.trim(),
+        phone: formData.phone.trim(),
+        value: parsedValue,
+        source: formData.source,
+        assignedTo: formData.assignedTo,
+        notes: formData.notes,
+        // Auto-fill Title and Company to satisfy DB constraints
+        title: `${formData.contact.trim()}'s Opportunity`,
+        company: 'N/A',
+        id: isEditing ? lead.id : undefined,
+      };
+
       await onSave(leadToSave);
-      // Only close if successful (onSave should throw if failed)
     } catch (err: any) {
       console.error('Save failed', err);
       setError(err.message || 'Failed to save lead. Please try again.');
@@ -135,33 +196,66 @@ const NewLeadModal: React.FC<NewLeadModalProps> = ({ isOpen, onClose, onSave, le
         </div>
         <div className="p-6 max-h-[70vh] overflow-y-auto">
           <div className="space-y-4">
-            <div>
-              <label htmlFor="lead-title" className={labelClasses}>Lead Title / Opportunity</label>
-              <input type="text" id="lead-title" name="title" className={inputClasses} value={formData.title} onChange={handleChange} placeholder="e.g., Q4 Website Project" disabled={!canWrite} />
+            {/* Contact Person with Autocomplete */}
+            <div className="relative">
+              <label htmlFor="lead-contact" className={labelClasses}>Contact Person (Client Name) *</label>
+              <input
+                type="text"
+                id="lead-contact"
+                name="contact"
+                value={formData.contact}
+                onChange={(e) => handleContactSearch(e.target.value)}
+                onFocus={() => setShowContactDropdown(formData.contact.length > 0)}
+                placeholder="Type contact name..."
+                className={inputClasses}
+                disabled={!canWrite}
+              />
+
+              {showContactDropdown && (
+                <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded shadow-lg max-h-60 overflow-y-auto">
+                  {contacts
+                    .filter(c =>
+                      c.name.toLowerCase().includes(contactSearchQuery.toLowerCase()) ||
+                      c.email?.toLowerCase().includes(contactSearchQuery.toLowerCase()) ||
+                      c.phone?.includes(contactSearchQuery)
+                    )
+                    .slice(0, 10)
+                    .map(c => (
+                      <div
+                        key={c.id}
+                        onClick={() => handleContactSelect(c)}
+                        className="p-2 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer"
+                      >
+                        <div className="font-semibold">{c.name}</div>
+                        <div className="text-xs text-gray-500">{c.email || c.phone || 'No contact info'}</div>
+                      </div>
+                    ))}
+                  {contacts.filter(c =>
+                    c.name.toLowerCase().includes(contactSearchQuery.toLowerCase())
+                  ).length === 0 && contactSearchQuery && (
+                      <div className="p-3 text-sm text-gray-500 italic">
+                        No existing contact found. Fill in the details below to create a new contact.
+                      </div>
+                    )}
+                </div>
+              )}
+              <p className="text-xs text-gray-500 mt-1">Start typing to search existing contacts or enter a new name</p>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="lead-company" className={labelClasses}>Company Name</label>
-                <input type="text" id="lead-company" name="company" className={inputClasses} value={formData.company} onChange={handleChange} placeholder="e.g., Acme Corp" disabled={!canWrite} />
-              </div>
-              <div>
-                <label htmlFor="lead-contact" className={labelClasses}>Contact Person</label>
-                <input type="text" id="lead-contact" name="contact" className={inputClasses} value={formData.contact} onChange={handleChange} placeholder="e.g., John Doe" disabled={!canWrite} />
-              </div>
-            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label htmlFor="lead-email" className={labelClasses}>Contact Email</label>
-                <input type="email" id="lead-email" name="email" className={inputClasses} value={formData.email} onChange={handleChange} placeholder="e.g., john.d@acme.corp" disabled={!canWrite} />
+                <input type="email" id="lead-email" name="email" className={inputClasses} value={formData.email} onChange={handleChange} placeholder="e.g., john@example.com" disabled={!canWrite} />
               </div>
               <div>
-                <label htmlFor="lead-phone" className={labelClasses}>Contact Phone</label>
-                <input type="tel" id="lead-phone" name="phone" className={inputClasses} value={formData.phone} onChange={handleChange} placeholder="e.g., +1 555-123-4567" disabled={!canWrite} />
+                <label htmlFor="lead-phone" className={labelClasses}>Contact Phone *</label>
+                <input type="tel" id="lead-phone" name="phone" className={inputClasses} value={formData.phone} onChange={handleChange} placeholder="e.g., +91 9876543210" disabled={!canWrite} />
               </div>
             </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label htmlFor="lead-value" className={labelClasses}>Estimated Value (₹)</label>
+                <label htmlFor="lead-value" className={labelClasses}>Estimated Value (₹) *</label>
                 <input type="number" id="lead-value" name="value" className={inputClasses} value={formData.value} onChange={handleChange} placeholder="e.g., 50000" disabled={!canWrite} />
               </div>
               <div>
@@ -185,7 +279,7 @@ const NewLeadModal: React.FC<NewLeadModalProps> = ({ isOpen, onClose, onSave, le
               </select>
             </div>
             <div>
-              <label htmlFor="lead-notes" className={labelClasses}>Notes</label>
+              <label htmlFor="lead-notes" className={labelClasses}>Notes *</label>
               <textarea id="lead-notes" name="notes" rows={4} className={inputClasses} value={formData.notes} onChange={handleChange} placeholder="Add any relevant notes about this lead..." disabled={!canWrite}></textarea>
             </div>
             {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}

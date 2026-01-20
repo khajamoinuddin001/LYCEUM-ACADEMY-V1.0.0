@@ -258,7 +258,7 @@ const Dashboard: React.FC<DashboardProps> = ({ onNavigateBack, transactions, use
                             Your Tasks
                         </h2>
                         <button
-                            onClick={() => onAppSelect('To-do')}
+                            onClick={() => onAppSelect('Tasks')}
                             className="text-sm font-medium text-lyceum-blue hover:underline"
                         >
                             View All

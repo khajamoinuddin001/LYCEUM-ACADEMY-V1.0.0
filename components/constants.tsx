@@ -82,37 +82,13 @@ export const ODOO_APPS: OdooApp[] = [
     iconColor: 'text-purple-600',
   },
   {
-    name: 'Inventory',
-    icon: <Warehouse size={36} />,
-    bgColor: 'bg-orange-100',
-    iconColor: 'text-orange-600',
-  },
-  {
-    name: 'Manufacturing',
-    icon: <Wrench size={36} />,
-    bgColor: 'bg-gray-200',
-    iconColor: 'text-gray-700',
-  },
-  {
-    name: 'Website',
-    icon: <MonitorPlay size={36} />,
-    bgColor: 'bg-fuchsia-100',
-    iconColor: 'text-fuchsia-600',
-  },
-  {
-    name: 'Point of Sale',
-    icon: <DollarSign size={36} />,
-    bgColor: 'bg-lime-100',
-    iconColor: 'text-lime-600',
-  },
-  {
     name: 'Marketing',
     icon: <Share2 size={36} />,
     bgColor: 'bg-pink-100',
     iconColor: 'text-pink-600',
   },
   {
-    name: 'To-do',
+    name: 'Tasks',
     icon: <ClipboardList size={36} />,
     bgColor: 'bg-blue-100',
     iconColor: 'text-blue-600',
@@ -165,8 +141,8 @@ const adminPermissions = ODOO_APPS.reduce((acc, app) => {
   return acc;
 }, {} as { [appName: string]: AppPermissions });
 
-const employeeFullAccessApps = new Set(['Contacts', 'CRM', 'Agents', 'Calendar', 'Discuss', 'To-do', 'Reception', 'Sales', 'Marketing', 'LMS', 'Visitor Display', 'Department Dashboard', 'Attendance']);
-const employeeReadOnlyApps = new Set(['dashboard', 'Accounting', 'Inventory', 'Manufacturing', 'Website', 'Point of Sale']);
+const employeeFullAccessApps = new Set(['Contacts', 'CRM', 'Agents', 'Calendar', 'Discuss', 'Tasks', 'Reception', 'Sales', 'Marketing', 'LMS', 'Visitor Display', 'Department Dashboard', 'Attendance']);
+const employeeReadOnlyApps = new Set(['dashboard', 'Accounting']);
 const employeePermissions: { [appName: string]: AppPermissions } = ODOO_APPS.reduce((acc, app) => {
   if (employeeFullAccessApps.has(app.name)) {
     acc[app.name] = { ...fullAccess };
