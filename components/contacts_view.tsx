@@ -288,8 +288,22 @@ const ContactsView: React.FC<ContactsViewProps> = ({ contacts, onNewContactClick
 
             {/* Merge Contact Modal */}
             {showMergeModal && (
-                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-2xl p-6">
+                <div
+                    className="fixed inset-0 flex items-center justify-center p-4"
+                    style={{ zIndex: 9999, backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
+                    onClick={(e) => {
+                        // Close modal if clicking on backdrop
+                        if (e.target === e.currentTarget) {
+                            setShowMergeModal(false);
+                            setPrimaryContact(null);
+                            setTargetContact(null);
+                        }
+                    }}
+                >
+                    <div
+                        className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-2xl p-6 relative"
+                        onClick={(e) => e.stopPropagation()}
+                    >
                         <h3 className="text-xl font-bold mb-4 text-gray-800 dark:text-white">Merge Contacts</h3>
                         <p className="text-sm text-gray-600 dark:text-gray-300 mb-6">
                             Select two contacts to merge. The primary contact will be kept and the target contact will be deleted after merging all data.
