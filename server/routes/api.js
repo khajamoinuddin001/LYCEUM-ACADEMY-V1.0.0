@@ -457,6 +457,13 @@ RETURNING *
 router.put('/contacts/:id', authenticateToken, async (req, res) => {
   try {
     const contact = req.body;
+
+    // Get the old contact data to check if name changed
+    const oldContactResult = await query('SELECT name, email, user_id FROM contacts WHERE id = $1', [req.params.id]);
+    const oldContact = oldContactResult.rows[0];
+    const nameChanged = oldContact && oldContact.name !== contact.name;
+
+    // Update the contact
     await query(`
       UPDATE contacts SET
 name = $1, email = $2, phone = $3, department = $4, major = $5, notes = $6,
@@ -507,9 +514,238 @@ name = $1, email = $2, phone = $3, department = $4, major = $5, notes = $6,
       contact.applicationPassword,
       req.params.id
     ]);
+
+    // If name changed, cascade the update to related records
+    if (nameChanged) {
+      console.log(`📝 Contact name changed from "${oldContact.name}" to "${contact.name}". Syncing across system...`);
+
+      // 1. Update user name if this contact has a linked user account
+      if (oldContact.user_id) {
+        await query('UPDATE users SET name = $1 WHERE id = $2', [contact.name, oldContact.user_id]);
+        console.log(`✅ Updated user name for user_id: ${oldContact.user_id}`);
+      }
+
+      // 2. Update CRM leads where this contact is the contact person
+      const leadsResult = await query('UPDATE leads SET contact = $1 WHERE email = $2 OR phone = $3 RETURNING id',
+        [contact.name, oldContact.email, contact.phone]);
+      if (leadsResult.rows.length > 0) {
+        console.log(`✅ Updated ${leadsResult.rows.length} CRM lead(s)`);
+      }
+
+      // 3. Update accounting transactions (customer_name)
+      const transactionsResult = await query('UPDATE transactions SET customer_name = $1 WHERE contact_id = $2 RETURNING id',
+        [contact.name, req.params.id]);
+      if (transactionsResult.rows.length > 0) {
+        console.log(`✅ Updated ${transactionsResult.rows.length} transaction(s)`);
+      }
+
+      // 4. Update visitors
+      const visitorsResult = await query('UPDATE visitors SET name = $1 WHERE contact_id = $2 RETURNING id',
+        [contact.name, req.params.id]);
+      if (visitorsResult.rows.length > 0) {
+        console.log(`✅ Updated ${visitorsResult.rows.length} visitor record(s)`);
+      }
+
+      console.log(`✅ Name sync complete for contact ID: ${req.params.id}`);
+    }
+
     const result = await query('SELECT * FROM contacts WHERE id = $1', [req.params.id]);
     res.json(transformContact(result.rows[0]));
   } catch (error) {
+    console.error('Error updating contact:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Merge contacts - combines two contacts into one
+router.post('/contacts/:id/merge', authenticateToken, async (req, res) => {
+  try {
+    const primaryId = parseInt(req.params.id);
+    const { targetContactId } = req.body;
+
+    if (!targetContactId) {
+      return res.status(400).json({ error: 'Target contact ID is required' });
+    }
+
+    // Fetch both contacts
+    const [primaryResult, targetResult] = await Promise.all([
+      query('SELECT * FROM contacts WHERE id = $1', [primaryId]),
+      query('SELECT * FROM contacts WHERE id = $1', [targetContactId])
+    ]);
+
+    if (primaryResult.rows.length === 0 || targetResult.rows.length === 0) {
+      return res.status(404).json({ error: 'One or both contacts not found' });
+    }
+
+    const primary = primaryResult.rows[0];
+    const target = targetResult.rows[0];
+
+    console.log(`🔄 Merging contact ${targetContactId} into ${primaryId}`);
+
+    // Helper: Deduplicate documents by filename
+    const deduplicateDocuments = (docs) => {
+      const seen = new Set();
+      return docs.filter(doc => {
+        if (seen.has(doc.filename || doc.name)) return false;
+        seen.add(doc.filename || doc.name);
+        return true;
+      });
+    };
+
+    // Helper: Merge checklists
+    const mergeChecklists = (list1, list2) => {
+      const merged = [...(list1 || [])];
+      const existingTexts = new Set(merged.map(item => item.text));
+
+      (list2 || []).forEach(item => {
+        if (!existingTexts.has(item.text)) {
+          merged.push(item);
+        }
+      });
+      return merged;
+    };
+
+    // Merge data - prioritize primary, add missing from target
+    const mergedData = {
+      name: primary.name || target.name,
+      email: primary.email || target.email,
+      phone: primary.phone || target.phone,
+      department: primary.department || target.department,
+      major: primary.major || target.major,
+      notes: [primary.notes, target.notes].filter(Boolean).join('\n\n'),
+      file_status: primary.file_status || target.file_status,
+      agent_assigned: primary.agent_assigned || target.agent_assigned,
+
+      // Merge arrays
+      checklist: mergeChecklists(
+        typeof primary.checklist === 'string' ? JSON.parse(primary.checklist) : primary.checklist,
+        typeof target.checklist === 'string' ? JSON.parse(target.checklist) : target.checklist
+      ),
+
+      activity_log: [
+        ...(typeof primary.activity_log === 'string' ? JSON.parse(primary.activity_log || '[]') : (primary.activity_log || [])),
+        ...(typeof target.activity_log === 'string' ? JSON.parse(target.activity_log || '[]') : (target.activity_log || []))
+      ].sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0)),
+
+      recorded_sessions: [
+        ...(typeof primary.recorded_sessions === 'string' ? JSON.parse(primary.recorded_sessions || '[]') : (primary.recorded_sessions || [])),
+        ...(typeof target.recorded_sessions === 'string' ? JSON.parse(target.recorded_sessions || '[]') : (target.recorded_sessions || []))
+      ],
+
+      documents: deduplicateDocuments([
+        ...(typeof primary.documents === 'string' ? JSON.parse(primary.documents || '[]') : (primary.documents || [])),
+        ...(typeof target.documents === 'string' ? JSON.parse(target.documents || '[]') : (target.documents || []))
+      ]),
+
+      // Merge visa information (objects)
+      visa_information: {
+        ...(typeof target.visa_information === 'string' ? JSON.parse(target.visa_information || '{}') : (target.visa_information || {})),
+        ...(typeof primary.visa_information === 'string' ? JSON.parse(primary.visa_information || '{}') : (primary.visa_information || {}))
+      },
+
+      lms_progress: {
+        ...(typeof target.lms_progress === 'string' ? JSON.parse(target.lms_progress || '{}') : (target.lms_progress || {})),
+        ...(typeof primary.lms_progress === 'string' ? JSON.parse(primary.lms_progress || '{}') : (primary.lms_progress || {}))
+      },
+
+      lms_notes: {
+        ...(typeof target.lms_notes === 'string' ? JSON.parse(target.lms_notes || '{}') : (target.lms_notes || {})),
+        ...(typeof primary.lms_notes === 'string' ? JSON.parse(primary.lms_notes || '{}') : (primary.lms_notes || {}))
+      },
+
+      courses: [
+        ...(typeof primary.courses === 'string' ? JSON.parse(primary.courses || '[]') : (primary.courses || [])),
+        ...(typeof target.courses === 'string' ? JSON.parse(target.courses || '[]') : (target.courses || []))
+      ],
+
+      // Address fields
+      street1: primary.street1 || target.street1,
+      street2: primary.street2 || target.street2,
+      city: primary.city || target.city,
+      state: primary.state || target.state,
+      zip: primary.zip || target.zip,
+      country: primary.country || target.country,
+
+      // Other fields
+      gstin: primary.gstin || target.gstin,
+      pan: primary.pan || target.pan,
+      tags: primary.tags || target.tags,
+      visa_type: primary.visa_type || target.visa_type,
+      country_of_application: primary.country_of_application || target.country_of_application,
+      source: primary.source || target.source,
+      contact_type: primary.contact_type || target.contact_type,
+      stream: primary.stream || target.stream,
+      intake: primary.intake || target.intake,
+      counselor_assigned: primary.counselor_assigned || target.counselor_assigned,
+      application_email: primary.application_email || target.application_email,
+      application_password: primary.application_password || target.application_password,
+      gpa: primary.gpa || target.gpa,
+      advisor: primary.advisor || target.advisor,
+
+      // Preserve user link from either
+      user_id: primary.user_id || target.user_id
+    };
+
+    // Update primary contact with merged data
+    await query(`
+      UPDATE contacts SET
+        name = $1, email = $2, phone = $3, department = $4, major = $5, notes = $6,
+        file_status = $7, agent_assigned = $8, checklist = $9, activity_log = $10,
+        recorded_sessions = $11, documents = $12, visa_information = $13, lms_progress = $14,
+        lms_notes = $15, gpa = $16, advisor = $17, courses = $18, street1 = $19, street2 = $20,
+        city = $21, state = $22, zip = $23, country = $24, gstin = $25, pan = $26, tags = $27,
+        visa_type = $28, country_of_application = $29, source = $30, contact_type = $31,
+        stream = $32, intake = $33, counselor_assigned = $34, application_email = $35,
+        application_password = $36, user_id = $37
+      WHERE id = $38
+    `, [
+      mergedData.name, mergedData.email, mergedData.phone, mergedData.department, mergedData.major, mergedData.notes,
+      mergedData.file_status, mergedData.agent_assigned, JSON.stringify(mergedData.checklist), JSON.stringify(mergedData.activity_log),
+      JSON.stringify(mergedData.recorded_sessions), JSON.stringify(mergedData.documents), JSON.stringify(mergedData.visa_information),
+      JSON.stringify(mergedData.lms_progress), JSON.stringify(mergedData.lms_notes), mergedData.gpa, mergedData.advisor,
+      JSON.stringify(mergedData.courses), mergedData.street1, mergedData.street2, mergedData.city, mergedData.state,
+      mergedData.zip, mergedData.country, mergedData.gstin, mergedData.pan, mergedData.tags, mergedData.visa_type,
+      mergedData.country_of_application, mergedData.source, mergedData.contact_type, mergedData.stream, mergedData.intake,
+      mergedData.counselor_assigned, mergedData.application_email, mergedData.application_password, mergedData.user_id,
+      primaryId
+    ]);
+
+    // Update all related records to point to primary contact
+    const recordsUpdated = {};
+
+    // Update visitors
+    const visitorsResult = await query('UPDATE visitors SET contact_id = $1 WHERE contact_id = $2 RETURNING id', [primaryId, targetContactId]);
+    recordsUpdated.visitors = visitorsResult.rows.length;
+
+    // Update transactions
+    const transactionsResult = await query('UPDATE transactions SET contact_id = $1 WHERE contact_id = $2 RETURNING id', [primaryId, targetContactId]);
+    recordsUpdated.transactions = transactionsResult.rows.length;
+
+    // Update leads
+    const leadsResult = await query('UPDATE leads SET contact_id = $1 WHERE contact_id = $2 RETURNING id', [primaryId, targetContactId]);
+    recordsUpdated.leads = leadsResult.rows.length;
+
+    // If target had a user link, update user to point to primary contact
+    if (target.user_id && !primary.user_id) {
+      await query('UPDATE users SET name = $1 WHERE id = $2', [mergedData.name, target.user_id]);
+      console.log(`✅ Updated user ${target.user_id} to link with primary contact`);
+    }
+
+    // Delete target contact
+    await query('DELETE FROM contacts WHERE id = $1', [targetContactId]);
+
+    console.log(`✅ Merge complete: ${recordsUpdated.visitors} visitors, ${recordsUpdated.transactions} transactions, ${recordsUpdated.leads} leads updated`);
+
+    // Fetch and return merged contact
+    const finalResult = await query('SELECT * FROM contacts WHERE id = $1', [primaryId]);
+
+    res.json({
+      success: true,
+      mergedContact: transformContact(finalResult.rows[0]),
+      recordsUpdated
+    });
+  } catch (error) {
+    console.error('Error merging contacts:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -966,9 +1202,24 @@ router.get('/tasks', authenticateToken, async (req, res) => {
 router.post('/tasks', authenticateToken, async (req, res) => {
   try {
     const task = req.body;
+
+    // Generate unique Task ID
+    let taskId;
+    let isUnique = false;
+    while (!isUnique) {
+      const randomNum = Math.floor(Math.random() * 90000) + 10000; // 5-digit number (10000-99999)
+      taskId = `TSK-${randomNum}`;
+
+      // Check if this ID already exists
+      const existing = await query('SELECT id FROM tasks WHERE task_id = $1', [taskId]);
+      if (existing.rows.length === 0) {
+        isUnique = true;
+      }
+    }
+
     const result = await query(`
-      INSERT INTO tasks(title, description, due_date, status, assigned_to, assigned_by, priority)
-      VALUES($1, $2, $3, $4, $5, $6, $7)
+      INSERT INTO tasks(title, description, due_date, status, assigned_to, assigned_by, priority, task_id)
+      VALUES($1, $2, $3, $4, $5, $6, $7, $8)
       RETURNING *
     `, [
       task.title,
@@ -977,7 +1228,8 @@ router.post('/tasks', authenticateToken, async (req, res) => {
       task.status || 'todo',
       task.assignedTo || req.user.id,
       req.user.id,
-      task.priority || 'Medium'
+      task.priority || 'Medium',
+      taskId
     ]);
     res.json(transformTask(result.rows[0]));
   } catch (error) {
@@ -988,6 +1240,7 @@ router.post('/tasks', authenticateToken, async (req, res) => {
 // Transformation helper for tasks
 const transformTask = (task) => ({
   ...task,
+  taskId: task.task_id,
   dueDate: task.due_date,
   createdAt: task.created_at,
   assignedTo: task.assigned_to,
@@ -1393,7 +1646,7 @@ router.get('/contacts/:id/visits', authenticateToken, async (req, res) => {
     const result = await query(`
 SELECT * FROM visitors 
       WHERE contact_id = $1 
-      ORDER BY created_at DESC
+      ORDER BY created_at ASC
   `, [req.params.id]);
 
     const formattedVisits = result.rows.map(v => ({

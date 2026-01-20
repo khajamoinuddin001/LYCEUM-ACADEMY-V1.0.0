@@ -15,18 +15,31 @@ interface TasksViewProps {
 
 const HistoryRow: React.FC<{ task: TodoTask, staff: { id: number; name: string; role: string }[] }> = ({ task, staff }) => {
     const completedBy = staff.find(s => s.id === task.completedBy)?.name || 'Unknown';
-    const completedDate = task.completedAt ? new Date(task.completedAt).toLocaleString() : 'N/A';
+    const createdBy = staff.find(s => s.id === task.assignedBy)?.name || 'Unknown';
+    const completedDate = task.completedAt ? new Date(task.completedAt).toLocaleString('en-IN', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+        timeZone: 'Asia/Kolkata'
+    }) : 'N/A';
+    const createdDate = task.createdAt ? new Date(task.createdAt).toLocaleString('en-IN', {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+        timeZone: 'Asia/Kolkata'
+    }) : 'N/A';
 
     return (
         <tr className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
             <td className="px-6 py-4">
                 <div className="font-bold text-gray-800 dark:text-gray-100">{task.title}</div>
+                <div className="text-xs text-gray-500 mt-1">{task.description}</div>
             </td>
             <td className="px-6 py-4">
-                <span className="text-sm text-gray-600 dark:text-gray-400">{completedBy}</span>
+                <div className="text-sm text-gray-600 dark:text-gray-400">{createdBy}</div>
+                <div className="text-xs text-gray-500">{createdDate}</div>
             </td>
             <td className="px-6 py-4">
-                <span className="text-sm text-gray-600 dark:text-gray-400">{completedDate}</span>
+                <div className="text-sm text-gray-600 dark:text-gray-400">{completedBy}</div>
+                <div className="text-xs text-gray-500">{completedDate}</div>
             </td>
             <td className="px-6 py-4">
                 <span className="text-sm text-gray-600 dark:text-gray-400">{task.dueDate}</span>
@@ -91,35 +104,27 @@ const TasksView: React.FC<TasksViewProps> = ({
     const filteredTasks = useMemo(() => {
         return tasks.filter(t => {
             const matchesSearch = t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                (t.description?.toLowerCase() || '').includes(searchQuery.toLowerCase());
-            const matchesStatus = statusFilter === 'All' || t.status === statusFilter;
-            const matchesPriority = priorityFilter === 'All' || t.priority === priorityFilter;
+                (t.description?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
+                (t.taskId?.toLowerCase() || '').includes(searchQuery.toLowerCase());
 
             if (activeTab === 'History') {
                 return t.status === 'done' && matchesSearch;
             }
 
             if (activeTab === 'Personal') {
-                // Personal means assigned TO me and created BY me (self-tasks)
-                // Or just strictly assigned to me? 
-                // Let's define Personal as: Assigned To Me (which is default view mostly)
-                // But typically "Personal" implies things I added for myself.
-                // Let's stick to standard filters for now, but tab switches context?
-                // Actually, "Personal To-Do" usually means tasks where I am both creator and assignee.
                 return t.assignedTo === user.id && t.assignedBy === user.id && t.status !== 'done' && matchesSearch;
             }
 
-            // Default Tasks Tab:
-            // exclude 'done' usually, unless filter says otherwise?
-            // "History" takes care of done.
-            // So Tasks view should ideally hide done?
-            // Or let users filter.
-            // Let's filter out 'done' for the main 'Tasks' list to keep it clean, 
-            // unless user explicitly sets Status Filter to 'done' or 'All'.
-            // Actually, if we have a History tab, usually main tab is active tasks.
-            const isNotDone = t.status !== 'done';
+            // Default Tasks Tab - show active tasks (not done)
+            const matchesStatus = statusFilter === 'All' || t.status === statusFilter;
+            const matchesPriority = priorityFilter === 'All' || t.priority === priorityFilter;
 
-            return matchesSearch && matchesStatus && matchesPriority && isNotDone;
+            // Only filter out 'done' tasks if status filter is not explicitly set to 'done' or 'All'
+            const shouldShowTask = statusFilter === 'done' || statusFilter === 'All'
+                ? matchesStatus
+                : t.status !== 'done' && matchesStatus;
+
+            return matchesSearch && shouldShowTask && matchesPriority;
         });
     }, [tasks, searchQuery, statusFilter, priorityFilter, activeTab, user.id]);
 
@@ -197,13 +202,14 @@ const TasksView: React.FC<TasksViewProps> = ({
                                 {activeTab === 'History' ? (
                                     <>
                                         <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase">Task</th>
+                                        <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase">Created By</th>
                                         <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase">Completed By</th>
-                                        <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase">Completed At</th>
-                                        <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase">Original Due Date</th>
+                                        <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase">Due Date</th>
                                         <th className="px-6 py-4 text-xs font-bold text-right text-gray-500 uppercase">Status</th>
                                     </>
                                 ) : (
                                     <>
+                                        <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase">Task ID</th>
                                         <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase">Task</th>
                                         <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase">Priority</th>
                                         <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase">Due Date</th>
@@ -227,6 +233,9 @@ const TasksView: React.FC<TasksViewProps> = ({
                                         <HistoryRow key={task.id} task={task} staff={staff} />
                                     ) : (
                                         <tr key={task.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
+                                            <td className="px-6 py-4">
+                                                <div className="text-xs font-mono text-lyceum-blue font-bold">{task.taskId || 'N/A'}</div>
+                                            </td>
                                             <td className="px-6 py-4">
                                                 <div className="font-bold text-gray-800 dark:text-gray-100">{task.title}</div>
                                                 <div className="text-xs text-gray-500 mt-1 line-clamp-1">{task.description}</div>

@@ -199,12 +199,15 @@ const ContactVisitsView: React.FC<ContactVisitsViewProps> = ({ contact, onNaviga
                             : [{ department: visit.host, purpose: visit.purpose || '', timestamp: visit.checkIn }];
                         const isCheckedOut = visit.status === 'Checked-out';
 
+                        // Visit number is the reverse index (oldest = 1, newest = visits.length)
+                        const visitNumber = visits.length - index;
+
                         return (
                             <div key={visit.id} className="border border-gray-200 dark:border-gray-700 p-6 bg-white dark:bg-gray-800 shadow-sm rounded-lg">
                                 {/* Header */}
                                 <div className="flex flex-wrap justify-between items-start mb-6 font-bold text-lg text-gray-900 dark:text-gray-100">
                                     <div className="mb-2">
-                                        <div>Visit number:- #{visit.dailySequenceNumber || (visits.length - index)}</div>
+                                        <div>Visit number:- #{visitNumber}</div>
                                         <div className="text-base font-normal mt-1">check-in:- {formatDateTime(visit.checkIn)}</div>
                                     </div>
                                     <div className="text-right mb-2">

@@ -234,6 +234,14 @@ export async function initDatabase() {
       await client.query('ALTER TABLE tasks ADD COLUMN IF NOT EXISTS priority TEXT DEFAULT \'Medium\'');
       await client.query('ALTER TABLE tasks ADD COLUMN IF NOT EXISTS completed_by INTEGER REFERENCES users(id)');
       await client.query('ALTER TABLE tasks ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP');
+      await client.query('ALTER TABLE tasks ADD COLUMN IF NOT EXISTS task_id TEXT UNIQUE');
+
+      // Generate task_id for existing tasks that don't have one
+      await client.query(`
+        UPDATE tasks 
+        SET task_id = 'TSK-' || LPAD((FLOOR(RANDOM() * 90000) + 10000)::TEXT, 5, '0')
+        WHERE task_id IS NULL
+      `);
       await client.query('ALTER TABLE documents ADD COLUMN IF NOT EXISTS is_private BOOLEAN DEFAULT false');
     } catch (e) {
       console.log('Columns might already exist');

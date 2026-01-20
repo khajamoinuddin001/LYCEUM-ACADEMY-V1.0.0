@@ -210,6 +210,12 @@ export const downloadDocument = async (documentId: number, filename: string): Pr
   document.body.removeChild(a);
 };
 
+export const deleteDocument = async (documentId: number): Promise<void> => {
+  return apiRequest(`/documents/${documentId}`, {
+    method: 'DELETE',
+  });
+};
+
 // Contacts
 export const getContacts = async (): Promise<Contact[]> => {
   return apiRequest<Contact[]>('/contacts');
@@ -227,6 +233,13 @@ export const saveContact = async (contactToSave: Contact, isNew: boolean): Promi
       body: JSON.stringify(contactToSave),
     });
   }
+};
+
+export const mergeContacts = async (primaryId: number, targetId: number): Promise<{ success: boolean; mergedContact: Contact; recordsUpdated: any }> => {
+  return apiRequest(`/contacts/${primaryId}/merge`, {
+    method: 'POST',
+    body: JSON.stringify({ targetContactId: targetId }),
+  });
 };
 
 // Leads

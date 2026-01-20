@@ -19,7 +19,7 @@ const VisitorDisplay: React.FC = () => {
     }, []);
 
     useEffect(() => {
-        const intervalId = setInterval(fetchVisitors, 3000); // Poll every 3s for faster updates
+        const intervalId = setInterval(fetchVisitors, 2000); // Poll every 2s for faster updates
         fetchVisitors(); // Initial fetch
         return () => clearInterval(intervalId);
     }, [selectedDept]);
@@ -27,6 +27,9 @@ const VisitorDisplay: React.FC = () => {
     const fetchVisitors = async () => {
         try {
             const allVisitors = await api.getVisitors();
+
+            console.log('[Visitor Display] Fetched visitors:', allVisitors.length);
+            console.log('[Visitor Display] Called visitors:', allVisitors.filter(v => v.status === 'Called').map(v => ({ name: v.name, calledAt: v.calledAt })));
 
             // Filter Logic
             const filtered = allVisitors.filter(v => {
@@ -41,7 +44,9 @@ const VisitorDisplay: React.FC = () => {
                 // Show 'Called' visitors for 15s generally, or until flash ends
                 if (v.status === 'Called' && v.calledAt) {
                     const calledTime = new Date(v.calledAt).getTime();
-                    return (Date.now() - calledTime) < ALERT_DURATION_MS;
+                    const timeSinceCalled = Date.now() - calledTime;
+                    console.log(`[Visitor Display] ${v.name} called ${timeSinceCalled}ms ago`);
+                    return timeSinceCalled < ALERT_DURATION_MS;
                 }
                 return false;
             }).sort((a, b) => {
@@ -77,21 +82,31 @@ const VisitorDisplay: React.FC = () => {
             if (selectedDept !== 'All' && getWaitingFor(v) !== selectedDept) return false;
 
             const calledTime = new Date(v.calledAt).getTime();
-            return (Date.now() - calledTime) < ALERT_DURATION_MS;
+            const timeSinceCalled = Date.now() - calledTime;
+            console.log(`[Alert Check] ${v.name}: ${timeSinceCalled}ms since called`);
+            return timeSinceCalled < ALERT_DURATION_MS;
         });
 
-        if (justCalled && justCalled.id !== lastCalledVisitor?.id) {
-            triggerAlert(justCalled);
-            setLastCalledVisitor(justCalled);
+        if (justCalled) {
+            console.log('[Alert Check] Found just called visitor:', justCalled.name, 'Last called:', lastCalledVisitor?.name);
+            if (!lastCalledVisitor || justCalled.id !== lastCalledVisitor.id) {
+                console.log('[Alert Check] Triggering alert for:', justCalled.name);
+                triggerAlert(justCalled);
+                setLastCalledVisitor(justCalled);
+            }
         }
     };
 
     const triggerAlert = (visitor: Visitor) => {
+        console.log('[Alert] Triggering alert for:', visitor.name);
         if (audioRef.current) {
             audioRef.current.play().catch(e => console.log("Audio play failed", e));
         }
         setFlashing(true);
-        setTimeout(() => setFlashing(false), ALERT_DURATION_MS);
+        setTimeout(() => {
+            console.log('[Alert] Stopping flash');
+            setFlashing(false);
+        }, ALERT_DURATION_MS);
     };
 
     const getWaitTime = (checkInTime?: string) => {
@@ -129,8 +144,8 @@ const VisitorDisplay: React.FC = () => {
                         key={dept}
                         onClick={() => setSelectedDept(dept)}
                         className={`px-6 py-2 rounded-full text-lg font-bold transition-all whitespace-nowrap ${selectedDept === dept
-                                ? 'bg-lyceum-blue text-white shadow-lg shadow-lyceum-blue/30 scale-105'
-                                : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'
+                            ? 'bg-lyceum-blue text-white shadow-lg shadow-lyceum-blue/30 scale-105'
+                            : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'
                             }`}
                     >
                         {dept}
@@ -165,8 +180,8 @@ const VisitorDisplay: React.FC = () => {
                                 <div
                                     key={visitor.id}
                                     className={`relative overflow-hidden rounded-2xl border-2 shadow-2xl transition-all duration-500 ${isCalled
-                                            ? 'bg-green-600 border-green-400 transform scale-105 z-10'
-                                            : 'bg-gray-800/80 border-gray-700/50 backdrop-blur-md'
+                                        ? 'bg-green-600 border-green-400 transform scale-105 z-10'
+                                        : 'bg-gray-800/80 border-gray-700/50 backdrop-blur-md'
                                         }`}
                                 >
                                     {isCalled && <div className="absolute inset-0 bg-green-500 opacity-20 animate-pulse"></div>}

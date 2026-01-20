@@ -30,6 +30,7 @@ export type TaskPriority = 'Low' | 'Medium' | 'High';
 
 export interface TodoTask {
   id: number;
+  taskId?: string;
   title: string;
   description: string;
   dueDate: string;

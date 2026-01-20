@@ -10,7 +10,7 @@ interface ContactDocumentsViewProps {
   user?: User | null;
 }
 
-const DocumentItem = ({ doc, analyzingDocId, handleAnalyzeClick, handleDownload }: any) => (
+const DocumentItem = ({ doc, analyzingDocId, handleAnalyzeClick, handleDownload, handleDelete, isStaffOrAdmin }: any) => (
   <li className="py-4 flex items-center justify-between">
     <div className="flex items-center">
       <Paperclip className="w-6 h-6 text-gray-400 mr-4" />
@@ -55,6 +55,15 @@ const DocumentItem = ({ doc, analyzingDocId, handleAnalyzeClick, handleDownload 
         <Download size={14} className="mr-1.5" />
         Download
       </button>
+      {isStaffOrAdmin && (
+        <button
+          onClick={() => handleDelete(doc)}
+          className="inline-flex items-center px-3 py-1.5 text-xs font-semibold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-md hover:bg-red-100 dark:hover:bg-red-900/30"
+        >
+          <Trash2 size={14} className="mr-1.5" />
+          Delete
+        </button>
+      )}
     </div>
   </li>
 );
@@ -124,6 +133,20 @@ const ContactDocumentsView: React.FC<ContactDocumentsViewProps> = ({ contact, on
     setAnalyzingDocId(null);
   };
 
+  const handleDelete = async (doc: Doc) => {
+    if (!confirm(`Are you sure you want to delete "${doc.name}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      await api.deleteDocument(doc.id);
+      await loadDocuments();
+    } catch (error) {
+      console.error('Failed to delete document:', error);
+      alert('Failed to delete document. Please try again.');
+    }
+  };
+
   return (
     <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm w-full mx-auto animate-fade-in">
       <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-200 dark:border-gray-700">
@@ -188,6 +211,8 @@ const ContactDocumentsView: React.FC<ContactDocumentsViewProps> = ({ contact, on
                     analyzingDocId={analyzingDocId}
                     handleAnalyzeClick={handleAnalyzeClick}
                     handleDownload={handleDownload}
+                    handleDelete={handleDelete}
+                    isStaffOrAdmin={isStaffOrAdmin}
                   />
                 ))}
               </ul>
@@ -212,6 +237,8 @@ const ContactDocumentsView: React.FC<ContactDocumentsViewProps> = ({ contact, on
                       analyzingDocId={analyzingDocId}
                       handleAnalyzeClick={handleAnalyzeClick}
                       handleDownload={handleDownload}
+                      handleDelete={handleDelete}
+                      isStaffOrAdmin={isStaffOrAdmin}
                     />
                   ))}
                 </ul>

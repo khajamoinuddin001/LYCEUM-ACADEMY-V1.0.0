@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import type { Contact, User } from '../types';
-import { Search, Filter } from './icons';
+import { Search, Filter, MoreHorizontal } from './icons';
 import ContactCard from './student_card';
+import * as api from '../utils/api';
 
 interface ContactsViewProps {
     contacts: Contact[];
@@ -17,7 +18,13 @@ const ContactsView: React.FC<ContactsViewProps> = ({ contacts, onNewContactClick
     const [fileStatusFilter, setFileStatusFilter] = useState('All Statuses');
     const [selectedContacts, setSelectedContacts] = useState<Set<number>>(new Set());
     const [isFilterOpen, setIsFilterOpen] = useState(false);
+    const [isMenuOpen, setIsMenuOpen] = useState(false);
+    const [showMergeModal, setShowMergeModal] = useState(false);
+    const [primaryContact, setPrimaryContact] = useState<Contact | null>(null);
+    const [targetContact, setTargetContact] = useState<Contact | null>(null);
+    const [isMerging, setIsMerging] = useState(false);
     const filterRef = useRef<HTMLDivElement>(null);
+    const menuRef = useRef<HTMLDivElement>(null);
 
     const allDepartments = useMemo(() => {
         const departments = new Set(contacts.map(s => s.department));
@@ -43,6 +50,9 @@ const ContactsView: React.FC<ContactsViewProps> = ({ contacts, onNewContactClick
             if (filterRef.current && !filterRef.current.contains(event.target as Node)) {
                 setIsFilterOpen(false);
             }
+            if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+                setIsMenuOpen(false);
+            }
         };
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -53,6 +63,32 @@ const ContactsView: React.FC<ContactsViewProps> = ({ contacts, onNewContactClick
         setMajorFilter('All Majors');
         setFileStatusFilter('All Statuses');
         setIsFilterOpen(false);
+    };
+
+    const handleMergeClick = () => {
+        setShowMergeModal(true);
+        setIsMenuOpen(false);
+    };
+
+    const handleMergeConfirm = async () => {
+        if (!primaryContact || !targetContact) {
+            alert('Please select both primary and target contacts');
+            return;
+        }
+
+        setIsMerging(true);
+        try {
+            const result = await api.mergeContacts(primaryContact.id, targetContact.id);
+            alert(`Merge successful! Updated ${result.recordsUpdated.visitors} visitors, ${result.recordsUpdated.transactions} transactions, ${result.recordsUpdated.leads} leads.`);
+            setShowMergeModal(false);
+            setPrimaryContact(null);
+            setTargetContact(null);
+            window.location.reload(); // Refresh to show updated contacts
+        } catch (error: any) {
+            alert(`Merge failed: ${error.message}`);
+        } finally {
+            setIsMerging(false);
+        }
     };
 
     const filteredAndSortedContacts = useMemo(() => {
@@ -121,14 +157,36 @@ const ContactsView: React.FC<ContactsViewProps> = ({ contacts, onNewContactClick
         <div className="animate-fade-in">
             <div className="flex flex-col md:flex-row items-center justify-between mb-6 gap-4">
                 <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-100">Contacts</h1>
-                {(user.role === 'Admin' || user.permissions?.['Contacts']?.create) && (
-                    <button
-                        onClick={onNewContactClick}
-                        className="w-full md:w-auto px-4 py-2 bg-lyceum-blue text-white rounded-md shadow-sm hover:bg-lyceum-blue-dark focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-800 focus:ring-lyceum-blue transition-colors"
-                    >
-                        New Contact
-                    </button>
-                )}
+                <div className="flex items-center gap-2">
+                    {(user.role === 'Admin' || user.permissions?.['Contacts']?.create) && (
+                        <button
+                            onClick={onNewContactClick}
+                            className="w-full md:w-auto px-4 py-2 bg-lyceum-blue text-white rounded-md shadow-sm hover:bg-lyceum-blue-dark focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-800 focus:ring-lyceum-blue transition-colors"
+                        >
+                            New Contact
+                        </button>
+                    )}
+                    {(user.role === 'Admin' || user.permissions?.['Contacts']?.update) && (
+                        <div className="relative" ref={menuRef}>
+                            <button
+                                onClick={() => setIsMenuOpen(!isMenuOpen)}
+                                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
+                            >
+                                <MoreHorizontal size={20} className="text-gray-600 dark:text-gray-300" />
+                            </button>
+                            {isMenuOpen && (
+                                <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border dark:border-gray-700 z-10 py-1">
+                                    <button
+                                        onClick={handleMergeClick}
+                                        className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                                    >
+                                        Merge Contact
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
             </div>
 
             <div className="p-4 bg-white dark:bg-gray-800/50 rounded-lg shadow-sm mb-6">
@@ -225,6 +283,93 @@ const ContactsView: React.FC<ContactsViewProps> = ({ contacts, onNewContactClick
             ) : (
                 <div className="text-center py-12 bg-white dark:bg-gray-800/50 rounded-lg shadow-sm">
                     <p className="text-gray-500 dark:text-gray-400">No contacts found matching your criteria.</p>
+                </div>
+            )}
+
+            {/* Merge Contact Modal */}
+            {showMergeModal && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-2xl p-6">
+                        <h3 className="text-xl font-bold mb-4 text-gray-800 dark:text-white">Merge Contacts</h3>
+                        <p className="text-sm text-gray-600 dark:text-gray-300 mb-6">
+                            Select two contacts to merge. The primary contact will be kept and the target contact will be deleted after merging all data.
+                        </p>
+
+                        <div className="grid grid-cols-2 gap-4 mb-6">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Primary Contact (Keep)</label>
+                                <select
+                                    value={primaryContact?.id || ''}
+                                    onChange={(e) => setPrimaryContact(contacts.find(c => c.id === parseInt(e.target.value)) || null)}
+                                    className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded dark:bg-gray-700 dark:text-white"
+                                >
+                                    <option value="">Select contact...</option>
+                                    {contacts.map(c => (
+                                        <option key={c.id} value={c.id}>
+                                            {c.name} {c.email ? `(${c.email})` : c.phone ? `(${c.phone})` : ''}
+                                        </option>
+                                    ))}
+                                </select>
+                                {primaryContact && (
+                                    <div className="mt-2 p-3 bg-green-50 dark:bg-green-900/20 rounded text-sm">
+                                        <p className="font-semibold">{primaryContact.name}</p>
+                                        {primaryContact.email && <p>Email: {primaryContact.email}</p>}
+                                        {primaryContact.phone && <p>Phone: {primaryContact.phone}</p>}
+                                    </div>
+                                )}
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Target Contact (Merge & Delete)</label>
+                                <select
+                                    value={targetContact?.id || ''}
+                                    onChange={(e) => setTargetContact(contacts.find(c => c.id === parseInt(e.target.value)) || null)}
+                                    className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded dark:bg-gray-700 dark:text-white"
+                                >
+                                    <option value="">Select contact...</option>
+                                    {contacts.filter(c => c.id !== primaryContact?.id).map(c => (
+                                        <option key={c.id} value={c.id}>
+                                            {c.name} {c.email ? `(${c.email})` : c.phone ? `(${c.phone})` : ''}
+                                        </option>
+                                    ))}
+                                </select>
+                                {targetContact && (
+                                    <div className="mt-2 p-3 bg-red-50 dark:bg-red-900/20 rounded text-sm">
+                                        <p className="font-semibold">{targetContact.name}</p>
+                                        {targetContact.email && <p>Email: {targetContact.email}</p>}
+                                        {targetContact.phone && <p>Phone: {targetContact.phone}</p>}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded p-4 mb-6">
+                            <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                                <strong>Warning:</strong> This action cannot be undone. All data from the target contact will be merged into the primary contact, and the target contact will be deleted.
+                            </p>
+                        </div>
+
+                        <div className="flex justify-end gap-3">
+                            <button
+                                onClick={() => {
+                                    setShowMergeModal(false);
+                                    setPrimaryContact(null);
+                                    setTargetContact(null);
+                                }}
+                                className="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                                disabled={isMerging}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleMergeConfirm}
+                                disabled={!primaryContact || !targetContact || isMerging}
+                                className="px-4 py-2 bg-lyceum-blue text-white rounded hover:bg-lyceum-blue-dark transition-colors font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {isMerging ? 'Merging...' : 'Confirm Merge'}
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
 
