@@ -23,6 +23,10 @@ const ContactsView: React.FC<ContactsViewProps> = ({ contacts, onNewContactClick
     const [primaryContact, setPrimaryContact] = useState<Contact | null>(null);
     const [targetContact, setTargetContact] = useState<Contact | null>(null);
     const [isMerging, setIsMerging] = useState(false);
+    const [primarySearchQuery, setPrimarySearchQuery] = useState('');
+    const [targetSearchQuery, setTargetSearchQuery] = useState('');
+    const [showPrimaryDropdown, setShowPrimaryDropdown] = useState(false);
+    const [showTargetDropdown, setShowTargetDropdown] = useState(false);
     const filterRef = useRef<HTMLDivElement>(null);
     const menuRef = useRef<HTMLDivElement>(null);
 
@@ -289,19 +293,20 @@ const ContactsView: React.FC<ContactsViewProps> = ({ contacts, onNewContactClick
             {/* Merge Contact Modal */}
             {showMergeModal && (
                 <div
-                    className="fixed inset-0 flex items-center justify-center p-4"
+                    className="fixed inset-0 flex items-start justify-center pt-10 p-4 overflow-y-auto"
                     style={{ zIndex: 9999, backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
                     onClick={(e) => {
-                        // Close modal if clicking on backdrop
                         if (e.target === e.currentTarget) {
                             setShowMergeModal(false);
                             setPrimaryContact(null);
                             setTargetContact(null);
+                            setPrimarySearchQuery('');
+                            setTargetSearchQuery('');
                         }
                     }}
                 >
                     <div
-                        className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-2xl p-6 relative"
+                        className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-2xl p-6 relative mb-10"
                         onClick={(e) => e.stopPropagation()}
                     >
                         <h3 className="text-xl font-bold mb-4 text-gray-800 dark:text-white">Merge Contacts</h3>
@@ -310,48 +315,117 @@ const ContactsView: React.FC<ContactsViewProps> = ({ contacts, onNewContactClick
                         </p>
 
                         <div className="grid grid-cols-2 gap-4 mb-6">
-                            <div>
+                            <div className="relative">
                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Primary Contact (Keep)</label>
-                                <select
-                                    value={primaryContact?.id || ''}
-                                    onChange={(e) => setPrimaryContact(contacts.find(c => c.id === parseInt(e.target.value)) || null)}
+                                <input
+                                    type="text"
+                                    value={primaryContact ? `${primaryContact.name} ${primaryContact.email ? `(${primaryContact.email})` : ''}` : primarySearchQuery}
+                                    onChange={(e) => {
+                                        setPrimarySearchQuery(e.target.value);
+                                        setPrimaryContact(null);
+                                        setShowPrimaryDropdown(true);
+                                    }}
+                                    onFocus={() => setShowPrimaryDropdown(true)}
+                                    placeholder="Type to search contact..."
                                     className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded dark:bg-gray-700 dark:text-white"
-                                >
-                                    <option value="">Select contact...</option>
-                                    {contacts.map(c => (
-                                        <option key={c.id} value={c.id}>
-                                            {c.name} {c.email ? `(${c.email})` : c.phone ? `(${c.phone})` : ''}
-                                        </option>
-                                    ))}
-                                </select>
+                                />
+                                {showPrimaryDropdown && !primaryContact && (
+                                    <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded shadow-lg max-h-60 overflow-y-auto">
+                                        {contacts
+                                            .filter(c =>
+                                                c.name.toLowerCase().includes(primarySearchQuery.toLowerCase()) ||
+                                                c.email?.toLowerCase().includes(primarySearchQuery.toLowerCase()) ||
+                                                c.phone?.includes(primarySearchQuery)
+                                            )
+                                            .slice(0, 10)
+                                            .map(c => (
+                                                <div
+                                                    key={c.id}
+                                                    onClick={() => {
+                                                        setPrimaryContact(c);
+                                                        setShowPrimaryDropdown(false);
+                                                        setPrimarySearchQuery('');
+                                                    }}
+                                                    className="p-2 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer"
+                                                >
+                                                    <div className="font-semibold">{c.name}</div>
+                                                    <div className="text-xs text-gray-500">{c.email || c.phone || 'No contact info'}</div>
+                                                </div>
+                                            ))}
+                                    </div>
+                                )}
                                 {primaryContact && (
                                     <div className="mt-2 p-3 bg-green-50 dark:bg-green-900/20 rounded text-sm">
                                         <p className="font-semibold">{primaryContact.name}</p>
                                         {primaryContact.email && <p>Email: {primaryContact.email}</p>}
                                         {primaryContact.phone && <p>Phone: {primaryContact.phone}</p>}
+                                        <button
+                                            onClick={() => {
+                                                setPrimaryContact(null);
+                                                setPrimarySearchQuery('');
+                                            }}
+                                            className="text-xs text-red-600 hover:underline mt-1"
+                                        >
+                                            Clear
+                                        </button>
                                     </div>
                                 )}
                             </div>
 
-                            <div>
+                            <div className="relative">
                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Target Contact (Merge & Delete)</label>
-                                <select
-                                    value={targetContact?.id || ''}
-                                    onChange={(e) => setTargetContact(contacts.find(c => c.id === parseInt(e.target.value)) || null)}
+                                <input
+                                    type="text"
+                                    value={targetContact ? `${targetContact.name} ${targetContact.email ? `(${targetContact.email})` : ''}` : targetSearchQuery}
+                                    onChange={(e) => {
+                                        setTargetSearchQuery(e.target.value);
+                                        setTargetContact(null);
+                                        setShowTargetDropdown(true);
+                                    }}
+                                    onFocus={() => setShowTargetDropdown(true)}
+                                    placeholder="Type to search contact..."
                                     className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded dark:bg-gray-700 dark:text-white"
-                                >
-                                    <option value="">Select contact...</option>
-                                    {contacts.filter(c => c.id !== primaryContact?.id).map(c => (
-                                        <option key={c.id} value={c.id}>
-                                            {c.name} {c.email ? `(${c.email})` : c.phone ? `(${c.phone})` : ''}
-                                        </option>
-                                    ))}
-                                </select>
+                                />
+                                {showTargetDropdown && !targetContact && (
+                                    <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded shadow-lg max-h-60 overflow-y-auto">
+                                        {contacts
+                                            .filter(c =>
+                                                c.id !== primaryContact?.id &&
+                                                (c.name.toLowerCase().includes(targetSearchQuery.toLowerCase()) ||
+                                                    c.email?.toLowerCase().includes(targetSearchQuery.toLowerCase()) ||
+                                                    c.phone?.includes(targetSearchQuery))
+                                            )
+                                            .slice(0, 10)
+                                            .map(c => (
+                                                <div
+                                                    key={c.id}
+                                                    onClick={() => {
+                                                        setTargetContact(c);
+                                                        setShowTargetDropdown(false);
+                                                        setTargetSearchQuery('');
+                                                    }}
+                                                    className="p-2 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer"
+                                                >
+                                                    <div className="font-semibold">{c.name}</div>
+                                                    <div className="text-xs text-gray-500">{c.email || c.phone || 'No contact info'}</div>
+                                                </div>
+                                            ))}
+                                    </div>
+                                )}
                                 {targetContact && (
                                     <div className="mt-2 p-3 bg-red-50 dark:bg-red-900/20 rounded text-sm">
                                         <p className="font-semibold">{targetContact.name}</p>
                                         {targetContact.email && <p>Email: {targetContact.email}</p>}
                                         {targetContact.phone && <p>Phone: {targetContact.phone}</p>}
+                                        <button
+                                            onClick={() => {
+                                                setTargetContact(null);
+                                                setTargetSearchQuery('');
+                                            }}
+                                            className="text-xs text-red-600 hover:underline mt-1"
+                                        >
+                                            Clear
+                                        </button>
                                     </div>
                                 )}
                             </div>

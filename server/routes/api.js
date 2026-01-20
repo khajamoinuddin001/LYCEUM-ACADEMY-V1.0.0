@@ -721,8 +721,9 @@ router.post('/contacts/:id/merge', authenticateToken, async (req, res) => {
     const transactionsResult = await query('UPDATE transactions SET contact_id = $1 WHERE contact_id = $2 RETURNING id', [primaryId, targetContactId]);
     recordsUpdated.transactions = transactionsResult.rows.length;
 
-    // Update leads
-    const leadsResult = await query('UPDATE leads SET contact_id = $1 WHERE contact_id = $2 RETURNING id', [primaryId, targetContactId]);
+    // Update leads - leads table uses contact name, not contact_id
+    const leadsResult = await query('UPDATE leads SET contact = $1 WHERE contact = $2 OR email = $3 OR phone = $4 RETURNING id',
+      [mergedData.name, target.name, target.email, target.phone]);
     recordsUpdated.leads = leadsResult.rows.length;
 
     // If target had a user link, update user to point to primary contact
