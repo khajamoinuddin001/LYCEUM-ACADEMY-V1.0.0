@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from 'react';
 import type { CrmLead, CrmStage, User } from '../types';
-import { IndianRupee, Building2, User as UserIcon, GripVertical, Filter, Trash2 } from './icons';
+import { IndianRupee, Building2, User as UserIcon, GripVertical, Filter, Trash2, Search, X, ChevronDown, ChevronUp, FileText } from './icons';
 
 const STAGES: CrmStage[] = ['New', 'Qualified', 'Proposal', 'Won', 'Lost'];
 
@@ -95,6 +95,18 @@ const LeadCard: React.FC<{ lead: CrmLead; onSelect: (lead: CrmLead) => void; onD
                     </div>
                 </div>
             </div>
+            {/* Quotations Badge */}
+            {lead.quotations && lead.quotations.length > 0 && (
+                <div className="mt-2 flex items-center text-xs text-indigo-600 dark:text-indigo-400">
+                    <FileText size={12} className="mr-1" />
+                    <span className="font-medium">
+                        {lead.quotations[lead.quotations.length - 1].quotationNumber || `QUO-${lead.quotations[lead.quotations.length - 1].id}`}
+                    </span>
+                    {lead.quotations.length > 1 && (
+                        <span className="ml-1 text-gray-500">+{lead.quotations.length - 1}</span>
+                    )}
+                </div>
+            )}
             <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-200 dark:border-gray-600">
                 <div className="flex items-center font-medium text-green-600 dark:text-green-400 text-sm">
                     <IndianRupee size={14} className="mr-1" />
@@ -127,17 +139,36 @@ const LeadCard: React.FC<{ lead: CrmLead; onSelect: (lead: CrmLead) => void; onD
 const CrmView: React.FC<CrmViewProps> = ({ leads, onLeadSelect, onNewLeadClick, onUpdateLeadStage, onDeleteLead, user }) => {
     const [dragOverStage, setDragOverStage] = useState<CrmStage | null>(null);
     const [agentFilter, setAgentFilter] = useState('All Agents');
+    const [searchQuery, setSearchQuery] = useState('');
+    const [isWonCollapsed, setIsWonCollapsed] = useState(true);
+    const [isLostCollapsed, setIsLostCollapsed] = useState(true);
     const canUpdate = user.role === 'Admin' || !!user.permissions?.['CRM']?.update;
     const canDelete = user.role === 'Admin' || !!user.permissions?.['CRM']?.delete;
 
     const uniqueAgents = useMemo(() => ['All Agents', ...Array.from(new Set(leads.map(l => l.assignedTo).filter(Boolean))) as string[]], [leads]);
 
     const filteredLeads = useMemo(() => {
-        if (agentFilter === 'All Agents') {
-            return leads;
+        let result = leads;
+
+        // Filter by agent
+        if (agentFilter !== 'All Agents') {
+            result = result.filter(lead => lead.assignedTo === agentFilter);
         }
-        return leads.filter(lead => lead.assignedTo === agentFilter);
-    }, [leads, agentFilter]);
+
+        // Filter by search query
+        if (searchQuery.trim()) {
+            const query = searchQuery.toLowerCase();
+            result = result.filter(lead =>
+                lead.title?.toLowerCase().includes(query) ||
+                lead.contact?.toLowerCase().includes(query) ||
+                lead.company?.toLowerCase().includes(query) ||
+                lead.email?.toLowerCase().includes(query) ||
+                lead.phone?.includes(query)
+            );
+        }
+
+        return result;
+    }, [leads, agentFilter, searchQuery]);
 
     const handleDrop = (e: React.DragEvent<HTMLDivElement>, stage: CrmStage) => {
         e.preventDefault();
@@ -200,9 +231,39 @@ const CrmView: React.FC<CrmViewProps> = ({ leads, onLeadSelect, onNewLeadClick, 
                 </div>
             </div>
 
+            {/* Search Bar */}
+            <div className="mb-4 relative">
+                <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+                    <input
+                        type="text"
+                        placeholder="Search leads by name, company, email, or phone..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full pl-10 pr-10 py-2.5 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-lyceum-blue focus:border-lyceum-blue text-gray-900 dark:text-gray-100"
+                    />
+                    {searchQuery && (
+                        <button
+                            onClick={() => setSearchQuery('')}
+                            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                        >
+                            <X size={18} />
+                        </button>
+                    )}
+                </div>
+                {searchQuery && (
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
+                        Found {filteredLeads.length} lead{filteredLeads.length !== 1 ? 's' : ''}
+                    </p>
+                )}
+            </div>
+
             <div className="flex-1 flex space-x-4 overflow-x-auto pb-4">
                 {STAGES.map(stage => {
                     const stageLeads = filteredLeads.filter(lead => lead.stage === stage);
+                    const isCollapsible = stage === 'Won' || stage === 'Lost';
+                    const isCollapsed = stage === 'Won' ? isWonCollapsed : stage === 'Lost' ? isLostCollapsed : false;
+
                     return (
                         <div
                             key={stage}
@@ -213,7 +274,18 @@ const CrmView: React.FC<CrmViewProps> = ({ leads, onLeadSelect, onNewLeadClick, 
                         >
                             <div className={`p-4 font-semibold text-gray-700 dark:text-gray-200 border-t-4 ${stageColorClasses[stage]} rounded-t-lg flex flex-col`}>
                                 <div className="flex justify-between items-center">
-                                    <span>{stage}</span>
+                                    <div className="flex items-center space-x-2">
+                                        <span>{stage}</span>
+                                        {isCollapsible && (
+                                            <button
+                                                onClick={() => stage === 'Won' ? setIsWonCollapsed(!isWonCollapsed) : setIsLostCollapsed(!isLostCollapsed)}
+                                                className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                                                title={isCollapsed ? 'Expand' : 'Collapse'}
+                                            >
+                                                {isCollapsed ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+                                            </button>
+                                        )}
+                                    </div>
                                     <span className="text-sm text-gray-500 dark:text-gray-400 font-normal">
                                         {stageLeads.length}
                                     </span>
@@ -223,11 +295,13 @@ const CrmView: React.FC<CrmViewProps> = ({ leads, onLeadSelect, onNewLeadClick, 
                                     {getStageValue(stage).toLocaleString('en-IN')}
                                 </div>
                             </div>
-                            <div className="p-2 flex-1 overflow-y-auto">
-                                {stageLeads.map(lead => (
-                                    <LeadCard key={lead.id} lead={lead} onSelect={onLeadSelect} onDelete={onDeleteLead} draggable={canUpdate} canDelete={canDelete} />
-                                ))}
-                            </div>
+                            {(!isCollapsible || !isCollapsed) && (
+                                <div className="p-2 flex-1 overflow-y-auto">
+                                    {stageLeads.map(lead => (
+                                        <LeadCard key={lead.id} lead={lead} onSelect={onLeadSelect} onDelete={onDeleteLead} draggable={canUpdate} canDelete={canDelete} />
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     );
                 })}

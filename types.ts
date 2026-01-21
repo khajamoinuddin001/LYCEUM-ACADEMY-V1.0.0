@@ -318,7 +318,7 @@ export interface CalendarEvent {
 
 export type CrmStage = 'New' | 'Qualified' | 'Proposal' | 'Won' | 'Lost';
 
-export type QuotationStatus = 'Draft' | 'Sent' | 'Accepted' | 'Rejected';
+export type QuotationStatus = 'Draft' | 'In Review' | 'Accepted by Student' | 'Agreed' | 'Rejected';
 
 export interface Quotation {
   id: number;
@@ -328,6 +328,8 @@ export interface Quotation {
   lineItems: QuotationLineItem[];
   total: number;
   status: QuotationStatus;
+  studentAccepted?: boolean;
+  studentAcceptedAt?: string;
   date: string;
 }
 
@@ -357,6 +359,10 @@ export interface CrmLead {
   assignedTo?: string;
   notes?: string;
   quotations?: Quotation[];
+  metadata?: {
+    accountsReceivable?: any[];
+    [key: string]: any;
+  };
   createdAt?: string;
 }
 

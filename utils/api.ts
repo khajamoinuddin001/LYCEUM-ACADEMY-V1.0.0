@@ -294,6 +294,148 @@ export const saveQuotation = async (leadId: number, quotationData: Omit<Quotatio
   return getLeads();
 };
 
+// Accept quotation (student action)
+export const acceptQuotation = async (quotationId: number): Promise<void> => {
+  // Find the lead and quotation
+  const leads = await getLeads();
+  let targetLead: CrmLead | null = null;
+  let quotationIndex = -1;
+
+  for (const lead of leads) {
+    const index = (lead.quotations || []).findIndex(q => q.id === quotationId);
+    if (index !== -1) {
+      targetLead = lead;
+      quotationIndex = index;
+      break;
+    }
+  }
+
+  if (!targetLead || quotationIndex === -1) {
+    throw new Error('Quotation not found');
+  }
+
+  const quotations = [...(targetLead.quotations || [])];
+  const quotation = quotations[quotationIndex];
+
+  // Update quotation with student acceptance
+  quotations[quotationIndex] = {
+    ...quotation,
+    studentAccepted: true,
+    studentAcceptedAt: new Date().toISOString(),
+    // Check if lead is Won - if yes, mark as Agreed, otherwise Accepted by Student
+    status: targetLead.stage === 'Won' ? 'Agreed' : 'Accepted by Student'
+  };
+
+  await apiRequest(`/leads/${targetLead.id}`, {
+    method: 'PUT',
+    body: JSON.stringify({ ...targetLead, quotations }),
+  });
+
+  // If both conditions met (student accepted + Won), create AR entry
+  if (targetLead.stage === 'Won') {
+    await createAccountsReceivable(targetLead.id, quotationId);
+  }
+};
+
+// Mark quotation as accepted (staff action for offline acceptance)
+export const markQuotationAccepted = async (leadId: number, quotationId: number): Promise<CrmLead[]> => {
+  const lead = await apiRequest<CrmLead>(`/leads/${leadId}`, { method: 'GET' });
+  const quotations = [...(lead.quotations || [])];
+  const quotationIndex = quotations.findIndex(q => q.id === quotationId);
+
+  if (quotationIndex === -1) {
+    throw new Error('Quotation not found');
+  }
+
+  quotations[quotationIndex] = {
+    ...quotations[quotationIndex],
+    studentAccepted: true,
+    studentAcceptedAt: new Date().toISOString(),
+    status: lead.stage === 'Won' ? 'Agreed' : 'Accepted by Student'
+  };
+
+  await apiRequest(`/leads/${leadId}`, {
+    method: 'PUT',
+    body: JSON.stringify({ ...lead, quotations }),
+  });
+
+  // If both conditions met, create AR
+  if (lead.stage === 'Won') {
+    await createAccountsReceivable(leadId, quotationId);
+  }
+
+  return getLeads();
+};
+
+// Update quotation status to In Review (when sharing with student)
+export const shareQuotation = async (leadId: number, quotationId: number): Promise<CrmLead[]> => {
+  const lead = await apiRequest<CrmLead>(`/leads/${leadId}`, { method: 'GET' });
+  const quotations = [...(lead.quotations || [])];
+  const quotationIndex = quotations.findIndex(q => q.id === quotationId);
+
+  if (quotationIndex === -1) {
+    throw new Error('Quotation not found');
+  }
+
+  quotations[quotationIndex] = {
+    ...quotations[quotationIndex],
+    status: 'In Review'
+  };
+
+  await apiRequest(`/leads/${leadId}`, {
+    method: 'PUT',
+    body: JSON.stringify({ ...lead, quotations }),
+  });
+
+  return getLeads();
+};
+
+// Create Accounts Receivable entry
+const createAccountsReceivable = async (leadId: number, quotationId: number): Promise<void> => {
+  const lead = await apiRequest<CrmLead>(`/leads/${leadId}`, { method: 'GET' });
+  const quotation = (lead.quotations || []).find(q => q.id === quotationId);
+
+  if (!quotation) {
+    throw new Error('Quotation not found');
+  }
+
+  // Get contact from lead
+  const contacts = await getContacts();
+  const contact = contacts.find(c => c.name === lead.contact || c.email === lead.email);
+
+  if (!contact) {
+    throw new Error('Contact not found');
+  }
+
+  // Create AR entry (stored in contact metadata for now)
+  const arEntry = {
+    id: Date.now(),
+    quotationId: quotation.id,
+    quotationRef: quotation.quotationNumber || `QUO-${quotation.id}`,
+    leadId: lead.id,
+    totalAmount: quotation.total,
+    paidAmount: 0,
+    remainingAmount: quotation.total,
+    status: 'Outstanding',
+    createdAt: new Date().toISOString(),
+    agreedAt: new Date().toISOString()
+  };
+
+  // Store AR in contact metadata (using type assertion for metadata)
+  const updatedContact = {
+    ...contact,
+    metadata: {
+      ...((contact as any).metadata || {}),
+      accountsReceivable: [...(((contact as any).metadata?.accountsReceivable as any[]) || []), arEntry]
+    }
+  } as Contact;
+
+  await apiRequest(`/contacts/${contact.id}`, {
+    method: 'PUT',
+    body: JSON.stringify(updatedContact),
+  });
+};
+
 // Transactions
 export const getTransactions = async (): Promise<AccountingTransaction[]> => {
   return apiRequest<AccountingTransaction[]>('/transactions');

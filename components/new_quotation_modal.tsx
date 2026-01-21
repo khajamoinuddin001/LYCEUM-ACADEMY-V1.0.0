@@ -128,9 +128,9 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ lead, onCancel, onS
     };
 
     if (!isEditing && !quotationToSave.quotationNumber) {
-      const datePart = new Date().toISOString().slice(0, 7).replace('-', ''); // YYYYMM
-      const randomPart = Math.floor(Math.random() * 900) + 100; // 100-999
-      quotationToSave.quotationNumber = `S-${datePart}${randomPart}`;
+      // Generate unique 6-digit reference number
+      const randomDigits = Math.floor(100000 + Math.random() * 900000); // 100000-999999
+      quotationToSave.quotationNumber = `QUO-${randomDigits}`;
     }
 
     console.log('Saving quotation:', quotationToSave);

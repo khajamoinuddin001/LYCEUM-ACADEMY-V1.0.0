@@ -68,9 +68,11 @@ const DEFAULT_STAFF_NAV = [
 ];
 
 const DEFAULT_STUDENT_NAV = [
-  { name: 'student_dashboard', label: 'dashboard', icon: <BarChart3 size={20} /> },
+  { name: 'student_dashboard', label: 'Dashboard', icon: <BarChart3 size={20} /> },
+  { name: 'Apps', label: 'Apps', icon: <LayoutGrid size={20} /> },
   { name: 'LMS', label: 'LMS', icon: <BookOpen size={20} /> },
-  { name: 'Profile', label: 'My Profile', icon: <UserCircle size={20} /> },
+  { name: 'Tickets', label: 'Tickets', icon: <FileText size={20} /> },
+  { name: 'My Profile', label: 'My Profile', icon: <UserCircle size={20} /> },
 ];
 
 const getAppMetadata = (name: string): OdooApp | undefined => {

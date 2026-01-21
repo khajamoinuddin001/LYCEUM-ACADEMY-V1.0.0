@@ -4,7 +4,6 @@ import React, { useEffect, useState, useRef } from 'react';
 import type { Contact, LmsCourse, CalendarEvent, Visitor } from '../types';
 import { GraduationCap, BookOpen, CalendarClock, Paperclip, CheckCircle2, Circle, Trophy, Calendar, Upload, Download } from './icons';
 import * as api from '../utils/api';
-import StudentTicketsView from './student_tickets_view';
 
 interface StudentDashboardProps {
     student?: Contact;
@@ -429,11 +428,6 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, courses, e
                         <button onClick={() => onAppSelect('LMS')} className="text-sm font-medium text-lyceum-blue hover:underline">Go to LMS</button>
                     </div>
                 </InfoCard>
-
-                {/* Support Tickets Section */}
-                <div className="lg:col-span-2">
-                    <StudentTicketsView student={student} />
-                </div>
 
                 <InfoCard icon={<CalendarClock size={20} />} title="Upcoming Deadlines">
                     {upcomingEvents.length > 0 ? (

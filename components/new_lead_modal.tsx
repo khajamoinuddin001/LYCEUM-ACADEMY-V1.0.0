@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X } from './icons';
 import type { CrmLead, User, Contact } from '../types';
 import * as api from '../utils/api';
@@ -28,6 +28,7 @@ const NewLeadModal: React.FC<NewLeadModalProps> = ({ isOpen, onClose, onSave, le
     notes: ''
   });
   const [error, setError] = useState('');
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   const isEditing = !!lead;
   const canWrite = user.role === 'Admin' || (isEditing ? user.permissions['CRM']?.update : user.permissions['CRM']?.create);
@@ -76,7 +77,14 @@ const NewLeadModal: React.FC<NewLeadModalProps> = ({ isOpen, onClose, onSave, le
   const handleContactSearch = (value: string) => {
     setContactSearchQuery(value);
     setFormData(prev => ({ ...prev, contact: value }));
-    setShowContactDropdown(value.length > 0);
+
+    // Only show dropdown if there's a value and matching contacts
+    const hasMatches = contacts.some(c =>
+      c.name.toLowerCase().includes(value.toLowerCase()) ||
+      c.email?.toLowerCase().includes(value.toLowerCase()) ||
+      c.phone?.includes(value)
+    );
+    setShowContactDropdown(value.length > 0 && hasMatches);
 
     // Auto-fill if exact match found
     const exactMatch = contacts.find(c => c.name.toLowerCase() === value.toLowerCase());
@@ -87,8 +95,23 @@ const NewLeadModal: React.FC<NewLeadModalProps> = ({ isOpen, onClose, onSave, le
         email: exactMatch.email || prev.email,
         phone: exactMatch.phone || prev.phone
       }));
+      setShowContactDropdown(false);
     }
   };
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowContactDropdown(false);
+      }
+    };
+
+    if (showContactDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showContactDropdown]);
 
   const handleClose = () => {
     setIsAnimatingOut(true);
@@ -197,7 +220,7 @@ const NewLeadModal: React.FC<NewLeadModalProps> = ({ isOpen, onClose, onSave, le
         <div className="p-6 max-h-[70vh] overflow-y-auto">
           <div className="space-y-4">
             {/* Contact Person with Autocomplete */}
-            <div className="relative">
+            <div className="relative" ref={dropdownRef}>
               <label htmlFor="lead-contact" className={labelClasses}>Contact Person (Client Name) *</label>
               <input
                 type="text"
@@ -205,7 +228,16 @@ const NewLeadModal: React.FC<NewLeadModalProps> = ({ isOpen, onClose, onSave, le
                 name="contact"
                 value={formData.contact}
                 onChange={(e) => handleContactSearch(e.target.value)}
-                onFocus={() => setShowContactDropdown(formData.contact.length > 0)}
+                onFocus={() => {
+                  const hasMatches = contacts.some(c =>
+                    c.name.toLowerCase().includes(formData.contact.toLowerCase())
+                  );
+                  setShowContactDropdown(formData.contact.length > 0 && hasMatches);
+                }}
+                onBlur={() => {
+                  // Delay to allow click on dropdown item
+                  setTimeout(() => setShowContactDropdown(false), 200);
+                }}
                 placeholder="Type contact name..."
                 className={inputClasses}
                 disabled={!canWrite}

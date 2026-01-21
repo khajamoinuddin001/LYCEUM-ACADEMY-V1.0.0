@@ -57,6 +57,9 @@ import EventModal from './components/event_modal';
 import LandingPage from './components/landing_page';
 import TicketsView from './components/tickets_view';
 import StudentTicketsView from './components/student_tickets_view';
+import StudentAppsView from './components/student_apps_view';
+import StudentAccountsView from './components/student_accounts_view';
+import StudentQuotationsView from './components/student_quotations_view';
 import AgentsView from './components/agents_view';
 import VisitorDisplay from './components/visitor_display';
 import DepartmentDashboard from './components/department_dashboard';
@@ -1531,6 +1534,54 @@ const DashboardLayout: React.FC = () => {
         <main className="flex-1 overflow-x-hidden overflow-y-auto bg-lyceum-light dark:bg-gray-800 p-3 md:p-6">
           {currentUser.role === 'Student' ? (
             (() => { // Use an IIFE to allow if/return inside JSX
+              // Student Apps Page
+              if (activeApp === 'Apps') {
+                return <StudentAppsView onAppSelect={handleAppSelect} />;
+              }
+
+              // Student Tickets Page
+              if (activeApp === 'Tickets') {
+                const studentContact = contacts.find(c =>
+                  c.userId === currentUser.id ||
+                  (c.email && currentUser.email && c.email.toLowerCase() === currentUser.email.toLowerCase())
+                );
+                return studentContact ? <StudentTicketsView student={studentContact} /> : <div>Loading...</div>;
+              }
+
+              // Student Accounts Page
+              if (activeApp === 'Accounts') {
+                const studentContact = contacts.find(c =>
+                  c.userId === currentUser.id ||
+                  (c.email && currentUser.email && c.email.toLowerCase() === currentUser.email.toLowerCase())
+                );
+                return studentContact ? <StudentAccountsView student={studentContact} /> : <div>Loading...</div>;
+              }
+
+              // Student Quotations Page
+              if (activeApp === 'Quotations') {
+                const studentContact = contacts.find(c =>
+                  c.userId === currentUser.id ||
+                  (c.email && currentUser.email && c.email.toLowerCase() === currentUser.email.toLowerCase())
+                );
+                return studentContact ? <StudentQuotationsView student={studentContact} /> : <div>Loading...</div>;
+              }
+
+              // Student Profile Page
+              if (activeApp === 'My Profile') {
+                const studentContact = contacts.find(c =>
+                  c.userId === currentUser.id ||
+                  (c.email && currentUser.email && c.email.toLowerCase() === currentUser.email.toLowerCase())
+                );
+                return studentContact ? (
+                  <StudentProfileView
+                    student={studentContact}
+                    onNavigateBack={() => handleAppSelect('Apps')}
+                    user={currentUser}
+                  />
+                ) : <div>Loading...</div>;
+              }
+
+              // Student Dashboard (default)
               if (activeApp === 'student_dashboard' || activeApp === 'dashboard') {
                 // Robustly find the student contact
                 console.log('🔍 [Student Dashboard] Looking for contact...');
