@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import type { TodoTask, User, TaskReply } from '../types';
-import { X, MessageSquare, Send, Clock, Paperclip, FileText, UserPlus, MoreHorizontal, Eye, Edit, Trash2 } from './icons';
+import { X, MessageSquare, Send, Clock, Paperclip, FileText, UserPlus, MoreHorizontal, Eye, Edit, Trash2, Download } from './icons';
 import { getStaffMembers } from '../utils/api';
 
 interface TaskDetailModalProps {
@@ -70,6 +70,31 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
             setShowForwardModal(false);
             onClose();
         }
+    };
+
+    const handleSaveEdit = async () => {
+        if (!editingReplyId || !editingReplyText.trim()) return;
+
+        const updatedReplies = task.replies?.map(r =>
+            r.id === editingReplyId ? { ...r, message: editingReplyText } : r
+        ) || [];
+
+        await onAddReply(task.id, '', []); // This will trigger a save
+        // Update task with edited replies
+        const updatedTask = { ...task, replies: updatedReplies };
+        onStatusChange(updatedTask as any, task.status as any);
+
+        setEditingReplyId(null);
+        setEditingReplyText('');
+    };
+
+    const handleDeleteReply = async (replyId: number) => {
+        if (!confirm('Delete this reply?')) return;
+
+        const updatedReplies = task.replies?.filter(r => r.id !== replyId) || [];
+        const updatedTask = { ...task, replies: updatedReplies };
+        onStatusChange(updatedTask as any, task.status as any);
+        setOpenMenuId(null);
     };
 
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -277,17 +302,49 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                                                     )}
                                                 </div>
                                             </div>
-                                            <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap mb-2">
-                                                {reply.message}
-                                            </p>
+                                            {editingReplyId === reply.id ? (
+                                                <div className="space-y-2">
+                                                    <textarea
+                                                        value={editingReplyText}
+                                                        onChange={(e) => setEditingReplyText(e.target.value)}
+                                                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                                                        rows={3}
+                                                    />
+                                                    <div className="flex gap-2">
+                                                        <button
+                                                            onClick={handleSaveEdit}
+                                                            className="px-3 py-1 bg-lyceum-blue text-white rounded text-sm"
+                                                        >
+                                                            Save
+                                                        </button>
+                                                        <button
+                                                            onClick={() => {
+                                                                setEditingReplyId(null);
+                                                                setEditingReplyText('');
+                                                            }}
+                                                            className="px-3 py-1 bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded text-sm"
+                                                        >
+                                                            Cancel
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap mb-2">
+                                                    {reply.message}
+                                                </p>
+                                            )}
                                             {reply.attachments && reply.attachments.length > 0 && (
                                                 <div className="mt-2 space-y-1">
                                                     {reply.attachments.map((file, idx) => (
-                                                        <div key={idx} className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                                                        <button
+                                                            key={idx}
+                                                            onClick={() => setPreviewAttachment(file)}
+                                                            className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400 hover:text-lyceum-blue dark:hover:text-lyceum-blue cursor-pointer w-full text-left"
+                                                        >
                                                             <FileText size={14} />
-                                                            <span>{file.name}</span>
+                                                            <span className="underline">{file.name}</span>
                                                             <span className="text-gray-400">({formatFileSize(file.size)})</span>
-                                                        </div>
+                                                        </button>
                                                     ))}
                                                 </div>
                                             )}
@@ -431,6 +488,32 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                             >
                                 Forward Task
                             </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Document Preview Modal */}
+            {previewAttachment && (
+                <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[70] flex items-center justify-center p-4" onClick={() => setPreviewAttachment(null)}>
+                    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-4xl p-6" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-lg font-bold text-gray-900 dark:text-white">{previewAttachment.name}</h3>
+                            <button onClick={() => setPreviewAttachment(null)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <div className="bg-gray-100 dark:bg-gray-900 rounded-lg p-8 text-center">
+                            <FileText size={64} className="mx-auto mb-4 text-gray-400" />
+                            <p className="text-gray-600 dark:text-gray-400 mb-4">File preview not available</p>
+                            <a
+                                href={previewAttachment.url}
+                                download={previewAttachment.name}
+                                className="inline-flex items-center gap-2 px-4 py-2 bg-lyceum-blue text-white rounded-lg hover:bg-lyceum-blue-dark"
+                            >
+                                <Download size={16} />
+                                Download File
+                            </a>
                         </div>
                     </div>
                 </div>
