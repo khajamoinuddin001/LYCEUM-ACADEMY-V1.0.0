@@ -131,7 +131,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     return (
         <>
             <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
-                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-3xl my-auto flex flex-col border border-gray-200 dark:border-gray-700 max-h-[90vh]">
+                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-3xl my-8 flex flex-col border border-gray-200 dark:border-gray-700" style={{ maxHeight: '90vh' }}>
                     {/* Header */}
                     <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-start flex-shrink-0">
                         <div className="flex-1">
