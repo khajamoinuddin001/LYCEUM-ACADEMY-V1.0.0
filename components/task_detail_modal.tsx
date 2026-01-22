@@ -1,13 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { TodoTask, User, TaskReply } from '../types';
-import { X, MessageSquare, Send, Clock, User as UserIcon } from './icons';
+import { X, MessageSquare, Send, Clock, Paperclip, FileText, UserPlus } from './icons';
+import { getStaffMembers } from '../utils/api';
 
 interface TaskDetailModalProps {
     task: TodoTask | null;
     isOpen: boolean;
     onClose: () => void;
-    onAddReply: (taskId: number, message: string) => void;
+    onAddReply: (taskId: number, message: string, attachments?: File[]) => Promise<void>;
     onStatusChange: (task: TodoTask, newStatus: 'To Do' | 'In Progress' | 'Done') => void;
+    onForwardTask: (task: TodoTask, newAssigneeId: number, newAssigneeName: string) => void;
     user: User;
 }
 
@@ -17,20 +19,32 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     onClose,
     onAddReply,
     onStatusChange,
+    onForwardTask,
     user
 }) => {
     const [replyMessage, setReplyMessage] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [attachments, setAttachments] = useState<File[]>([]);
+    const [showForwardModal, setShowForwardModal] = useState(false);
+    const [selectedStaffId, setSelectedStaffId] = useState<number>(0);
+    const [staff, setStaff] = useState<{ id: number; name: string; role: string; email: string }[]>([]);
+
+    useEffect(() => {
+        if (isOpen) {
+            getStaffMembers().then(setStaff).catch(console.error);
+        }
+    }, [isOpen]);
 
     if (!isOpen || !task) return null;
 
     const handleAddReply = async () => {
-        if (!replyMessage.trim()) return;
+        if (!replyMessage.trim() && attachments.length === 0) return;
 
         setIsSubmitting(true);
         try {
-            await onAddReply(task.id, replyMessage.trim());
+            await onAddReply(task.id, replyMessage.trim(), attachments);
             setReplyMessage('');
+            setAttachments([]);
         } finally {
             setIsSubmitting(false);
         }
@@ -41,12 +55,40 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
         onClose();
     };
 
+    const handleForwardTask = () => {
+        if (!selectedStaffId) {
+            alert('Please select a staff member to forward to');
+            return;
+        }
+        const selectedStaff = staff.find(s => s.id === selectedStaffId);
+        if (selectedStaff) {
+            onForwardTask(task, selectedStaffId, selectedStaff.name);
+            setShowForwardModal(false);
+            onClose();
+        }
+    };
+
+    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = Array.from(e.target.files || []);
+        setAttachments(prev => [...prev, ...files]);
+    };
+
+    const removeAttachment = (index: number) => {
+        setAttachments(prev => prev.filter((_, i) => i !== index));
+    };
+
     const formatTimestamp = (timestamp: string) => {
         return new Date(timestamp).toLocaleString('en-IN', {
             dateStyle: 'medium',
             timeStyle: 'short',
             timeZone: 'Asia/Kolkata'
         });
+    };
+
+    const formatFileSize = (bytes: number) => {
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
     };
 
     const getPriorityColor = (priority?: string) => {
@@ -73,160 +115,273 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
         }
     };
 
+    // Get actual names from staff list
+    const getStaffName = (identifier: any) => {
+        if (!identifier) return 'Unassigned';
+        // If it's already a name (string), return it
+        if (typeof identifier === 'string') return identifier;
+        // If it's an ID, find the staff member
+        const staffMember = staff.find(s => s.id === identifier);
+        return staffMember ? staffMember.name : String(identifier);
+    };
+
     const isAssignedToCurrentUser = task.assignedTo === user.id || task.assignedTo === user.name;
     const canReply = isAssignedToCurrentUser && task.status !== 'Done';
 
     return (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col border border-gray-200 dark:border-gray-700">
-                {/* Header */}
-                <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-start">
-                    <div className="flex-1">
-                        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-                            {task.title}
-                        </h2>
-                        <div className="flex items-center gap-3 flex-wrap">
-                            <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${getStatusColor(task.status)}`}>
-                                {task.status}
-                            </span>
-                            {task.priority && (
-                                <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${getPriorityColor(task.priority)}`}>
-                                    {task.priority} Priority
+        <>
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-3xl max-h-[85vh] overflow-hidden flex flex-col border border-gray-200 dark:border-gray-700">
+                    {/* Header */}
+                    <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-start flex-shrink-0">
+                        <div className="flex-1">
+                            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+                                {task.title}
+                            </h2>
+                            <div className="flex items-center gap-3 flex-wrap">
+                                <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${getStatusColor(task.status)}`}>
+                                    {task.status}
                                 </span>
-                            )}
-                            {task.dueDate && (
-                                <span className="text-sm text-gray-600 dark:text-gray-400 flex items-center gap-1">
-                                    <Clock size={14} />
-                                    Due: {new Date(task.dueDate).toLocaleDateString()}
-                                </span>
-                            )}
+                                {task.priority && (
+                                    <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${getPriorityColor(task.priority)}`}>
+                                        {task.priority} Priority
+                                    </span>
+                                )}
+                                {task.dueDate && (
+                                    <span className="text-sm text-gray-600 dark:text-gray-400 flex items-center gap-1">
+                                        <Clock size={14} />
+                                        Due: {new Date(task.dueDate).toLocaleDateString()}
+                                    </span>
+                                )}
+                            </div>
                         </div>
-                    </div>
-                    <button
-                        onClick={onClose}
-                        className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full text-gray-500"
-                    >
-                        <X size={20} />
-                    </button>
-                </div>
-
-                {/* Content */}
-                <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                    {/* Description */}
-                    {task.description && (
-                        <div>
-                            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                                Description
-                            </h3>
-                            <p className="text-gray-600 dark:text-gray-400 whitespace-pre-wrap">
-                                {task.description}
-                            </p>
-                        </div>
-                    )}
-
-                    {/* Task Info */}
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                                Assigned To
-                            </h3>
-                            <p className="text-gray-600 dark:text-gray-400">{task.assignedTo || 'Unassigned'}</p>
-                        </div>
-                        <div>
-                            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                                Assigned By
-                            </h3>
-                            <p className="text-gray-600 dark:text-gray-400">{task.assignedBy || 'Unknown'}</p>
-                        </div>
+                        <button
+                            onClick={onClose}
+                            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full text-gray-500"
+                        >
+                            <X size={20} />
+                        </button>
                     </div>
 
-                    {/* Replies Section */}
-                    <div>
-                        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
-                            <MessageSquare size={16} />
-                            Progress Updates & Remarks ({task.replies?.length || 0})
-                        </h3>
+                    {/* Content - Scrollable */}
+                    <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                        {/* Description */}
+                        {task.description && (
+                            <div>
+                                <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                                    Description
+                                </h3>
+                                <p className="text-gray-600 dark:text-gray-400 whitespace-pre-wrap">
+                                    {task.description}
+                                </p>
+                            </div>
+                        )}
 
-                        {/* Replies List */}
-                        <div className="space-y-3 mb-4">
-                            {task.replies && task.replies.length > 0 ? (
-                                task.replies.map((reply) => (
-                                    <div
-                                        key={reply.id}
-                                        className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 border border-gray-200 dark:border-gray-600"
-                                    >
-                                        <div className="flex items-start justify-between mb-2">
-                                            <div className="flex items-center gap-2">
-                                                <div className="w-8 h-8 bg-lyceum-blue rounded-full flex items-center justify-center text-white text-sm font-semibold">
-                                                    {reply.userName.charAt(0).toUpperCase()}
-                                                </div>
-                                                <div>
-                                                    <p className="text-sm font-semibold text-gray-900 dark:text-white">
-                                                        {reply.userName}
-                                                    </p>
-                                                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                                                        {formatTimestamp(reply.timestamp)}
-                                                    </p>
+                        {/* Task Info */}
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                                    Assigned To
+                                </h3>
+                                <p className="text-gray-600 dark:text-gray-400">{getStaffName(task.assignedTo)}</p>
+                            </div>
+                            <div>
+                                <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                                    Assigned By
+                                </h3>
+                                <p className="text-gray-600 dark:text-gray-400">{getStaffName(task.assignedBy)}</p>
+                            </div>
+                        </div>
+
+                        {/* Replies Section */}
+                        <div>
+                            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
+                                <MessageSquare size={16} />
+                                Progress Updates & Remarks ({task.replies?.length || 0})
+                            </h3>
+
+                            {/* Replies List */}
+                            <div className="space-y-3 mb-4">
+                                {task.replies && task.replies.length > 0 ? (
+                                    task.replies.map((reply) => (
+                                        <div
+                                            key={reply.id}
+                                            className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 border border-gray-200 dark:border-gray-600"
+                                        >
+                                            <div className="flex items-start justify-between mb-2">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-8 h-8 bg-lyceum-blue rounded-full flex items-center justify-center text-white text-sm font-semibold">
+                                                        {reply.userName.charAt(0).toUpperCase()}
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-sm font-semibold text-gray-900 dark:text-white">
+                                                            {reply.userName}
+                                                        </p>
+                                                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                                                            {formatTimestamp(reply.timestamp)}
+                                                        </p>
+                                                    </div>
                                                 </div>
                                             </div>
+                                            <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap mb-2">
+                                                {reply.message}
+                                            </p>
+                                            {reply.attachments && reply.attachments.length > 0 && (
+                                                <div className="mt-2 space-y-1">
+                                                    {reply.attachments.map((file, idx) => (
+                                                        <div key={idx} className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+                                                            <FileText size={14} />
+                                                            <span>{file.name}</span>
+                                                            <span className="text-gray-400">({formatFileSize(file.size)})</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
                                         </div>
-                                        <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
-                                            {reply.message}
-                                        </p>
+                                    ))
+                                ) : (
+                                    <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
+                                        No updates yet
+                                    </p>
+                                )}
+                            </div>
+
+                            {/* Add Reply Form */}
+                            {canReply && (
+                                <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 border border-blue-200 dark:border-blue-800">
+                                    <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                                        Add Progress Update (Optional)
+                                    </label>
+                                    <textarea
+                                        value={replyMessage}
+                                        onChange={(e) => setReplyMessage(e.target.value)}
+                                        placeholder="Share progress, updates, or remarks about this task..."
+                                        rows={3}
+                                        className="w-full px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-lyceum-blue focus:border-lyceum-blue outline-none dark:text-white resize-none"
+                                    />
+
+                                    {/* File Upload */}
+                                    <div className="mt-3">
+                                        <label className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors w-fit">
+                                            <Paperclip size={16} className="text-gray-600 dark:text-gray-400" />
+                                            <span className="text-sm text-gray-700 dark:text-gray-300">Attach Files (Optional)</span>
+                                            <input
+                                                type="file"
+                                                multiple
+                                                onChange={handleFileSelect}
+                                                className="hidden"
+                                            />
+                                        </label>
+
+                                        {/* Selected Files */}
+                                        {attachments.length > 0 && (
+                                            <div className="mt-2 space-y-1">
+                                                {attachments.map((file, idx) => (
+                                                    <div key={idx} className="flex items-center justify-between bg-white dark:bg-gray-800 px-3 py-2 rounded border border-gray-200 dark:border-gray-600">
+                                                        <div className="flex items-center gap-2 text-sm">
+                                                            <FileText size={14} className="text-gray-600 dark:text-gray-400" />
+                                                            <span className="text-gray-700 dark:text-gray-300">{file.name}</span>
+                                                            <span className="text-gray-400 text-xs">({formatFileSize(file.size)})</span>
+                                                        </div>
+                                                        <button
+                                                            onClick={() => removeAttachment(idx)}
+                                                            className="text-red-600 hover:text-red-800 dark:text-red-400"
+                                                        >
+                                                            <X size={16} />
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
-                                ))
-                            ) : (
-                                <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
-                                    No updates yet
-                                </p>
+
+                                    <button
+                                        onClick={handleAddReply}
+                                        disabled={(!replyMessage.trim() && attachments.length === 0) || isSubmitting}
+                                        className="mt-3 px-4 py-2 bg-lyceum-blue text-white rounded-lg font-semibold hover:bg-lyceum-blue-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                                    >
+                                        <Send size={16} />
+                                        {isSubmitting ? 'Sending...' : 'Add Update'}
+                                    </button>
+                                </div>
                             )}
                         </div>
+                    </div>
 
-                        {/* Add Reply Form */}
+                    {/* Footer - Fixed */}
+                    <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center flex-shrink-0">
+                        <div className="flex gap-2">
+                            <button
+                                onClick={onClose}
+                                className="px-4 py-2 text-sm font-semibold text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
+                            >
+                                Close
+                            </button>
+                            <button
+                                onClick={() => setShowForwardModal(true)}
+                                className="px-4 py-2 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 transition-colors flex items-center gap-2"
+                            >
+                                <UserPlus size={16} />
+                                Forward Task
+                            </button>
+                        </div>
                         {canReply && (
-                            <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 border border-blue-200 dark:border-blue-800">
-                                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                                    Add Progress Update (Optional)
-                                </label>
-                                <textarea
-                                    value={replyMessage}
-                                    onChange={(e) => setReplyMessage(e.target.value)}
-                                    placeholder="Share progress, updates, or remarks about this task..."
-                                    rows={3}
-                                    className="w-full px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-lyceum-blue focus:border-lyceum-blue outline-none dark:text-white resize-none"
-                                />
-                                <button
-                                    onClick={handleAddReply}
-                                    disabled={!replyMessage.trim() || isSubmitting}
-                                    className="mt-2 px-4 py-2 bg-lyceum-blue text-white rounded-lg font-semibold hover:bg-lyceum-blue-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                                >
-                                    <Send size={16} />
-                                    {isSubmitting ? 'Sending...' : 'Add Update'}
-                                </button>
-                            </div>
+                            <button
+                                onClick={handleMarkComplete}
+                                className="px-6 py-2 bg-green-600 text-white rounded-lg font-bold shadow-lg hover:bg-green-700 transition-all active:scale-95"
+                            >
+                                Mark as Complete
+                            </button>
                         )}
                     </div>
                 </div>
-
-                {/* Footer */}
-                <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center">
-                    <button
-                        onClick={onClose}
-                        className="px-4 py-2 text-sm font-semibold text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
-                    >
-                        Close
-                    </button>
-                    {canReply && (
-                        <button
-                            onClick={handleMarkComplete}
-                            className="px-6 py-2 bg-green-600 text-white rounded-lg font-bold shadow-lg hover:bg-green-700 transition-all active:scale-95"
-                        >
-                            Mark as Complete
-                        </button>
-                    )}
-                </div>
             </div>
-        </div>
+
+            {/* Forward Task Modal */}
+            {showForwardModal && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+                    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md border border-gray-200 dark:border-gray-700">
+                        <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+                            <h3 className="text-xl font-bold text-gray-900 dark:text-white">Forward Task</h3>
+                            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                                Reassign this task to another staff member
+                            </p>
+                        </div>
+                        <div className="p-6">
+                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                                Select Staff Member
+                            </label>
+                            <select
+                                value={selectedStaffId}
+                                onChange={(e) => setSelectedStaffId(Number(e.target.value))}
+                                className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-lyceum-blue outline-none dark:text-white"
+                            >
+                                <option value={0}>Select a staff member...</option>
+                                {staff.map(s => (
+                                    <option key={s.id} value={s.id}>
+                                        {s.name} ({s.role}) - {s.email}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3">
+                            <button
+                                onClick={() => setShowForwardModal(false)}
+                                className="px-4 py-2 text-sm font-semibold text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleForwardTask}
+                                className="px-6 py-2 bg-purple-600 text-white rounded-lg font-bold hover:bg-purple-700 transition-all"
+                            >
+                                Forward Task
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </>
     );
 };
 

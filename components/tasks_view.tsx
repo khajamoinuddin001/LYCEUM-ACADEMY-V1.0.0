@@ -109,10 +109,17 @@ const TasksView: React.FC<TasksViewProps> = ({
         setIsDetailModalOpen(true);
     };
 
-    const handleAddReply = async (taskId: number, message: string) => {
+    const handleAddReply = async (taskId: number, message: string, attachments?: File[]) => {
         // Find the task and add reply
         const task = tasks.find(t => t.id === taskId);
         if (!task) return;
+
+        // Process attachments (in real app, upload to server)
+        const processedAttachments = attachments?.map(file => ({
+            name: file.name,
+            url: URL.createObjectURL(file), // In production, this would be the uploaded file URL
+            size: file.size
+        })) || [];
 
         const newReply = {
             id: Date.now(),
@@ -120,7 +127,8 @@ const TasksView: React.FC<TasksViewProps> = ({
             userId: user.id,
             userName: user.name,
             message,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            attachments: processedAttachments.length > 0 ? processedAttachments : undefined
         };
 
         const updatedTask = {
@@ -128,13 +136,25 @@ const TasksView: React.FC<TasksViewProps> = ({
             replies: [...(task.replies || []), newReply]
         };
 
+        // Save the updated task
         onEditTask(updatedTask);
+
+        // Update the selected task to show the new reply immediately
         setSelectedTask(updatedTask);
     };
 
     const handleCloseDetailModal = () => {
         setIsDetailModalOpen(false);
         setSelectedTask(null);
+    };
+
+    const handleForwardTask = (task: TodoTask, newAssigneeId: number, newAssigneeName: string) => {
+        const updatedTask = {
+            ...task,
+            assignedTo: newAssigneeId,
+            status: 'To Do' as TodoStatus // Reset to To Do when forwarded
+        };
+        onEditTask(updatedTask);
     };
 
     const filteredTasks = useMemo(() => {
@@ -347,6 +367,7 @@ const TasksView: React.FC<TasksViewProps> = ({
                 onClose={handleCloseDetailModal}
                 onAddReply={handleAddReply}
                 onStatusChange={onStatusChange}
+                onForwardTask={handleForwardTask}
                 user={user}
             />
 

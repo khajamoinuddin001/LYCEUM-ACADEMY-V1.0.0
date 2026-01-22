@@ -52,6 +52,7 @@ export interface TaskReply {
   userName: string;
   message: string;
   timestamp: string;
+  attachments?: { name: string; url: string; size: number }[];
 }
 
 export interface Ticket {
