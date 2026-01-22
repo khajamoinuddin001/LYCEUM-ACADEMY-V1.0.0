@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import type { TodoTask, User, TaskReply } from '../types';
-import { X, MessageSquare, Send, Clock, Paperclip, FileText, UserPlus } from './icons';
+import { X, MessageSquare, Send, Clock, Paperclip, FileText, UserPlus, MoreHorizontal, Eye, Edit, Trash2 } from './icons';
 import { getStaffMembers } from '../utils/api';
 
 interface TaskDetailModalProps {
@@ -28,6 +28,10 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     const [showForwardModal, setShowForwardModal] = useState(false);
     const [selectedStaffId, setSelectedStaffId] = useState<number>(0);
     const [staff, setStaff] = useState<{ id: number; name: string; role: string; email: string }[]>([]);
+    const [openMenuId, setOpenMenuId] = useState<number | null>(null);
+    const [editingReplyId, setEditingReplyId] = useState<number | null>(null);
+    const [editingReplyText, setEditingReplyText] = useState('');
+    const [previewAttachment, setPreviewAttachment] = useState<{ name: string; url: string } | null>(null);
 
     useEffect(() => {
         if (isOpen) {
@@ -130,8 +134,8 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
 
     return (
         <>
-            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-3xl flex flex-col border border-gray-200 dark:border-gray-700" style={{ maxHeight: '80vh' }}>
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 sm:p-6 md:p-8 lg:p-12">
+                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-3xl flex flex-col border border-gray-200 dark:border-gray-700 mt-52" style={{ maxHeight: '70vh' }}>
                     {/* Header */}
                     <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-start flex-shrink-0">
                         <div className="flex-1">
@@ -221,6 +225,56 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                                                             {formatTimestamp(reply.timestamp)}
                                                         </p>
                                                     </div>
+                                                </div>
+                                                {/* Three-dot menu */}
+                                                <div className="relative">
+                                                    <button
+                                                        onClick={() => setOpenMenuId(openMenuId === reply.id ? null : reply.id)}
+                                                        className="p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded"
+                                                    >
+                                                        <MoreHorizontal size={16} className="text-gray-600 dark:text-gray-400" />
+                                                    </button>
+                                                    {openMenuId === reply.id && (
+                                                        <div className="absolute right-0 mt-1 w-40 bg-white dark:bg-gray-700 rounded-lg shadow-lg border border-gray-200 dark:border-gray-600 z-10">
+                                                            {reply.attachments && reply.attachments.length > 0 && (
+                                                                <button
+                                                                    onClick={() => {
+                                                                        setPreviewAttachment(reply.attachments![0]);
+                                                                        setOpenMenuId(null);
+                                                                    }}
+                                                                    className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-600 flex items-center gap-2 rounded-t-lg"
+                                                                >
+                                                                    <Eye size={14} />
+                                                                    Preview
+                                                                </button>
+                                                            )}
+                                                            <button
+                                                                onClick={() => {
+                                                                    setEditingReplyId(reply.id);
+                                                                    setEditingReplyText(reply.message);
+                                                                    setOpenMenuId(null);
+                                                                }}
+                                                                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-600 flex items-center gap-2"
+                                                            >
+                                                                <Edit size={14} />
+                                                                Edit
+                                                            </button>
+                                                            <button
+                                                                onClick={() => {
+                                                                    if (confirm('Delete this reply?')) {
+                                                                        // Handle delete
+                                                                        const updatedReplies = task.replies?.filter(r => r.id !== reply.id) || [];
+                                                                        onAddReply(task.id, '', []); // Trigger update
+                                                                    }
+                                                                    setOpenMenuId(null);
+                                                                }}
+                                                                className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-600 flex items-center gap-2 text-red-600 dark:text-red-400 rounded-b-lg"
+                                                            >
+                                                                <Trash2 size={14} />
+                                                                Delete
+                                                            </button>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
                                             <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap mb-2">

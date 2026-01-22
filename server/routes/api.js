@@ -1331,6 +1331,12 @@ router.put('/tasks/:id', authenticateToken, async (req, res) => {
       task.title, task.description, task.dueDate, task.status, task.assignedTo, task.priority
     ];
 
+    // Add replies if present
+    if (task.replies !== undefined) {
+      updateFields.push(`replies = $${updateParams.length + 1}`);
+      updateParams.push(JSON.stringify(task.replies));
+    }
+
     if (completedBy) {
       updateFields.push(`completed_by = $${updateParams.length + 1}`);
       updateParams.push(completedBy);
