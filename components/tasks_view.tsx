@@ -8,6 +8,7 @@ interface TasksViewProps {
     tasks: TodoTask[];
     onNewTaskClick: () => void;
     onEditTask: (task: TodoTask) => void;
+    onSaveTask?: (task: Partial<TodoTask>) => Promise<void>;
     onDeleteTask: (taskId: number) => void;
     onStatusChange: (task: TodoTask, newStatus: TodoStatus) => void;
     user: User;
@@ -71,6 +72,7 @@ const TasksView: React.FC<TasksViewProps> = ({
     tasks,
     onNewTaskClick,
     onEditTask,
+    onSaveTask,
     onDeleteTask,
     onStatusChange,
     user,
@@ -154,7 +156,11 @@ const TasksView: React.FC<TasksViewProps> = ({
             assignedTo: newAssigneeId,
             status: 'To Do' as TodoStatus // Reset to To Do when forwarded
         };
-        onEditTask(updatedTask);
+        if (onSaveTask) {
+            onSaveTask(updatedTask);
+        } else {
+            onEditTask(updatedTask);
+        }
     };
 
     const filteredTasks = useMemo(() => {

@@ -1368,6 +1368,7 @@ const DashboardLayout: React.FC = () => {
           tasks={tasks}
           onNewTaskClick={() => { setEditingTask(null); setIsTaskModalOpen(true); }}
           onEditTask={(task) => { setEditingTask(task); setIsTaskModalOpen(true); }}
+          onSaveTask={handleSaveTask}
           onDeleteTask={handleDeleteTask}
           onStatusChange={(task, newStatus) => handleSaveTask({ ...task, status: newStatus })}
           user={currentUser}
