@@ -138,8 +138,10 @@ const TasksView: React.FC<TasksViewProps> = ({
             replies: [...(task.replies || []), newReply]
         };
 
-        // Save the updated task
-        onEditTask(updatedTask);
+        // Save to backend
+        if (onSaveTask) {
+            await onSaveTask(updatedTask);
+        }
 
         // Update the selected task to show the new reply immediately
         setSelectedTask(updatedTask);
