@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import type { TodoTask, User, TaskPriority, TodoStatus } from '../types';
 import { Search, Filter, Plus, Edit, Trash2, Calendar, User as UserIcon, AlertCircle, CheckCircle2, Clock, MoreHorizontal } from './icons';
 import { getStaffMembers } from '../utils/api';
+import TaskDetailModal from './task_detail_modal';
 
 interface TasksViewProps {
     tasks: TodoTask[];
@@ -81,6 +82,8 @@ const TasksView: React.FC<TasksViewProps> = ({
     const [adminFilterUser, setAdminFilterUser] = useState<string>('self'); // 'self', 'all', or userId
     const [activeTab, setActiveTab] = useState<'Tasks' | 'History' | 'Personal'>('Tasks');
     const [staff, setStaff] = useState<{ id: number; name: string; role: string }[]>([]);
+    const [selectedTask, setSelectedTask] = useState<TodoTask | null>(null);
+    const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
 
     const isAdmin = user.role === 'Admin';
 
@@ -99,6 +102,39 @@ const TasksView: React.FC<TasksViewProps> = ({
         } else {
             onFilterChange({ userId: Number(value) });
         }
+    };
+
+    const handleTaskClick = (task: TodoTask) => {
+        setSelectedTask(task);
+        setIsDetailModalOpen(true);
+    };
+
+    const handleAddReply = async (taskId: number, message: string) => {
+        // Find the task and add reply
+        const task = tasks.find(t => t.id === taskId);
+        if (!task) return;
+
+        const newReply = {
+            id: Date.now(),
+            taskId,
+            userId: user.id,
+            userName: user.name,
+            message,
+            timestamp: new Date().toISOString()
+        };
+
+        const updatedTask = {
+            ...task,
+            replies: [...(task.replies || []), newReply]
+        };
+
+        onEditTask(updatedTask);
+        setSelectedTask(updatedTask);
+    };
+
+    const handleCloseDetailModal = () => {
+        setIsDetailModalOpen(false);
+        setSelectedTask(null);
     };
 
     const filteredTasks = useMemo(() => {
@@ -232,7 +268,7 @@ const TasksView: React.FC<TasksViewProps> = ({
                                     activeTab === 'History' ? (
                                         <HistoryRow key={task.id} task={task} staff={staff} />
                                     ) : (
-                                        <tr key={task.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
+                                        <tr key={task.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors cursor-pointer" onClick={() => handleTaskClick(task)}>
                                             <td className="px-6 py-4">
                                                 <div className="text-xs font-mono text-lyceum-blue font-bold">{task.taskId || 'N/A'}</div>
                                             </td>
@@ -296,6 +332,16 @@ const TasksView: React.FC<TasksViewProps> = ({
                     </table>
                 </div>
             </div>
+
+            {/* Task Detail Modal */}
+            <TaskDetailModal
+                task={selectedTask}
+                isOpen={isDetailModalOpen}
+                onClose={handleCloseDetailModal}
+                onAddReply={handleAddReply}
+                onStatusChange={onStatusChange}
+                user={user}
+            />
 
             <style>{`
                 .animate-fade-in {
