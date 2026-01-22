@@ -287,10 +287,17 @@ const TasksView: React.FC<TasksViewProps> = ({
                                                     {task.dueDate}
                                                 </div>
                                             </td>
-                                            <td className="px-6 py-4">
+                                            <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
                                                 <select
                                                     value={task.status}
-                                                    onChange={(e) => onStatusChange(task, e.target.value as TodoStatus)}
+                                                    onChange={(e) => {
+                                                        const newStatus = e.target.value as TodoStatus;
+                                                        if (newStatus === 'done') {
+                                                            handleTaskClick(task);
+                                                        } else {
+                                                            onStatusChange(task, newStatus);
+                                                        }
+                                                    }}
                                                     className={`px-3 py-1 rounded-lg text-xs font-bold outline-none border-none cursor-pointer ${statusColors[task.status]}`}
                                                 >
                                                     <option value="todo">To Do</option>
