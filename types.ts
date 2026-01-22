@@ -40,6 +40,18 @@ export interface TodoTask {
   priority?: 'Low' | 'Medium' | 'High';
   createdAt?: string;
   updatedAt?: string;
+  replies?: TaskReply[];
+  completedBy?: number;
+  completedAt?: string;
+}
+
+export interface TaskReply {
+  id: number;
+  taskId: number;
+  userId: number;
+  userName: string;
+  message: string;
+  timestamp: string;
 }
 
 export interface Ticket {
@@ -375,7 +387,7 @@ export interface LeadDetailsModalProps {
   user: User;
 }
 
-export type TransactionType = 'Invoice' | 'Bill' | 'Payment';
+export type TransactionType = 'Income' | 'Purchase' | 'Expense';
 export type TransactionStatus = 'Paid' | 'Pending' | 'Overdue';
 
 export interface AccountingTransaction {
@@ -387,6 +399,10 @@ export interface AccountingTransaction {
   type: TransactionType;
   status: TransactionStatus;
   amount: number;
+  paymentMethod?: 'Cash' | 'Online';
+  invoiceNumber?: string;
+  contact?: string;
+  dueDate?: string;
 }
 export type UserRole = 'Admin' | 'Staff' | 'Student';
 
