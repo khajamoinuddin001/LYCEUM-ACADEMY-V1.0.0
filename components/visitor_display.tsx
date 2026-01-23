@@ -79,7 +79,7 @@ const VisitorDisplay: React.FC = () => {
     const checkForAlerts = (currentVisitors: Visitor[]) => {
         // Check for ANY visitor called in the last few seconds globally (or for this dept)
         const justCalled = currentVisitors.find(v => {
-            if (v.status !== 'Called' || !v.calledAt) return false;
+            if (!v.calledAt) return false;  // Check for calledAt timestamp instead of status
 
             // If viewing specific dept, only alert for that dept
             if (selectedDept !== 'All' && getWaitingFor(v) !== selectedDept) return false;
@@ -178,7 +178,8 @@ const VisitorDisplay: React.FC = () => {
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                         {visitors.map((visitor, index) => {
-                            const isCalled = visitor.status === 'Called';
+                            // Check if visitor was called recently (within ALERT_DURATION_MS)
+                            const isCalled = visitor.calledAt && (Date.now() - new Date(visitor.calledAt).getTime() < ALERT_DURATION_MS);
                             return (
                                 <div
                                     key={visitor.id}
