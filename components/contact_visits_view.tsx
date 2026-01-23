@@ -34,7 +34,8 @@ const ContactVisitsView: React.FC<ContactVisitsViewProps> = ({ contact, onNaviga
         const fetchStaff = async () => {
             try {
                 const users = await api.getUsers();
-                const staff = users.filter(u => u.role === 'Admin' || u.role === 'Staff' || u.role === 'Employee');
+                // Filter for Admin and Staff roles (exclude Students)
+                const staff = users.filter(u => u.role === 'Admin' || u.role === 'Staff');
                 setStaffMembers(staff);
             } catch (error) {
                 console.error('Failed to load staff:', error);
