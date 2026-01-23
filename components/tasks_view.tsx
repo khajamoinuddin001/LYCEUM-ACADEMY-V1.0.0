@@ -79,7 +79,7 @@ const TasksView: React.FC<TasksViewProps> = ({
     onFilterChange
 }) => {
     const [searchQuery, setSearchQuery] = useState('');
-    const [statusFilter, setStatusFilter] = useState<'All' | TodoStatus>('All');
+    const [statusFilter, setStatusFilter] = useState<'All' | TodoStatus>('todo');
     const [priorityFilter, setPriorityFilter] = useState<'All' | TaskPriority>('All');
     const [adminFilterUser, setAdminFilterUser] = useState<string>('self'); // 'self', 'all', or userId
     const [activeTab, setActiveTab] = useState<'Tasks' | 'History' | 'Personal'>('Tasks');

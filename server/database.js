@@ -205,6 +205,7 @@ export async function initDatabase() {
         assigned_to INTEGER REFERENCES users(id),
         assigned_by INTEGER REFERENCES users(id),
         priority TEXT NOT NULL DEFAULT 'Medium' CHECK(priority IN ('Low', 'Medium', 'High')),
+        replies JSONB DEFAULT '[]',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -253,6 +254,7 @@ export async function initDatabase() {
       await client.query('ALTER TABLE tasks ADD COLUMN IF NOT EXISTS completed_by INTEGER REFERENCES users(id)');
       await client.query('ALTER TABLE tasks ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP');
       await client.query('ALTER TABLE tasks ADD COLUMN IF NOT EXISTS task_id TEXT UNIQUE');
+      await client.query('ALTER TABLE tasks ADD COLUMN IF NOT EXISTS replies JSONB DEFAULT \'[]\'');
 
       // Generate task_id for existing tasks that don't have one
       await client.query(`
