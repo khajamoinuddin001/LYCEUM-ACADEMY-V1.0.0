@@ -193,14 +193,15 @@ const ContactVisitsView: React.FC<ContactVisitsViewProps> = ({ contact, onNaviga
                 </div>
             ) : (
                 <div className="space-y-8">
-                    {visits.map((visit, index) => {
+                    {[...visits].reverse().map((visit, index) => {
                         const segments = visit.visitSegments && visit.visitSegments.length > 0
                             ? visit.visitSegments
                             : [{ department: visit.host, purpose: visit.purpose || '', timestamp: visit.checkIn }];
                         const isCheckedOut = visit.status === 'Checked-out';
 
                         // Visit number: oldest = 1, newest = visits.length
-                        const visitNumber = index + 1;
+                        // Since we reversed the array, calculate from the end
+                        const visitNumber = visits.length - index;
 
                         return (
                             <div key={visit.id} className="border border-gray-200 dark:border-gray-700 p-6 bg-white dark:bg-gray-800 shadow-sm rounded-lg">
