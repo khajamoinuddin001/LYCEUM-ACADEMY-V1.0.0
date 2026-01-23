@@ -55,7 +55,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     };
 
     const handleMarkComplete = () => {
-        onStatusChange(task, 'Done');
+        onStatusChange(task, 'done' as any);
         onClose();
     };
 
