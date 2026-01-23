@@ -88,7 +88,7 @@ const DepartmentDashboard: React.FC<DepartmentDashboardProps> = ({ user, onViewV
 
             await api.saveVisitor({
                 ...visitor,
-                status: 'Called' as any,
+                status: 'Checked-in' as any,  // Keep as Checked-in, not 'Called'
                 calledAt: new Date().toISOString(),
                 visitSegments: currentSegments
             });
