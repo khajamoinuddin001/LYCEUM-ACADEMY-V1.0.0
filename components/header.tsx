@@ -60,7 +60,10 @@ const Header: React.FC<HeaderProps> = ({ sidebarOpen, setSidebarOpen, activeApp,
         <div className="flex items-center gap-1 md:gap-2 flex-1 min-w-0">
           {/* Hamburger menu - always visible, toggles sidebar */}
           <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
+            onClick={() => {
+              console.log('[Header] Hamburger clicked! sidebarOpen:', sidebarOpen, '-> will become:', !sidebarOpen);
+              setSidebarOpen(!sidebarOpen);
+            }}
             className="p-2 text-gray-600 dark:text-gray-300 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring touch-manipulation flex-shrink-0"
             aria-label="Toggle menu"
           >

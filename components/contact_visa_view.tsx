@@ -65,6 +65,70 @@ const EditableCheckbox: React.FC<{
     );
 }
 
+const EditableDateField: React.FC<{
+    label: string;
+    isEditing: boolean;
+    value?: string;
+    name: string;
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+}> = ({ label, isEditing, value, name, onChange }) => {
+    if (isEditing) {
+        return (
+            <div>
+                <label htmlFor={name} className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{label}</label>
+                <input
+                    type="date"
+                    id={name}
+                    name={name}
+                    value={value || ''}
+                    onChange={onChange}
+                    className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-md shadow-sm bg-gray-50 dark:bg-gray-700/50 sm:text-sm text-gray-900 dark:text-gray-100 focus:ring-lyceum-blue focus:border-lyceum-blue"
+                />
+            </div>
+        );
+    }
+    return (
+        <div className="p-2 rounded-md border border-gray-200 dark:border-gray-700 min-h-[58px]">
+            <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
+            <p className="text-sm font-medium text-gray-800 dark:text-gray-100 mt-1 truncate">
+                {value ? new Date(value).toLocaleDateString() : <span className="italic text-gray-400 dark:text-gray-500">Not set</span>}
+            </p>
+        </div>
+    );
+}
+
+const EditableTimeField: React.FC<{
+    label: string;
+    isEditing: boolean;
+    value?: string;
+    name: string;
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+}> = ({ label, isEditing, value, name, onChange }) => {
+    if (isEditing) {
+        return (
+            <div>
+                <label htmlFor={name} className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{label}</label>
+                <input
+                    type="time"
+                    id={name}
+                    name={name}
+                    value={value || ''}
+                    onChange={onChange}
+                    className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-md shadow-sm bg-gray-50 dark:bg-gray-700/50 sm:text-sm text-gray-900 dark:text-gray-100 focus:ring-lyceum-blue focus:border-lyceum-blue"
+                />
+            </div>
+        );
+    }
+    return (
+        <div className="p-2 rounded-md border border-gray-200 dark:border-gray-700 min-h-[58px]">
+            <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
+            <p className="text-sm font-medium text-gray-800 dark:text-gray-100 mt-1 truncate">
+                {value || <span className="italic text-gray-400 dark:text-gray-500">Not set</span>}
+            </p>
+        </div>
+    );
+}
+
 
 const SectionTitle: React.FC<{ title: string }> = ({ title }) => (
     <h3 className="text-sm font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 pb-2 border-b border-gray-200 dark:border-gray-700 mb-4">{title}</h3>
@@ -82,6 +146,92 @@ const VisaTab: React.FC<{ label: string; active?: boolean; onClick: () => void; 
     </button>
 );
 
+const EditableDropdownField: React.FC<{
+    label: string;
+    isEditing: boolean;
+    value?: string;
+    name: string;
+    onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => void;
+    options: string[];
+}> = ({ label, isEditing, value, name, onChange, options }) => {
+    const [showCustomInput, setShowCustomInput] = React.useState(false);
+    const [customValue, setCustomValue] = React.useState('');
+
+    const handleSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        if (e.target.value === '__custom__') {
+            setShowCustomInput(true);
+        } else {
+            setShowCustomInput(false);
+            onChange(e);
+        }
+    };
+
+    const handleCustomSubmit = () => {
+        if (customValue.trim()) {
+            const syntheticEvent = {
+                target: { name, value: customValue.trim() }
+            } as React.ChangeEvent<HTMLInputElement>;
+            onChange(syntheticEvent);
+            setCustomValue('');
+            setShowCustomInput(false);
+        }
+    };
+
+    if (isEditing) {
+        return (
+            <div>
+                <label htmlFor={name} className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{label}</label>
+                {showCustomInput ? (
+                    <div className="flex gap-2">
+                        <input
+                            type="text"
+                            value={customValue}
+                            onChange={(e) => setCustomValue(e.target.value)}
+                            placeholder="Enter custom location"
+                            className="flex-1 px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-md shadow-sm bg-gray-50 dark:bg-gray-700/50 sm:text-sm text-gray-900 dark:text-gray-100 focus:ring-lyceum-blue focus:border-lyceum-blue"
+                        />
+                        <button
+                            type="button"
+                            onClick={handleCustomSubmit}
+                            className="px-3 py-2 bg-lyceum-blue text-white rounded-md text-sm hover:bg-lyceum-blue-dark"
+                        >
+                            Add
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setShowCustomInput(false)}
+                            className="px-3 py-2 bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-md text-sm hover:bg-gray-400 dark:hover:bg-gray-500"
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                ) : (
+                    <select
+                        id={name}
+                        name={name}
+                        value={value || ''}
+                        onChange={handleSelectChange}
+                        className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-md shadow-sm bg-gray-50 dark:bg-gray-700/50 sm:text-sm text-gray-900 dark:text-gray-100 focus:ring-lyceum-blue focus:border-lyceum-blue"
+                    >
+                        <option value="">Select {label}</option>
+                        {options.map(option => (
+                            <option key={option} value={option}>{option}</option>
+                        ))}
+                        <option value="__custom__">+ Add Custom Location</option>
+                    </select>
+                )}
+            </div>
+        );
+    }
+    return (
+        <div className="p-2 rounded-md border border-gray-200 dark:border-gray-700 min-h-[58px]">
+            <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
+            <p className="text-sm font-medium text-gray-800 dark:text-gray-100 mt-1 truncate">
+                {value || <span className="italic text-gray-400 dark:text-gray-500">Not set</span>}
+            </p>
+        </div>
+    );
+}
 
 const ContactVisaView: React.FC<ContactVisaViewProps> = ({ contact, onNavigateBack, onSave, user }) => {
     const [activeTab, setActiveTab] = useState('Visa Filing');
@@ -255,9 +405,36 @@ const ContactVisaView: React.FC<ContactVisaViewProps> = ({ contact, onNavigateBa
                             </div>
                             <div className="space-y-4">
                                 <SectionTitle title="Visa Interview Information" />
-                                {Object.entries({ vacPreference: "VAC Preference", viPreference: "VI Preference", vacDate: "VAC Date", vacTime: "VAC Time", viDate: "VI Date", viTime: "VI Time", consulate: "Consulate", slotBookedOn: "Slot Booked On", slotBookedBy: "Slot Booked By" }).map(([key, label]) =>
-                                    <EditableField key={key} label={label} name={`visaInterview.${key}`} value={data.visaInterview?.[key]} isEditing={isEditing} onChange={handleDeepChange} />
-                                )}
+                                <EditableDropdownField
+                                    label="VAC Preference"
+                                    name="visaInterview.vacPreference"
+                                    value={data.visaInterview?.vacPreference}
+                                    isEditing={isEditing}
+                                    onChange={handleDeepChange}
+                                    options={['Mumbai', 'New Delhi', 'Chennai', 'Kolkata', 'Hyderabad']}
+                                />
+                                <EditableDropdownField
+                                    label="VI Preference"
+                                    name="visaInterview.viPreference"
+                                    value={data.visaInterview?.viPreference}
+                                    isEditing={isEditing}
+                                    onChange={handleDeepChange}
+                                    options={['Mumbai', 'New Delhi', 'Chennai', 'Kolkata', 'Hyderabad']}
+                                />
+                                <EditableDateField label="VAC Date" name="visaInterview.vacDate" value={data.visaInterview?.vacDate} isEditing={isEditing} onChange={handleDeepChange} />
+                                <EditableTimeField label="VAC Time" name="visaInterview.vacTime" value={data.visaInterview?.vacTime} isEditing={isEditing} onChange={handleDeepChange} />
+                                <EditableDateField label="VI Date" name="visaInterview.viDate" value={data.visaInterview?.viDate} isEditing={isEditing} onChange={handleDeepChange} />
+                                <EditableTimeField label="VI Time" name="visaInterview.viTime" value={data.visaInterview?.viTime} isEditing={isEditing} onChange={handleDeepChange} />
+                                <EditableDropdownField
+                                    label="VI Consulate"
+                                    name="visaInterview.consulate"
+                                    value={data.visaInterview?.consulate}
+                                    isEditing={isEditing}
+                                    onChange={handleDeepChange}
+                                    options={['Mumbai', 'New Delhi', 'Chennai', 'Kolkata', 'Hyderabad']}
+                                />
+                                <EditableDateField label="Slot Booked On" name="visaInterview.slotBookedOn" value={data.visaInterview?.slotBookedOn} isEditing={isEditing} onChange={handleDeepChange} />
+                                <EditableField label="Slot Booked By" name="visaInterview.slotBookedBy" value={data.visaInterview?.slotBookedBy} isEditing={isEditing} onChange={handleDeepChange} />
                             </div>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 px-6 mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">

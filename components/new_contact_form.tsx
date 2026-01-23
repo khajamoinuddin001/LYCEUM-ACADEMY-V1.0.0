@@ -17,6 +17,7 @@ interface NewContactFormProps {
     onSave: (contact: Contact) => void;
     onComposeAIEmail: (prompt: string, contact: Contact) => void;
     user: User;
+    users: User[]; // Added for staff dropdown
     onAddSessionVideo: (contactId: number, videoBlob: Blob) => Promise<void>;
     onDeleteSessionVideo: (contactId: number, sessionId: number) => Promise<void>;
     transactions?: AccountingTransaction[];
@@ -181,7 +182,7 @@ const initialFormState = {
 
 
 
-const NewContactForm: React.FC<NewContactFormProps> = ({ contact, contacts, onNavigateBack, onNavigateToDocuments, onNavigateToVisa, onNavigateToChecklist, onNavigateToVisits, onSave, onComposeAIEmail, user, onAddSessionVideo, onDeleteSessionVideo, transactions = [] }) => {
+const NewContactForm: React.FC<NewContactFormProps> = ({ contact, contacts, onNavigateBack, onNavigateToDocuments, onNavigateToVisa, onNavigateToChecklist, onNavigateToVisits, onSave, onComposeAIEmail, user, users, onAddSessionVideo, onDeleteSessionVideo, transactions = [] }) => {
     const [currentTab, setCurrentTab] = useState<'details' | 'finance'>('details');
     const [formData, setFormData] = useState(initialFormState);
     const [isSummarizing, setIsSummarizing] = useState(false);
@@ -483,7 +484,14 @@ const NewContactForm: React.FC<NewContactFormProps> = ({ contact, contacts, onNa
                             <FormRow label="Stream"><FormInput name="stream" value={formData.stream} onChange={handleChange} disabled={!canWrite} /></FormRow>
                             <FormRow label="Course"><FormInput name="course" value={formData.course} onChange={handleChange} disabled={!canWrite} /></FormRow>
                             <FormRow label="Intake"><FormInput name="intake" value={formData.intake} onChange={handleChange} disabled={!canWrite} /></FormRow>
-                            <FormRow label="Counselor Assigned"><FormInput name="counselorAssigned" value={formData.counselorAssigned} onChange={handleChange} disabled={!canWrite} /></FormRow>
+                            <FormRow label="Counselor Assigned">
+                                <select name="counselorAssigned" value={formData.counselorAssigned} onChange={handleChange} disabled={!canWrite} className="w-full bg-transparent text-gray-800 dark:text-gray-200 text-sm focus:outline-none dark:bg-gray-800 disabled:opacity-70 disabled:cursor-not-allowed">
+                                    <option value="">Select a Counselor</option>
+                                    {users.filter(u => u.role === 'Staff' || u.role === 'Admin').map(staffMember => (
+                                        <option key={staffMember.id} value={staffMember.name}>{staffMember.name}</option>
+                                    ))}
+                                </select>
+                            </FormRow>
                             <FormRow label="Agent Assigned">
                                 <select name="agentAssigned" value={formData.agentAssigned} onChange={handleChange} disabled={!canWrite} className="w-full bg-transparent text-gray-800 dark:text-gray-200 text-sm focus:outline-none dark:bg-gray-800 disabled:opacity-70 disabled:cursor-not-allowed">
                                     <option value="">Select an Agent</option><option value="Agent A">Agent A</option><option value="Agent B">Agent B</option><option value="Agent C">Agent C</option>

@@ -186,17 +186,17 @@ const DashboardLayout: React.FC = () => {
             usersData, activityLogData, paymentLogData, contactsData, transactionsData, leadsData,
             templatesData, visitorsData, tasksData, eventsData, channelsData, couponsData, lmsCoursesData, notificationsData
           ] = await Promise.all([
-            fetchWithFallback(api.getUsers()),
+            effectiveUser.role === 'Admin' || effectiveUser.role === 'Staff' ? fetchWithFallback(api.getUsers()) : Promise.resolve([]),
             fetchWithFallback(api.getActivityLog()),
             fetchWithFallback(api.getPaymentActivityLog()),
             fetchWithFallback(api.getContacts()),
             fetchWithFallback(api.getTransactions()),
-            fetchWithFallback(api.getLeads()),
+            effectiveUser.role === 'Admin' || effectiveUser.role === 'Staff' ? fetchWithFallback(api.getLeads()) : Promise.resolve([]),
             fetchWithFallback(api.getQuotationTemplates()),
             fetchWithFallback(api.getVisitors()),
             fetchWithFallback(api.getTasks()),
             fetchWithFallback(api.getEvents()),
-            fetchWithFallback(api.getChannels()),
+            effectiveUser.role === 'Admin' || effectiveUser.role === 'Staff' ? fetchWithFallback(api.getChannels()) : Promise.resolve([]),
             fetchWithFallback(api.getCoupons()),
             fetchWithFallback(api.getLmsCourses()),
             fetchWithFallback(api.getNotifications())
@@ -280,11 +280,11 @@ const DashboardLayout: React.FC = () => {
     const handleResize = () => {
       const mobile = window.innerWidth < 768;
       setIsMobile(mobile);
-      if (!mobile) {
-        setSidebarOpen(true);
-      } else {
+      // Only close sidebar when switching to mobile, don't force open on desktop
+      if (mobile) {
         setSidebarOpen(false);
       }
+      // Removed: setSidebarOpen(true) for desktop - was preventing manual toggle
     };
 
     window.addEventListener('resize', handleResize);
@@ -1402,7 +1402,7 @@ const DashboardLayout: React.FC = () => {
 
           // Render form if we have data OR if we are creating a new contact
           if (contactData || editingContact === 'new') {
-            return <NewContactForm user={currentUser} contact={contactData} contacts={contacts} transactions={transactions} onNavigateBack={handleBackToContacts} onNavigateToDocuments={() => setContactViewMode('documents')} onNavigateToVisa={() => setContactViewMode('visaFiling')} onNavigateToChecklist={() => setContactViewMode('checklist')} onNavigateToVisits={() => setContactViewMode('visits')} onSave={handleSaveContact} onComposeAIEmail={handleGenerateEmailDraft} onAddSessionVideo={handleAddSessionVideo} onDeleteSessionVideo={handleDeleteSessionVideo} />;
+            return <NewContactForm user={currentUser} users={users} contact={contactData} contacts={contacts} transactions={transactions} onNavigateBack={handleBackToContacts} onNavigateToDocuments={() => setContactViewMode('documents')} onNavigateToVisa={() => setContactViewMode('visaFiling')} onNavigateToChecklist={() => setContactViewMode('checklist')} onNavigateToVisits={() => setContactViewMode('visits')} onSave={handleSaveContact} onComposeAIEmail={handleGenerateEmailDraft} onAddSessionVideo={handleAddSessionVideo} onDeleteSessionVideo={handleDeleteSessionVideo} />;
           }
         }
         return <ContactsView contacts={contacts} onContactSelect={handleContactSelect} onNewContactClick={handleNewContactClick} user={currentUser} />;

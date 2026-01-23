@@ -4,7 +4,8 @@ import * as api from '../utils/api';
 import { Users, Clock, Filter, Monitor } from './icons';
 
 const DEPARTMENTS = ['All', 'Admission', 'Accounts', 'Visa', 'LMS', 'Reception', 'Counseling'];
-const ALERT_DURATION_MS = 15000; // 15 seconds
+const FLASH_DURATION_MS = 15000; // Flash for 15 seconds
+const DISPLAY_DURATION_MS = 60000; // Keep on display for 1 minute total
 
 const VisitorDisplay: React.FC = () => {
     const [visitors, setVisitors] = useState<Visitor[]>([]);
@@ -29,7 +30,13 @@ const VisitorDisplay: React.FC = () => {
             const allVisitors = await api.getVisitors();
 
             console.log('[Visitor Display] Fetched visitors:', allVisitors.length);
-            console.log('[Visitor Display] Called visitors:', allVisitors.filter(v => v.calledAt).map(v => ({ name: v.name, calledAt: v.calledAt })));
+            const calledVisitors = allVisitors.filter(v => v.calledAt);
+            console.log('[Visitor Display] Visitors with calledAt:', calledVisitors.map(v => ({
+                name: v.name,
+                calledAt: v.calledAt,
+                timeSince: Date.now() - new Date(v.calledAt).getTime(),
+                withinDuration: (Date.now() - new Date(v.calledAt).getTime()) < FLASH_DURATION_MS
+            })));
 
             // Filter Logic
             const filtered = allVisitors.filter(v => {
@@ -38,22 +45,25 @@ const VisitorDisplay: React.FC = () => {
                 // Department Filter
                 if (selectedDept !== 'All' && targetDept !== selectedDept) return false;
 
-                // Status Filter - show checked-in visitors
+                // Show checked-in visitors OR visitors called within last minute
                 if (v.status === 'Checked-in' || (v.status as any) === 'Scheduled') {
-                    // If they have calledAt timestamp, check if within alert duration
-                    if (v.calledAt) {
-                        const calledTime = new Date(v.calledAt).getTime();
-                        const timeSinceCalled = Date.now() - calledTime;
-                        console.log(`[Visitor Display] ${v.name} called ${timeSinceCalled}ms ago`);
-                        return timeSinceCalled < ALERT_DURATION_MS;
-                    }
-                    return true;
+                    return true; // Show all checked-in/scheduled visitors
                 }
+
+                // Also show visitors who were called within the last minute (even if checked out)
+                if (v.calledAt) {
+                    const calledTime = new Date(v.calledAt).getTime();
+                    const timeSinceCalled = Date.now() - calledTime;
+                    const withinDisplayDuration = timeSinceCalled < DISPLAY_DURATION_MS;
+                    console.log(`[Visitor Display] ${v.name} called ${timeSinceCalled}ms ago, still showing: ${withinDisplayDuration}`);
+                    return withinDisplayDuration;
+                }
+
                 return false;
             }).sort((a, b) => {
-                // Sort by check-in time, but push visitors with calledAt to the very top if active
-                const aIsCalled = a.calledAt && (Date.now() - new Date(a.calledAt).getTime() < ALERT_DURATION_MS);
-                const bIsCalled = b.calledAt && (Date.now() - new Date(b.calledAt).getTime() < ALERT_DURATION_MS);
+                // Sort by check-in time, but push recently called visitors to the very top
+                const aIsCalled = a.calledAt && (Date.now() - new Date(a.calledAt).getTime() < DISPLAY_DURATION_MS);
+                const bIsCalled = b.calledAt && (Date.now() - new Date(b.calledAt).getTime() < DISPLAY_DURATION_MS);
                 if (aIsCalled && !bIsCalled) return -1;
                 if (bIsCalled && !aIsCalled) return 1;
                 return new Date(a.checkIn || '').getTime() - new Date(b.checkIn || '').getTime();
@@ -87,7 +97,7 @@ const VisitorDisplay: React.FC = () => {
             const calledTime = new Date(v.calledAt).getTime();
             const timeSinceCalled = Date.now() - calledTime;
             console.log(`[Alert Check] ${v.name}: ${timeSinceCalled}ms since called`);
-            return timeSinceCalled < ALERT_DURATION_MS;
+            return timeSinceCalled < FLASH_DURATION_MS;
         });
 
         if (justCalled) {
@@ -109,7 +119,7 @@ const VisitorDisplay: React.FC = () => {
         setTimeout(() => {
             console.log('[Alert] Stopping flash');
             setFlashing(false);
-        }, ALERT_DURATION_MS);
+        }, FLASH_DURATION_MS);
     };
 
     const getWaitTime = (checkInTime?: string) => {
@@ -178,8 +188,8 @@ const VisitorDisplay: React.FC = () => {
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                         {visitors.map((visitor, index) => {
-                            // Check if visitor was called recently (within ALERT_DURATION_MS)
-                            const isCalled = visitor.calledAt && (Date.now() - new Date(visitor.calledAt).getTime() < ALERT_DURATION_MS);
+                            // Check if visitor was called recently (within FLASH_DURATION_MS)
+                            const isCalled = visitor.calledAt && (Date.now() - new Date(visitor.calledAt).getTime() < FLASH_DURATION_MS);
                             return (
                                 <div
                                     key={visitor.id}

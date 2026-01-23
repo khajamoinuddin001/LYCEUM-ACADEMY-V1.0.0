@@ -209,10 +209,11 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, activeApp, onAppSe
     bg-white dark:bg-gray-900 shadow-xl z-50 h-full transition-all duration-300 ease-in-out print:hidden border-r border-gray-200 dark:border-gray-800
     ${isMobile
       ? `fixed inset-y-0 left-0 transform ${isOpen ? 'translate-x-0 w-64' : '-translate-x-full w-64'}`
-      : `relative flex-shrink-0 ${isOpen ? 'w-64' : 'w-0'}`
+      : `relative flex-shrink-0 min-w-0 ${isOpen ? 'w-64' : 'w-0'}`
     }
     ${isOverSidebar ? 'ring-2 ring-inset ring-lyceum-blue/30' : ''}
   `;
+  console.log('[Sidebar] isOpen:', isOpen, 'isMobile:', isMobile, 'classes:', isOpen ? 'w-64' : 'w-0');
 
   const renderNavItems = () => {
     if (user.role === 'Student') {
@@ -266,6 +267,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, activeApp, onAppSe
         onDragOver={(e) => { e.preventDefault(); setIsOverSidebar(true); }}
         onDragLeave={() => setIsOverSidebar(false)}
         onDrop={handleSidebarDrop}
+        style={{ overflow: isOpen ? 'visible' : 'hidden' }}
       >
         <div className="flex flex-col h-full">
           <div className="flex items-center justify-between p-6 mb-2">
@@ -276,7 +278,10 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, activeApp, onAppSe
               lyceum
             </button>
             <button
-              onClick={() => setIsOpen(!isOpen)}
+              onClick={() => {
+                console.log('[Sidebar] Arrow clicked! isOpen:', isOpen, '-> will become:', !isOpen);
+                setIsOpen(!isOpen);
+              }}
               className="text-gray-400 hover:text-lyceum-blue transition-all duration-300 rounded-lg p-1 hover:scale-110"
               aria-label={isOpen ? "Collapse sidebar" : "Expand sidebar"}
             >

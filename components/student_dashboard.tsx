@@ -1,7 +1,7 @@
 
 
 import React, { useEffect, useState, useRef } from 'react';
-import type { Contact, LmsCourse, CalendarEvent, Visitor } from '../types';
+import type { Contact, LmsCourse, CalendarEvent, Visitor, User } from '../types';
 import { GraduationCap, BookOpen, CalendarClock, Paperclip, CheckCircle2, Circle, Trophy, Calendar, Upload, Download } from './icons';
 import * as api from '../utils/api';
 
@@ -107,15 +107,46 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, courses, e
     }
 
     const today = new Date();
-    const nextWeek = new Date();
-    nextWeek.setDate(today.getDate() + 7);
+    today.setHours(0, 0, 0, 0); // Start of today
 
-    const upcomingEvents = (events || [])
-        .filter(e => {
-            const start = new Date(e.start);
-            return start >= today && start <= nextWeek;
-        })
-        .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())
+    // Collect all upcoming deadlines
+    const allDeadlines: Array<{ title: string; start: Date; type: string }> = [];
+
+    // Add calendar events
+    (events || []).forEach(e => {
+        const start = new Date(e.start);
+        if (start >= today) {
+            allDeadlines.push({ title: e.title, start, type: 'event' });
+        }
+    });
+
+    // Add VAC Date from visa information
+    if (student.visaInformation?.visaInterview?.vacDate) {
+        const vacDate = new Date(student.visaInformation.visaInterview.vacDate);
+        if (vacDate >= today) {
+            allDeadlines.push({
+                title: 'VAC Appointment',
+                start: vacDate,
+                type: 'vac'
+            });
+        }
+    }
+
+    // Add VI Date from visa information
+    if (student.visaInformation?.visaInterview?.viDate) {
+        const viDate = new Date(student.visaInformation.visaInterview.viDate);
+        if (viDate >= today) {
+            allDeadlines.push({
+                title: 'Visa Interview',
+                start: viDate,
+                type: 'vi'
+            });
+        }
+    }
+
+    // Sort all deadlines by date and take top 5
+    const upcomingEvents = allDeadlines
+        .sort((a, b) => a.start.getTime() - b.start.getTime())
         .slice(0, 5);
 
     const checklist = student.checklist || [];
@@ -404,51 +435,68 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, courses, e
                     )}
                 </InfoCard>
 
-                <InfoCard icon={<BookOpen size={20} />} title="Enrolled Courses">
-                    <div className="space-y-4">
-                        {courses.map(course => {
-                            const totalLessons = course.modules.reduce((acc, module) => acc + module.lessons.length, 0);
-                            const completedLessons = student.lmsProgress?.[course.id]?.completedLessons.length || 0;
-                            const courseProgress = totalLessons > 0 ? (completedLessons / totalLessons) * 100 : 0;
-
-                            return (
-                                <div key={course.id}>
-                                    <div className="flex justify-between items-center mb-1">
-                                        <p className="font-medium text-gray-900 dark:text-gray-100">{course.title}</p>
-                                        <p className="text-sm text-gray-500 dark:text-gray-400">{completedLessons}/{totalLessons} lessons</p>
-                                    </div>
-                                    <div className="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">
-                                        <div className="bg-lyceum-blue h-2.5 rounded-full" style={{ width: `${courseProgress}%` }}></div>
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                    <div className="mt-4 text-right">
-                        <button onClick={() => onAppSelect('LMS')} className="text-sm font-medium text-lyceum-blue hover:underline">Go to LMS</button>
-                    </div>
-                </InfoCard>
-
                 <InfoCard icon={<CalendarClock size={20} />} title="Upcoming Deadlines">
                     {upcomingEvents.length > 0 ? (
                         <ul className="space-y-3">
-                            {upcomingEvents.map(event => (
-                                <li key={event.id} className="flex items-start">
+                            {upcomingEvents.map((event, index) => (
+                                <li key={`${event.type}-${index}`} className="flex items-start">
                                     <div className="text-center mr-4 flex-shrink-0">
                                         <p className="text-xs text-red-500 font-bold">{event.start.toLocaleString('default', { month: 'short' }).toUpperCase()}</p>
                                         <p className="text-lg font-bold text-gray-800 dark:text-gray-100 -mt-1">{event.start.getDate()}</p>
                                     </div>
                                     <div>
                                         <p className="font-medium text-gray-900 dark:text-gray-100 text-sm">{event.title}</p>
-                                        <p className="text-xs text-gray-500 dark:text-gray-400">{event.start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                                        <p className="text-xs text-gray-500 dark:text-gray-400">{event.start.toLocaleDateString()}</p>
                                     </div>
                                 </li>
                             ))}
                         </ul>
                     ) : (
-                        <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-2">No deadlines in the next 7 days.</p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-2">No upcoming deadlines.</p>
                     )}
                 </InfoCard>
+
+                {/* Your Counselor Section */}
+                {/* Your Counselor Section */}
+                <div className="bg-gradient-to-r from-indigo-500 to-purple-600 dark:from-indigo-600 dark:to-purple-700 p-6 rounded-xl shadow-lg border border-indigo-400 dark:border-indigo-500">
+                    <h2 className="text-xl font-bold text-white mb-3">Your Counselor</h2>
+                    <div className="flex items-center justify-between">
+                        <div className="text-white">
+                            {student.counselorAssigned ? (
+                                <>
+                                    <p className="text-lg font-semibold">{student.counselorAssigned}</p>
+                                    <p className="text-indigo-100 text-sm mt-1">Available to assist you</p>
+                                </>
+                            ) : (
+                                <p className="text-indigo-100 text-sm italic">No counselor assigned yet.</p>
+                            )}
+                        </div>
+                        {student.counselorAssigned && (
+                            <button
+                                onClick={() => onAppSelect('Calendar')}
+                                className="bg-white hover:bg-indigo-50 text-indigo-600 font-semibold px-5 py-2.5 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 transform hover:scale-105"
+                            >
+                                Schedule Appointment
+                            </button>
+                        )}
+                    </div>
+                </div>
+
+                {/* Need Help Section - At Bottom */}
+                <div className="bg-gradient-to-r from-blue-500 to-blue-600 dark:from-blue-600 dark:to-blue-700 p-8 rounded-xl shadow-lg border border-blue-400 dark:border-blue-500">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h2 className="text-2xl font-bold text-white mb-2">Need Help?</h2>
+                            <p className="text-blue-50 text-sm">Raise a support ticket and our team will assist you</p>
+                        </div>
+                        <button
+                            onClick={() => onAppSelect('Tickets')}
+                            className="bg-white hover:bg-blue-50 text-blue-600 font-semibold px-6 py-3 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 transform hover:scale-105"
+                        >
+                            Raise Ticket
+                        </button>
+                    </div>
+                </div>
             </div>
             <style>{`
             @keyframes fade-in {
