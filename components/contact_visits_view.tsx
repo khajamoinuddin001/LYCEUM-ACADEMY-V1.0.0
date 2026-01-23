@@ -199,8 +199,8 @@ const ContactVisitsView: React.FC<ContactVisitsViewProps> = ({ contact, onNaviga
                             : [{ department: visit.host, purpose: visit.purpose || '', timestamp: visit.checkIn }];
                         const isCheckedOut = visit.status === 'Checked-out';
 
-                        // Visit number is the reverse index (oldest = 1, newest = visits.length)
-                        const visitNumber = visits.length - index;
+                        // Visit number: oldest = 1, newest = visits.length
+                        const visitNumber = index + 1;
 
                         return (
                             <div key={visit.id} className="border border-gray-200 dark:border-gray-700 p-6 bg-white dark:bg-gray-800 shadow-sm rounded-lg">
