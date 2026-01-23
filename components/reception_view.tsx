@@ -75,13 +75,16 @@ const ReceptionView: React.FC<ReceptionViewProps> = ({ visitors, onNewVisitorCli
             } catch (e) { return false; }
         };
 
-        const visitorsToday = visitors.filter(v => isToday(v.checkIn)).length;
-        const currentlyCheckedIn = visitors.filter(v => v.status === 'Checked-in').length;
-        const pendingAppointments = visitors.filter(v => v.status === 'Scheduled' && isToday(v.scheduledCheckIn)).length;
+        // Ensure visitors is an array to prevent filter errors
+        const visitorsList = Array.isArray(visitors) ? visitors : [];
+
+        const visitorsToday = visitorsList.filter(v => isToday(v.checkIn)).length;
+        const currentlyCheckedIn = visitorsList.filter(v => v.status === 'Checked-in').length;
+        const pendingAppointments = visitorsList.filter(v => v.status === 'Scheduled' && isToday(v.scheduledCheckIn)).length;
 
         // 1. Today's Log: Visitors w/ checkIn today OR currently checked-in (even if from prev day, though rare)
         // We'll focus strictly on "Actionable or Happened Today"
-        let todayLog = visitors.filter(v => {
+        let todayLog = visitorsList.filter(v => {
             // Include if status is Checked-in (always show active visitors)
             if (v.status === 'Checked-in') return true;
             // Include if checked in today
@@ -92,12 +95,12 @@ const ReceptionView: React.FC<ReceptionViewProps> = ({ visitors, onNewVisitorCli
         });
 
         // 2. Scheduled: Status 'Scheduled'
-        let scheduled = visitors.filter(v => v.status === 'Scheduled');
+        let scheduled = visitorsList.filter(v => v.status === 'Scheduled');
 
         // 3. History: Everything else (Past checked-out not today, or skipped appointments?)
         // Actually, user wants "old visitor log in history". 
         // So History = All non-active, non-today visitors (mostly past Completed visits).
-        let history = visitors.filter(v => {
+        let history = visitorsList.filter(v => {
             // Exclude what's in Today's Log
             if (v.status === 'Checked-in') return false;
             if (isToday(v.checkIn)) return false;
