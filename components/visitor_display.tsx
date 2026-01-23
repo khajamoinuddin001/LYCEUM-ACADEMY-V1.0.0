@@ -29,7 +29,7 @@ const VisitorDisplay: React.FC = () => {
             const allVisitors = await api.getVisitors();
 
             console.log('[Visitor Display] Fetched visitors:', allVisitors.length);
-            console.log('[Visitor Display] Called visitors:', allVisitors.filter(v => v.status === 'Called').map(v => ({ name: v.name, calledAt: v.calledAt })));
+            console.log('[Visitor Display] Called visitors:', allVisitors.filter(v => v.calledAt).map(v => ({ name: v.name, calledAt: v.calledAt })));
 
             // Filter Logic
             const filtered = allVisitors.filter(v => {
@@ -38,21 +38,24 @@ const VisitorDisplay: React.FC = () => {
                 // Department Filter
                 if (selectedDept !== 'All' && targetDept !== selectedDept) return false;
 
-                // Status Filter
-                if (v.status === 'Checked-in' || (v.status as any) === 'Scheduled') return true;
-
-                // Show 'Called' visitors for 15s generally, or until flash ends
-                if (v.status === 'Called' && v.calledAt) {
-                    const calledTime = new Date(v.calledAt).getTime();
-                    const timeSinceCalled = Date.now() - calledTime;
-                    console.log(`[Visitor Display] ${v.name} called ${timeSinceCalled}ms ago`);
-                    return timeSinceCalled < ALERT_DURATION_MS;
+                // Status Filter - show checked-in visitors
+                if (v.status === 'Checked-in' || (v.status as any) === 'Scheduled') {
+                    // If they have calledAt timestamp, check if within alert duration
+                    if (v.calledAt) {
+                        const calledTime = new Date(v.calledAt).getTime();
+                        const timeSinceCalled = Date.now() - calledTime;
+                        console.log(`[Visitor Display] ${v.name} called ${timeSinceCalled}ms ago`);
+                        return timeSinceCalled < ALERT_DURATION_MS;
+                    }
+                    return true;
                 }
                 return false;
             }).sort((a, b) => {
-                // Sort by check-in time, but push "Called" to the very top if active
-                if (a.status === 'Called' && b.status !== 'Called') return -1;
-                if (b.status === 'Called' && a.status !== 'Called') return 1;
+                // Sort by check-in time, but push visitors with calledAt to the very top if active
+                const aIsCalled = a.calledAt && (Date.now() - new Date(a.calledAt).getTime() < ALERT_DURATION_MS);
+                const bIsCalled = b.calledAt && (Date.now() - new Date(b.calledAt).getTime() < ALERT_DURATION_MS);
+                if (aIsCalled && !bIsCalled) return -1;
+                if (bIsCalled && !aIsCalled) return 1;
                 return new Date(a.checkIn || '').getTime() - new Date(b.checkIn || '').getTime();
             });
 
