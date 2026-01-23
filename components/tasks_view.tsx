@@ -156,7 +156,7 @@ const TasksView: React.FC<TasksViewProps> = ({
         const updatedTask = {
             ...task,
             assignedTo: newAssigneeId,
-            status: 'To Do' as TodoStatus // Reset to To Do when forwarded
+            status: 'todo' as TodoStatus // Reset to todo when forwarded
         };
         if (onSaveTask) {
             onSaveTask(updatedTask);
