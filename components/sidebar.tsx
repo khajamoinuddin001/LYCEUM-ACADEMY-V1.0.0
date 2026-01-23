@@ -209,7 +209,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, activeApp, onAppSe
     bg-white dark:bg-gray-900 shadow-xl z-50 h-full transition-all duration-300 ease-in-out print:hidden border-r border-gray-200 dark:border-gray-800
     ${isMobile
       ? `fixed inset-y-0 left-0 transform ${isOpen ? 'translate-x-0 w-64' : '-translate-x-full w-64'}`
-      : `relative flex-shrink-0 ${isOpen ? 'w-64' : 'w-0 overflow-hidden'}`
+      : `relative flex-shrink-0 ${isOpen ? 'w-64' : 'w-0'}`
     }
     ${isOverSidebar ? 'ring-2 ring-inset ring-lyceum-blue/30' : ''}
   `;
