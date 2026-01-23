@@ -275,8 +275,12 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, activeApp, onAppSe
             >
               lyceum
             </button>
-            <button onClick={() => setIsOpen(false)} className="text-gray-400 hover:text-lyceum-blue transition-colors rounded-lg p-1">
-              <ChevronLeft size={24} />
+            <button
+              onClick={() => setIsOpen(!isOpen)}
+              className="text-gray-400 hover:text-lyceum-blue transition-all duration-300 rounded-lg p-1 hover:scale-110"
+              aria-label={isOpen ? "Collapse sidebar" : "Expand sidebar"}
+            >
+              <ChevronLeft size={24} className={`transition-transform duration-300 ${!isOpen ? 'rotate-180' : ''}`} />
             </button>
           </div>
           <nav className="flex-grow px-3 overflow-y-auto custom-scrollbar">
