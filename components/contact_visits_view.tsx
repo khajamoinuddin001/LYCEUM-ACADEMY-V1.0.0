@@ -57,14 +57,17 @@ const ContactVisitsView: React.FC<ContactVisitsViewProps> = ({ contact, onNaviga
         }
     };
 
-    const handleActionChange = async (visit: Visitor, action: string) => {
+    const handleActionChange = async (visit: Visitor, segmentIndex: number, action: string) => {
         if (!action) return;
         setUpdatingVisitId(visit.id);
         try {
             const currentSegments = visit.visitSegments && visit.visitSegments.length > 0
                 ? [...visit.visitSegments]
                 : [{ department: visit.host, purpose: visit.purpose || '', timestamp: visit.checkIn }];
-            currentSegments[currentSegments.length - 1].action = action;
+            // Update the specific segment, not just the last one
+            if (currentSegments[segmentIndex]) {
+                currentSegments[segmentIndex].action = action;
+            }
             await api.saveVisitor({ ...visit, visitSegments: currentSegments });
             await fetchVisits();
         } catch (error) {
@@ -244,7 +247,7 @@ const ContactVisitsView: React.FC<ContactVisitsViewProps> = ({ contact, onNaviga
                                                     <select
                                                         className="w-full h-full appearance-none bg-transparent px-2 font-bold focus:outline-none"
                                                         value={segment.action || ''}
-                                                        onChange={(e) => handleActionChange(visit, e.target.value)}
+                                                        onChange={(e) => handleActionChange(visit, segIdx, e.target.value)}
                                                         disabled={!canEdit || updatingVisitId === visit.id}
                                                     >
                                                         <option value="">Select Action...</option>
