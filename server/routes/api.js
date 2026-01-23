@@ -2132,7 +2132,7 @@ RETURNING *
   `, [
       notification.title,
       notification.description,
-      notification.read || false,
+      notification.read ? 1 : 0,  // Convert boolean to integer
       JSON.stringify(notification.linkTo || {}),
       JSON.stringify(notification.recipientUserIds || []),
       JSON.stringify(notification.recipientRoles || [])
