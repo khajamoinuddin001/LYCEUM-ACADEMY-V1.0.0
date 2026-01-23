@@ -34,7 +34,7 @@ const ContactVisitsView: React.FC<ContactVisitsViewProps> = ({ contact, onNaviga
         const fetchStaff = async () => {
             try {
                 const users = await api.getUsers();
-                const staff = users.filter(u => u.role === 'Staff');
+                const staff = users.filter(u => u.role === 'Admin' || u.role === 'Staff' || u.role === 'Employee');
                 setStaffMembers(staff);
             } catch (error) {
                 console.error('Failed to load staff:', error);
@@ -291,6 +291,7 @@ const ContactVisitsView: React.FC<ContactVisitsViewProps> = ({ contact, onNaviga
                             onChange={(e) => setSelectedStaff(e.target.value)}
                             className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded mb-4 dark:bg-gray-700 dark:text-white outline-none focus:ring-2 focus:ring-lyceum-blue"
                         >
+                            <option value="">-- Select Staff Member --</option>
                             {staffMembers.map(staff => (
                                 <option key={staff.id} value={staff.email}>
                                     {staff.name} ({staff.email})
