@@ -2,8 +2,9 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import type { Contact, LmsCourse, CalendarEvent, Visitor, User } from '../types';
-import { GraduationCap, BookOpen, CalendarClock, Paperclip, CheckCircle2, Circle, Trophy, Calendar, Upload, Download } from './icons';
+import { GraduationCap, BookOpen, CalendarClock, Paperclip, CheckCircle2, Circle, Trophy, Calendar, Upload, Download, User as UserIcon } from './icons';
 import * as api from '../utils/api';
+import StudentAppointmentModal from './student_appointment_modal';
 
 interface StudentDashboardProps {
     student?: Contact;
@@ -32,6 +33,7 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, courses, e
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [showChecklistDetails, setShowChecklistDetails] = useState(false);
     const [showUniversityDetails, setShowUniversityDetails] = useState(false);
+    const [isAppointmentModalOpen, setIsAppointmentModalOpen] = useState(false);
 
     useEffect(() => {
         if (student) {
@@ -90,6 +92,33 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, courses, e
         } catch (error) {
             console.error('Failed to download document:', error);
             alert('Failed to download document. Please try again.');
+        }
+    };
+
+
+    const handleScheduleAppointment = async (date: string, time: string, purpose: string) => {
+        if (!student) return;
+        try {
+            const scheduledCheckIn = new Date(`${date}T${time}`).toISOString();
+
+            await api.saveVisitor({
+                name: student.name,
+                company: student.phone || '',
+                host: student.counselorAssigned || 'Reception', // Use name for now as API resolves it? Or better: send counselor name
+                scheduledCheckIn,
+                purpose: purpose,
+                status: 'Scheduled'
+            });
+
+            setIsAppointmentModalOpen(false);
+            alert("Appointment scheduled successfully! It will appear in your visits list.");
+
+            // Refresh visits
+            api.getContactVisits(student.id).then(setVisits).catch(console.error);
+
+        } catch (error: any) {
+            console.error("Failed to schedule:", error);
+            alert("Failed to schedule appointment: " + error.message);
         }
     };
 
@@ -438,18 +467,65 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, courses, e
                 <InfoCard icon={<CalendarClock size={20} />} title="Upcoming Deadlines">
                     {upcomingEvents.length > 0 ? (
                         <ul className="space-y-3">
-                            {upcomingEvents.map((event, index) => (
-                                <li key={`${event.type}-${index}`} className="flex items-start">
-                                    <div className="text-center mr-4 flex-shrink-0">
-                                        <p className="text-xs text-red-500 font-bold">{event.start.toLocaleString('default', { month: 'short' }).toUpperCase()}</p>
-                                        <p className="text-lg font-bold text-gray-800 dark:text-gray-100 -mt-1">{event.start.getDate()}</p>
-                                    </div>
-                                    <div>
-                                        <p className="font-medium text-gray-900 dark:text-gray-100 text-sm">{event.title}</p>
-                                        <p className="text-xs text-gray-500 dark:text-gray-400">{event.start.toLocaleDateString()}</p>
-                                    </div>
-                                </li>
-                            ))}
+                            {upcomingEvents.map((event, index) => {
+                                const today = new Date();
+                                today.setHours(0, 0, 0, 0);
+                                const target = new Date(event.start);
+                                target.setHours(0, 0, 0, 0);
+                                const diffTime = target.getTime() - today.getTime();
+                                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                                let daysLeftText = '';
+                                let daysLeftColor = 'text-gray-500';
+
+                                if (diffDays === 0) {
+                                    daysLeftText = 'Today';
+                                    daysLeftColor = 'text-red-600 font-bold';
+                                } else if (diffDays === 1) {
+                                    daysLeftText = 'Tomorrow';
+                                    daysLeftColor = 'text-orange-500 font-medium';
+                                } else if (diffDays < 0) {
+                                    daysLeftText = 'Overdue';
+                                    daysLeftColor = 'text-red-700 font-bold';
+                                } else {
+                                    daysLeftText = `${diffDays} days left`;
+                                    daysLeftColor = 'text-blue-600 font-medium';
+                                }
+
+                                return (
+                                    <li key={`${event.type}-${index}`} className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors border border-transparent hover:border-gray-200 dark:hover:border-gray-700">
+                                        <div className="flex items-center">
+                                            <div className="text-center mr-4 flex-shrink-0 bg-white dark:bg-gray-800 p-2 rounded-lg shadow-sm border border-gray-100 dark:border-gray-700 min-w-[3.5rem]">
+                                                <p className="text-xs text-red-500 font-bold uppercase tracking-wider">{event.start.toLocaleString('default', { month: 'short' })}</p>
+                                                <p className="text-xl font-black text-gray-800 dark:text-gray-100 leading-none mt-0.5">{event.start.getDate()}</p>
+                                            </div>
+                                            <div>
+                                                <p className="font-bold text-gray-800 dark:text-gray-100 text-sm">{event.title}</p>
+                                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{event.start.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                                            </div>
+                                        </div>
+
+                                        <div className={`flex flex-col items-center justify-center min-w-[5rem] px-3 py-1.5 rounded-lg ${diffDays === 0 ? 'bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800' :
+                                            diffDays === 1 ? 'bg-orange-50 dark:bg-orange-900/20 border border-orange-100 dark:border-orange-800' :
+                                                diffDays < 0 ? 'bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700' :
+                                                    'bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800'
+                                            }`}>
+                                            {diffDays === 0 ? (
+                                                <span className="text-sm font-bold text-red-600 dark:text-red-400 uppercase tracking-wide">Today</span>
+                                            ) : diffDays === 1 ? (
+                                                <span className="text-sm font-bold text-orange-600 dark:text-orange-400 uppercase tracking-wide">Tmrw</span>
+                                            ) : diffDays < 0 ? (
+                                                <span className="text-sm font-bold text-gray-500 uppercase tracking-wide">Done</span>
+                                            ) : (
+                                                <>
+                                                    <span className="text-xl font-bold text-blue-600 dark:text-blue-400 leading-none">{diffDays}</span>
+                                                    <span className="text-[10px] font-bold text-blue-400 dark:text-blue-300 uppercase tracking-wider mt-0.5">Days Left</span>
+                                                </>
+                                            )}
+                                        </div>
+                                    </li>
+                                );
+                            })}
                         </ul>
                     ) : (
                         <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-2">No upcoming deadlines.</p>
@@ -458,29 +534,78 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, courses, e
 
                 {/* Your Counselor Section */}
                 {/* Your Counselor Section */}
-                <div className="bg-gradient-to-r from-indigo-500 to-purple-600 dark:from-indigo-600 dark:to-purple-700 p-6 rounded-xl shadow-lg border border-indigo-400 dark:border-indigo-500">
-                    <h2 className="text-xl font-bold text-white mb-3">Your Counselor</h2>
-                    <div className="flex items-center justify-between">
-                        <div className="text-white">
-                            {student.counselorAssigned ? (
-                                <>
-                                    <p className="text-lg font-semibold">{student.counselorAssigned}</p>
-                                    <p className="text-indigo-100 text-sm mt-1">Available to assist you</p>
-                                </>
-                            ) : (
-                                <p className="text-indigo-100 text-sm italic">No counselor assigned yet.</p>
-                            )}
+                {/* Your Counselor Section */}
+                <InfoCard icon={<UserIcon size={20} />} title="Your Counselor">
+                    {student.counselorAssigned ? (
+                        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                            <div className="flex items-center gap-4 w-full sm:w-auto">
+                                <div className="w-12 h-12 rounded-full bg-lyceum-blue/10 flex items-center justify-center text-lyceum-blue font-bold text-xl flex-shrink-0">
+                                    {student.counselorAssigned.charAt(0)}
+                                </div>
+                                <div>
+                                    <h3 className="font-bold text-lg text-gray-900 dark:text-gray-100">{student.counselorAssigned}</h3>
+                                    {student.counselorDetails?.phone ? (() => {
+                                        let isAvailable = true;
+                                        const details = student.counselorDetails;
+                                        if (details.shiftStart && details.shiftEnd) {
+                                            const now = new Date();
+                                            const dayName = now.toLocaleDateString('en-US', { weekday: 'long' });
+                                            if (details.workingDays && Array.isArray(details.workingDays) && !details.workingDays.includes(dayName)) {
+                                                isAvailable = false;
+                                            } else {
+                                                const [startH, startM] = details.shiftStart.split(':').map(Number);
+                                                const [endH, endM] = details.shiftEnd.split(':').map(Number);
+                                                const currentH = now.getHours();
+                                                const currentM = now.getMinutes();
+                                                const currentTime = currentH * 60 + currentM;
+                                                const startTime = startH * 60 + startM;
+                                                const endTime = endH * 60 + endM;
+                                                isAvailable = currentTime >= startTime && currentTime < endTime;
+                                            }
+                                        }
+
+                                        return (
+                                            <div className="flex items-center gap-2 mt-0.5">
+                                                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${isAvailable ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                                    {isAvailable ? 'Available' : 'Unavailable'}
+                                                </span>
+                                                <span className="text-sm font-medium text-gray-600 dark:text-gray-300 tracking-wide">{student.counselorDetails.phone}</span>
+                                            </div>
+                                        );
+                                    })() : (
+                                        <p className="text-sm text-gray-500 dark:text-gray-400">Assigned Counselor</p>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="flex flex-col gap-2 w-full sm:w-auto">
+                                <button
+                                    onClick={() => setIsAppointmentModalOpen(true)}
+                                    className="w-full px-5 py-2.5 bg-lyceum-blue text-white text-sm font-semibold rounded-lg shadow-md hover:bg-lyceum-blue-dark hover:shadow-lg transition-all transform hover:-translate-y-0.5 whitespace-nowrap"
+                                >
+                                    Schedule Appointment
+                                </button>
+                                {visits.filter(v => v.status === 'Scheduled' && new Date(v.scheduledCheckIn || '') > new Date()).map(appt => (
+                                    <div key={appt.id} className="bg-blue-50 dark:bg-blue-900/20 px-4 py-2 rounded-lg border border-blue-100 dark:border-blue-800 text-right mt-2">
+                                        <p className="text-xs font-bold text-lyceum-blue uppercase tracking-wide mb-0.5">Upcoming</p>
+                                        <p className="text-xs font-semibold text-gray-800 dark:text-gray-200">
+                                            {new Date(appt.scheduledCheckIn!).toLocaleString(undefined, {
+                                                month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                                            })}
+                                        </p>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
-                        {student.counselorAssigned && (
-                            <button
-                                onClick={() => onAppSelect('Calendar')}
-                                className="bg-white hover:bg-indigo-50 text-indigo-600 font-semibold px-5 py-2.5 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 transform hover:scale-105"
-                            >
-                                Schedule Appointment
-                            </button>
-                        )}
-                    </div>
-                </div>
+                    ) : (
+                        <div className="flex flex-col items-center justify-center py-6 text-center">
+                            <div className="w-12 h-12 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center text-gray-400 mb-3">
+                                <UserIcon size={24} />
+                            </div>
+                            <p className="text-gray-900 dark:text-gray-100 font-medium">No Counselor Assigned</p>
+                            <p className="text-sm text-gray-500 mt-1">Contact administration for assistance.</p>
+                        </div>
+                    )}
+                </InfoCard>
 
                 {/* Need Help Section - At Bottom */}
                 <div className="bg-gradient-to-r from-blue-500 to-blue-600 dark:from-blue-600 dark:to-blue-700 p-8 rounded-xl shadow-lg border border-blue-400 dark:border-blue-500">
@@ -507,6 +632,16 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, courses, e
             animation: fade-in 0.3s ease-out forwards;
             }
         `}</style>
+
+
+            <StudentAppointmentModal
+                isOpen={isAppointmentModalOpen}
+                onClose={() => setIsAppointmentModalOpen(false)}
+                onSave={handleScheduleAppointment}
+                counselorName={student.counselorAssigned || 'Counselor'}
+                shiftStart={student.counselorDetails?.shiftStart}
+                shiftEnd={student.counselorDetails?.shiftEnd}
+            />
         </div>
     );
 };

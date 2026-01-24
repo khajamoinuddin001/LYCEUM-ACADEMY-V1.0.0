@@ -153,10 +153,13 @@ router.get('/contacts/:id/documents', authenticateToken, async (req, res) => {
 // Users routes
 router.get('/users', authenticateToken, requireRole('Admin', 'Staff'), async (req, res) => {
   try {
-    const result = await query('SELECT id, name, email, role, permissions, must_reset_password, created_at FROM users');
+    const result = await query('SELECT id, name, email, phone, role, permissions, must_reset_password, created_at, shift_start, shift_end, working_days, joining_date, base_salary FROM users');
     res.json(result.rows.map(user => ({
       ...user,
       permissions: typeof user.permissions === 'string' ? JSON.parse(user.permissions || '{}') : (user.permissions || {}),
+      workingDays: typeof user.working_days === 'string' ? JSON.parse(user.working_days || '[]') : (user.working_days || []),
+      shiftStart: user.shift_start,
+      shiftEnd: user.shift_end,
       mustResetPassword: user.must_reset_password
     })));
   } catch (error) {
@@ -170,10 +173,10 @@ router.post('/users', authenticateToken, requireRole('Admin'), async (req, res) 
     const bcrypt = await import('bcryptjs');
     const hashedPassword = await bcrypt.hash(password, 10);
     const result = await query(`
-      INSERT INTO users (name, email, password, role, permissions)
-      VALUES ($1, $2, $3, $4, $5)
-      RETURNING id, name, email, role, permissions
-    `, [name, email.toLowerCase(), hashedPassword, role, JSON.stringify({})]);
+      INSERT INTO users (name, email, phone, password, role, permissions)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      RETURNING id, name, email, phone, role, permissions
+    `, [name, email.toLowerCase(), req.body.phone || null, hashedPassword, role, JSON.stringify({})]);
 
     const user = result.rows[0];
     if (user && typeof user.permissions === 'string') {
@@ -199,7 +202,7 @@ router.put('/users/:id', authenticateToken, async (req, res) => {
       return res.status(403).json({ error: 'Unauthorized' });
     }
 
-    const { name, email, role, permissions, newPassword, joining_date, base_salary, shift_start, shift_end, working_days } = req.body;
+    const { name, email, phone, role, permissions, newPassword, joining_date, base_salary, shift_start, shift_end, working_days } = req.body;
 
     // If not admin, prevent role/permission/salary changes
     if (!isAdmin) {
@@ -219,13 +222,14 @@ router.put('/users/:id', authenticateToken, async (req, res) => {
 
     addUpdate('name', name);
     addUpdate('email', email);
+    addUpdate('phone', phone);
     if (isAdmin) {
       addUpdate('role', role);
       if (permissions) addUpdate('permissions', JSON.stringify(permissions));
       addUpdate('joining_date', joining_date);
       addUpdate('base_salary', base_salary);
       addUpdate('shift_start', shift_start);
-      addUpdate('shift_start', shift_start);
+
       addUpdate('shift_end', shift_end);
       addUpdate('working_days', working_days ? JSON.stringify(working_days) : undefined);
     }
@@ -388,7 +392,29 @@ RETURNING *
         return res.json(transformedContacts);
       }
 
-      const transformedContacts = result.rows.map(transformContact);
+      const transformedContacts = await Promise.all(result.rows.map(async (contact) => {
+        const transformed = transformContact(contact);
+        if (transformed.counselorAssigned) {
+          const counselorRes = await query('SELECT email, phone, shift_start, shift_end, working_days FROM users WHERE name = $1', [transformed.counselorAssigned]);
+          if (counselorRes.rows.length > 0) {
+            const cUser = counselorRes.rows[0];
+            transformed.counselorDetails = {
+              email: cUser.email,
+              phone: cUser.phone,
+              shiftStart: cUser.shift_start,
+              shiftEnd: cUser.shift_end,
+              workingDays: cUser.working_days // DB stores as JSON string or array? Schema says "working_days TEXT" or array?
+            };
+            // Need to handle working_days parsing if it's stored as JSON string in DB but returned as string
+            try {
+              if (typeof cUser.working_days === 'string') {
+                transformed.counselorDetails.workingDays = JSON.parse(cUser.working_days);
+              }
+            } catch (e) { }
+          }
+        }
+        return transformed;
+      }));
       return res.json(transformedContacts);
     }
 
@@ -1770,7 +1796,12 @@ router.get('/visitors/my-visitors', authenticateToken, async (req, res) => {
 
 router.get('/visitors', authenticateToken, async (req, res) => {
   try {
-    const result = await query('SELECT * FROM visitors');
+    // Resolve host ID to name if possible
+    const result = await query(`
+      SELECT v.*, u.name as host_name 
+      FROM visitors v
+      LEFT JOIN users u ON v.host = CAST(u.id AS TEXT)
+    `);
     const visitors = result.rows.map(v => ({
       ...v,
       scheduledCheckIn: v.scheduled_check_in,
@@ -2158,43 +2189,94 @@ router.put('/notifications/mark-all-read', authenticateToken, async (req, res) =
 
 // ATTENDANCE ROUTES
 
-// Check-in
+// Helper: Haversine Distance (Meters)
+function getDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371e3; // metres
+  const φ1 = lat1 * Math.PI / 180; // φ, λ in radians
+  const φ2 = lat2 * Math.PI / 180;
+  const Δφ = (lat2 - lat1) * Math.PI / 180;
+  const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+  const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+    Math.cos(φ1) * Math.cos(φ2) *
+    Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return R * c;
+}
+
+// SETTINGS ROUTES
+router.post('/settings/office-location', authenticateToken, requireRole('Admin'), async (req, res) => {
+  try {
+    const { lat, lng } = req.body;
+    await query(`
+      INSERT INTO system_settings (key, value)
+      VALUES ($1, $2)
+      ON CONFLICT (key) DO UPDATE SET value = $2
+    `, ['OFFICE_LOCATION', { lat, lng }]);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/settings/office-location', authenticateToken, async (req, res) => {
+  try {
+    const result = await query('SELECT value FROM system_settings WHERE key = $1', ['OFFICE_LOCATION']);
+    res.json(result.rows[0]?.value || null);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Attendance routes
 router.post('/attendance/check-in', authenticateToken, async (req, res) => {
   try {
-    const userId = req.user.id;
-    const today = new Date().toISOString().split('T')[0];
-    const now = new Date();
+    const { lat, lng } = req.body;
 
+    // Check Geofence
+    const settingsRes = await query('SELECT value FROM system_settings WHERE key = $1', ['OFFICE_LOCATION']);
+    if (settingsRes.rows.length > 0) {
+      const office = settingsRes.rows[0].value;
+      if (!lat || !lng) {
+        return res.status(400).json({ error: 'Location required to mark attendance' });
+      }
+      const dist = getDistance(lat, lng, office.lat, office.lng);
+      if (dist > 50) {
+        return res.status(400).json({ error: `You are ${(dist - 50).toFixed(0)}m away from office. Must be within 50m.` });
+      }
+    }
+
+    const today = new Date().toISOString().split('T')[0];
     // Check if already checked in
-    const existing = await query('SELECT * FROM attendance_logs WHERE user_id = $1 AND date = $2', [userId, today]);
+    const existing = await query('SELECT * FROM attendance_logs WHERE user_id = $1 AND date = $2', [req.user.id, today]);
+
     if (existing.rows.length > 0) {
       return res.status(400).json({ error: 'Already checked in today' });
     }
 
-    // Get user shift details
-    const userRes = await query('SELECT shift_start FROM users WHERE id = $1', [userId]);
-    const shiftStartStr = userRes.rows[0]?.shift_start || '09:00'; // Default 9 AM
-
-    // Calculate status (Late or Present)
+    // Determine status (Late/On Time)
+    // Fetch user shift start
+    const user = await query('SELECT shift_start FROM users WHERE id = $1', [req.user.id]);
+    const shiftStart = user.rows[0]?.shift_start; // "09:00"
     let status = 'Present';
-    const [h, m] = shiftStartStr.split(':').map(Number);
-    const shiftStart = new Date();
-    shiftStart.setHours(h, m, 0, 0);
 
-    // Add 15 mins buffer
-    const bufferTime = new Date(shiftStart.getTime() + 15 * 60000);
-
-    if (now > bufferTime) {
-      status = 'Late';
+    if (shiftStart) {
+      const [h, m] = shiftStart.split(':').map(Number);
+      const now = new Date();
+      const shiftTime = new Date();
+      shiftTime.setHours(h, m, 0, 0);
+      // Allow 15 min buffer?
+      shiftTime.setMinutes(shiftTime.getMinutes() + 15);
+      if (now > shiftTime) status = 'Late';
     }
 
-    const result = await query(`
-      INSERT INTO attendance_logs(user_id, date, check_in, status)
-VALUES($1, $2, $3, $4)
-RETURNING *
-  `, [userId, today, now, status]);
+    await query(`
+      INSERT INTO attendance_logs (user_id, date, check_in, status)
+      VALUES ($1, $2, NOW(), $3)
+    `, [req.user.id, today, status]);
 
-    res.json(result.rows[0]);
+    res.json({ success: true, status });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -2203,22 +2285,34 @@ RETURNING *
 // Check-out
 router.post('/attendance/check-out', authenticateToken, async (req, res) => {
   try {
-    const userId = req.user.id;
-    const today = new Date().toISOString().split('T')[0];
-    const now = new Date();
+    const { lat, lng } = req.body;
 
-    const result = await query(`
-      UPDATE attendance_logs 
-      SET check_out = $1 
-      WHERE user_id = $2 AND date = $3
-RETURNING *
-  `, [now, userId, today]);
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'No check-in record found for today' });
+    // Check Geofence (Optional for Check-out? User said "mark attendence", implies both. Let's strict.)
+    const settingsRes = await query('SELECT value FROM system_settings WHERE key = $1', ['OFFICE_LOCATION']);
+    if (settingsRes.rows.length > 0) {
+      const office = settingsRes.rows[0].value;
+      if (!lat || !lng) {
+        return res.status(400).json({ error: 'Location required to mark attendance' });
+      }
+      const dist = getDistance(lat, lng, office.lat, office.lng);
+      if (dist > 50) {
+        return res.status(400).json({ error: `You are ${(dist - 50).toFixed(0)}m away. Must be within 50m.` });
+      }
     }
 
-    res.json(result.rows[0]);
+    const today = new Date().toISOString().split('T')[0];
+    const result = await query(`
+      UPDATE attendance_logs 
+      SET check_out = NOW()
+      WHERE user_id = $1 AND date = $2 AND check_out IS NULL
+      RETURNING *
+    `, [req.user.id, today]);
+
+    if (result.rows.length === 0) {
+      return res.status(400).json({ error: 'No active check-in found for today' });
+    }
+
+    res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -2263,6 +2357,61 @@ router.delete('/holidays/:id', authenticateToken, requireRole('Admin'), async (r
   }
 });
 
+// LEAVE MANAGEMENT
+router.post('/leaves', authenticateToken, async (req, res) => {
+  try {
+    const { startDate, endDate, reason } = req.body;
+    if (!startDate || !endDate) return res.status(400).json({ error: 'Dates required' });
+
+    const result = await query(`
+      INSERT INTO leave_requests (user_id, start_date, end_date, reason)
+      VALUES ($1, $2, $3, $4)
+      RETURNING *
+    `, [req.user.id, startDate, endDate, reason]);
+    res.json(result.rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/leaves', authenticateToken, async (req, res) => {
+  try {
+    let sql = `
+      SELECT l.*, u.name as user_name, u.email as user_email
+      FROM leave_requests l
+      JOIN users u ON l.user_id = u.id
+    `;
+    const params = [];
+
+    // RBAC: Staff only see their own, Admin sees all
+    if (req.user.role !== 'Admin') {
+      sql += ` WHERE l.user_id = $1`;
+      params.push(req.user.id);
+    }
+
+    sql += ` ORDER BY l.created_at DESC`;
+    const result = await query(sql, params);
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.put('/leaves/:id', authenticateToken, requireRole('Admin'), async (req, res) => {
+  try {
+    const { status } = req.body;
+    if (!['Approved', 'Rejected'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid status' });
+    }
+    const result = await query(`
+      UPDATE leave_requests SET status = $1 WHERE id = $2 RETURNING *
+    `, [status, req.params.id]);
+    res.json(result.rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // PAYROLL REPORT (Admin)
 router.get('/attendance/payroll', authenticateToken, requireRole('Admin'), async (req, res) => {
   try {
@@ -2270,10 +2419,10 @@ router.get('/attendance/payroll', authenticateToken, requireRole('Admin'), async
 
     if (!month || !year) return res.status(400).json({ error: 'Month and Year required' });
 
-    const startDate = `${year} -${String(month).padStart(2, '0')}-01`;
+    const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
     // Calculate end date (last day of month)
     const endDay = new Date(Number(year), Number(month), 0).getDate();
-    const endDate = `${year} -${String(month).padStart(2, '0')} -${endDay} `;
+    const endDate = `${year}-${String(month).padStart(2, '0')}-${endDay}`;
 
     // Fetch all users with salary info
     const users = await query('SELECT id, name, base_salary, joining_date FROM users WHERE role != $1', ['Student']);
@@ -2286,6 +2435,14 @@ router.get('/attendance/payroll', authenticateToken, requireRole('Admin'), async
     const logsRes = await query('SELECT * FROM attendance_logs WHERE date >= $1 AND date <= $2', [startDate, endDate]);
     const logs = logsRes.rows;
 
+    // Fetch APPROVED leaves overlapping this month
+    const leavesRes = await query(`
+        SELECT * FROM leave_requests 
+        WHERE status = 'Approved' 
+        AND start_date <= $2 AND end_date >= $1
+    `, [startDate, endDate]);
+    const leaves = leavesRes.rows;
+
     const report = users.rows.map(user => {
       const userLogs = logs.filter(l => l.user_id === user.id);
       const presentDays = userLogs.length; // Simple count of check-ins
@@ -2293,25 +2450,79 @@ router.get('/attendance/payroll', authenticateToken, requireRole('Admin'), async
 
       // Calculate Working Days
       // Total days in month - Sundays - Holidays
-      let sundays = 0;
+      // Calculate Standard Working Days (Full Month) for Rate Calculation
+      let standardSundays = 0;
       for (let d = 1; d <= endDay; d++) {
         const date = new Date(Number(year), Number(month) - 1, d);
-        if (date.getDay() === 0) sundays++; // Sunday
+        if (date.getDay() === 0) standardSundays++;
       }
-      const workingDays = endDay - sundays - holidaysCount;
-
+      const standardWorkingDays = endDay - standardSundays - holidaysCount;
       const baseSalary = parseFloat(user.base_salary) || 0;
-      const payPerDay = workingDays > 0 ? baseSalary / workingDays : 0;
+      const payPerDay = standardWorkingDays > 0 ? baseSalary / standardWorkingDays : 0;
+
+      // Calculate Effective Working Days for User (Considering Join Date)
+      const joinDate = user.joining_date ? new Date(user.joining_date) : null;
+      let effectiveStartDay = 1;
+
+      // If user joined this month, start from join date
+      if (joinDate && joinDate.getFullYear() === Number(year) && joinDate.getMonth() === Number(month) - 1) {
+        effectiveStartDay = joinDate.getDate();
+      }
+      // If user joined AFTER this month, they have 0 working days
+      if (joinDate && (joinDate.getFullYear() > Number(year) || (joinDate.getFullYear() === Number(year) && joinDate.getMonth() > Number(month) - 1))) {
+        // Future joiner
+        return { userId: user.id, name: user.name, baseSalary, workingDays: 0, presentDays: 0, lateDays: 0, finalSalary: 0 };
+      }
+
+      let userSundays = 0;
+      for (let d = effectiveStartDay; d <= endDay; d++) {
+        const date = new Date(Number(year), Number(month) - 1, d);
+        if (date.getDay() === 0) userSundays++;
+      }
+
+      // Holidays falling in user's tenure
+      const validHolidays = holidaysRes.rows.filter(h => {
+        const hDate = new Date(h.date);
+        return hDate.getDate() >= effectiveStartDay;
+      }).length;
+
+      const userLength = endDay - effectiveStartDay + 1;
+      const workingDays = Math.max(0, userLength - userSundays - validHolidays);
+
+      // Calculate Paid Leave Days
+      const userLeaves = leaves.filter(l => l.user_id === user.id);
+      let paidLeaveDays = 0;
+      userLeaves.forEach(leave => {
+        const lStart = new Date(leave.start_date);
+        const lEnd = new Date(leave.end_date);
+
+        // Iterate days in leave
+        for (let d = new Date(lStart); d <= lEnd; d.setDate(d.getDate() + 1)) { // Create new Date object for iteration
+          // Check if date falls in current month and user tenure
+          if (d.getMonth() === Number(month) - 1 && d.getFullYear() === Number(year) && d.getDate() >= effectiveStartDay && d.getDate() <= endDay) {
+            // Exclude Sundays (assuming leaves don't count on Sundays)
+            if (d.getDay() !== 0) {
+              // Exclude Holidays? Usually yes.
+              const isHoliday = holidaysRes.rows.some(h => new Date(h.date).toDateString() === d.toDateString());
+              if (!isHoliday) {
+                paidLeaveDays++;
+              }
+            }
+          }
+        }
+      });
 
       // Deductions
-      // Absent days = workingDays - presentDays
-      const absentDays = Math.max(0, workingDays - presentDays);
+      // Absent days = workingDays - presentDays - paidLeaveDays
+      // Logic: You should be present (workingDays). You were present X days. You were on paid leave Y days.
+      // Deficit = workingDays - (present + leave).
+      const absentDays = Math.max(0, workingDays - presentDays - paidLeaveDays);
       const absentDeduction = absentDays * payPerDay;
 
-      // Late deduction: 50 INR per late arrival (customizable but hardcoded for now)
+      // Late deduction: 50 INR per late arrival
       const lateDeduction = lateDays * 50;
 
-      const finalSalary = Math.max(0, baseSalary - absentDeduction - lateDeduction);
+      const finalSalary = Math.round(Math.max(0, ((presentDays + paidLeaveDays) * payPerDay) - lateDeduction));
 
       return {
         userId: user.id,
@@ -2319,9 +2530,9 @@ router.get('/attendance/payroll', authenticateToken, requireRole('Admin'), async
         baseSalary,
         workingDays,
         presentDays,
+        paidLeaveDays, // Useful for frontend
         lateDays,
-        absentDays,
-        finalSalary: Math.round(finalSalary)
+        finalSalary
       };
     });
 

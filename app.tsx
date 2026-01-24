@@ -1452,6 +1452,10 @@ const DashboardLayout: React.FC = () => {
           currentUser={currentUser}
           onNewStaffClick={() => setIsNewStaffModalOpen(true)}
           onStartImpersonation={handleStartImpersonation}
+          onUpdateUserDetails={(userId, data) => {
+            setUsers(prev => prev.map(u => u.id === userId ? { ...u, ...data } : u));
+            logActivity(`Updated user details for ID: ${userId}.`);
+          }}
         />
       );
       case 'Visitor Display': return <VisitorDisplay />;

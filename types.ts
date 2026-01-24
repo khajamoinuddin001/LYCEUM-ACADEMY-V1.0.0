@@ -429,6 +429,10 @@ export interface User {
   shift_start?: string;
   shift_end?: string;
   working_days?: string[];
+  phone?: string;
+  shiftStart?: string;
+  shiftEnd?: string;
+  workingDays?: string[];
 }
 
 export interface ActivityLog {

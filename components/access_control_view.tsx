@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import type { User, UserRole, AppPermissions, ActivityLog } from '../types';
 import * as api from '../utils/api';
-import { ArrowLeft, X, Eye, UserPlus, Trash2 } from './icons';
+import { ArrowLeft, X, Eye, UserPlus, Trash2, Edit as UserIcon } from './icons';
 import { ODOO_APPS, STAFF_ROLES } from './constants';
 
 interface ManageAppsModalProps {
@@ -226,15 +226,53 @@ interface AccessControlViewProps {
     currentUser: User;
     onNewStaffClick: () => void;
     onStartImpersonation: (user: User) => void;
+    onUpdateUserDetails: (userId: number, data: { name: string; email: string; phone: string }) => void;
 }
 
-const AccessControlView: React.FC<AccessControlViewProps> = ({ users, activityLog, onUpdateUserRole, onUpdateUserPermissions, onDeleteUser, onUserCreated, onNavigateBack, currentUser, onNewStaffClick, onStartImpersonation }) => {
+const AccessControlView: React.FC<AccessControlViewProps> = ({ users, activityLog, onUpdateUserRole, onUpdateUserPermissions, onDeleteUser, onUserCreated, onNavigateBack, currentUser, onNewStaffClick, onStartImpersonation, onUpdateUserDetails }) => {
     const [modalUser, setModalUser] = useState<User | null>(null);
     const [activeTab, setActiveTab] = useState('staff');
     const [showNewUserModal, setShowNewUserModal] = useState(false);
-    const [newUserForm, setNewUserForm] = useState({ name: '', email: '', role: 'Staff' as UserRole });
+    const [newUserForm, setNewUserForm] = useState({ name: '', email: '', phone: '', role: 'Staff' as UserRole });
     const [isCreating, setIsCreating] = useState(false);
     const [createdPassword, setCreatedPassword] = useState<string | null>(null);
+
+    // Edit User State
+    const [editingUser, setEditingUser] = useState<User | null>(null);
+    const [editForm, setEditForm] = useState({ name: '', email: '', phone: '' });
+    const [isUpdating, setIsUpdating] = useState(false);
+
+    const handleEditClick = (user: User) => {
+        setEditingUser(user);
+        setEditForm({
+            name: user.name,
+            email: user.email,
+            phone: (user as any).phone || ''
+        });
+    };
+
+    const handleUpdateUser = async () => {
+        if (!editingUser || !editForm.name || !editForm.email) return;
+        setIsUpdating(true);
+        try {
+            await api.updateUser(editingUser.id, {
+                name: editForm.name,
+                email: editForm.email,
+                phone: editForm.phone
+            });
+            onUpdateUserDetails(editingUser.id, {
+                ...editForm,
+                // Pass phone update to check
+            } as any);
+            setEditingUser(null);
+            alert('✅ User details updated successfully');
+        } catch (error) {
+            console.error('Failed to update user:', error);
+            alert('Failed to update user');
+        } finally {
+            setIsUpdating(false);
+        }
+    };
 
     const handleRoleChange = async (userId: number, newRole: UserRole) => {
         try {
@@ -254,7 +292,7 @@ const AccessControlView: React.FC<AccessControlViewProps> = ({ users, activityLo
 
         setIsCreating(true);
         try {
-            const result = await api.createUser(newUserForm.name, newUserForm.email, newUserForm.role, {});
+            const result = await api.createUser(newUserForm.name, newUserForm.email, newUserForm.role, { phone: newUserForm.phone });
             setCreatedPassword(result.temporaryPassword);
 
             // Update parent state
@@ -265,7 +303,7 @@ const AccessControlView: React.FC<AccessControlViewProps> = ({ users, activityLo
             });
 
             alert(`✅ User created successfully!\n\nTemporary Password: ${result.temporaryPassword}\n\nPlease save this password and share it securely with the user.`);
-            setNewUserForm({ name: '', email: '', role: 'Staff' });
+            setNewUserForm({ name: '', email: '', phone: '', role: 'Staff' });
             setShowNewUserModal(false);
         } catch (error: any) {
             console.error('Failed to create user:', error);
@@ -367,6 +405,7 @@ const AccessControlView: React.FC<AccessControlViewProps> = ({ users, activityLo
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{user.name}</div>
                                                 <div className="text-xs text-gray-500 dark:text-gray-400">{user.email}</div>
+                                                {(user as any).phone && <div className="text-xs text-gray-400 dark:text-gray-500">{(user as any).phone}</div>}
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
                                                 <select
@@ -400,6 +439,13 @@ const AccessControlView: React.FC<AccessControlViewProps> = ({ users, activityLo
                                                     >
                                                         <Eye size={16} className="mr-2" />
                                                         Impersonate
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleEditClick(user)}
+                                                        className="p-2 text-gray-500 hover:text-lyceum-blue dark:hover:text-blue-400"
+                                                        title="Edit User Details"
+                                                    >
+                                                        <UserIcon size={18} />
                                                     </button>
                                                     <button
                                                         onClick={() => handleDeleteUser(user.id, user.name)}
@@ -486,6 +532,17 @@ const AccessControlView: React.FC<AccessControlViewProps> = ({ users, activityLo
                                 />
                             </div>
                             <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Phone</label>
+                                <input
+                                    type="text"
+                                    value={newUserForm.phone}
+                                    onChange={(e) => setNewUserForm({ ...newUserForm, phone: e.target.value })}
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-700 dark:text-white"
+                                    placeholder="+91..."
+                                    disabled={isCreating}
+                                />
+                            </div>
+                            <div>
                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Role</label>
                                 <select
                                     value={newUserForm.role}
@@ -519,6 +576,70 @@ const AccessControlView: React.FC<AccessControlViewProps> = ({ users, activityLo
                                     </svg>
                                 )}
                                 {isCreating ? 'Creating...' : 'Create User'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Edit User Modal */}
+            {editingUser && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => !isUpdating && setEditingUser(null)}>
+                    <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm" />
+                    <div className="relative bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-between mb-4">
+                            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Edit User Details</h2>
+                            <button onClick={() => setEditingUser(null)} disabled={isUpdating} className="text-gray-400 hover:text-gray-600">
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Name</label>
+                                <input
+                                    type="text"
+                                    value={editForm.name}
+                                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-700 dark:text-white"
+                                    disabled={isUpdating}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email</label>
+                                <input
+                                    type="email"
+                                    value={editForm.email}
+                                    onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-700 dark:text-white"
+                                    disabled={isUpdating}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Phone</label>
+                                <input
+                                    type="text"
+                                    value={editForm.phone}
+                                    onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-700 dark:text-white"
+                                    placeholder="+91..."
+                                    disabled={isUpdating}
+                                />
+                            </div>
+                        </div>
+                        <div className="mt-6 flex gap-3">
+                            <button
+                                onClick={() => setEditingUser(null)}
+                                disabled={isUpdating}
+                                className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleUpdateUser}
+                                disabled={isUpdating}
+                                className="flex-1 px-4 py-2 bg-lyceum-blue text-white rounded-md hover:bg-lyceum-blue-dark disabled:opacity-50 flex items-center justify-center gap-2"
+                            >
+                                {isUpdating ? 'Saving...' : 'Save Changes'}
                             </button>
                         </div>
                     </div>

@@ -494,12 +494,18 @@ export const updateUser = async (userId: number, updates: Partial<User>): Promis
   return response.json();
 };
 // Attendance API
-export const checkIn = async () => {
-  return await apiRequest('/attendance/check-in', { method: 'POST' });
+export const checkIn = async (location?: { lat: number; lng: number }) => {
+  return await apiRequest('/attendance/check-in', {
+    method: 'POST',
+    body: JSON.stringify(location || {})
+  });
 };
 
-export const checkOut = async () => {
-  return await apiRequest('/attendance/check-out', { method: 'POST' });
+export const checkOut = async (location?: { lat: number; lng: number }) => {
+  return await apiRequest('/attendance/check-out', {
+    method: 'POST',
+    body: JSON.stringify(location || {})
+  });
 };
 
 export const getAttendanceHistory = async () => {
@@ -523,6 +529,35 @@ export const deleteHoliday = async (id: number) => {
 
 export const getPayrollReport = async (month: number, year: number) => {
   return await apiRequest(`/attendance/payroll?month=${month}&year=${year}`, { method: 'GET' });
+};
+
+export const saveOfficeLocation = async (location: { lat: number; lng: number }) => {
+  return await apiRequest('/settings/office-location', {
+    method: 'POST',
+    body: JSON.stringify(location)
+  });
+};
+
+export const getOfficeLocation = async () => {
+  return await apiRequest<{ lat: number; lng: number } | null>('/settings/office-location', { method: 'GET' });
+};
+
+export const applyLeave = async (leave: { startDate: string; endDate: string; reason: string }) => {
+  return await apiRequest('/leaves', {
+    method: 'POST',
+    body: JSON.stringify(leave)
+  });
+};
+
+export const getLeaves = async () => {
+  return await apiRequest('/leaves', { method: 'GET' });
+};
+
+export const updateLeaveStatus = async (id: number, status: 'Approved' | 'Rejected') => {
+  return await apiRequest(`/leaves/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify({ status })
+  });
 };
 
 export const saveEvents = async (events: CalendarEvent[]): Promise<CalendarEvent[]> => {
@@ -889,7 +924,11 @@ export const saveVisitor = async (data: {
   } else {
     await apiRequest('/visitors', {
       method: 'POST',
-      body: JSON.stringify({ ...data, checkIn: istTime.toISOString(), status: 'Checked-in' }),
+      body: JSON.stringify({
+        ...data,
+        checkIn: data.checkIn || istTime.toISOString(),
+        status: data.status || 'Checked-in'
+      }),
     });
   }
   return getVisitors();

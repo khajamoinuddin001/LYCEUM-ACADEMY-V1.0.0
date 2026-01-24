@@ -15,6 +15,7 @@ const DepartmentDashboard: React.FC<DepartmentDashboardProps> = ({ user, onViewV
     const [followUpVisitor, setFollowUpVisitor] = useState<Visitor | null>(null);
     const [targetStaff, setTargetStaff] = useState('');
     const [staffMembers, setStaffMembers] = useState<User[]>([]);
+    const [viewMode, setViewMode] = useState<'Mine' | 'All'>('Mine'); // Admin default: Mine
 
     const userDepartment = user.role === 'Admin' ? 'All' : (user.permissions?.department || 'Unassigned');
 
@@ -48,14 +49,25 @@ const DepartmentDashboard: React.FC<DepartmentDashboardProps> = ({ user, onViewV
             const waiting = allVisitors.filter(v => {
                 if (v.status === 'Checked-out') return false;
 
-                let targetDept = v.host;
+                let targetDept = (v as any).host_name || v.host;
                 if (v.visitSegments && v.visitSegments.length > 0) {
                     targetDept = v.visitSegments[v.visitSegments.length - 1].department;
                 }
 
-                // Match department
-                const isForMyDept = user.role === 'Admin' || targetDept.includes(user.name) || targetDept === userDepartment;
-                if (!isForMyDept) return false;
+                // Match Logic
+                let isForMe = false;
+                // 1. Check Name/Department String match
+                if (targetDept.includes(user.name) || targetDept === userDepartment) isForMe = true;
+                // 2. Check strict ID match (if target is host ID)
+                if (String(v.host) === String(user.id)) isForMe = true;
+
+                // Admin Filter Logic
+                let matchesScope = isForMe;
+                if (user.role === 'Admin' && viewMode === 'All') {
+                    matchesScope = true;
+                }
+
+                if (!matchesScope) return false;
 
                 // Status check: Checked-in OR (Called AND < 2 mins ago)
                 if (v.status === 'Checked-in' || (v.status as any) === 'Scheduled') return true;
@@ -67,7 +79,7 @@ const DepartmentDashboard: React.FC<DepartmentDashboardProps> = ({ user, onViewV
             }).sort((a, b) => new Date(a.checkIn || '').getTime() - new Date(b.checkIn || '').getTime());
 
             setVisitors(waiting);
-            setMyTasks(tasks.filter(t => t.status !== 'done'));
+            setMyTasks(tasks.filter(t => t.status !== 'Done'));
         } catch (error) {
             console.error("Fetch error", error);
         } finally {
@@ -153,7 +165,7 @@ const DepartmentDashboard: React.FC<DepartmentDashboardProps> = ({ user, onViewV
 
     const handleTaskDone = async (task: TodoTask) => {
         try {
-            await api.saveTask({ ...task, status: 'done' });
+            await api.saveTask({ ...task, status: 'Done' });
             fetchData();
         } catch (error) {
             console.error("Failed to mark task as done", error);
@@ -169,7 +181,23 @@ const DepartmentDashboard: React.FC<DepartmentDashboardProps> = ({ user, onViewV
                     </h1>
                     <p className="text-gray-500">{user.name} - {userDepartment}</p>
                 </div>
-                <div className="flex gap-4">
+                <div className="flex gap-4 items-center">
+                    {user.role === 'Admin' && (
+                        <div className="bg-gray-100 dark:bg-gray-700 p-1 rounded-lg flex text-sm font-medium">
+                            <button
+                                onClick={() => setViewMode('All')}
+                                className={`px-3 py-1.5 rounded-md transition-all ${viewMode === 'All' ? 'bg-white dark:bg-gray-600 shadow-sm text-lyceum-blue' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'}`}
+                            >
+                                All Visitors
+                            </button>
+                            <button
+                                onClick={() => setViewMode('Mine')}
+                                className={`px-3 py-1.5 rounded-md transition-all ${viewMode === 'Mine' ? 'bg-white dark:bg-gray-600 shadow-sm text-lyceum-blue' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'}`}
+                            >
+                                My Visitors
+                            </button>
+                        </div>
+                    )}
                     <div className="text-right">
                         <div className="text-sm text-gray-500">Waiting</div>
                         <div className="text-2xl font-bold text-lyceum-blue">{visitors.length}</div>

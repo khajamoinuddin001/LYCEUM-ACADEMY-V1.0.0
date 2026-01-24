@@ -51,6 +51,7 @@ export async function initDatabase() {
         id SERIAL PRIMARY KEY,
         name TEXT NOT NULL,
         email TEXT UNIQUE NOT NULL,
+        phone TEXT,
         password TEXT NOT NULL,
         role TEXT NOT NULL CHECK(role IN ('Admin', 'Staff', 'Student')),
         permissions JSONB DEFAULT '{}',
@@ -395,6 +396,19 @@ export async function initDatabase() {
       )
     `);
 
+    // LEAVE REQUESTS
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS leave_requests (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id),
+        start_date DATE NOT NULL,
+        end_date DATE NOT NULL,
+        reason TEXT,
+        status TEXT CHECK(status IN ('Pending', 'Approved', 'Rejected')) DEFAULT 'Pending',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     // Add columns to users if they don't exist
     const userColumns = ['joining_date', 'base_salary', 'shift_start', 'shift_end'];
     for (const col of userColumns) {
@@ -411,6 +425,30 @@ export async function initDatabase() {
         await client.query(`ALTER TABLE users ADD COLUMN ${col} ${type}`);
       }
     }
+
+
+
+    // Add working_days column separately
+    try {
+      await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS working_days JSONB DEFAULT \'[]\'');
+    } catch (e) {
+      console.log('Working days column might already exist');
+    }
+
+    // Add phone column separately if it doesn't exist
+    try {
+      await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT');
+    } catch (e) {
+      console.log('Phone column might already exist');
+    }
+
+    // SYSTEM SETTINGS (for Office Location etc)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS system_settings (
+        key TEXT PRIMARY KEY,
+        value JSONB
+      )
+    `);
 
     console.log("✅ Database initialized successfully");
   } catch (err) {

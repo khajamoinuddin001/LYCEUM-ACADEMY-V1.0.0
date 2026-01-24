@@ -4,8 +4,8 @@ import * as api from '../utils/api';
 import { Users, Clock, Filter, Monitor } from './icons';
 
 const DEPARTMENTS = ['All', 'Admission', 'Accounts', 'Visa', 'LMS', 'Reception', 'Counseling'];
-const FLASH_DURATION_MS = 15000; // Flash for 15 seconds
-const DISPLAY_DURATION_MS = 60000; // Keep on display for 1 minute total
+const FLASH_DURATION_MS = 10000; // Flash for 10 seconds (reduced from 15)
+const DISPLAY_DURATION_MS = 30000; // Keep on list for 30 seconds (reduced from 60)
 
 const VisitorDisplay: React.FC = () => {
     const [visitors, setVisitors] = useState<Visitor[]>([]);
@@ -80,6 +80,11 @@ const VisitorDisplay: React.FC = () => {
     };
 
     const getWaitingFor = (visitor: Visitor) => {
+        // PRIORITIZE Host Name (Specific Person)
+        if ((visitor as any).host_name) {
+            return (visitor as any).host_name;
+        }
+        // Then Department
         if (visitor.visitSegments && visitor.visitSegments.length > 0) {
             return visitor.visitSegments[visitor.visitSegments.length - 1].department;
         }

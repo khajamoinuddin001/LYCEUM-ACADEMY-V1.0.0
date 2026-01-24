@@ -10,7 +10,7 @@ interface AttendanceViewProps {
 }
 
 const AttendanceView: React.FC<AttendanceViewProps> = ({ user, users = [], onUpdateUser }) => {
-    const [activeTab, setActiveTab] = useState<'me' | 'staff' | 'holidays' | 'payroll'>('me');
+    const [activeTab, setActiveTab] = useState<'me' | 'staff' | 'holidays' | 'payroll' | 'leaves' | 'manageRequests'>('me');
     const [myLogs, setMyLogs] = useState<any[]>([]);
     const [isCheckedIn, setIsCheckedIn] = useState(false);
     const [todayLog, setTodayLog] = useState<any | null>(null);
@@ -24,6 +24,13 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ user, users = [], onUpd
     // Holiday Form state
     const [newHoliday, setNewHoliday] = useState({ date: '', description: '' });
 
+    // Leave Management State
+    const [leaveList, setLeaveList] = useState<any[]>([]);
+    const [leaveForm, setLeaveForm] = useState({ startDate: '', endDate: '', reason: '' });
+
+    // Office Location State
+    const [officeLocation, setOfficeLocation] = useState<{ lat: number, lng: number } | null>(null);
+
     // Current Time for Clock
     const [currentTime, setCurrentTime] = useState(new Date());
 
@@ -36,11 +43,15 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ user, users = [], onUpd
         fetchMyAttendance();
         if (user.role === 'Admin') {
             fetchHolidays();
+            fetchLeaves(); // Admin sees all
+            fetchOfficeLocation();
             if (users && users.length > 0) {
                 setStaffList(users.filter(u => u.role !== 'Student'));
             } else {
                 fetchStaff();
             }
+        } else {
+            fetchLeaves(); // Staff sees their own
         }
     }, [user.role, users]);
 
@@ -75,9 +86,76 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ user, users = [], onUpd
         }
     };
 
+    const fetchLeaves = async () => {
+        try {
+            const data = await api.getLeaves();
+            setLeaveList(data);
+        } catch (error) {
+            console.error("Failed to fetch leaves:", error);
+        }
+    };
+
+    const fetchOfficeLocation = async () => {
+        try {
+            const loc = await api.getOfficeLocation();
+            setOfficeLocation(loc);
+        } catch (error) {
+            console.error("Failed to fetch location:", error);
+        }
+    };
+
+    const handleApplyLeave = async (e: React.FormEvent) => {
+        e.preventDefault();
+        try {
+            await api.applyLeave(leaveForm);
+            alert('Leave request submitted!');
+            setLeaveForm({ startDate: '', endDate: '', reason: '' });
+            fetchLeaves();
+        } catch (error: any) {
+            alert('Failed to apply: ' + error.message);
+        }
+    };
+
+    const handleUpdateLeaveStatus = async (id: number, status: 'Approved' | 'Rejected') => {
+        if (!confirm(`Are you sure you want to mark this request as ${status}?`)) return;
+        try {
+            await api.updateLeaveStatus(id, status);
+            fetchLeaves();
+        } catch (error) {
+            alert('Failed to update status');
+        }
+    };
+
+    const getLocation = (): Promise<{ lat: number, lng: number }> => {
+        return new Promise((resolve, reject) => {
+            if (!navigator.geolocation) return reject(new Error("Geolocation not supported"));
+            navigator.geolocation.getCurrentPosition(
+                (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+                (err) => reject(new Error("Location permission denied. Please allow location access to mark attendance."))
+            );
+        });
+    };
+
     const handleCheckIn = async () => {
         try {
-            await api.checkIn();
+            // Try to get location, but don't block if not required (API decides)
+            // Actually, if we fail to get location (denied), we should send nothing?
+            // Or if we denied, we fail locally?
+            // If API requires it, we MUST send it. Best to always try.
+            let loc;
+            try {
+                loc = await getLocation();
+            } catch (e: any) {
+                console.log("Location skipped:", e.message);
+                // We proceed without location. If backend requires it, it will 400.
+                if (confirm("Location access failed/denied. Try checking in without location? (If Geofencing is on, this will fail)")) {
+                    // proceed
+                } else {
+                    return;
+                }
+            }
+
+            await api.checkIn(loc);
             await fetchMyAttendance();
         } catch (error: any) {
             alert(error.message || "Check-in failed");
@@ -86,10 +164,24 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ user, users = [], onUpd
 
     const handleCheckOut = async () => {
         try {
-            await api.checkOut();
+            let loc;
+            try { loc = await getLocation(); } catch (e) { }
+            await api.checkOut(loc);
             await fetchMyAttendance();
         } catch (error: any) {
             alert(error.message || "Check-out failed");
+        }
+    };
+
+    const handleSetOfficeLocation = async () => {
+        if (!confirm("This will set the OFFICE LOCATION to your current GPS coordinates. Ensure you are at the office.")) return;
+        try {
+            const loc = await getLocation();
+            await api.saveOfficeLocation(loc);
+            setOfficeLocation(loc);
+            alert("✅ Office location updated successfully!");
+        } catch (error: any) {
+            alert("Failed to set location: " + error.message);
         }
     };
 
@@ -253,15 +345,38 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ user, users = [], onUpd
     const renderStaffMgmt = () => (
         <div className="space-y-6 animate-fade-in">
             <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-                <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-                    <h3 className="text-lg font-bold">Staff Salary & Shift Settings</h3>
-                    <p className="text-sm text-gray-500">Configure base salaries and working hours for each staff member.</p>
+                <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                    <div>
+                        <h3 className="text-lg font-bold">Staff Salary & Shift Settings</h3>
+                        <p className="text-sm text-gray-500">Configure base salaries and working hours for each staff member.</p>
+                        {officeLocation ? (
+                            <div className="mt-2 flex items-center gap-2 text-xs text-green-600 bg-green-50 px-2 py-1 rounded w-fit">
+                                <CheckCircle size={12} />
+                                <span>Geofence Active: {officeLocation.lat.toFixed(4)}, {officeLocation.lng.toFixed(4)}</span>
+                                <a href={`https://maps.google.com/?q=${officeLocation.lat},${officeLocation.lng}`} target="_blank" rel="noreferrer" className="underline ml-1">View Map</a>
+                            </div>
+                        ) : (
+                            <div className="mt-2 flex items-center gap-2 text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded w-fit">
+                                <AlertCircle size={12} />
+                                <span>Geofence Inactive (Set location to enable)</span>
+                            </div>
+                        )}
+                    </div>
+                    <div>
+                        <button
+                            onClick={handleSetOfficeLocation}
+                            className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-lg text-sm font-bold transition-colors"
+                        >
+                            <span className="text-lg">📍</span> Set Office Location
+                        </button>
+                    </div>
                 </div>
                 <div className="overflow-x-auto">
                     <table className="w-full text-left">
                         <thead className="bg-gray-50 dark:bg-gray-800/50 text-gray-500 text-xs uppercase">
                             <tr>
                                 <th className="px-6 py-4">Staff Member</th>
+                                <th className="px-6 py-4">Joining Date</th>
                                 <th className="px-6 py-4">Base Salary</th>
                                 <th className="px-6 py-4">Shift Start</th>
                                 <th className="px-6 py-4">Shift End</th>
@@ -274,6 +389,14 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ user, users = [], onUpd
                                     <td className="px-6 py-4">
                                         <div className="font-bold text-gray-900 dark:text-gray-100">{s.name}</div>
                                         <div className="text-xs text-gray-500">{s.email}</div>
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        <input
+                                            type="date"
+                                            className="p-1.5 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-sm"
+                                            defaultValue={s.joining_date ? s.joining_date.toString().split('T')[0] : ''}
+                                            onBlur={(e) => handleUpdateStaff(s.id, { joining_date: e.target.value })}
+                                        />
                                     </td>
                                     <td className="px-6 py-4">
                                         <div className="relative">
@@ -456,8 +579,8 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ user, users = [], onUpd
                                 <tr>
                                     <th className="px-6 py-5 font-bold">Staff Details</th>
                                     <th className="px-6 py-5 font-bold">Base Salary</th>
-                                    <th className="px-6 py-5 font-bold">Working Days</th>
-                                    <th className="px-6 py-5 font-bold">Present / Late</th>
+                                    <th className="px-6 py-5 font-bold">Period</th>
+                                    <th className="px-6 py-5 font-bold">Present / Leaves / Late</th>
                                     <th className="px-6 py-5 font-bold">Deductions</th>
                                     <th className="px-6 py-5 font-bold text-right">Final Pay</th>
                                 </tr>
@@ -473,12 +596,19 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ user, users = [], onUpd
                                         <td className="px-6 py-5">{row.workingDays} days</td>
                                         <td className="px-6 py-5">
                                             <div className="flex items-center gap-2">
-                                                <span className="text-green-600 font-bold">{row.presentDays}P</span>
-                                                <span className="text-amber-600 font-bold">{row.lateDays}L</span>
+                                                <span className="text-green-600 font-bold" title="Present">{row.presentDays}P</span>
+                                                <span className="text-blue-600 font-bold" title="Paid Leaves">{row.paidLeaveDays || 0}L</span>
+                                                <span className="text-amber-600 font-bold" title="Late">{row.lateDays}L</span>
                                             </div>
                                         </td>
                                         <td className="px-6 py-5 text-red-600 font-bold">
-                                            -₹{((row.baseSalary / row.workingDays) * (row.workingDays - row.presentDays) + (row.lateDays * 50)).toLocaleString()}
+                                            {/* Deductions: Only show late fines and absent deduction */}
+                                            {/* Absent days logic is implicit in Final Pay vs Base. 
+                                                If we want to show 'Deduction Amount', we can calc: Base - Final.
+                                                But Base might be Pro-rated Max?
+                                                Let's calculate Deduction = Base - Final.
+                                            */}
+                                            -₹{Math.max(0, row.baseSalary - row.finalSalary).toLocaleString()}
                                         </td>
                                         <td className="px-6 py-5 text-right font-black text-lg text-lyceum-blue">₹{row.finalSalary.toLocaleString()}</td>
                                     </tr>
@@ -491,6 +621,106 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ user, users = [], onUpd
         </div>
     );
 
+    const renderMyLeaves = () => (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-fade-in">
+            <div className="lg:col-span-1">
+                <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700">
+                    <h3 className="text-lg font-bold mb-6">Request Leave</h3>
+                    <form onSubmit={handleApplyLeave} className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Start Date</label>
+                                <input type="date" className="w-full p-2.5 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg outline-none" value={leaveForm.startDate} onChange={e => setLeaveForm({ ...leaveForm, startDate: e.target.value })} required />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">End Date</label>
+                                <input type="date" className="w-full p-2.5 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg outline-none" value={leaveForm.endDate} onChange={e => setLeaveForm({ ...leaveForm, endDate: e.target.value })} required />
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Reason</label>
+                            <textarea className="w-full p-2.5 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg outline-none" rows={3} value={leaveForm.reason} onChange={e => setLeaveForm({ ...leaveForm, reason: e.target.value })} required placeholder="Why are you taking leave?" />
+                        </div>
+                        <button type="submit" className="w-full py-2.5 bg-lyceum-blue text-white font-bold rounded-lg shadow-lg hover:bg-blue-700 transition-all">Submit Request</button>
+                    </form>
+                </div>
+            </div>
+            <div className="lg:col-span-2">
+                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+                    <div className="p-6 border-b border-gray-200 dark:border-gray-700"><h3 className="text-lg font-bold">My Leave History</h3></div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left">
+                            <thead className="bg-gray-50 dark:bg-gray-800/50 text-gray-500 text-xs uppercase">
+                                <tr>
+                                    <th className="px-6 py-4">Dates</th>
+                                    <th className="px-6 py-4">Reason</th>
+                                    <th className="px-6 py-4">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                                {leaveList.filter(l => l.user_id === user.id).map(leave => (
+                                    <tr key={leave.id}><td className="px-6 py-4"><div className="font-bold">{new Date(leave.start_date).toLocaleDateString()}</div><div className="text-xs text-gray-500">to {new Date(leave.end_date).toLocaleDateString()}</div></td><td className="px-6 py-4 text-sm">{leave.reason}</td><td className="px-6 py-4"><span className={`px-2 py-1 rounded-full text-xs font-bold ${leave.status === 'Approved' ? 'bg-green-100 text-green-700' : leave.status === 'Rejected' ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'}`}>{leave.status}</span></td></tr>
+                                ))}
+                                {leaveList.filter(l => l.user_id === user.id).length === 0 && <tr><td colSpan={3} className="px-6 py-8 text-center text-gray-400">No leave requests found.</td></tr>}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+
+    const renderManageLeaves = () => (
+        <div className="space-y-6 animate-fade-in">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+                <div className="p-6 border-b border-gray-200 dark:border-gray-700"><h3 className="text-lg font-bold">Pending Leave Requests</h3></div>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                        <thead className="bg-gray-50 dark:bg-gray-800/50 text-gray-500 text-xs uppercase">
+                            <tr>
+                                <th className="px-6 py-4">Staff</th>
+                                <th className="px-6 py-4">Dates</th>
+                                <th className="px-6 py-4">Reason</th>
+                                <th className="px-6 py-4 text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                            {leaveList.map(leave => (
+                                <tr key={leave.id} className="hover:bg-gray-50/50">
+                                    <td className="px-6 py-4"><div className="font-bold">{leave.user_name}</div><div className="text-xs text-gray-500">{leave.user_email}</div></td>
+                                    <td className="px-6 py-4"><div className="font-medium">{new Date(leave.start_date).toLocaleDateString()}</div><div className="text-xs text-gray-500">to {new Date(leave.end_date).toLocaleDateString()}</div></td>
+                                    <td className="px-6 py-4 text-sm max-w-xs truncate" title={leave.reason}>{leave.reason}</td>
+                                    <td className="px-6 py-4 text-right">
+                                        <div className="flex items-center justify-end gap-3">
+                                            <span className={`px-2 py-1 rounded-full text-xs font-bold ${leave.status === 'Pending' ? 'bg-orange-100 text-orange-700' :
+                                                leave.status === 'Approved' ? 'bg-green-100 text-green-700' :
+                                                    'bg-red-100 text-red-700'
+                                                }`}>
+                                                {leave.status}
+                                            </span>
+
+                                            {leave.status !== 'Approved' && (
+                                                <button onClick={() => handleUpdateLeaveStatus(leave.id, 'Approved')} className="px-3 py-1 bg-green-600 text-white text-xs font-bold rounded hover:bg-green-700 shadow-sm">
+                                                    Accept
+                                                </button>
+                                            )}
+                                            {leave.status !== 'Rejected' && (
+                                                <button onClick={() => handleUpdateLeaveStatus(leave.id, 'Rejected')} className="px-3 py-1 bg-red-600 text-white text-xs font-bold rounded hover:bg-red-700 shadow-sm">
+                                                    Refuse
+                                                </button>
+                                            )}
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                            {leaveList.length === 0 && <tr><td colSpan={4} className="px-6 py-8 text-center text-gray-400">No leave requests found.</td></tr>}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    );
+
     return (
         <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-8 pb-20">
             {/* Header Section */}
@@ -500,19 +730,39 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ user, users = [], onUpd
                     <p className="text-gray-500 dark:text-gray-400 mt-2">Manage shift recordings, holiday schedules, and automated payroll reports.</p>
                 </div>
 
-                {user.role === 'Admin' && (
+                {user.role === 'Admin' ? (
+                    <div className="flex p-1.5 bg-gray-100 dark:bg-gray-800/80 rounded-2xl shadow-inner w-full md:w-auto overflow-x-auto whitespace-nowrap">
+                        <button onClick={() => setActiveTab('me')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all ${activeTab === 'me' ? 'bg-white dark:bg-gray-700 text-lyceum-blue shadow-md' : 'text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'}`}>
+                            <Clock size={16} /> My Dashboard
+                        </button>
+                        <button onClick={() => setActiveTab('leaves')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all ${activeTab === 'leaves' ? 'bg-white dark:bg-gray-700 text-lyceum-blue shadow-md' : 'text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'}`}>
+                            <Calendar size={16} /> My Leaves
+                        </button>
+                        {user.role === 'Admin' && (
+                            <>
+                                <button onClick={() => setActiveTab('staff')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all ${activeTab === 'staff' ? 'bg-white dark:bg-gray-700 text-lyceum-blue shadow-md' : 'text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'}`}>
+                                    <Users size={16} /> Staff
+                                </button>
+                                <button onClick={() => setActiveTab('manageRequests')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all ${activeTab === 'manageRequests' ? 'bg-white dark:bg-gray-700 text-lyceum-blue shadow-md' : 'text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'}`}>
+                                    <CheckCircle size={16} /> Requests
+                                </button>
+                                <button onClick={() => setActiveTab('holidays')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all ${activeTab === 'holidays' ? 'bg-white dark:bg-gray-700 text-lyceum-blue shadow-md' : 'text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'}`}>
+                                    <Calendar size={16} /> Holidays
+                                </button>
+                                <button onClick={() => setActiveTab('payroll')} className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all ${activeTab === 'payroll' ? 'bg-white dark:bg-gray-700 text-lyceum-blue shadow-md' : 'text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'}`}>
+                                    <DollarSign size={16} /> Payroll
+                                </button>
+                            </>
+                        )}
+                    </div>
+                ) : (
+                    // Staff Navigation (if not Admin)
                     <div className="flex p-1.5 bg-gray-100 dark:bg-gray-800/80 rounded-2xl shadow-inner w-full md:w-auto overflow-x-auto whitespace-nowrap">
                         <button onClick={() => setActiveTab('me')} className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'me' ? 'bg-white dark:bg-gray-700 text-lyceum-blue shadow-md' : 'text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'}`}>
                             <Clock size={18} /> My Dashboard
                         </button>
-                        <button onClick={() => setActiveTab('staff')} className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'staff' ? 'bg-white dark:bg-gray-700 text-lyceum-blue shadow-md' : 'text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'}`}>
-                            <Users size={18} /> Staff Settings
-                        </button>
-                        <button onClick={() => setActiveTab('holidays')} className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'holidays' ? 'bg-white dark:bg-gray-700 text-lyceum-blue shadow-md' : 'text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'}`}>
-                            <Calendar size={18} /> Holidays
-                        </button>
-                        <button onClick={() => setActiveTab('payroll')} className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'payroll' ? 'bg-white dark:bg-gray-700 text-lyceum-blue shadow-md' : 'text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'}`}>
-                            <DollarSign size={18} /> Payroll Report
+                        <button onClick={() => setActiveTab('leaves')} className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-sm font-bold transition-all ${activeTab === 'leaves' ? 'bg-white dark:bg-gray-700 text-lyceum-blue shadow-md' : 'text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'}`}>
+                            <Calendar size={18} /> Leaves
                         </button>
                     </div>
                 )}
@@ -524,6 +774,8 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ user, users = [], onUpd
                 {activeTab === 'staff' && renderStaffMgmt()}
                 {activeTab === 'holidays' && renderHolidays()}
                 {activeTab === 'payroll' && renderPayroll()}
+                {activeTab === 'leaves' && renderMyLeaves()}
+                {activeTab === 'manageRequests' && renderManageLeaves()}
             </div>
 
             <style>{`
