@@ -533,4 +533,100 @@ router.post('/create-user', authenticateToken, async (req, res) => {
   }
 });
 
+// Google Sign-In
+router.post('/google', async (req, res) => {
+  try {
+    const { token } = req.body;
+    if (!token) return res.status(400).json({ error: 'Token is required' });
+
+    const { OAuth2Client } = await import('google-auth-library');
+    const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+
+    const ticket = await client.verifyIdToken({
+      idToken: token,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+
+    const payload = ticket.getPayload();
+    const { email, name, sub: googleId } = payload;
+
+    // Check if user exists
+    let result = await query('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
+    let user;
+
+    if (result.rows.length === 0) {
+      // Create new user (Student)
+      console.log(`🆕 Creating new user via Google Sign-In: ${email}`);
+
+      // Default student permissions
+      const studentPermissions = {
+        'LMS': { read: true },
+        'dashboard': { read: true },
+        'Profile': { read: true, update: true }
+      };
+
+      const defaultChecklist = [
+        { id: 0, text: 'University Checklist - documents', completed: false, type: 'checkbox' },
+        { id: 1, text: 'University Checklist - university applied', completed: false, type: 'checkbox' },
+        { id: 2, text: 'University Checklist - Remark', completed: false, type: 'text', response: '' },
+        { id: 3, text: 'DS 160 - DS 160 started', completed: false, type: 'checkbox' },
+        { id: 4, text: 'DS 160 - DS 160 filled', completed: false, type: 'checkbox' },
+        { id: 5, text: 'DS 160 - DS 160 submitted', completed: false, type: 'checkbox' },
+        { id: 6, text: 'CGI - credentials created', completed: false, type: 'checkbox' },
+        { id: 7, text: 'CGI - paid interview fees', completed: false, type: 'checkbox' },
+        { id: 8, text: 'CGI - ready to book slot', completed: false, type: 'checkbox' },
+        { id: 9, text: 'Sevis fee - sevis fee received', completed: false, type: 'checkbox' },
+        { id: 10, text: 'Sevis fee - sevis fee paid', completed: false, type: 'checkbox' },
+        { id: 11, text: 'Visa Interview Preparation - sevis fee received', completed: false, type: 'checkbox' },
+        { id: 12, text: 'Visa Interview Preparation - online classes', completed: false, type: 'checkbox' },
+        { id: 13, text: 'Post visa guidance - projects', completed: false, type: 'checkbox' }
+      ];
+
+      // Insert user as verified (Google verified it)
+      const userInsert = await query(`
+        INSERT INTO users (name, email, role, permissions, is_verified, google_id)
+        VALUES ($1, $2, 'Student', $3, true, $4)
+        RETURNING id, name, email, role, permissions, must_reset_password
+      `, [name, email.toLowerCase(), JSON.stringify(studentPermissions), googleId]);
+
+      user = userInsert.rows[0];
+
+      // Link or create contact
+      const contactRes = await query('SELECT id FROM contacts WHERE email = $1', [email.toLowerCase()]);
+      if (contactRes.rows.length > 0) {
+        await query(`UPDATE contacts SET user_id = $1 WHERE id = $2`, [user.id, contactRes.rows[0].id]);
+      } else {
+        const contactId = `LA${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}${String(user.id).padStart(3, '0')}`;
+        await query(`
+          INSERT INTO contacts (user_id, name, email, contact_id, department, major, notes, checklist, activity_log, recorded_sessions)
+          VALUES ($1, $2, $3, $4, 'Unassigned', 'Unassigned', $5, $6, '[]', '[]')
+        `, [user.id, name, email.toLowerCase(), contactId, 'Registered via Google Sign-In', JSON.stringify(defaultChecklist)]);
+      }
+    } else {
+      user = result.rows[0];
+      // Sync Google ID if not present
+      if (!user.google_id) {
+        await query('UPDATE users SET google_id = $1, is_verified = true WHERE id = $2', [googleId, user.id]);
+      }
+    }
+
+    const { password: _, ...userWithoutPassword } = user;
+    const jwtToken = generateToken(userWithoutPassword);
+
+    res.json({
+      user: {
+        ...userWithoutPassword,
+        permissions: typeof userWithoutPassword.permissions === 'string'
+          ? JSON.parse(userWithoutPassword.permissions)
+          : (userWithoutPassword.permissions || {}),
+        mustResetPassword: userWithoutPassword.must_reset_password
+      },
+      token: jwtToken
+    });
+  } catch (error) {
+    console.error('Google Auth Error:', error);
+    res.status(500).json({ error: 'Google authentication failed' });
+  }
+});
+
 export default router;

@@ -15,7 +15,7 @@ const DepartmentDashboard: React.FC<DepartmentDashboardProps> = ({ user, onViewV
     const [followUpVisitor, setFollowUpVisitor] = useState<Visitor | null>(null);
     const [targetStaff, setTargetStaff] = useState('');
     const [staffMembers, setStaffMembers] = useState<User[]>([]);
-    const [viewMode, setViewMode] = useState<'Mine' | 'All'>('Mine'); // Admin default: Mine
+    const [viewMode, setViewMode] = useState<'Mine' | 'All'>(user.role === 'Admin' ? 'All' : 'Mine');
 
     const userDepartment = user.role === 'Admin' ? 'All' : (user.permissions?.department || 'Unassigned');
 
@@ -31,7 +31,7 @@ const DepartmentDashboard: React.FC<DepartmentDashboardProps> = ({ user, onViewV
         };
         fetchStaff();
 
-        const intervalId = setInterval(fetchData, 10000); // Auto-refresh every 10s
+        const intervalId = setInterval(fetchData, 5000); // Auto-refresh every 5s
         fetchData();
         return () => clearInterval(intervalId);
     }, []);
@@ -44,40 +44,57 @@ const DepartmentDashboard: React.FC<DepartmentDashboardProps> = ({ user, onViewV
                 api.getTasks() // Assuming this returns tasks for current user
             ]);
 
-            // Filter visitors waiting waiting or recently called for THIS department
-            // Logic: Visit active AND (current segment department matches)
+            // Filter visitors waiting or recently called for THIS department
+            console.log(`[Dashboard] Filtering ${allVisitors.length} visitors for user ${user.name} (${user.role})`);
+
             const waiting = allVisitors.filter(v => {
+                // Never show checked-out visitors in this dashboard
                 if (v.status === 'Checked-out') return false;
 
-                let targetDept = (v as any).host_name || v.host;
-                if (v.visitSegments && v.visitSegments.length > 0) {
-                    targetDept = v.visitSegments[v.visitSegments.length - 1].department;
-                }
-
-                // Match Logic
+                // 1. Determine if this visitor belongs to the current user ("My Visitors")
                 let isForMe = false;
-                // 1. Check Name/Department String match
-                if (targetDept.includes(user.name) || targetDept === userDepartment) isForMe = true;
-                // 2. Check strict ID match (if target is host ID)
-                if (String(v.host) === String(user.id)) isForMe = true;
 
-                // Admin Filter Logic
-                let matchesScope = isForMe;
-                if (user.role === 'Admin' && viewMode === 'All') {
-                    matchesScope = true;
+                // Check by host ID (most accurate)
+                if (v.host && String(v.host) === String(user.id)) isForMe = true;
+
+                // Check by name or department string
+                const targetDeptName = String((v as any).host_name || v.host || '').toLowerCase().trim();
+                const userNameNormalized = String(user.name || '').toLowerCase().trim();
+                const userDeptNormalized = (user.permissions?.department || '').toLowerCase().trim();
+
+                if (targetDeptName.includes(userNameNormalized) ||
+                    (userDeptNormalized && targetDeptName.includes(userDeptNormalized))) {
+                    isForMe = true;
                 }
 
-                if (!matchesScope) return false;
-
-                // Status check: Checked-in OR (Called AND < 2 mins ago)
-                if (v.status === 'Checked-in' || (v.status as any) === 'Scheduled') return true;
-                if (v.status === 'Called' && v.calledAt) {
-                    const diff = new Date().getTime() - new Date(v.calledAt).getTime();
-                    return diff < 120000; // 2 minutes
+                // Also check visit segments for department/name match
+                if (!isForMe && v.visitSegments && v.visitSegments.length > 0) {
+                    const lastSegment = v.visitSegments[v.visitSegments.length - 1];
+                    if (lastSegment && lastSegment.department) {
+                        const segDept = String(lastSegment.department).toLowerCase().trim();
+                        if (segDept.includes(userNameNormalized) ||
+                            (userDeptNormalized && segDept.includes(userDeptNormalized))) {
+                            isForMe = true;
+                        }
+                    }
                 }
-                return false;
-            }).sort((a, b) => new Date(a.checkIn || '').getTime() - new Date(b.checkIn || '').getTime());
 
+                // 2. Decide visibility based on User Role and View Mode
+                if (user.role === 'Admin') {
+                    // Admins see everything that isn't checked out
+                    return true;
+                }
+
+                // Staff see their own scope or everything if specifically in "All" mode (though toggle is hidden for them currently)
+                if (viewMode === 'All') return true;
+                return isForMe;
+            }).sort((a, b) => {
+                const timeA = new Date(a.checkIn || a.scheduledCheckIn || 0).getTime();
+                const timeB = new Date(b.checkIn || b.scheduledCheckIn || 0).getTime();
+                return timeA - timeB;
+            });
+
+            console.log(`[Dashboard] Found ${waiting.length} visitors matching scope`);
             setVisitors(waiting);
             setMyTasks(tasks.filter(t => t.status !== 'Done'));
         } catch (error) {
@@ -100,7 +117,7 @@ const DepartmentDashboard: React.FC<DepartmentDashboardProps> = ({ user, onViewV
 
             await api.saveVisitor({
                 ...visitor,
-                status: 'Checked-in' as any,  // Keep as Checked-in, not 'Called'
+                status: 'Checked-in',
                 calledAt: new Date().toISOString(),
                 visitSegments: currentSegments
             });
@@ -182,22 +199,7 @@ const DepartmentDashboard: React.FC<DepartmentDashboardProps> = ({ user, onViewV
                     <p className="text-gray-500">{user.name} - {userDepartment}</p>
                 </div>
                 <div className="flex gap-4 items-center">
-                    {user.role === 'Admin' && (
-                        <div className="bg-gray-100 dark:bg-gray-700 p-1 rounded-lg flex text-sm font-medium">
-                            <button
-                                onClick={() => setViewMode('All')}
-                                className={`px-3 py-1.5 rounded-md transition-all ${viewMode === 'All' ? 'bg-white dark:bg-gray-600 shadow-sm text-lyceum-blue' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'}`}
-                            >
-                                All Visitors
-                            </button>
-                            <button
-                                onClick={() => setViewMode('Mine')}
-                                className={`px-3 py-1.5 rounded-md transition-all ${viewMode === 'Mine' ? 'bg-white dark:bg-gray-600 shadow-sm text-lyceum-blue' : 'text-gray-500 hover:text-gray-700 dark:text-gray-400'}`}
-                            >
-                                My Visitors
-                            </button>
-                        </div>
-                    )}
+                    {/* Toggle hidden at user request, defaults to All for Admin */}
                     <div className="text-right">
                         <div className="text-sm text-gray-500">Waiting</div>
                         <div className="text-2xl font-bold text-lyceum-blue">{visitors.length}</div>
@@ -253,7 +255,7 @@ const DepartmentDashboard: React.FC<DepartmentDashboardProps> = ({ user, onViewV
                                                     )}
                                                 </div>
                                                 <div className="flex gap-2 mt-2">
-                                                    {v.status === 'Called' ? (
+                                                    {v.calledAt && (new Date().getTime() - new Date(v.calledAt).getTime() < 60000) ? (
                                                         <span className="flex items-center gap-1 text-xs font-bold text-green-600 bg-green-100 px-2 py-0.5 rounded animate-pulse">
                                                             <Volume2 size={14} />
                                                             Calling...

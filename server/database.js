@@ -58,6 +58,7 @@ export async function initDatabase() {
         must_reset_password BOOLEAN DEFAULT false,
         is_verified BOOLEAN DEFAULT false,
         verification_token TEXT,
+        google_id TEXT UNIQUE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -229,7 +230,7 @@ export async function initDatabase() {
         check_in TIMESTAMP,
         check_out TIMESTAMP,
         check_out TIMESTAMP,
-        status TEXT NOT NULL CHECK(status IN ('Scheduled', 'Checked-in', 'Checked-out')),
+        status TEXT NOT NULL CHECK(status IN ('Scheduled', 'Checked-in', 'Checked-out', 'Called')),
         card_number TEXT,
         daily_sequence_number INTEGER,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

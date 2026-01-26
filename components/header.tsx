@@ -21,7 +21,7 @@ interface HeaderProps {
   notificationsOpen: boolean;
   setNotificationsOpen: (open: boolean) => void;
   darkMode: boolean;
-  setDarkMode: (value: boolean | ((val: boolean) => boolean)) => void;
+  setDarkMode: () => void;
 }
 
 const Header: React.FC<HeaderProps> = ({ sidebarOpen, setSidebarOpen, activeApp, onAppSelect, onSearchClick, onQuickCreateClick, user, onLogout, notifications, onMarkAllNotificationsAsRead, onNotificationClick, notificationsOpen, setNotificationsOpen, darkMode, setDarkMode }) => {
@@ -69,13 +69,21 @@ const Header: React.FC<HeaderProps> = ({ sidebarOpen, setSidebarOpen, activeApp,
           >
             <Menu size={24} />
           </button>
+
+          {/* Logo in Header */}
+          {!sidebarOpen && (
+            <div className="flex-shrink-0 w-8 h-8 bg-white dark:bg-gray-800 rounded-lg flex items-center justify-center overflow-hidden border border-gray-100 dark:border-gray-700 shadow-sm ml-1">
+              <img src="/logo.png" alt="Logo" className="w-full h-full object-contain p-1" />
+            </div>
+          )}
+
           {/* App name - clickable to go back to Apps */}
           <button
             onClick={() => onAppSelect(user.role === 'Student' ? 'student_dashboard' : 'Apps')}
-            className="px-2 py-1.5 md:px-3 md:py-2 text-sm md:text-base font-semibold text-gray-700 dark:text-gray-200 hover:text-lyceum-blue dark:hover:text-lyceum-blue hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors truncate touch-manipulation"
+            className="px-2 py-1.5 md:px-3 md:py-2 text-sm md:text-base font-black text-lyceum-blue dark:text-lyceum-blue-light hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors truncate touch-manipulation tracking-tighter"
             title="Back to Apps"
           >
-            {activeApp === 'student_dashboard' ? 'Student Portal' : activeApp}
+            {activeApp === 'student_dashboard' ? 'Student Portal' : (activeApp === 'Apps' ? 'lyceum' : activeApp)}
           </button>
         </div>
 

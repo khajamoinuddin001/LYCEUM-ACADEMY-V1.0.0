@@ -64,6 +64,7 @@ import AgentsView from './components/agents_view';
 import VisitorDisplay from './components/visitor_display';
 import DepartmentDashboard from './components/department_dashboard';
 import AttendanceView from './components/attendance_view';
+import { TermsView, PrivacyView, LandingDocumentsView } from './components/legal_views';
 
 
 type ContactViewMode = 'details' | 'documents' | 'visaFiling' | 'checklist' | 'visits';
@@ -143,9 +144,24 @@ const DashboardLayout: React.FC = () => {
   const setEvents = (newEvents: CalendarEvent[]) => api.saveEvents(newEvents).then(setRawEvents);
   const currentUser = impersonatingUser || storedCurrentUser;
 
+  const handleGlobalThemeToggle = () => {
+    setDarkMode(!darkMode);
+  };
+
+  const handleGoogleLogin = async (googleToken: string) => {
+    try {
+      const { user } = await api.loginWithGoogle(googleToken);
+      setStoredCurrentUser(user);
+      setShowLandingPage(false);
+    } catch (err: any) {
+      throw err;
+    }
+  };
+
   // Initialize showLandingPage based on whether there's a stored user
   const [showLandingPage, setShowLandingPage] = useState(true);
   const [initialRegisterMode, setInitialRegisterMode] = useState(false);
+  const [landingViewMode, setLandingViewMode] = useState<'home' | 'terms' | 'privacy' | 'documents'>('home');
 
   // Effect to sync session storage removed as user wants landing page every time
 
@@ -1433,7 +1449,7 @@ const DashboardLayout: React.FC = () => {
           return <StudentProfileView student={studentContact} user={currentUser} onNavigateBack={() => handleAppSelect('student_dashboard')} onUpdateProfile={handleUpdateProfile} onChangePassword={handleChangePassword} />;
         }
         return <ProfileView user={currentUser} onNavigateBack={() => handleAppSelect(currentUser.role === 'Admin' || currentUser.role === 'Staff' ? 'Apps' : 'student_dashboard')} />;
-      case 'Settings': return <SettingsView user={currentUser} onNavigateBack={() => handleAppSelect('Apps')} quotationTemplates={quotationTemplates} onSaveTemplate={handleSaveQuotationTemplate} onDeleteTemplate={handleDeleteQuotationTemplate} onUpdateProfile={handleUpdateProfile} onChangePassword={handleChangePassword} darkMode={darkMode} setDarkMode={setDarkMode} coupons={coupons} onSaveCoupon={handleSaveCoupon} onDeleteCoupon={handleDeleteCoupon} courses={lmsCourses} />;
+      case 'Settings': return <SettingsView user={currentUser} onNavigateBack={() => handleAppSelect('Apps')} quotationTemplates={quotationTemplates} onSaveTemplate={handleSaveQuotationTemplate} onDeleteTemplate={handleDeleteQuotationTemplate} onUpdateProfile={handleUpdateProfile} onChangePassword={handleChangePassword} darkMode={darkMode} setDarkMode={handleGlobalThemeToggle} coupons={coupons} onSaveCoupon={handleSaveCoupon} onDeleteCoupon={handleDeleteCoupon} courses={lmsCourses} />;
       case 'Access Control': return (
         <AccessControlView
           users={users}
@@ -1485,16 +1501,27 @@ const DashboardLayout: React.FC = () => {
 
   // Show landing page if not logged in and landing page not dismissed
   if (!currentUser && showLandingPage) {
-    return <LandingPage
-      onLogin={() => {
-        setInitialRegisterMode(false);
-        setShowLandingPage(false);
-      }}
-      onRegister={() => {
-        setInitialRegisterMode(true);
-        setShowLandingPage(false);
-      }}
-    />;
+    if (landingViewMode === 'terms') return <TermsView onBack={() => setLandingViewMode('home')} />;
+    if (landingViewMode === 'privacy') return <PrivacyView onBack={() => setLandingViewMode('home')} />;
+    if (landingViewMode === 'documents') return <LandingDocumentsView onBack={() => setLandingViewMode('home')} />;
+
+    return (
+      <LandingPage
+        onLogin={() => {
+          setInitialRegisterMode(false);
+          setShowLandingPage(false);
+        }}
+        onRegister={() => {
+          setInitialRegisterMode(true);
+          setShowLandingPage(false);
+        }}
+        onTerms={() => setLandingViewMode('terms')}
+        onPrivacy={() => setLandingViewMode('privacy')}
+        onDocuments={() => setLandingViewMode('documents')}
+        darkMode={darkMode}
+        setDarkMode={handleGlobalThemeToggle}
+      />
+    );
   }
 
   // Show login/reset password views
@@ -1527,7 +1554,7 @@ const DashboardLayout: React.FC = () => {
     if (activeApp === 'ResetPassword') {
       return <ResetPasswordView onBack={() => setActiveApp('Login')} />;
     }
-    return <LoginView onLogin={handleLogin} users={users} onRegister={handleRegisterStudent} onForgotPassword={() => setActiveApp('ForgotPassword')} onBackToLanding={() => setShowLandingPage(true)} initialIsRegister={initialRegisterMode} />;
+    return <LoginView onLogin={handleLogin} users={users} onRegister={handleRegisterStudent} onForgotPassword={() => setActiveApp('ForgotPassword')} onBackToLanding={() => setShowLandingPage(true)} initialIsRegister={initialRegisterMode} onLoginWithGoogle={handleGoogleLogin} />;
   }
 
   return (
@@ -1535,7 +1562,7 @@ const DashboardLayout: React.FC = () => {
       {impersonatingUser && <ImpersonationBanner userName={impersonatingUser.name} onStop={handleStopImpersonation} />}
       <Sidebar isOpen={sidebarOpen} setIsOpen={setSidebarOpen} activeApp={activeApp} onAppSelect={handleAppSelect} isMobile={isMobile} user={currentUser} onLogout={handleLogout} />
       <div className={`flex-1 flex flex-col overflow-hidden ${impersonatingUser ? 'pt-10' : ''}`}>
-        <Header sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} activeApp={activeApp} onAppSelect={handleAppSelect} onSearchClick={() => setIsSearchOpen(true)} onQuickCreateClick={() => setIsQuickCreateOpen(true)} user={currentUser} onLogout={handleLogout} notifications={filteredNotifications} onMarkAllNotificationsAsRead={markAllAsRead} onNotificationClick={handleSearchResultSelect} notificationsOpen={notificationsOpen} setNotificationsOpen={setNotificationsOpen} darkMode={darkMode} setDarkMode={setDarkMode} />
+        <Header sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} activeApp={activeApp} onAppSelect={handleAppSelect} onSearchClick={() => setIsSearchOpen(true)} onQuickCreateClick={() => setIsQuickCreateOpen(true)} user={currentUser} onLogout={handleLogout} notifications={filteredNotifications} onMarkAllNotificationsAsRead={markAllAsRead} onNotificationClick={handleSearchResultSelect} notificationsOpen={notificationsOpen} setNotificationsOpen={setNotificationsOpen} darkMode={darkMode} setDarkMode={handleGlobalThemeToggle} />
         <main className="flex-1 overflow-x-hidden overflow-y-auto bg-lyceum-light dark:bg-gray-800 p-3 md:p-6">
           {currentUser.role === 'Student' ? (
             (() => { // Use an IIFE to allow if/return inside JSX

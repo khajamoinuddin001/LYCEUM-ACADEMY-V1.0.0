@@ -20,7 +20,7 @@ const VisitorDisplay: React.FC = () => {
     }, []);
 
     useEffect(() => {
-        const intervalId = setInterval(fetchVisitors, 2000); // Poll every 2s for faster updates
+        const intervalId = setInterval(fetchVisitors, 5000); // Poll every 5s for updates
         fetchVisitors(); // Initial fetch
         return () => clearInterval(intervalId);
     }, [selectedDept]);

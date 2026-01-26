@@ -85,7 +85,7 @@ const NewVisitorModal: React.FC<NewVisitorModalProps> = ({ isOpen, onClose, onSa
       ...prev,
       name: contact.name,
       company: contact.phone || prev.company,
-      host: contact.department || prev.host
+      host: contact.department || 'N/A'
     }));
     setShowSuggestions(false);
   };
@@ -217,6 +217,9 @@ const NewVisitorModal: React.FC<NewVisitorModalProps> = ({ isOpen, onClose, onSa
                         e.stopPropagation();
                         setSelectedStaff(staffMember);
                         setStaffSearch(staffMember.name);
+                        // Update host field with department or role
+                        const hostDept = staffMember.permissions?.department || staffMember.role || 'General Staff';
+                        setFormData(prev => ({ ...prev, host: hostDept }));
                         setShowStaffDropdown(false);
                       }}
                     >

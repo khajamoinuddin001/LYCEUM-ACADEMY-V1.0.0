@@ -9,12 +9,15 @@ if (!rootElement) {
 }
 
 import { BrowserRouter } from 'react-router-dom';
+import { GoogleOAuthProvider } from '@react-oauth/google';
 
 const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
-    <BrowserRouter>
-      <App />
-    </BrowserRouter>
+    <GoogleOAuthProvider clientId="1033192868063-gaitfj9it7rqoquker2h2th9igp6a48k.apps.googleusercontent.com">
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
+    </GoogleOAuthProvider>
   </React.StrictMode>
 );

@@ -273,9 +273,14 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, activeApp, onAppSe
           <div className="flex items-center justify-between p-6 mb-2">
             <button
               onClick={() => onAppSelect(user.role === 'Student' ? 'student_dashboard' : 'Apps')}
-              className="text-2xl font-black text-lyceum-blue dark:text-lyceum-blue-light focus:outline-none tracking-tighter"
+              className="flex items-center gap-3 group focus:outline-none"
             >
-              lyceum
+              <div className="w-10 h-10 bg-white dark:bg-gray-800 rounded-lg flex items-center justify-center overflow-hidden border border-gray-100 dark:border-gray-800 shadow-sm group-hover:rotate-6 transition-transform">
+                <img src="/logo.png" alt="Logo" className="w-full h-full object-contain p-1" />
+              </div>
+              <span className="text-2xl font-black bg-clip-text text-transparent bg-gradient-to-r from-lyceum-blue to-blue-600 tracking-tighter">
+                lyceum
+              </span>
             </button>
             <button
               onClick={() => {

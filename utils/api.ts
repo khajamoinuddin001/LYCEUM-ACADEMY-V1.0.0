@@ -79,6 +79,15 @@ export const login = async (email: string, password: string, remember: boolean =
   return data;
 };
 
+export const loginWithGoogle = async (googleToken: string, remember: boolean = true): Promise<{ user: User; token: string }> => {
+  const data = await apiRequest<{ user: User; token: string }>('/auth/google', {
+    method: 'POST',
+    body: JSON.stringify({ token: googleToken }),
+  });
+  setToken(data.token, remember);
+  return data;
+};
+
 export const registerStudent = async (name: string, email: string, password: string, adminKey?: string): Promise<{ success: boolean; message: string }> => {
   return apiRequest<{ success: boolean; message: string }>('/auth/register', {
     method: 'POST',

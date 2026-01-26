@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import type { User, UserRole } from '../types';
 import { Mail, Lock, UserPlus, ArrowLeft } from './icons';
+import { GoogleLogin } from '@react-oauth/google';
+import * as api from '../utils/api';
 
 interface LoginViewProps {
     onLogin: (email: string, password: string, rememberMe: boolean) => Promise<void>;
@@ -11,6 +13,7 @@ interface LoginViewProps {
     onForgotPassword?: () => void;
     onBackToLanding?: () => void;
     initialIsRegister?: boolean;
+    onLoginWithGoogle: (token: string) => Promise<void>;
 }
 
 const GoogleIcon = () => (
@@ -26,7 +29,7 @@ const AppleIcon = () => (
 );
 
 
-const LoginView: React.FC<LoginViewProps> = ({ onLogin, users, onRegister, onForgotPassword, onBackToLanding, initialIsRegister }) => {
+const LoginView: React.FC<LoginViewProps> = ({ onLogin, users, onRegister, onForgotPassword, onBackToLanding, initialIsRegister, onLoginWithGoogle }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [name, setName] = useState('');
@@ -82,6 +85,19 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, users, onRegister, onFor
         setRegisterAsAdmin(false);
         setAdminKey('');
     };
+    const handleGoogleSuccess = async (credentialResponse: any) => {
+        if (credentialResponse.credential) {
+            setError('');
+            setIsLoading(true);
+            try {
+                await onLoginWithGoogle(credentialResponse.credential);
+            } catch (err: any) {
+                setError(err.message || 'Google login failed');
+            } finally {
+                setIsLoading(false);
+            }
+        }
+    };
 
     return (
         <div className="flex items-center justify-center min-h-screen bg-gray-100 dark:bg-gray-900 p-4" style={{
@@ -98,8 +114,11 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, users, onRegister, onFor
                         <ArrowLeft size={20} />
                     </button>
                 )}
-                <div>
-                    <h1 className="text-3xl font-bold text-center text-lyceum-blue">lyceum</h1>
+                <div className="flex flex-col items-center">
+                    <div className="w-16 h-16 bg-white dark:bg-gray-700 rounded-2xl flex items-center justify-center overflow-hidden border border-gray-100 dark:border-gray-600 shadow-lg mb-4 hover:rotate-6 transition-transform">
+                        <img src="/logo.png" alt="Logo" className="w-full h-full object-contain p-2" />
+                    </div>
+                    <h1 className="text-3xl font-black text-center text-lyceum-blue tracking-tighter">lyceum</h1>
                     <h2 className="mt-2 text-xl font-semibold text-center text-gray-800 dark:text-gray-100">
                         {isRegisterView ? 'Create Student Account' : 'Welcome Back!'}
                     </h2>
@@ -172,88 +191,89 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, users, onRegister, onFor
                         </div>
                     </form>
                 ) : (
-                    <>
-                        <form className="mt-8 space-y-6" onSubmit={handleLoginSubmit}>
-                            <div>
-                                <label htmlFor="email-address" className="sr-only">Email address</label>
-                                <div className="relative">
-                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                        <Mail className="h-5 w-5 text-gray-400" />
-                                    </div>
-                                    <input id="email-address" name="email" type="email" autoComplete="email" required
-                                        className="appearance-none block w-full px-3 py-2 pl-10 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-lyceum-blue focus:border-lyceum-blue sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                                        placeholder="Email address" value={email} onChange={(e) => setEmail(e.target.value)} />
+                    <form className="mt-8 space-y-6" onSubmit={handleLoginSubmit}>
+                        <div>
+                            <label htmlFor="email-address" className="sr-only">Email address</label>
+                            <div className="relative">
+                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                    <Mail className="h-5 w-5 text-gray-400" />
                                 </div>
+                                <input id="email-address" name="email" type="email" autoComplete="email" required
+                                    className="appearance-none block w-full px-3 py-2 pl-10 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-lyceum-blue focus:border-lyceum-blue sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                    placeholder="Email address" value={email} onChange={(e) => setEmail(e.target.value)} />
                             </div>
-                            <div>
-                                <label htmlFor="password" className="sr-only">Password</label>
-                                <div className="relative">
-                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                        <Lock className="h-5 w-5 text-gray-400" />
-                                    </div>
-                                    <input id="password" name="password" type="password" autoComplete="current-password" required
-                                        className="appearance-none block w-full px-3 py-2 pl-10 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-lyceum-blue focus:border-lyceum-blue sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                                        placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} />
+                        </div>
+                        <div>
+                            <label htmlFor="password" className="sr-only">Password</label>
+                            <div className="relative">
+                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                    <Lock className="h-5 w-5 text-gray-400" />
                                 </div>
-                            </div>
-
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center">
-                                    <input id="remember-me" name="remember-me" type="checkbox"
-                                        checked={rememberMe}
-                                        onChange={(e) => setRememberMe(e.target.checked)}
-                                        className="h-4 w-4 text-lyceum-blue focus:ring-lyceum-blue border-gray-300 rounded" />
-                                    <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-900 dark:text-gray-300">Remember me</label>
-                                </div>
-                                <div className="text-sm">
-                                    <a href="#" onClick={(e) => { e.preventDefault(); onForgotPassword?.(); }} className="font-medium text-lyceum-blue hover:text-lyceum-blue-dark">Forgot your password?</a>
-                                </div>
-                            </div>
-
-                            {error && <p className="text-sm text-center text-red-500">{error}</p>}
-
-                            <div>
-                                <button type="submit" disabled={isLoading}
-                                    className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-lyceum-blue hover:bg-lyceum-blue-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-lyceum-blue disabled:bg-lyceum-blue/50">
-                                    {isLoading ? 'Signing in...' : 'Sign in'}
-                                </button>
-                            </div>
-                            <div className="text-sm text-center">
-                                <a href="#" onClick={toggleView} className="font-medium text-lyceum-blue hover:text-lyceum-blue-dark">
-                                    Don't have an account? Register now
-                                </a>
-                            </div>
-                        </form>
-
-                        <div className="relative my-4">
-                            <div className="absolute inset-0 flex items-center" aria-hidden="true">
-                                <div className="w-full border-t border-gray-300 dark:border-gray-600" />
-                            </div>
-                            <div className="relative flex justify-center text-sm">
-                                <span className="px-2 bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400">
-                                    Or sign in with
-                                </span>
+                                <input id="password" name="password" type="password" autoComplete="current-password" required
+                                    className="appearance-none block w-full px-3 py-2 pl-10 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-lyceum-blue focus:border-lyceum-blue sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                    placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} />
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-3">
-                            <button
-                                type="button"
-                                className="w-full flex flex-col items-center justify-center gap-2 py-4 px-4 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600"
-                            >
-                                <GoogleIcon />
-                                <span className="text-xs">Sign in with Google</span>
-                            </button>
-                            <button
-                                type="button"
-                                className="w-full flex flex-col items-center justify-center gap-2 py-4 px-4 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600"
-                            >
-                                <AppleIcon />
-                                <span className="text-xs">Sign in with Apple</span>
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center">
+                                <input id="remember-me" name="remember-me" type="checkbox"
+                                    checked={rememberMe}
+                                    onChange={(e) => setRememberMe(e.target.checked)}
+                                    className="h-4 w-4 text-lyceum-blue focus:ring-lyceum-blue border-gray-300 rounded" />
+                                <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-900 dark:text-gray-300">Remember me</label>
+                            </div>
+                            <div className="text-sm">
+                                <a href="#" onClick={(e) => { e.preventDefault(); onForgotPassword?.(); }} className="font-medium text-lyceum-blue hover:text-lyceum-blue-dark">Forgot your password?</a>
+                            </div>
+                        </div>
+
+                        {error && <p className="text-sm text-center text-red-500">{error}</p>}
+
+                        <div>
+                            <button type="submit" disabled={isLoading}
+                                className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-lyceum-blue hover:bg-lyceum-blue-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-lyceum-blue disabled:bg-lyceum-blue/50">
+                                {isLoading ? 'Signing in...' : 'Sign in'}
                             </button>
                         </div>
-                    </>
+                        <div className="text-sm text-center">
+                            <a href="#" onClick={toggleView} className="font-medium text-lyceum-blue hover:text-lyceum-blue-dark">
+                                Don't have an account? Register now
+                            </a>
+                        </div>
+                    </form>
                 )}
+
+                <div className="relative my-4">
+                    <div className="absolute inset-0 flex items-center" aria-hidden="true">
+                        <div className="w-full border-t border-gray-300 dark:border-gray-600" />
+                    </div>
+                    <div className="relative flex justify-center text-sm">
+                        <span className="px-2 bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400">
+                            Or continue with
+                        </span>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3">
+                    <div className="flex justify-center">
+                        <GoogleLogin
+                            onSuccess={handleGoogleSuccess}
+                            onError={() => setError('Google Authentication Failed')}
+                            useOneTap
+                            theme="filled_blue"
+                            shape="pill"
+                            text="continue_with"
+                        />
+                    </div>
+                    <button
+                        type="button"
+                        className="w-full flex items-center justify-center gap-2 py-2 px-4 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600"
+                    >
+                        <AppleIcon />
+                        <span>Continue with Apple</span>
+                    </button>
+                </div>
             </div>
         </div>
     );

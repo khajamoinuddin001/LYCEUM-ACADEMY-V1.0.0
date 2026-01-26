@@ -227,7 +227,9 @@ const ContactVisitsView: React.FC<ContactVisitsViewProps> = ({ contact, onNaviga
                                         <div key={segIdx} className="border border-gray-200 dark:border-gray-700 p-4 rounded-lg">
                                             <div className="mb-4">
                                                 <span className="font-bold mr-2">department:-</span>
-                                                <span>{segment.department || 'Reception Desk'}</span>
+                                                <span>{segment.department && segment.department !== 'Unassigned' && segment.department !== 'Walk-in'
+                                                    ? segment.department
+                                                    : (visit.staffName || 'Reception Desk')}</span>
                                             </div>
                                             <div className="mb-4 flex items-center">
                                                 <span className="font-bold mr-2 whitespace-nowrap">purpose of visit :-</span>

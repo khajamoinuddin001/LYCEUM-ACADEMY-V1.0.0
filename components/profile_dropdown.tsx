@@ -9,7 +9,7 @@ interface ProfileDropdownProps {
   onLogout: () => void;
   user: User;
   darkMode: boolean;
-  setDarkMode: (value: boolean | ((val: boolean) => boolean)) => void;
+  setDarkMode: () => void;
 }
 
 const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ isOpen, onClose, onNavigate, onLogout, user, darkMode, setDarkMode }) => {
@@ -22,7 +22,7 @@ const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ isOpen, onClose, onNa
 
   const handleDarkModeToggle = (e: React.MouseEvent) => {
     e.stopPropagation();
-    setDarkMode(prev => !prev);
+    setDarkMode();
   };
 
   return (
