@@ -28,10 +28,14 @@ const ContactCard: React.FC<ContactCardProps> = ({ contact, onSelect, isSelected
         className="absolute top-4 right-4 h-5 w-5 rounded text-lyceum-blue focus:ring-lyceum-blue border-gray-300 dark:border-gray-600 pointer-events-none"
         aria-label={`Select contact ${contact.name}`}
       />
-      
+
       <div className="flex items-start mb-4">
         {contact.avatarUrl ? (
-          <img src={contact.avatarUrl} alt={contact.name} className="w-16 h-16 rounded-full mr-4" />
+          <img
+            src={contact.avatarUrl.startsWith('blob:') || contact.avatarUrl.startsWith('http') ? contact.avatarUrl : `${import.meta.env.VITE_API_URL}${contact.avatarUrl}`}
+            alt={contact.name}
+            className="w-16 h-16 rounded-full mr-4 object-cover"
+          />
         ) : (
           <div className="w-16 h-16 rounded-full bg-lyceum-blue flex items-center justify-center text-white text-2xl font-bold mr-4 flex-shrink-0">
             {getInitials(contact.name)}
@@ -47,7 +51,7 @@ const ContactCard: React.FC<ContactCardProps> = ({ contact, onSelect, isSelected
           <p className="text-gray-600 dark:text-gray-300 text-sm">{contact.major}</p>
         </div>
       </div>
-      
+
       <div className="space-y-3 text-sm flex-grow">
         <div className="flex items-center text-gray-700 dark:text-gray-200">
           <Building2 size={16} className="mr-3 text-gray-400 dark:text-gray-500 flex-shrink-0" />

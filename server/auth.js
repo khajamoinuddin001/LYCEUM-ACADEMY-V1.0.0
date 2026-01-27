@@ -45,15 +45,22 @@ export async function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
 
+  // console.log('authenticateToken - Path:', req.path);
+  // console.log('authenticateToken - Auth header present:', !!authHeader);
+  // console.log('authenticateToken - Token present:', !!token);
+
   if (!token) {
+    console.log('authenticateToken - No token, returning 401');
     return res.status(401).json({ error: 'Access token required' });
   }
 
   const decoded = verifyToken(token);
   if (!decoded) {
+    console.log('authenticateToken - Invalid token, returning 403');
     return res.status(403).json({ error: 'Invalid or expired token' });
   }
 
+  // console.log('authenticateToken - Token valid, user:', decoded);
   req.user = decoded;
 
   // Fetch latest permissions from DB
@@ -67,6 +74,7 @@ export async function authenticateToken(req, res, next) {
       req.user.permissions = typeof userDoc.permissions === 'string'
         ? JSON.parse(userDoc.permissions)
         : (userDoc.permissions || {});
+      // console.log('authenticateToken - User permissions loaded:', req.user.permissions);
     }
   } catch (error) {
     console.error('Error fetching user permissions:', error);

@@ -5,6 +5,7 @@ import type { Contact, FileStatus, User, ContactActivity, ContactActivityAction,
 import { summarizeText } from '../utils/gemini';
 import VideoRecordingModal from './video_recording_modal';
 import CameraModal from './camera_modal';
+import { uploadContactPhoto } from '../utils/api';
 
 interface NewContactFormProps {
     contact?: Contact;
@@ -14,7 +15,7 @@ interface NewContactFormProps {
     onNavigateToVisa: () => void;
     onNavigateToChecklist: () => void;
     onNavigateToVisits: () => void;
-    onSave: (contact: Contact) => void;
+    onSave: (contact: Contact) => Promise<Contact | null>;
     onComposeAIEmail: (prompt: string, contact: Contact) => void;
     user: User;
     users: User[]; // Added for staff dropdown
@@ -189,6 +190,7 @@ const NewContactForm: React.FC<NewContactFormProps> = ({ contact, contacts, onNa
     const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
     const [isAvatarMenuOpen, setIsAvatarMenuOpen] = useState(false);
     const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
+    const [pendingPhotoBlob, setPendingPhotoBlob] = useState<Blob | null>(null);
     const avatarMenuRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const isNew = !contact;
@@ -253,7 +255,7 @@ const NewContactForm: React.FC<NewContactFormProps> = ({ contact, contacts, onNa
                 URL.revokeObjectURL(formData.avatarUrl);
             }
         };
-    }, []);
+    }, [formData.avatarUrl]);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
@@ -281,7 +283,7 @@ const NewContactForm: React.FC<NewContactFormProps> = ({ contact, contacts, onNa
         }
     };
 
-    const handleSave = () => {
+    const handleSave = async () => {
         const contactToSave: Contact = {
             id: contact?.id || 0,
             name: formData.name,
@@ -318,7 +320,28 @@ const NewContactForm: React.FC<NewContactFormProps> = ({ contact, contacts, onNa
             applicationEmail: formData.applicationEmail,
             applicationPassword: formData.applicationPassword,
         };
-        onSave(contactToSave);
+
+        try {
+            // Call parent onSave first to handle standard fields
+            const savedContact = await onSave(contactToSave);
+
+            if (savedContact) {
+                // If we have a pending photo blob, upload it using the returned ID
+                if (pendingPhotoBlob) {
+                    const { avatarUrl: serverUrl } = await uploadContactPhoto(savedContact.id, pendingPhotoBlob);
+                    setFormData(prev => ({ ...prev, avatarUrl: serverUrl }));
+                    setPendingPhotoBlob(null);
+                }
+
+                // If it was a NEW contact, we need to navigate back now that we're done
+                if (isNew) {
+                    onNavigateBack();
+                }
+            }
+        } catch (error) {
+            console.error("Failed to save contact/photo:", error);
+            alert("Failed to save contact/photo. Please try again.");
+        }
     };
 
     const handleSaveVideo = async (videoBlob: Blob) => {
@@ -347,6 +370,7 @@ const NewContactForm: React.FC<NewContactFormProps> = ({ contact, contacts, onNa
             }
             const newUrl = URL.createObjectURL(file);
             setFormData(prev => ({ ...prev, avatarUrl: newUrl }));
+            setPendingPhotoBlob(file);
         }
         setIsAvatarMenuOpen(false);
     };
@@ -357,6 +381,7 @@ const NewContactForm: React.FC<NewContactFormProps> = ({ contact, contacts, onNa
         }
         const newUrl = URL.createObjectURL(blob);
         setFormData(prev => ({ ...prev, avatarUrl: newUrl }));
+        setPendingPhotoBlob(blob);
         setIsCameraModalOpen(false);
         setIsAvatarMenuOpen(false);
     };
@@ -366,6 +391,7 @@ const NewContactForm: React.FC<NewContactFormProps> = ({ contact, contacts, onNa
             URL.revokeObjectURL(formData.avatarUrl);
         }
         setFormData(prev => ({ ...prev, avatarUrl: undefined }));
+        setPendingPhotoBlob(null);
         setIsAvatarMenuOpen(false);
     };
 
@@ -386,10 +412,14 @@ const NewContactForm: React.FC<NewContactFormProps> = ({ contact, contacts, onNa
                         <button
                             onClick={handleAvatarClick}
                             disabled={!canWrite}
-                            className="w-20 h-20 rounded-md border-2 border-dashed border-gray-300 dark:border-gray-600 flex items-center justify-center text-gray-400 hover:border-lyceum-blue hover:text-lyceum-blue transition-colors disabled:cursor-not-allowed disabled:hover:border-gray-300 disabled:hover:text-gray-400"
+                            className="w-20 h-20 rounded-md border-2 border-dashed border-gray-300 dark:border-gray-600 flex items-center justify-center text-gray-400 hover:border-lyceum-blue hover:text-lyceum-blue transition-colors disabled:cursor-not-allowed disabled:hover:border-gray-300 disabled:hover:text-gray-400 overflow-hidden"
                         >
                             {formData.avatarUrl ? (
-                                <img src={formData.avatarUrl} alt="Contact Avatar" className="w-full h-full object-cover rounded-md" />
+                                <img
+                                    src={formData.avatarUrl.startsWith('blob:') || formData.avatarUrl.startsWith('http') ? formData.avatarUrl : `${import.meta.env.VITE_API_URL}${formData.avatarUrl}`}
+                                    alt="Contact Avatar"
+                                    className="w-full h-full object-cover"
+                                />
                             ) : (
                                 <Camera size={24} />
                             )}
@@ -546,8 +576,8 @@ const NewContactForm: React.FC<NewContactFormProps> = ({ contact, contacts, onNa
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                                {transactions.filter(tx => tx.contactId === contact?.id).length > 0 ? (
-                                    transactions.filter(tx => tx.contactId === contact?.id).map(tx => (
+                                {transactions.filter(tx => tx.contactId === contact?.id && tx.type === 'Income').length > 0 ? (
+                                    transactions.filter(tx => tx.contactId === contact?.id && tx.type === 'Income').map(tx => (
                                         <tr key={tx.id} className="text-sm">
                                             <td className="px-6 py-4 whitespace-nowrap text-gray-500">{tx.date}</td>
                                             <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900 dark:text-gray-100">{tx.id}</td>

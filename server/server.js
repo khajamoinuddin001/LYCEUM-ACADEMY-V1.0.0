@@ -50,7 +50,8 @@ app.options('*', cors());
 // 3. Security headers (Configured to play well with CORS)
 app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" },
-  crossOriginEmbedderPolicy: false
+  crossOriginEmbedderPolicy: false,
+  crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" }
 }));
 
 // 4. Rate limiting
@@ -79,6 +80,11 @@ try {
   console.error('Failed to initialize database:', err);
   process.exit(1);
 }
+
+// Static files
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+app.use('/api/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Routes
 app.use('/api/auth', authRoutes);

@@ -1,9 +1,17 @@
 import React, { useState, useMemo } from 'react';
 import {
     TrendingUp, TrendingDown, DollarSign, PieChart, Wallet, Receipt, AlertCircle,
-    ShoppingCart, CreditCard, FileText, Trash2, X
+    ShoppingCart, CreditCard, FileText, Trash2, X, ArrowRightLeft, Edit, Printer
 } from 'lucide-react';
 import type { AccountingTransaction, Contact, User } from '../types';
+import * as api from '../utils/api';
+import AccountTransferModal from './account_transfer_modal';
+import EditTransactionModal from './edit_transaction_modal';
+import TransactionPrintView from './transaction_print_view';
+import NewInvoiceModal from './new_invoice_modal';
+import NewPurchaseModal from './new_purchase_modal';
+import NewExpenseModal from './new_expense_modal';
+import TransactionDetailsModal from './transaction_details_modal';
 
 interface AccountingViewProps {
     transactions: AccountingTransaction[];
@@ -15,6 +23,8 @@ interface AccountingViewProps {
     onEditTransaction: (transaction: AccountingTransaction) => void;
     onDeleteTransaction: (transactionId: string) => void;
     onPrintTransaction: (transaction: AccountingTransaction) => void;
+    onSaveTransaction: (transaction: Omit<AccountingTransaction, 'id'> & { id?: string }) => Promise<void>;
+    onAddContact: (contact: any) => Promise<Contact>;
 }
 
 const AccountingView: React.FC<AccountingViewProps> = ({
@@ -23,19 +33,27 @@ const AccountingView: React.FC<AccountingViewProps> = ({
     user,
     onNewInvoiceClick,
     onDeleteTransaction,
+    onSaveTransaction,
+    onAddContact,
 }) => {
     const [showPurchaseModal, setShowPurchaseModal] = useState(false);
     const [showExpensesModal, setShowExpensesModal] = useState(false);
     const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+    const [showTransferModal, setShowTransferModal] = useState(false);
+    const [editingTransaction, setEditingTransaction] = useState<AccountingTransaction | null>(null);
+    const [printingTransaction, setPrintingTransaction] = useState<AccountingTransaction | null>(null);
+    const [viewingTransaction, setViewingTransaction] = useState<AccountingTransaction | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
-    const [typeFilter, setTypeFilter] = useState<'All' | 'Income' | 'Purchase' | 'Expense'>('All');
+    const [typeFilter, setTypeFilter] = useState<'All' | 'Income' | 'Purchase' | 'Expense' | 'Transfer'>('All');
+    const [startDate, setStartDate] = useState('');
+    const [endDate, setEndDate] = useState('');
 
     // Calculate summary statistics for last 30 days
     const summary = useMemo(() => {
         const thirtyDaysAgo = new Date();
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-        // Filter transactions from last 30 days
+        // Filter transactions from last 30 days for revenue/expenses
         const recentTransactions = transactions.filter(t =>
             new Date(t.date) >= thirtyDaysAgo
         );
@@ -64,17 +82,23 @@ const AccountingView: React.FC<AccountingViewProps> = ({
         // 6. Net Profit = Gross Profit - Expenses
         const netProfit = grossProfit - operatingExpenses;
 
-        // Cash flow based on payment method
-        const cashTransactions = transactions.filter(t => t.paymentMethod === 'Cash' && t.status === 'Paid');
-        const onlineTransactions = transactions.filter(t => t.paymentMethod === 'Online' && t.status === 'Paid');
-
-        const cashInHand = cashTransactions.reduce((sum, t) => {
+        const cashInHand = Math.round(transactions.filter(t => t.status === 'Paid').reduce((sum, t) => {
+            if (t.type === 'Transfer') {
+                if (t.paymentMethod === 'Cash') return sum - t.amount; // From Cash
+                return sum + t.amount; // To Cash (assuming only Bank/Cash exist)
+            }
+            if (t.paymentMethod !== 'Cash') return sum;
             return sum + (t.type === 'Income' ? t.amount : -t.amount);
-        }, 0);
+        }, 0));
 
-        const accountBalance = onlineTransactions.reduce((sum, t) => {
+        const accountBalance = Math.round(transactions.filter(t => t.status === 'Paid').reduce((sum, t) => {
+            if (t.type === 'Transfer') {
+                if (t.paymentMethod === 'Online') return sum - t.amount; // From Bank
+                return sum + t.amount; // To Bank
+            }
+            if (t.paymentMethod !== 'Online') return sum;
             return sum + (t.type === 'Income' ? t.amount : -t.amount);
-        }, 0);
+        }, 0));
 
         // Accounts Receivable - sum of all expected incoming payments
         // 1. Pending income transactions (invoices not yet paid)
@@ -126,6 +150,14 @@ const AccountingView: React.FC<AccountingViewProps> = ({
             filtered = filtered.filter(t => t.type === typeFilter);
         }
 
+        // Apply date filter
+        if (startDate) {
+            filtered = filtered.filter(t => new Date(t.date) >= new Date(startDate));
+        }
+        if (endDate) {
+            filtered = filtered.filter(t => new Date(t.date) <= new Date(endDate));
+        }
+
         // Apply search filter
         if (searchQuery.trim()) {
             const query = searchQuery.toLowerCase();
@@ -164,6 +196,8 @@ const AccountingView: React.FC<AccountingViewProps> = ({
                 return 'text-green-600 dark:text-green-400';
             case 'Expense':
                 return 'text-red-600 dark:text-red-400';
+            case 'Transfer':
+                return 'text-purple-600 dark:text-purple-400';
             default:
                 return 'text-blue-600 dark:text-blue-400';
         }
@@ -172,6 +206,16 @@ const AccountingView: React.FC<AccountingViewProps> = ({
     const handleDeleteInvoice = (transactionId: string) => {
         if (window.confirm('Are you sure you want to delete this transaction?')) {
             onDeleteTransaction(transactionId);
+        }
+    };
+
+    const handleUpdateTransaction = async (id: string, updates: Partial<AccountingTransaction>) => {
+        try {
+            await onSaveTransaction({ ...updates, id });
+            setEditingTransaction(null);
+        } catch (error) {
+            console.error('Error updating transaction:', error);
+            alert('Failed to update transaction. Please try again.');
         }
     };
 
@@ -190,6 +234,13 @@ const AccountingView: React.FC<AccountingViewProps> = ({
                     </div>
 
                     <div className="flex gap-3">
+                        <button
+                            onClick={() => setShowTransferModal(true)}
+                            className="flex items-center px-4 py-2 bg-lyceum-blue text-white rounded-lg hover:bg-lyceum-blue-dark transition-colors shadow-md"
+                        >
+                            <ArrowRightLeft size={18} className="mr-2" />
+                            Transfer
+                        </button>
                         <button
                             onClick={() => setShowPurchaseModal(true)}
                             className="flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors shadow-md"
@@ -363,6 +414,23 @@ const AccountingView: React.FC<AccountingViewProps> = ({
                                     </button>
                                 )}
                             </div>
+                            <div className="flex items-center gap-2">
+                                <input
+                                    type="date"
+                                    value={startDate}
+                                    onChange={(e) => setStartDate(e.target.value)}
+                                    className="px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-lyceum-blue text-gray-900 dark:text-gray-100"
+                                    placeholder="Start Date"
+                                />
+                                <span className="text-gray-500 dark:text-gray-400">-</span>
+                                <input
+                                    type="date"
+                                    value={endDate}
+                                    onChange={(e) => setEndDate(e.target.value)}
+                                    className="px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-lyceum-blue text-gray-900 dark:text-gray-100"
+                                    placeholder="End Date"
+                                />
+                            </div>
                             <select
                                 value={typeFilter}
                                 onChange={(e) => setTypeFilter(e.target.value as any)}
@@ -372,6 +440,7 @@ const AccountingView: React.FC<AccountingViewProps> = ({
                                 <option value="Income">Income</option>
                                 <option value="Purchase">Purchase</option>
                                 <option value="Expense">Expense</option>
+                                <option value="Transfer">Transfer</option>
                             </select>
                         </div>
                     </div>
@@ -387,7 +456,7 @@ const AccountingView: React.FC<AccountingViewProps> = ({
                                         Date
                                     </th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                                        Name of Client (Entity)
+                                        Customer Name
                                     </th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                                         Description
@@ -417,9 +486,12 @@ const AccountingView: React.FC<AccountingViewProps> = ({
                                     recentTransactions.map((transaction) => (
                                         <tr key={transaction.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
                                             <td className="px-6 py-4 whitespace-nowrap">
-                                                <span className="text-sm font-medium text-lyceum-blue">
+                                                <button
+                                                    onClick={() => setViewingTransaction(transaction)}
+                                                    className="text-sm font-medium text-lyceum-blue hover:text-lyceum-blue-dark dark:text-blue-400 dark:hover:text-blue-300 hover:underline cursor-pointer"
+                                                >
                                                     {transaction.invoiceNumber || transaction.id}
-                                                </span>
+                                                </button>
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 <span className="text-sm text-gray-900 dark:text-gray-100">
@@ -448,21 +520,42 @@ const AccountingView: React.FC<AccountingViewProps> = ({
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap text-right">
                                                 {transaction.status === 'Pending' || transaction.status === 'Overdue' ? (
-                                                    <span className="text-sm font-medium text-red-600 dark:text-red-400">
-                                                        {formatCurrency(transaction.amount)}
-                                                    </span>
+                                                    (() => {
+                                                        const isOverdue = transaction.dueDate && new Date(transaction.dueDate) < new Date(new Date().setHours(0, 0, 0, 0));
+                                                        return (
+                                                            <span className={`text-sm font-medium ${isOverdue ? 'text-red-600 dark:text-red-400' : 'text-gray-600 dark:text-gray-400'}`}>
+                                                                {formatCurrency(transaction.amount)}
+                                                            </span>
+                                                        );
+                                                    })()
                                                 ) : (
                                                     <span className="text-sm text-gray-500 dark:text-gray-400">-</span>
                                                 )}
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap text-center">
-                                                <button
-                                                    onClick={() => handleDeleteInvoice(transaction.id)}
-                                                    className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
-                                                    title="Delete transaction"
-                                                >
-                                                    <Trash2 size={18} />
-                                                </button>
+                                                <div className="flex items-center justify-center gap-2">
+                                                    <button
+                                                        onClick={() => setEditingTransaction(transaction)}
+                                                        className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+                                                        title="Edit transaction"
+                                                    >
+                                                        <Edit size={18} />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setPrintingTransaction(transaction)}
+                                                        className="text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-300"
+                                                        title="Print transaction"
+                                                    >
+                                                        <Printer size={18} />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleDeleteInvoice(transaction.id)}
+                                                        className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
+                                                        title="Delete transaction"
+                                                    >
+                                                        <Trash2 size={18} />
+                                                    </button>
+                                                </div>
                                             </td>
                                         </tr>
                                     ))
@@ -472,49 +565,64 @@ const AccountingView: React.FC<AccountingViewProps> = ({
                     </div>
                 </div>
 
-                {/* Purchase Modal - Placeholder */}
-                {showPurchaseModal && (
-                    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-                        <div className="bg-white dark:bg-gray-800 rounded-lg max-w-2xl w-full p-6">
-                            <div className="flex items-center justify-between mb-4">
-                                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Record Purchase</h2>
-                                <button onClick={() => setShowPurchaseModal(false)} className="text-gray-500 hover:text-gray-700">
-                                    <X size={24} />
-                                </button>
-                            </div>
-                            <p className="text-gray-600 dark:text-gray-400">Purchase modal - Coming soon!</p>
-                        </div>
-                    </div>
+                {/* New Invoice Modal */}
+                <NewInvoiceModal
+                    isOpen={showInvoiceModal}
+                    onClose={() => setShowInvoiceModal(false)}
+                    contacts={contacts}
+                    onSave={onSaveTransaction}
+                    onAddContact={onAddContact}
+                />
+
+                {/* New Purchase Modal */}
+                <NewPurchaseModal
+                    isOpen={showPurchaseModal}
+                    onClose={() => setShowPurchaseModal(false)}
+                    contacts={contacts}
+                    onSave={onSaveTransaction}
+                    onAddContact={onAddContact}
+                />
+
+                {/* New Expense Modal */}
+                <NewExpenseModal
+                    isOpen={showExpensesModal}
+                    onClose={() => setShowExpensesModal(false)}
+                    contacts={contacts}
+                    onSave={onSaveTransaction}
+                    onAddContact={onAddContact}
+                />
+
+                <AccountTransferModal
+                    isOpen={showTransferModal}
+                    onClose={() => setShowTransferModal(false)}
+                    onSave={onSaveTransaction}
+                />
+
+                {/* Edit Transaction Modal */}
+                {editingTransaction && (
+                    <EditTransactionModal
+                        transaction={editingTransaction}
+                        contacts={contacts}
+                        onClose={() => setEditingTransaction(null)}
+                        onSave={handleUpdateTransaction}
+                    />
                 )}
 
-                {/* Expenses Modal - Placeholder */}
-                {showExpensesModal && (
-                    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-                        <div className="bg-white dark:bg-gray-800 rounded-lg max-w-2xl w-full p-6">
-                            <div className="flex items-center justify-between mb-4">
-                                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Record Expense</h2>
-                                <button onClick={() => setShowExpensesModal(false)} className="text-gray-500 hover:text-gray-700">
-                                    <X size={24} />
-                                </button>
-                            </div>
-                            <p className="text-gray-600 dark:text-gray-400">Expenses modal - Coming soon!</p>
-                        </div>
-                    </div>
+                {/* Print Transaction View */}
+                {printingTransaction && (
+                    <TransactionPrintView
+                        transaction={printingTransaction}
+                        contact={contacts.find(c => c.id === printingTransaction.contactId)}
+                        onClose={() => setPrintingTransaction(null)}
+                    />
                 )}
 
-                {/* Invoice Modal - Placeholder */}
-                {showInvoiceModal && (
-                    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-                        <div className="bg-white dark:bg-gray-800 rounded-lg max-w-2xl w-full p-6">
-                            <div className="flex items-center justify-between mb-4">
-                                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Create Invoice</h2>
-                                <button onClick={() => setShowInvoiceModal(false)} className="text-gray-500 hover:text-gray-700">
-                                    <X size={24} />
-                                </button>
-                            </div>
-                            <p className="text-gray-600 dark:text-gray-400">Invoice modal - Coming soon!</p>
-                        </div>
-                    </div>
+                {/* Transaction Details Modal */}
+                {viewingTransaction && (
+                    <TransactionDetailsModal
+                        transaction={viewingTransaction}
+                        onClose={() => setViewingTransaction(null)}
+                    />
                 )}
             </div>
         </div>

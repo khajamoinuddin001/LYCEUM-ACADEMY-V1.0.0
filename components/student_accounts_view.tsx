@@ -19,9 +19,9 @@ const StudentAccountsView: React.FC<StudentAccountsViewProps> = ({ student }) =>
         try {
             setIsLoading(true);
             const allTransactions = await api.getTransactions();
-            // Filter to show only this student's transactions
+            // Filter to show only this student's transactions AND only Invoices
             const studentTransactions = allTransactions.filter(
-                (t) => t.contactId === student.id
+                (t) => t.contactId === student.id && t.type === 'Income'
             );
             setTransactions(studentTransactions);
         } catch (error) {

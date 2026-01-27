@@ -244,6 +244,29 @@ export const saveContact = async (contactToSave: Contact, isNew: boolean): Promi
   }
 };
 
+export const uploadContactPhoto = async (contactId: number, file: Blob): Promise<{ avatarUrl: string }> => {
+  const formData = new FormData();
+  formData.append('photo', file);
+
+  const token = getToken();
+  const headers: HeadersInit = {
+    ...(token && { 'Authorization': `Bearer ${token}` }),
+  };
+
+  const response = await fetch(`${API_BASE_URL}/contacts/${contactId}/photo`, {
+    method: 'POST',
+    headers,
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Failed to upload photo' }));
+    throw new Error(error.error || `HTTP ${response.status}`);
+  }
+
+  return response.json();
+};
+
 export const mergeContacts = async (primaryId: number, targetId: number): Promise<{ success: boolean; mergedContact: Contact; recordsUpdated: any }> => {
   return apiRequest(`/contacts/${primaryId}/merge`, {
     method: 'POST',
@@ -479,6 +502,66 @@ export const recordPayment = async (id: string): Promise<{ allTransactions: Acco
   const transaction = await apiRequest<AccountingTransaction>(`/transactions/${id}`, { method: 'GET' });
   const { transaction: paidTransaction, allTransactions } = await updateTransaction(id, { ...transaction, status: 'Paid' });
   return { allTransactions, paidTransaction };
+};
+
+// Vendors
+export interface Vendor {
+  id: number;
+  name: string;
+  email?: string;
+  phone?: string;
+  gstin?: string;
+  address?: string;
+}
+
+export const getVendors = async (): Promise<Vendor[]> => {
+  return apiRequest<Vendor[]>('/vendors');
+};
+
+export const saveVendor = async (vendor: Omit<Vendor, 'id'>): Promise<Vendor> => {
+  return apiRequest<Vendor>('/vendors', {
+    method: 'POST',
+    body: JSON.stringify(vendor)
+  });
+};
+
+// Products (Inventory)
+export interface Product {
+  id: number;
+  name: string;
+  description?: string;
+  price: number;
+  type?: string;
+}
+
+export const getProducts = async (): Promise<Product[]> => {
+  return apiRequest<Product[]>('/products');
+};
+
+export const saveProduct = async (product: Omit<Product, 'id'>): Promise<Product> => {
+  return apiRequest<Product>('/products', {
+    method: 'POST',
+    body: JSON.stringify(product)
+  });
+};
+
+// Expense Payees
+export interface ExpensePayee {
+  id: number;
+  name: string;
+  default_category?: string;
+  // default_payment_method removed as per request
+}
+
+export const getExpensePayees = async (): Promise<ExpensePayee[]> => {
+  return apiRequest<ExpensePayee[]>('/expense-payees');
+};
+
+export const saveExpensePayee = async (payee: { name: string; defaultCategory?: string }): Promise<ExpensePayee> => {
+  return apiRequest<ExpensePayee>('/expense-payees', {
+    method: 'POST',
+    body: JSON.stringify(payee)
+  });
 };
 
 // Events

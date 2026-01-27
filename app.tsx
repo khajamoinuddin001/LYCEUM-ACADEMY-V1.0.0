@@ -140,7 +140,56 @@ const DashboardLayout: React.FC = () => {
   const [viewingCertificateForCourse, setViewingCertificateForCourse] = useState<LmsCourse | null>(null);
   const [courseToPurchase, setCourseToPurchase] = useState<LmsCourse | null>(null);
 
-  const events = useMemo(() => rawEvents.map(e => ({ ...e, start: new Date(e.start), end: new Date(e.end) })), [rawEvents]);
+  const events = useMemo(() => {
+    const calendarEvents = rawEvents.map(e => ({ ...e, start: new Date(e.start), end: new Date(e.end) }));
+
+    // Add Visa Dates from Contacts
+    const visaEvents: CalendarEvent[] = [];
+    contacts.forEach(contact => {
+      const visa = contact.visaInformation?.visaInterview;
+      if (visa) {
+        if (visa.vacDate) {
+          const start = new Date(visa.vacDate);
+          if (visa.vacTime) {
+            const [hours, minutes] = visa.vacTime.split(':').map(Number);
+            start.setHours(hours, minutes);
+          } else {
+            start.setHours(9, 0); // Default to 9 AM
+          }
+          const end = new Date(start.getTime() + 60 * 60 * 1000); // 1 hour duration
+          visaEvents.push({
+            id: -(contact.id * 10 + 1), // Semi-unique negative ID
+            title: `${contact.name} (VAC)`,
+            start,
+            end,
+            color: 'purple',
+            description: `VAC Interview for ${contact.name}`
+          });
+        }
+
+        if (visa.viDate) {
+          const start = new Date(visa.viDate);
+          if (visa.viTime) {
+            const [hours, minutes] = visa.viTime.split(':').map(Number);
+            start.setHours(hours, minutes);
+          } else {
+            start.setHours(10, 0); // Default to 10 AM
+          }
+          const end = new Date(start.getTime() + 60 * 60 * 1000); // 1 hour duration
+          visaEvents.push({
+            id: -(contact.id * 10 + 2), // Semi-unique negative ID
+            title: `${contact.name} (VI)`,
+            start,
+            end,
+            color: 'red',
+            description: `Visa Interview for ${contact.name}`
+          });
+        }
+      }
+    });
+
+    return [...calendarEvents, ...visaEvents];
+  }, [rawEvents, contacts]);
   const setEvents = (newEvents: CalendarEvent[]) => api.saveEvents(newEvents).then(setRawEvents);
   const currentUser = impersonatingUser || storedCurrentUser;
 
@@ -540,8 +589,8 @@ const DashboardLayout: React.FC = () => {
 
   const handleSaveContact = async (updatedContact: Contact) => {
     if (currentUser?.role !== 'Admin') {
-      if (editingContact === 'new' && !currentUser?.permissions?.['Contacts']?.create) return;
-      if (editingContact !== 'new' && !currentUser?.permissions?.['Contacts']?.update) return;
+      if (editingContact === 'new' && !currentUser?.permissions?.['Contacts']?.create) return null;
+      if (editingContact !== 'new' && !currentUser?.permissions?.['Contacts']?.update) return null;
     }
 
     const isNew = editingContact === 'new';
@@ -554,7 +603,9 @@ const DashboardLayout: React.FC = () => {
       const freshContacts = await api.getContacts();
       setContacts(freshContacts);
       logContactActivity(savedContact.id, 'created', 'Contact was created.');
-      handleBackToContacts();
+      // Special: We wait for the caller (NewContactForm) to receive the object 
+      // and potentially upload a photo before we go back.
+      // But we can return it now.
     } else {
       setContacts(prev => prev.map(c => c.id === savedContact.id ? savedContact : c));
       setEditingContact(savedContact);
@@ -566,6 +617,7 @@ const DashboardLayout: React.FC = () => {
         logContactActivity(savedContact.id, 'status', `Status changed to ${savedContact.fileStatus || 'Not Set'}.`);
       }
     }
+    return savedContact;
   };
 
   const handleLeadSelect = (lead: CrmLead) => setSelectedLead(lead);
@@ -1441,7 +1493,26 @@ const DashboardLayout: React.FC = () => {
           onEditTransaction={(tx) => { setEditingTransaction(tx); setIsTransactionModalOpen(true); }}
           onDeleteTransaction={handleDeleteTransaction}
           onPrintTransaction={setPrintingTransaction}
+          onSaveTransaction={handleSaveTransaction}
           contacts={contacts}
+          onAddContact={async (contactData) => {
+            const newContact: Contact = {
+              id: 0,
+              name: contactData.name,
+              email: contactData.email || '',
+              phone: contactData.phone || '',
+              contactId: '',
+              department: 'Unassigned',
+              major: 'Unassigned',
+              notes: `Quick created on ${new Date().toLocaleDateString()}. Type: ${contactData.type}`,
+              checklist: [],
+              activityLog: [],
+              recordedSessions: [],
+            };
+            const savedContact = await api.saveContact(newContact, true);
+            setContacts(prev => [savedContact, ...prev]);
+            return savedContact;
+          }}
         />
       );
       case 'Profile':

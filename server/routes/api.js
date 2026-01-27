@@ -13,6 +13,20 @@ const upload = multer({
   limits: { fileSize: 50 * 1024 * 1024 } // 50MB limit
 });
 
+// Configure multer for disk storage (avatars)
+const avatarStorage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, 'uploads/avatars/')
+  },
+  filename: function (req, file, cb) {
+    const contactId = req.params.id;
+    const ext = path.extname(file.originalname);
+    cb(null, `contact-${contactId}-${Date.now()}${ext}`)
+  }
+});
+const uploadAvatar = multer({ storage: avatarStorage });
+import path from 'path';
+
 // Document routes
 router.post('/documents', authenticateToken, async (req, res) => {
   try {
@@ -300,6 +314,7 @@ const transformContact = (dbContact) => {
     counselorAssigned: dbContact.counselor_assigned,
     applicationEmail: dbContact.application_email,
     applicationPassword: dbContact.application_password,
+    avatarUrl: dbContact.avatar_url,
     createdAt: dbContact.created_at,
     // JSON fields
     checklist: (() => {
@@ -351,6 +366,24 @@ router.delete('/documents/:id', authenticateToken, async (req, res) => {
     res.json({ success: true, message: 'Document deleted successfully' });
   } catch (error) {
     console.error('Error deleting document:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Photo upload route
+router.post('/contacts/:id/photo', authenticateToken, uploadAvatar.single('photo'), async (req, res) => {
+  try {
+    const contactId = req.params.id;
+    if (!req.file) {
+      return res.status(400).json({ error: 'No photo uploaded' });
+    }
+
+    const avatarUrl = `/uploads/avatars/${req.file.filename}`;
+    await query('UPDATE contacts SET avatar_url = $1 WHERE id = $2', [avatarUrl, contactId]);
+
+    res.json({ success: true, avatarUrl });
+  } catch (error) {
+    console.error('Error uploading photo:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -446,13 +479,13 @@ router.post('/contacts', authenticateToken, async (req, res) => {
 
       // Find highest sequence for today
       const todayContacts = await query(
-        "SELECT \"contactId\" FROM contacts WHERE \"contactId\" LIKE $1 ORDER BY \"contactId\" DESC LIMIT 1",
+        "SELECT contact_id FROM contacts WHERE contact_id LIKE $1 ORDER BY contact_id DESC LIMIT 1",
         [`${datePrefix}% `]
       );
 
       let sequence = 0;
       if (todayContacts.rows.length > 0) {
-        const lastId = todayContacts.rows[0].contactId;
+        const lastId = todayContacts.rows[0].contact_id;
         sequence = parseInt(lastId.slice(-3)) + 1;
       }
 
@@ -465,8 +498,8 @@ router.post('/contacts', authenticateToken, async (req, res) => {
     agent_assigned, checklist, activity_log, recorded_sessions, documents, visa_information,
     lms_progress, lms_notes, gpa, advisor, courses, street1, street2, city, state, zip,
     country, gstin, pan, tags, visa_type, country_of_application, source, contact_type,
-    stream, intake, counselor_assigned, application_email, application_password
-  ) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38)
+    stream, intake, counselor_assigned, application_email, application_password, avatar_url
+  ) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39)
 RETURNING *
   `, [
       contact.userId || null,
@@ -506,7 +539,8 @@ RETURNING *
       contact.intake || null,
       contact.counselorAssigned || null,
       contact.applicationEmail || null,
-      contact.applicationPassword || null
+      contact.applicationPassword || null,
+      contact.avatarUrl || null
     ]);
     res.json(transformContact(result.rows[0]));
   } catch (error) {
@@ -533,8 +567,8 @@ name = $1, email = $2, phone = $3, department = $4, major = $5, notes = $6,
   city = $21, state = $22, zip = $23, country = $24, gstin = $25, pan = $26, tags = $27,
   visa_type = $28, country_of_application = $29, source = $30, contact_type = $31,
   stream = $32, intake = $33, counselor_assigned = $34, application_email = $35,
-  application_password = $36
-      WHERE id = $37
+  application_password = $36, avatar_url = $37
+      WHERE id = $38
   `, [
       contact.name,
       contact.email,
@@ -572,6 +606,7 @@ name = $1, email = $2, phone = $3, department = $4, major = $5, notes = $6,
       contact.counselorAssigned,
       contact.applicationEmail,
       contact.applicationPassword,
+      contact.avatarUrl,
       req.params.id
     ]);
 
@@ -1109,8 +1144,110 @@ router.delete('/leads/:id', authenticateToken, async (req, res) => {
 // Transactions routes
 router.get('/transactions', authenticateToken, async (req, res) => {
   try {
-    const result = await query('SELECT * FROM transactions');
+    const result = await query('SELECT * FROM transactions ORDER BY date DESC, id DESC');
+    const transactions = result.rows.map(t => ({
+      ...t,
+      contactId: t.contact_id,
+      customerName: t.customer_name, // Map snake_case to camelCase
+      paymentMethod: t.payment_method,
+      dueDate: t.due_date
+    }));
+    res.json(transactions);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// VENDORS ROUTES
+router.get('/vendors', authenticateToken, async (req, res) => {
+  try {
+    const result = await query('SELECT * FROM vendors ORDER BY created_at DESC');
     res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/vendors', authenticateToken, async (req, res) => {
+  try {
+    const { name, email, phone, gstin, address } = req.body;
+    if (!name) return res.status(400).json({ error: 'Vendor name is required' });
+
+    const result = await query(`
+      INSERT INTO vendors (name, email, phone, gstin, address)
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING *
+    `, [name, email || null, phone || null, gstin || null, address || null]);
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PRODUCTS ROUTES
+router.get('/products', authenticateToken, async (req, res) => {
+  try {
+    const result = await query('SELECT * FROM products ORDER BY name ASC');
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/products', authenticateToken, async (req, res) => {
+  try {
+    const { name, description, price, type } = req.body;
+    if (!name) return res.status(400).json({ error: 'Product name is required' });
+
+    const result = await query(`
+      INSERT INTO products (name, description, price, type)
+      VALUES ($1, $2, $3, $4)
+      RETURNING *
+    `, [name, description || null, price || 0, type || 'Goods']);
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// EXPENSE PAYEES ROUTES
+router.get('/expense-payees', authenticateToken, async (req, res) => {
+  try {
+    const result = await query('SELECT * FROM expense_payees ORDER BY name ASC');
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/expense-payees', authenticateToken, async (req, res) => {
+  try {
+    const { name, defaultCategory } = req.body;
+    if (!name) return res.status(400).json({ error: 'Payee name is required' });
+
+    // Check if exists
+    const existing = await query('SELECT * FROM expense_payees WHERE name = $1', [name]);
+    if (existing.rows.length > 0) {
+      // Update existing if needed, or just return it
+      if (defaultCategory) {
+        const updated = await query(
+          'UPDATE expense_payees SET default_category = $1 WHERE id = $2 RETURNING *',
+          [defaultCategory, existing.rows[0].id]
+        );
+        return res.json(updated.rows[0]);
+      }
+      return res.json(existing.rows[0]);
+    }
+
+    const result = await query(`
+      INSERT INTO expense_payees (name, default_category)
+      VALUES ($1, $2)
+      RETURNING *
+    `, [name, defaultCategory || null]);
+
+    res.json(result.rows[0]);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -1121,8 +1258,8 @@ router.post('/transactions', authenticateToken, async (req, res) => {
     const transaction = req.body;
     const id = transaction.id || `${transaction.type === 'Bill' ? 'BILL' : 'INV'}-${String(Date.now()).slice(-6)}`;
     const result = await query(`
-      INSERT INTO transactions(id, contact_id, customer_name, date, description, type, status, amount)
-      VALUES($1, $2, $3, $4, $5, $6, $7, $8)
+      INSERT INTO transactions(id, contact_id, customer_name, date, description, type, status, amount, payment_method, due_date)
+      VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING *
     `, [
       id,
@@ -1132,7 +1269,9 @@ router.post('/transactions', authenticateToken, async (req, res) => {
       transaction.description || null,
       transaction.type,
       transaction.status || 'Pending',
-      transaction.amount
+      transaction.amount,
+      transaction.paymentMethod || null,
+      transaction.dueDate || null
     ]);
     res.json(result.rows[0]);
   } catch (error) {
@@ -1142,11 +1281,15 @@ router.post('/transactions', authenticateToken, async (req, res) => {
 
 router.put('/transactions/:id', authenticateToken, async (req, res) => {
   try {
+    console.log('PUT /transactions/:id - User:', req.user);
+    console.log('PUT /transactions/:id - Body:', req.body);
+    console.log('PUT /transactions/:id - Params:', req.params);
+
     const transaction = req.body;
     await query(`
       UPDATE transactions SET
-      contact_id = $1, customer_name = $2, date = $3, description = $4, type = $5, status = $6, amount = $7
-      WHERE id = $8
+      contact_id = $1, customer_name = $2, date = $3, description = $4, type = $5, status = $6, amount = $7, payment_method = $8, due_date = $9
+      WHERE id = $10
     `, [
       transaction.contactId || null,
       transaction.customerName,
@@ -1155,11 +1298,14 @@ router.put('/transactions/:id', authenticateToken, async (req, res) => {
       transaction.type,
       transaction.status,
       transaction.amount,
+      transaction.paymentMethod,
+      transaction.dueDate || null,
       req.params.id
     ]);
     const result = await query('SELECT * FROM transactions WHERE id = $1', [req.params.id]);
     res.json(result.rows[0]);
   } catch (error) {
+    console.error('PUT /transactions/:id - Error:', error);
     res.status(500).json({ error: error.message });
   }
 });

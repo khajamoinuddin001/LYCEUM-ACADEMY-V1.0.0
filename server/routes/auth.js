@@ -624,8 +624,12 @@ router.post('/google', async (req, res) => {
       token: jwtToken
     });
   } catch (error) {
-    console.error('Google Auth Error:', error);
-    res.status(500).json({ error: 'Google authentication failed' });
+    console.error('❌ Google Auth Error:', {
+      message: error.message,
+      stack: error.stack,
+      token: req.body.token ? (req.body.token.substring(0, 10) + '...') : 'missing'
+    });
+    res.status(500).json({ error: `Google authentication failed: ${error.message}` });
   }
 });
 
