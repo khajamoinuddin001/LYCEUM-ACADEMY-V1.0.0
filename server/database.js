@@ -276,9 +276,10 @@ export async function initDatabase() {
       await client.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS payment_method TEXT');
       try {
         await client.query('SAVEPOINT fix_constraint_sp');
-        // Drop old constraint and add new one allowing 'Transfer'
+        // Drop old constraint and add new one allowing all used types
         await client.query('ALTER TABLE transactions DROP CONSTRAINT IF EXISTS transactions_type_check');
-        await client.query("ALTER TABLE transactions ADD CONSTRAINT transactions_type_check CHECK (type IN ('Invoice', 'Bill', 'Payment', 'Transfer'))");
+        // Broaden the check to include 'Purchase', 'Expense', 'Income' as defined in types.ts and used in app
+        await client.query("ALTER TABLE transactions ADD CONSTRAINT transactions_type_check CHECK (type IN ('Invoice', 'Bill', 'Payment', 'Transfer', 'Purchase', 'Expense', 'Income'))");
         await client.query('RELEASE SAVEPOINT fix_constraint_sp');
       } catch (err) {
         await client.query('ROLLBACK TO SAVEPOINT fix_constraint_sp');
