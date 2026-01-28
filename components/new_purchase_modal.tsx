@@ -30,7 +30,7 @@ const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
         vendorId: undefined as number | undefined,
         date: new Date().toISOString().split('T')[0],
         paymentMethod: 'Cash' as 'Cash' | 'Online',
-        status: 'paid' as 'Paid' | 'Pending' | 'Overdue',
+        status: 'Paid' as 'Paid' | 'Pending' | 'Overdue',
         notes: ''
     });
 

@@ -163,6 +163,7 @@ const AccountingView: React.FC<AccountingViewProps> = ({
             const query = searchQuery.toLowerCase();
             filtered = filtered.filter(t =>
                 (t.invoiceNumber?.toLowerCase().includes(query)) ||
+                (t.id?.toString().toLowerCase().includes(query)) ||
                 (t.contact?.toLowerCase().includes(query)) ||
                 (t.customerName?.toLowerCase().includes(query)) ||
                 (t.description?.toLowerCase().includes(query))

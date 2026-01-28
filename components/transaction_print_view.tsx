@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { Printer, X, Receipt, FileText } from 'lucide-react';
 import type { AccountingTransaction, Contact } from '../types';
 
 interface TransactionPrintViewProps {
@@ -7,7 +8,11 @@ interface TransactionPrintViewProps {
     onClose: () => void;
 }
 
+type PrintFormat = 'a4' | 'thermal';
+
 const TransactionPrintView: React.FC<TransactionPrintViewProps> = ({ transaction, contact, onClose }) => {
+    const [format, setFormat] = useState<PrintFormat>('a4');
+
     const handlePrint = () => {
         window.print();
     };
@@ -28,225 +33,308 @@ const TransactionPrintView: React.FC<TransactionPrintViewProps> = ({ transaction
         });
     };
 
-    const getTypeColor = (type: string) => {
-        switch (type) {
-            case 'Income': return 'text-green-600';
-            case 'Purchase': return 'text-orange-600';
-            case 'Expense': return 'text-red-600';
-            case 'Transfer': return 'text-blue-600';
-            default: return 'text-gray-600';
-        }
-    };
-
-    const getStatusBadge = (status: string) => {
-        const colors = {
-            'Paid': 'bg-green-100 text-green-800',
-            'Pending': 'bg-yellow-100 text-yellow-800',
-            'Overdue': 'bg-red-100 text-red-800'
-        };
-        return colors[status as keyof typeof colors] || 'bg-gray-100 text-gray-800';
-    };
-
     return (
         <>
             <style>{`
                 @media print {
-                    body * {
-                        visibility: hidden;
-                    }
-                    #print-content, #print-content * {
-                        visibility: visible;
-                    }
+                    @page { margin: 0; size: auto; }
+                    body { margin: 0; -webkit-print-color-adjust: exact; }
+                    body * { visibility: hidden; }
+                    #print-content, #print-content * { visibility: visible; }
                     #print-content {
                         position: absolute;
                         left: 0;
                         top: 0;
                         width: 100%;
+                        height: 100%;
+                        margin: 0;
+                        padding: ${format === 'thermal' ? '10px' : '40px'};
+                        background: white;
                     }
-                    .no-print {
-                        display: none !important;
-                    }
-                    .print-break {
-                        page-break-after: always;
-                    }
+                    .no-print { display: none !important; }
                 }
             `}</style>
 
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-                    {/* Header - No Print */}
-                    <div className="no-print sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-                        <h2 className="text-xl font-semibold text-gray-900">
-                            Transaction Receipt
-                        </h2>
-                        <div className="flex gap-2">
-                            <button
-                                onClick={handlePrint}
-                                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                            >
-                                Print
-                            </button>
+            <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4 transition-opacity">
+                <div className={`bg-white rounded-lg shadow-2xl w-full max-h-[90vh] overflow-y-auto ${format === 'thermal' ? 'max-w-md' : 'max-w-4xl'}`}>
+                    {/* Toolbar - No Print */}
+                    <div className="no-print sticky top-0 bg-gray-50 border-b border-gray-200 px-6 py-4 flex flex-col sm:flex-row items-center justify-between z-10 gap-4">
+                        <div className="flex items-center gap-4">
+                            <h2 className="text-lg font-semibold text-gray-900">Print Preview</h2>
+
+                            {/* Format Toggle */}
+                            <div className="bg-gray-200 p-1 rounded-lg flex items-center">
+                                <button
+                                    onClick={() => setFormat('a4')}
+                                    className={`px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition-all ${format === 'a4'
+                                            ? 'bg-white text-lyceum-blue shadow-sm'
+                                            : 'text-gray-600 hover:text-gray-900'
+                                        }`}
+                                >
+                                    <FileText size={16} />
+                                    Standard (A4)
+                                </button>
+                                <button
+                                    onClick={() => setFormat('thermal')}
+                                    className={`px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition-all ${format === 'thermal'
+                                            ? 'bg-white text-lyceum-blue shadow-sm'
+                                            : 'text-gray-600 hover:text-gray-900'
+                                        }`}
+                                >
+                                    <Receipt size={16} />
+                                    Thermal
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="flex gap-3">
                             <button
                                 onClick={onClose}
-                                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                                className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium transition-colors shadow-sm flex items-center gap-2"
                             >
-                                Close
+                                <X size={16} />
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handlePrint}
+                                className="px-5 py-2 bg-lyceum-blue text-white rounded-lg hover:bg-lyceum-blue-dark font-medium transition-colors shadow-md flex items-center gap-2"
+                            >
+                                <Printer size={16} />
+                                Print
                             </button>
                         </div>
                     </div>
 
-                    {/* Print Content */}
-                    <div id="print-content" className="p-8">
-                        {/* Company Header */}
-                        <div className="text-center mb-8 border-b-2 border-gray-800 pb-6">
-                            <h1 className="text-3xl font-bold text-gray-900 mb-2">Lyceum Academy</h1>
-                            <p className="text-gray-600">Professional Education & Training Services</p>
-                            <p className="text-sm text-gray-500 mt-1">
-                                Email: omar@lyceumacademy.com | Phone: +91 7893078791
-                            </p>
-                        </div>
+                    {/* Print Content Container */}
+                    <div id="print-content" className={`bg-white relative text-gray-900 font-sans ${format === 'thermal' ? 'p-4 max-w-[80mm] mx-auto' : 'p-10 min-h-[1100px]'}`}>
 
-                        {/* Transaction Header */}
-                        <div className="mb-6">
-                            <div className="flex justify-between items-start mb-4">
-                                <div>
-                                    <h2 className={`text-2xl font-bold ${getTypeColor(transaction.type)} mb-1`}>
-                                        {transaction.type} Receipt
-                                    </h2>
-                                    <p className="text-gray-600">Transaction ID: <span className="font-mono font-semibold">{transaction.id}</span></p>
-                                </div>
-                                <div className="text-right">
-                                    <p className="text-sm text-gray-600">Date</p>
-                                    <p className="text-lg font-semibold">{formatDate(transaction.date)}</p>
-                                </div>
-                            </div>
-                        </div>
+                        {format === 'a4' ? (
+                            // ==================== A4 LAYOUT ====================
+                            <>
+                                {/* decorative top bar */}
+                                <div className="h-2 w-full bg-lyceum-blue mb-8"></div>
 
-                        {/* Customer/Vendor Information */}
-                        <div className="bg-gray-50 p-4 rounded-lg mb-6">
-                            <h3 className="font-semibold text-gray-900 mb-2">
-                                {transaction.type === 'Income' ? 'Customer' : 'Vendor'} Information
-                            </h3>
-                            <p className="text-gray-700 font-medium text-lg">{transaction.customerName}</p>
-                            {contact && (
-                                <div className="mt-3 space-y-1 text-sm text-gray-600">
-                                    {contact.email && (
-                                        <p><span className="font-medium">Email:</span> {contact.email}</p>
-                                    )}
-                                    {contact.phone && (
-                                        <p><span className="font-medium">Phone:</span> {contact.phone}</p>
-                                    )}
-                                    {(contact.street1 || contact.city || contact.state) && (
-                                        <div className="mt-2">
-                                            <p className="font-medium">Address:</p>
-                                            {contact.street1 && <p>{contact.street1}</p>}
-                                            {contact.street2 && <p>{contact.street2}</p>}
-                                            {(contact.city || contact.state || contact.zip) && (
-                                                <p>
-                                                    {contact.city}{contact.city && contact.state && ', '}{contact.state} {contact.zip}
-                                                </p>
-                                            )}
-                                            {contact.country && <p>{contact.country}</p>}
+                                {/* Top Header Section */}
+                                <div className="flex justify-between items-start mb-12">
+                                    {/* Company Logo & Name */}
+                                    <div className="flex flex-col">
+                                        <img src="/logo.png" alt="Lyceum Academy" className="h-16 w-auto object-contain mb-4 select-none" />
+                                        <h1 className="text-2xl font-bold text-lyceum-blue tracking-tight">LYCEUM ACADEMY</h1>
+                                        <p className="text-sm text-gray-600 font-medium">Professional Education & Training Services</p>
+                                    </div>
+
+                                    {/* Invoice Meta */}
+                                    <div className="text-right">
+                                        <h2 className="text-4xl font-light text-gray-800 uppercase tracking-widest mb-4">
+                                            {transaction.type === 'Income' ? 'INVOICE' : 'RECEIPT'}
+                                        </h2>
+                                        <div className="space-y-1">
+                                            <p className="text-sm text-gray-500 font-medium">Reference No.</p>
+                                            <p className="text-lg font-bold text-gray-900 mb-2">{transaction.id}</p>
+                                            <p className="text-sm text-gray-500 font-medium">Date</p>
+                                            <p className="text-lg font-bold text-gray-900">{formatDate(transaction.date)}</p>
                                         </div>
-                                    )}
-                                    {contact.gstin && (
-                                        <p><span className="font-medium">GSTIN:</span> {contact.gstin}</p>
-                                    )}
-                                    {contact.pan && (
-                                        <p><span className="font-medium">PAN:</span> {contact.pan}</p>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Transaction Details */}
-                        <div className="border border-gray-300 rounded-lg overflow-hidden mb-6">
-                            <table className="w-full">
-                                <thead className="bg-gray-100">
-                                    <tr>
-                                        <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Description</th>
-                                        <th className="px-4 py-3 text-right text-sm font-semibold text-gray-700">Amount</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr className="border-t border-gray-200">
-                                        <td className="px-4 py-4 text-gray-700">
-                                            {transaction.description || `${transaction.type} transaction`}
-                                        </td>
-                                        <td className="px-4 py-4 text-right font-semibold text-gray-900">
-                                            {formatCurrency(transaction.amount)}
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-
-                        {/* Payment Details */}
-                        <div className="grid grid-cols-2 gap-6 mb-6">
-                            <div>
-                                <h3 className="font-semibold text-gray-900 mb-3">Payment Details</h3>
-                                <div className="space-y-2">
-                                    <div className="flex justify-between">
-                                        <span className="text-gray-600">Payment Method:</span>
-                                        <span className="font-medium text-gray-900">
-                                            {transaction.paymentMethod || 'Not specified'}
-                                        </span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span className="text-gray-600">Status:</span>
-                                        <span className={`px-2 py-1 rounded text-xs font-semibold ${getStatusBadge(transaction.status)}`}>
-                                            {transaction.status}
-                                        </span>
                                     </div>
                                 </div>
-                            </div>
 
-                            <div>
-                                <h3 className="font-semibold text-gray-900 mb-3">Amount Summary</h3>
-                                <div className="space-y-2">
-                                    <div className="flex justify-between">
-                                        <span className="text-gray-600">Subtotal:</span>
-                                        <span className="font-medium text-gray-900">{formatCurrency(transaction.amount)}</span>
+                                {/* Divider */}
+                                <div className="border-b border-gray-200 mb-10 opacity-50"></div>
+
+                                {/* Addresses Grid */}
+                                <div className="grid grid-cols-2 gap-12 mb-12">
+                                    {/* From */}
+                                    <div>
+                                        <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">From</h3>
+                                        <div className="text-gray-800 font-medium leading-relaxed">
+                                            <p className="text-lg font-bold text-lyceum-blue mb-1">Lyceum Academy</p>
+                                            <p>Asif Nagar, Hyderabad</p>
+                                            <p>Telangana, India 500028</p>
+                                            <p className="mt-2 text-sm text-gray-600">
+                                                <span className="font-semibold">Email:</span> omar@lyceumacademy.com<br />
+                                                <span className="font-semibold">Phone:</span> +91 7893078791
+                                            </p>
+                                        </div>
                                     </div>
-                                    <div className="flex justify-between pt-2 border-t border-gray-300">
-                                        <span className="font-semibold text-gray-900">Total Amount:</span>
-                                        <span className="font-bold text-lg text-gray-900">{formatCurrency(transaction.amount)}</span>
+
+                                    {/* To */}
+                                    <div>
+                                        <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
+                                            {transaction.type === 'Income' ? 'Bill To' : 'Vendor'}
+                                        </h3>
+                                        <div className="text-gray-800 font-medium leading-relaxed">
+                                            <p className="text-lg font-bold text-gray-900 mb-1">{transaction.customerName}</p>
+                                            {contact ? (
+                                                <>
+                                                    {contact.organization && <p>{contact.organization}</p>}
+                                                    {contact.street1 && <p>{contact.street1}</p>}
+                                                    {(contact.city || contact.state) && (
+                                                        <p>{contact.city}{contact.city && contact.state && ', '}{contact.state} {contact.zip}</p>
+                                                    )}
+                                                    {contact.email && <div className="mt-2 text-sm text-gray-600"><span className="font-semibold">Email:</span> {contact.email}</div>}
+                                                    {contact.phone && <div className="text-sm text-gray-600"><span className="font-semibold">Phone:</span> {contact.phone}</div>}
+                                                </>
+                                            ) : (
+                                                <p className="text-gray-500 italic">No additional contact details available</p>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        </div>
 
-                        {/* Additional Notes */}
-                        {transaction.description && (
-                            <div className="bg-blue-50 p-4 rounded-lg mb-6">
-                                <h3 className="font-semibold text-gray-900 mb-2">Notes</h3>
-                                <p className="text-gray-700 text-sm">{transaction.description}</p>
+                                {/* Line Items Table */}
+                                <div className="mb-8">
+                                    <table className="w-full">
+                                        <thead>
+                                            <tr className="bg-gray-50 border-y border-gray-200">
+                                                <th className="py-3 px-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Description</th>
+                                                <th className="py-3 px-4 text-right text-xs font-bold text-gray-500 uppercase tracking-wider w-40">Amount</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="text-sm text-gray-800">
+                                            <tr className="border-b border-gray-100">
+                                                <td className="py-4 px-4 align-top">
+                                                    <p className="font-medium text-base mb-1">
+                                                        {transaction.description || `${transaction.type} Transaction`}
+                                                    </p>
+                                                    <p className="text-gray-500 text-xs">
+                                                        Payment Method: {transaction.paymentMethod || 'N/A'}
+                                                    </p>
+                                                </td>
+                                                <td className="py-4 px-4 text-right align-top font-medium text-base">
+                                                    {formatCurrency(transaction.amount)}
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                {/* Totals Section */}
+                                <div className="flex justify-end mb-16">
+                                    <div className="w-64 bg-gray-50 p-6 rounded-lg border border-gray-100">
+                                        <div className="flex justify-between mb-3 text-sm text-gray-600">
+                                            <span>Subtotal</span>
+                                            <span>{formatCurrency(transaction.amount)}</span>
+                                        </div>
+                                        <div className="flex justify-between mb-4 text-sm text-gray-600">
+                                            <span>Tax (0%)</span>
+                                            <span>₹0.00</span>
+                                        </div>
+                                        <div className="border-t border-gray-200 pt-3 flex justify-between items-center">
+                                            <span className="font-bold text-gray-900">Total</span>
+                                            <span className="font-bold text-2xl text-lyceum-blue">
+                                                {formatCurrency(transaction.amount)}
+                                            </span>
+                                        </div>
+                                        {/* Status Stamp */}
+                                        <div className="mt-4 text-right">
+                                            <span className={`
+                                                inline-block px-3 py-1 text-xs font-bold uppercase rounded-full border
+                                                ${transaction.status === 'Paid' ? 'bg-green-50 text-green-600 border-green-200' : ''}
+                                                ${transaction.status === 'Pending' ? 'bg-yellow-50 text-yellow-600 border-yellow-200' : ''}
+                                                ${transaction.status === 'Overdue' ? 'bg-red-50 text-red-600 border-red-200' : ''}
+                                            `}>
+                                                {transaction.status}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Signature Section */}
+                                {transaction.status === 'Paid' && (
+                                    <div className="flex justify-between items-end mt-auto mb-12">
+                                        <div className="text-xs text-gray-400 max-w-sm">
+                                            <p>This is a computer-generated document. No signature is required.</p>
+                                        </div>
+                                        <div className="text-center w-48">
+                                            <div className="h-12 mb-2 font-handwriting text-2xl text-lyceum-blue opacity-80">
+                                                Lyceum Academy
+                                            </div>
+                                            <div className="border-t border-gray-300 pt-2">
+                                                <p className="text-xs font-bold text-gray-500 uppercase">Authorized Signature</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Sticky Footer */}
+                                <div className="absolute bottom-0 left-0 w-full p-10">
+                                    <div className="border-t border-gray-100 pt-6 flex flex-col items-center justify-center text-center text-xs text-gray-400 space-y-2">
+                                        <p className="font-medium text-gray-500">Thank you for your business!</p>
+                                        <p>Lyceum Academy Pvt Ltd • Asif Nagar, Hyderabad • +91 7893078791</p>
+                                        <p>www.lyceumacademy.com</p>
+                                    </div>
+                                </div>
+                            </>
+                        ) : (
+                            // ==================== THERMAL LAYOUT ====================
+                            <div className="text-center font-mono text-sm">
+                                {/* Header */}
+                                <div className="flex flex-col items-center mb-4">
+                                    <img src="/logo.png" alt="Logo" className="h-12 w-auto mb-2 grayscale" />
+                                    <h2 className="font-bold text-base uppercase">Lyceum Academy</h2>
+                                    <p className="text-[10px] text-gray-600">Asif Nagar, Hyderabad</p>
+                                    <p className="text-[10px] text-gray-600">Ph: +91 7893078791</p>
+                                </div>
+
+                                <div className="border-b border-black border-dashed my-2"></div>
+
+                                {/* Transaction Info */}
+                                <div className="text-left mb-2">
+                                    <div className="flex justify-between">
+                                        <span>Type:</span>
+                                        <span className="font-bold uppercase">{transaction.type}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span>Ref:</span>
+                                        <span>{transaction.id}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span>Date:</span>
+                                        <span>{new Date(transaction.date).toLocaleDateString()}</span>
+                                    </div>
+                                </div>
+
+                                <div className="border-b border-black border-dashed my-2"></div>
+
+                                {/* Bill To */}
+                                <div className="text-left mb-2">
+                                    <p className="text-[10px] uppercase text-gray-500">Bill To:</p>
+                                    <p className="font-bold text-sm truncate">{transaction.customerName}</p>
+                                    {contact?.phone && <p className="text-[10px]">Ph: {contact.phone}</p>}
+                                </div>
+
+                                <div className="border-b border-black border-dashed my-2"></div>
+
+                                {/* Items */}
+                                <div className="text-left mb-4">
+                                    <div className="mb-2">
+                                        <p className="font-semibold">{transaction.description || 'Service/Product'}</p>
+                                        <div className="flex justify-between text-xs mt-1">
+                                            <span>1 x {formatCurrency(transaction.amount)}</span>
+                                            <span className="font-bold">{formatCurrency(transaction.amount)}</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="border-b border-black border-dashed my-2"></div>
+
+                                {/* Totals */}
+                                <div className="text-right">
+                                    <div className="flex justify-between font-bold text-base">
+                                        <span>TOTAL</span>
+                                        <span>{formatCurrency(transaction.amount)}</span>
+                                    </div>
+                                    <p className="text-[10px] mt-1 text-gray-600">Paid via {transaction.paymentMethod || 'Cash'}</p>
+                                </div>
+
+                                <div className="border-b border-black border-dashed my-4"></div>
+
+                                {/* Footer */}
+                                <div className="text-center text-[10px]">
+                                    <p>Thank you!</p>
+                                    <p className="mt-1">Computer Generated Receipt</p>
+                                </div>
                             </div>
                         )}
-
-                        {/* Footer */}
-                        <div className="mt-12 pt-6 border-t border-gray-300">
-                            <div className="flex justify-between items-end">
-                                <div>
-                                    <p className="text-xs text-gray-500">
-                                        This is a computer-generated receipt and does not require a signature.
-                                    </p>
-                                    <p className="text-xs text-gray-500 mt-1">
-                                        Generated on: {new Date().toLocaleString('en-IN')}
-                                    </p>
-                                </div>
-                                <div className="text-right">
-                                    <div className="border-t-2 border-gray-800 pt-2 mt-8">
-                                        <p className="text-sm font-semibold text-gray-900">Authorized Signature</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Thank You Note */}
-                        <div className="text-center mt-8 text-gray-600">
-                            <p className="font-semibold">Thank you for your business!</p>
-                        </div>
                     </div>
                 </div>
             </div>
