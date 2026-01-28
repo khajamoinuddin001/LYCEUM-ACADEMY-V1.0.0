@@ -267,6 +267,24 @@ export async function initDatabase() {
         WHERE task_id IS NULL
       `);
       await client.query('ALTER TABLE documents ADD COLUMN IF NOT EXISTS is_private BOOLEAN DEFAULT false');
+
+      // Avatar DB Storage Support
+      await client.query('ALTER TABLE contacts ADD COLUMN IF NOT EXISTS avatar_data BYTEA');
+      await client.query('ALTER TABLE contacts ADD COLUMN IF NOT EXISTS avatar_mimetype TEXT');
+
+      // Fix transactions for Transfers
+      await client.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS payment_method TEXT');
+      try {
+        await client.query('SAVEPOINT fix_constraint_sp');
+        // Drop old constraint and add new one allowing 'Transfer'
+        await client.query('ALTER TABLE transactions DROP CONSTRAINT IF EXISTS transactions_type_check');
+        await client.query("ALTER TABLE transactions ADD CONSTRAINT transactions_type_check CHECK (type IN ('Invoice', 'Bill', 'Payment', 'Transfer'))");
+        await client.query('RELEASE SAVEPOINT fix_constraint_sp');
+      } catch (err) {
+        await client.query('ROLLBACK TO SAVEPOINT fix_constraint_sp');
+        console.log('Note: Could not update transactions_type_check constraint (ignoring error to keep DB init alive). Details:', err.message);
+      }
+
     } catch (e) {
       console.log('Columns might already exist');
     }

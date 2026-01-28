@@ -14,13 +14,17 @@ interface NewPurchaseModalProps {
     isOpen: boolean;
     onClose: () => void;
     onSave: (purchase: any) => Promise<void>;
+    contacts?: any[]; // Added contacts prop
 }
 
 const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
     isOpen,
     onClose,
-    onSave
+    onSave,
+    contacts = [] // Default to empty array if not provided
 }) => {
+    const [relatedContactId, setRelatedContactId] = useState<number | undefined>(undefined);
+    const [relatedContactName, setRelatedContactName] = useState('');
     const [formData, setFormData] = useState({
         vendorName: '',
         vendorId: undefined as number | undefined,
@@ -140,7 +144,7 @@ const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
                 // If the vendor exists in our specialized table, we could perhaps link it, 
                 // but standard transactions link to contacts. 
                 // Since user wanted separate logic, we rely on the Name string.
-                contactId: null,
+                contactId: relatedContactId || null,
                 date: formData.date,
                 type: 'Purchase',
                 amount: total,
@@ -164,6 +168,8 @@ const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
                 status: 'Pending',
                 notes: ''
             });
+            setRelatedContactId(undefined);
+            setRelatedContactName('');
             setLineItems([{ description: '', quantity: 1, rate: 0, amount: 0 }]);
         } catch (error) {
             console.error('Failed to create purchase:', error);
@@ -240,6 +246,33 @@ const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
                                     required
                                 />
                             </div>
+                        </div>
+
+                        {/* Related Contact Selection */}
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                Related Contact / Student (Optional)
+                            </label>
+                            <input
+                                type="text"
+                                list="contacts-list-purchase"
+                                value={relatedContactName}
+                                onChange={(e) => {
+                                    setRelatedContactName(e.target.value);
+                                    const found = contacts.find(c => c.name === e.target.value);
+                                    setRelatedContactId(found ? found.id : undefined);
+                                }}
+                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                                placeholder="Search student or client name..."
+                            />
+                            <datalist id="contacts-list-purchase">
+                                {contacts.map(c => (
+                                    <option key={c.id} value={c.name} />
+                                ))}
+                            </datalist>
+                            <p className="text-xs text-gray-500 mt-1">
+                                Link this purchase to a student file (Internal record only).
+                            </p>
                         </div>
 
                         <div>

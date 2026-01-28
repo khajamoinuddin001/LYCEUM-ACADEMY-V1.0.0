@@ -14,17 +14,10 @@ const upload = multer({
 });
 
 // Configure multer for disk storage (avatars)
-const avatarStorage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, 'uploads/avatars/')
-  },
-  filename: function (req, file, cb) {
-    const contactId = req.params.id;
-    const ext = path.extname(file.originalname);
-    cb(null, `contact-${contactId}-${Date.now()}${ext}`)
-  }
+const uploadAvatar = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
 });
-const uploadAvatar = multer({ storage: avatarStorage });
 import path from 'path';
 
 // Document routes
@@ -370,18 +363,47 @@ router.delete('/documents/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// Photo upload route
+// Serve avatar from DB
+router.get('/contacts/:id/avatar', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await query('SELECT avatar_data, avatar_mimetype FROM contacts WHERE id = $1', [id]);
+
+    if (result.rows.length === 0 || !result.rows[0].avatar_data) {
+      return res.status(404).send('Avatar not found');
+    }
+
+    const { avatar_data, avatar_mimetype } = result.rows[0];
+    res.setHeader('Content-Type', avatar_mimetype || 'image/jpeg');
+    res.send(avatar_data);
+  } catch (error) {
+    console.error('Error serving avatar:', error);
+    res.status(500).send('Error serving avatar');
+  }
+});
+
+// Photo upload route (DB Storage)
 router.post('/contacts/:id/photo', authenticateToken, uploadAvatar.single('photo'), async (req, res) => {
   try {
-    const contactId = req.params.id;
+    const contactId = parseInt(req.params.id);
     if (!req.file) {
       return res.status(400).json({ error: 'No photo uploaded' });
     }
 
-    const avatarUrl = `/uploads/avatars/${req.file.filename}`;
-    await query('UPDATE contacts SET avatar_url = $1 WHERE id = $2', [avatarUrl, contactId]);
+    const file = req.file;
+    const avatarUrl = `/api/contacts/${contactId}/avatar?t=${Date.now()}`;
 
-    res.json({ success: true, avatarUrl });
+    // Update avatar_data, mimetype, and set the URL to point to our serving endpoint
+    const result = await query(
+      'UPDATE contacts SET avatar_url = $1, avatar_data = $2, avatar_mimetype = $3 WHERE id = $4 RETURNING avatar_url',
+      [avatarUrl, file.buffer, file.mimetype, contactId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Contact not found' });
+    }
+
+    res.json({ success: true, avatarUrl: result.rows[0].avatar_url });
   } catch (error) {
     console.error('Error uploading photo:', error);
     res.status(500).json({ error: error.message });
