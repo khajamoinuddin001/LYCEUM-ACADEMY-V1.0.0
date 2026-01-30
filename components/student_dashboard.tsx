@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import type { Contact, LmsCourse, CalendarEvent, Visitor, User } from '../types';
-import { GraduationCap, BookOpen, CalendarClock, Paperclip, CheckCircle2, Circle, Trophy, Calendar, Upload, Download, User as UserIcon } from './icons';
+import { GraduationCap, BookOpen, CalendarClock, Paperclip, CheckCircle2, Circle, Trophy, Calendar, Upload, Download, User as UserIcon, ArrowLeft } from './icons';
 import * as api from '../utils/api';
 import StudentAppointmentModal from './student_appointment_modal';
 
@@ -622,6 +622,7 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, courses, e
                         </button>
                     </div>
                 </div>
+
             </div>
             <style>{`
             @keyframes fade-in {

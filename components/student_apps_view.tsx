@@ -1,5 +1,5 @@
 import React from 'react';
-import { BookOpen, FileText, User, Paperclip, Receipt } from 'lucide-react';
+import { BookOpen, FileText, User, Paperclip, Receipt, CheckCircle2 } from 'lucide-react';
 
 interface StudentAppsViewProps {
     onAppSelect: (appName: string) => void;
@@ -56,6 +56,13 @@ const StudentAppsView: React.FC<StudentAppsViewProps> = ({ onAppSelect }) => {
             description: 'Access your uploaded documents and files',
             bgColor: 'bg-green-100 dark:bg-green-900/20',
             iconColor: 'text-green-600 dark:text-green-400',
+        },
+        {
+            name: 'Tasks',
+            icon: <CheckCircle2 size={48} />,
+            description: 'View your assigned tasks and to-dos',
+            bgColor: 'bg-orange-100 dark:bg-orange-900/20',
+            iconColor: 'text-orange-600 dark:text-orange-400',
         },
     ];
 
@@ -114,22 +121,7 @@ const StudentAppsView: React.FC<StudentAppsViewProps> = ({ onAppSelect }) => {
                 </div>
 
                 {/* Quick Stats or Info Section */}
-                <div className="mt-12 bg-gradient-to-r from-lyceum-blue to-blue-600 rounded-xl p-6 text-white">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <h3 className="text-lg font-semibold mb-1">Need Help?</h3>
-                            <p className="text-blue-100 text-sm">
-                                Raise a support ticket and our team will assist you
-                            </p>
-                        </div>
-                        <button
-                            onClick={() => onAppSelect('Tickets')}
-                            className="bg-white text-lyceum-blue px-6 py-3 rounded-lg font-semibold hover:bg-blue-50 transition-colors"
-                        >
-                            Raise Ticket
-                        </button>
-                    </div>
-                </div>
+
             </div>
         </div>
     );

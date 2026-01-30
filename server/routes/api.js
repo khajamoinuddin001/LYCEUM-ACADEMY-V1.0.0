@@ -16,7 +16,7 @@ const upload = multer({
 // Configure multer for disk storage (avatars)
 const uploadAvatar = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
+  limits: { fileSize: 50 * 1024 * 1024 } // 50MB limit
 });
 import path from 'path';
 

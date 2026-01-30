@@ -62,6 +62,7 @@ import StudentTicketsView from './components/student_tickets_view';
 import StudentAppsView from './components/student_apps_view';
 import StudentAccountsView from './components/student_accounts_view';
 import StudentQuotationsView from './components/student_quotations_view';
+import StudentTasksView from './components/student_tasks_view';
 import AgentsView from './components/agents_view';
 import VisitorDisplay from './components/visitor_display';
 import DepartmentDashboard from './components/department_dashboard';
@@ -1684,6 +1685,21 @@ const DashboardLayout: React.FC = () => {
                     student={studentContact}
                     onNavigateBack={() => handleAppSelect('Apps')}
                     user={currentUser}
+                  />
+                ) : <div>Loading...</div>;
+              }
+
+              // Student Tasks Page
+              if (activeApp === 'Tasks') {
+                const studentContact = contacts.find(c =>
+                  c.userId === currentUser.id ||
+                  (c.email && currentUser.email && c.email.toLowerCase() === currentUser.email.toLowerCase())
+                );
+                return studentContact ? (
+                  <StudentTasksView
+                    student={studentContact}
+                    tasks={tasks}
+                    onNavigateBack={() => handleAppSelect('Apps')}
                   />
                 ) : <div>Loading...</div>;
               }
