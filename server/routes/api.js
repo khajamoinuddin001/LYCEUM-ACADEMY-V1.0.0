@@ -1420,6 +1420,17 @@ router.get('/tasks', authenticateToken, async (req, res) => {
       params.push(req.user.id);
     }
 
+    // Allow filtering by contactId if provided
+    if (req.query.contactId) {
+      // Append AND if WHERE clause exists, else add WHERE
+      if (q.includes('WHERE')) {
+        q += ` AND contact_id = $${params.length + 1}`;
+      } else {
+        q += ` WHERE contact_id = $${params.length + 1}`;
+      }
+      params.push(req.query.contactId);
+    }
+
     q += ' ORDER BY created_at DESC';
     const result = await query(q, params);
     res.json(result.rows.map(transformTask));
@@ -1447,8 +1458,8 @@ router.post('/tasks', authenticateToken, async (req, res) => {
     }
 
     const result = await query(`
-      INSERT INTO tasks(title, description, due_date, status, assigned_to, assigned_by, priority, task_id)
-      VALUES($1, $2, $3, $4, $5, $6, $7, $8)
+      INSERT INTO tasks(title, description, due_date, status, assigned_to, assigned_by, priority, task_id, contact_id)
+      VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9)
       RETURNING *
     `, [
       task.title,
@@ -1458,7 +1469,8 @@ router.post('/tasks', authenticateToken, async (req, res) => {
       task.assignedTo || req.user.id,
       req.user.id,
       task.priority || 'Medium',
-      taskId
+      taskId,
+      task.contactId || null
     ]);
     res.json(transformTask(result.rows[0]));
   } catch (error) {
@@ -1475,7 +1487,8 @@ const transformTask = (task) => ({
   assignedTo: task.assigned_to,
   assignedBy: task.assigned_by,
   completedBy: task.completed_by,
-  completedAt: task.completed_at
+  completedAt: task.completed_at,
+  contactId: task.contact_id
 });
 
 

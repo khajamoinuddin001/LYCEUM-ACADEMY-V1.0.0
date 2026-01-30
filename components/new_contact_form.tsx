@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { HelpCircle, Sparkles, MailPlus, Flag, PlusCircle, StickyNote, Video as VideoIcon, CheckCircle2, VideoOff, Camera, Plus, Trash2, ChevronDown, Upload } from './icons';
 import type { Contact, FileStatus, User, ContactActivity, ContactActivityAction, RecordedSession, AccountingTransaction } from '../types';
@@ -15,6 +14,8 @@ interface NewContactFormProps {
     onNavigateToVisa: () => void;
     onNavigateToChecklist: () => void;
     onNavigateToVisits: () => void;
+    onNavigateToCRM: () => void;
+    onNavigateToTasks: () => void;
     onSave: (contact: Contact) => Promise<Contact | null>;
     onComposeAIEmail: (prompt: string, contact: Contact) => void;
     user: User;
@@ -183,7 +184,7 @@ const initialFormState = {
 
 
 
-const NewContactForm: React.FC<NewContactFormProps> = ({ contact, contacts, onNavigateBack, onNavigateToDocuments, onNavigateToVisa, onNavigateToChecklist, onNavigateToVisits, onSave, onComposeAIEmail, user, users, onAddSessionVideo, onDeleteSessionVideo, transactions = [] }) => {
+const NewContactForm: React.FC<NewContactFormProps> = ({ contact, contacts, onNavigateBack, onNavigateToDocuments, onNavigateToVisa, onNavigateToChecklist, onNavigateToVisits, onNavigateToCRM, onNavigateToTasks, onSave, onComposeAIEmail, user, users, onAddSessionVideo, onDeleteSessionVideo, transactions = [] }) => {
     const [currentTab, setCurrentTab] = useState<'details' | 'finance'>('details');
     const [formData, setFormData] = useState(initialFormState);
     const [isSummarizing, setIsSummarizing] = useState(false);
@@ -468,6 +469,8 @@ const NewContactForm: React.FC<NewContactFormProps> = ({ contact, contacts, onNa
                 <button onClick={onNavigateToChecklist} disabled={!contact} className="ml-4 px-1 py-3 font-medium text-gray-500 dark:text-gray-400 hover:text-lyceum-blue disabled:opacity-50 disabled:cursor-not-allowed">Checklist</button>
                 <button onClick={onNavigateToVisa} disabled={!contact} className="ml-4 px-1 py-3 font-medium text-gray-500 dark:text-gray-400 hover:text-lyceum-blue disabled:opacity-50 disabled:cursor-not-allowed">Visa Filing</button>
                 <button onClick={onNavigateToVisits} disabled={!contact} className="ml-4 px-1 py-3 font-medium text-gray-500 dark:text-gray-400 hover:text-lyceum-blue disabled:opacity-50 disabled:cursor-not-allowed">Visits</button>
+                <button onClick={onNavigateToCRM} disabled={!contact} className="ml-4 px-1 py-3 font-medium text-gray-500 dark:text-gray-400 hover:text-lyceum-blue disabled:opacity-50 disabled:cursor-not-allowed">CRM</button>
+                <button onClick={onNavigateToTasks} disabled={!contact} className="ml-4 px-1 py-3 font-medium text-gray-500 dark:text-gray-400 hover:text-lyceum-blue disabled:opacity-50 disabled:cursor-not-allowed">Tasks</button>
             </div>
 
             {currentTab === 'details' ? (

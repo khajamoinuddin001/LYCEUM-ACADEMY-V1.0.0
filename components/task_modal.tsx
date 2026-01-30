@@ -9,15 +9,19 @@ interface TaskModalProps {
     onSave: (task: Partial<TodoTask>) => void;
     editTask: TodoTask | null;
     currentUserId: number;
+    contacts: { id: number; name: string; email?: string }[];
 }
 
-const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, editTask, currentUserId }) => {
+const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, editTask, currentUserId, contacts }) => {
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [dueDate, setDueDate] = useState('');
     const [status, setStatus] = useState<TodoStatus>('todo');
     const [priority, setPriority] = useState<TaskPriority>('Medium');
     const [assignedTo, setAssignedTo] = useState<number>(currentUserId);
+    const [contactId, setContactId] = useState<number | ''>('');
+    const [contactSearch, setContactSearch] = useState('');
+    const [isContactDropdownOpen, setIsContactDropdownOpen] = useState(false);
     const [staff, setStaff] = useState<{ id: number; name: string; role: string }[]>([]);
 
     useEffect(() => {
@@ -39,6 +43,13 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, editTask
                 setStatus(editTask.status || 'todo');
                 setPriority(editTask.priority || 'Medium');
                 setAssignedTo(editTask.assignedTo || currentUserId);
+                setContactId(editTask.contactId || '');
+                if (editTask.contactId) {
+                    const linkedContact = contacts.find(c => c.id === editTask.contactId);
+                    setContactSearch(linkedContact ? linkedContact.name : '');
+                } else {
+                    setContactSearch('');
+                }
             } else {
                 setTitle('');
                 setDescription('');
@@ -46,6 +57,8 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, editTask
                 setStatus('todo');
                 setPriority('Medium');
                 setAssignedTo(currentUserId);
+                setContactId('');
+                setContactSearch('');
             }
         }
     }, [isOpen, editTask, currentUserId]);
@@ -62,8 +75,10 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, editTask
             description,
             dueDate,
             status,
+
             priority,
             assignedTo: Number(assignedTo),
+            contactId: contactId ? Number(contactId) : undefined,
         });
         onClose();
     };
@@ -104,6 +119,48 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, editTask
                             className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-lyceum-blue focus:border-lyceum-blue outline-none dark:text-white resize-none"
                         />
                     </div>
+
+                    <div className="relative">
+                        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Related Contact / Student (Optional)</label>
+                        <input
+                            type="text"
+                            value={contactSearch}
+                            onChange={(e) => {
+                                setContactSearch(e.target.value);
+                                setIsContactDropdownOpen(true);
+                                if (!e.target.value) setContactId('');
+                            }}
+                            onFocus={() => setIsContactDropdownOpen(true)}
+                            placeholder="Type to search contact..."
+                            className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-lyceum-blue focus:border-lyceum-blue outline-none dark:text-white"
+                        />
+                        {isContactDropdownOpen && (
+                            <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                                {contacts.filter(c => c.name.toLowerCase().includes(contactSearch.toLowerCase()) || (c.email && c.email.toLowerCase().includes(contactSearch.toLowerCase()))).length > 0 ? (
+                                    contacts.filter(c => c.name.toLowerCase().includes(contactSearch.toLowerCase()) || (c.email && c.email.toLowerCase().includes(contactSearch.toLowerCase()))).map(c => (
+                                        <div
+                                            key={c.id}
+                                            onClick={() => {
+                                                setContactId(c.id);
+                                                setContactSearch(c.name);
+                                                setIsContactDropdownOpen(false);
+                                            }}
+                                            className="px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer text-sm text-gray-700 dark:text-gray-200"
+                                        >
+                                            {c.name} {c.email ? <span className="text-gray-400 text-xs">({c.email})</span> : ''}
+                                        </div>
+                                    ))
+                                ) : (
+                                    <div className="px-4 py-2 text-sm text-gray-500 dark:text-gray-400">No contacts found</div>
+                                )}
+                            </div>
+                        )}
+                        {/* Overlay to close dropdown when clicking outside */}
+                        {isContactDropdownOpen && (
+                            <div className="fixed inset-0 z-0" onClick={() => setIsContactDropdownOpen(false)}></div>
+                        )}
+                    </div>
+                    {/* Use a backdrop invisible div to handle closing logic better if needed, but simple blur or outside click is handled by the ui normally. For now, let's just use focus/click logic. Actually, a click outside listener is better but let's keep it simple first. The user asks for suggestion dropdown. */}
 
                     <div className="grid grid-cols-2 gap-4">
                         <div>

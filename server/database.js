@@ -257,6 +257,7 @@ export async function initDatabase() {
       await client.query('ALTER TABLE tasks ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP');
       await client.query('ALTER TABLE tasks ADD COLUMN IF NOT EXISTS task_id TEXT UNIQUE');
       await client.query('ALTER TABLE tasks ADD COLUMN IF NOT EXISTS replies JSONB DEFAULT \'[]\'');
+      await client.query('ALTER TABLE tasks ADD COLUMN IF NOT EXISTS contact_id INTEGER REFERENCES contacts(id)');
       // Add due_date column to transactions if it doesn't exist
       await client.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS due_date TEXT');
 

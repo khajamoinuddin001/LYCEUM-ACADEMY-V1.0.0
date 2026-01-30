@@ -43,6 +43,7 @@ export interface TodoTask {
   replies?: TaskReply[];
   completedBy?: number;
   completedAt?: string;
+  contactId?: number;
 }
 
 export interface TaskReply {

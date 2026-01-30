@@ -43,6 +43,8 @@ import ContactChecklistView from './components/contact_checklist_view';
 import NewVisitorModal from './components/new_visitor_modal';
 import NewAppointmentModal from './components/new_appointment_modal';
 import ContactVisitsView from './components/contact_visits_view';
+import ContactCrmView from './components/contact_crm_view';
+import ContactTasksView from './components/contact_tasks_view';
 import ResetPasswordView from './components/reset_password_view';
 import ForgotPasswordView from './components/forgot_password_view';
 import ResetPasswordForm from './components/reset_password_form';
@@ -67,7 +69,7 @@ import AttendanceView from './components/attendance_view';
 import { TermsView, PrivacyView, LandingDocumentsView } from './components/legal_views';
 
 
-type ContactViewMode = 'details' | 'documents' | 'visaFiling' | 'checklist' | 'visits';
+type ContactViewMode = 'details' | 'documents' | 'visaFiling' | 'checklist' | 'visits' | 'crm' | 'tasks';
 
 // ... (keep existing imports)
 import { Routes, Route } from 'react-router-dom';
@@ -1467,10 +1469,12 @@ const DashboardLayout: React.FC = () => {
           if (contactData && contactViewMode === 'visaFiling') return <ContactVisaView user={currentUser} contact={contactData} onNavigateBack={() => setContactViewMode('details')} onSave={handleSaveContact} />;
           if (contactData && contactViewMode === 'checklist') return <ContactChecklistView user={currentUser} contact={contactData} onNavigateBack={() => setContactViewMode('details')} onUpdateChecklistItem={handleUpdateChecklistItem} onSave={handleSaveContact} />;
           if (contactData && contactViewMode === 'visits') return <ContactVisitsView user={currentUser} contact={contactData} onNavigateBack={() => setContactViewMode('details')} />;
+          if (contactData && contactViewMode === 'crm') return <ContactCrmView contact={contactData} leads={leads} onNavigateBack={() => setContactViewMode('details')} user={currentUser} />;
+          if (contactData && contactViewMode === 'tasks') return <ContactTasksView contact={contactData} tasks={tasks} user={currentUser} onNavigateBack={() => setContactViewMode('details')} onSaveTask={handleSaveTask} />;
 
           // Render form if we have data OR if we are creating a new contact
           if (contactData || editingContact === 'new') {
-            return <NewContactForm user={currentUser} users={users} contact={contactData} contacts={contacts} transactions={transactions} onNavigateBack={handleBackToContacts} onNavigateToDocuments={() => setContactViewMode('documents')} onNavigateToVisa={() => setContactViewMode('visaFiling')} onNavigateToChecklist={() => setContactViewMode('checklist')} onNavigateToVisits={() => setContactViewMode('visits')} onSave={handleSaveContact} onComposeAIEmail={handleGenerateEmailDraft} onAddSessionVideo={handleAddSessionVideo} onDeleteSessionVideo={handleDeleteSessionVideo} />;
+            return <NewContactForm user={currentUser} users={users} contact={contactData} contacts={contacts} transactions={transactions} onNavigateBack={handleBackToContacts} onNavigateToDocuments={() => setContactViewMode('documents')} onNavigateToVisa={() => setContactViewMode('visaFiling')} onNavigateToChecklist={() => setContactViewMode('checklist')} onNavigateToVisits={() => setContactViewMode('visits')} onNavigateToCRM={() => setContactViewMode('crm')} onNavigateToTasks={() => setContactViewMode('tasks')} onSave={handleSaveContact} onComposeAIEmail={handleGenerateEmailDraft} onAddSessionVideo={handleAddSessionVideo} onDeleteSessionVideo={handleDeleteSessionVideo} />;
           }
         }
         return <ContactsView contacts={contacts} onContactSelect={handleContactSelect} onNewContactClick={handleNewContactClick} user={currentUser} />;
@@ -1718,6 +1722,7 @@ const DashboardLayout: React.FC = () => {
         onSave={handleSaveTask}
         editTask={editingTask}
         currentUserId={currentUser.id}
+        contacts={contacts}
       />
 
       <SearchModal
