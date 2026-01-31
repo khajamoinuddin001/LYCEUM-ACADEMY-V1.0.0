@@ -259,7 +259,8 @@ const DashboardLayout: React.FC = () => {
             fetchWithFallback(api.getPaymentActivityLog()),
             fetchWithFallback(api.getContacts()),
             fetchWithFallback(api.getTransactions()),
-            effectiveUser.role === 'Admin' || effectiveUser.role === 'Staff' ? fetchWithFallback(api.getLeads()) : Promise.resolve([]),
+            // Enable getLeads for Student as well (backend now filters)
+            effectiveUser.role === 'Admin' || effectiveUser.role === 'Staff' || effectiveUser.role === 'Student' ? fetchWithFallback(api.getLeads()) : Promise.resolve([]),
             fetchWithFallback(api.getQuotationTemplates()),
             fetchWithFallback(api.getVisitors()),
             fetchWithFallback(api.getTasks()),
@@ -623,7 +624,31 @@ const DashboardLayout: React.FC = () => {
     return savedContact;
   };
 
-  const handleLeadSelect = (lead: CrmLead) => setSelectedLead(lead);
+  const handleLeadSelect = (lead: CrmLead) => {
+    // Try to find a matching contact locally
+    const matchedContact = contacts.find(c => {
+      // Priority 1: Match by Email
+      if (lead.email && c.email && lead.email.toLowerCase() === c.email.toLowerCase()) {
+        return true;
+      }
+      // Priority 2: Match by Name (Contact Name vs Lead Contact Name)
+      if (lead.contact && c.name && lead.contact.toLowerCase() === c.name.toLowerCase()) {
+        return true;
+      }
+      return false;
+    });
+
+    if (matchedContact) {
+      if (isMobile) {
+        setSidebarOpen(false);
+      }
+      handleAppSelect('Contacts');
+      setEditingContact(matchedContact);
+      setContactViewMode('crm');
+    } else {
+      setSelectedLead(lead);
+    }
+  };
   const handleCloseLeadDetails = () => setSelectedLead(null);
 
   const handleSaveTransaction = async (data: Omit<AccountingTransaction, 'id'> & { id?: string }) => {
@@ -781,6 +806,17 @@ const DashboardLayout: React.FC = () => {
 
       setLeadForQuotation(null);
       setEditingQuotation(null);
+      alert('Quotation saved successfully!');
+    } catch (error: any) {
+      console.error('Error saving quotation:', error);
+      alert(`Failed to save quotation: ${error.message || 'Unknown error'}`);
+    }
+  };
+
+  const handleSaveContactQuotation = async (leadId: number, quotationData: Omit<Quotation, 'id' | 'status' | 'date'> | Quotation) => {
+    try {
+      const updatedLeads = await api.saveQuotation(leadId, quotationData);
+      setLeads(updatedLeads);
       alert('Quotation saved successfully!');
     } catch (error: any) {
       console.error('Error saving quotation:', error);
@@ -1470,12 +1506,12 @@ const DashboardLayout: React.FC = () => {
           if (contactData && contactViewMode === 'visaFiling') return <ContactVisaView user={currentUser} contact={contactData} onNavigateBack={() => setContactViewMode('details')} onSave={handleSaveContact} />;
           if (contactData && contactViewMode === 'checklist') return <ContactChecklistView user={currentUser} contact={contactData} onNavigateBack={() => setContactViewMode('details')} onUpdateChecklistItem={handleUpdateChecklistItem} onSave={handleSaveContact} />;
           if (contactData && contactViewMode === 'visits') return <ContactVisitsView user={currentUser} contact={contactData} onNavigateBack={() => setContactViewMode('details')} />;
-          if (contactData && contactViewMode === 'crm') return <ContactCrmView contact={contactData} leads={leads} onNavigateBack={() => setContactViewMode('details')} user={currentUser} />;
+          if (contactData && contactViewMode === 'crm') return <ContactCrmView contact={contactData} leads={leads} onNavigateBack={() => setContactViewMode('details')} user={currentUser} onSaveQuotation={handleSaveContactQuotation} quotationTemplates={quotationTemplates} onSaveTemplate={handleSaveQuotationTemplate} onDeleteTemplate={handleDeleteQuotationTemplate} />;
           if (contactData && contactViewMode === 'tasks') return <ContactTasksView contact={contactData} tasks={tasks} user={currentUser} onNavigateBack={() => setContactViewMode('details')} onSaveTask={handleSaveTask} />;
 
           // Render form if we have data OR if we are creating a new contact
           if (contactData || editingContact === 'new') {
-            return <NewContactForm user={currentUser} users={users} contact={contactData} contacts={contacts} transactions={transactions} onNavigateBack={handleBackToContacts} onNavigateToDocuments={() => setContactViewMode('documents')} onNavigateToVisa={() => setContactViewMode('visaFiling')} onNavigateToChecklist={() => setContactViewMode('checklist')} onNavigateToVisits={() => setContactViewMode('visits')} onNavigateToCRM={() => setContactViewMode('crm')} onNavigateToTasks={() => setContactViewMode('tasks')} onSave={handleSaveContact} onComposeAIEmail={handleGenerateEmailDraft} onAddSessionVideo={handleAddSessionVideo} onDeleteSessionVideo={handleDeleteSessionVideo} />;
+            return <NewContactForm user={currentUser} users={users} contact={contactData} contacts={contacts} onNavigateBack={handleBackToContacts} onNavigateToDocuments={() => setContactViewMode('documents')} onNavigateToVisa={() => setContactViewMode('visaFiling')} onNavigateToChecklist={() => setContactViewMode('checklist')} onNavigateToVisits={() => setContactViewMode('visits')} onNavigateToCRM={() => setContactViewMode('crm')} onNavigateToTasks={() => setContactViewMode('tasks')} onSave={handleSaveContact} onComposeAIEmail={handleGenerateEmailDraft} onAddSessionVideo={api.addSessionVideo} onDeleteSessionVideo={api.deleteSessionVideo} transactions={transactions} tasks={tasks} onSaveTask={handleSaveTask} />;
           }
         }
         return <ContactsView contacts={contacts} onContactSelect={handleContactSelect} onNewContactClick={handleNewContactClick} user={currentUser} />;
@@ -1671,7 +1707,18 @@ const DashboardLayout: React.FC = () => {
                   c.userId === currentUser.id ||
                   (c.email && currentUser.email && c.email.toLowerCase() === currentUser.email.toLowerCase())
                 );
-                return studentContact ? <StudentQuotationsView student={studentContact} /> : <div>Loading...</div>;
+                return studentContact ? (
+                  <StudentQuotationsView
+                    student={studentContact}
+                    quotations={leads
+                      .filter(l =>
+                        (l.email && currentUser.email && l.email.toLowerCase() === currentUser.email.toLowerCase()) ||
+                        (l.contact && studentContact.name && l.contact.toLowerCase() === studentContact.name.toLowerCase())
+                      )
+                      .flatMap(l => l.quotations || [])
+                    }
+                  />
+                ) : <div>Loading...</div>;
               }
 
               // Student Profile Page

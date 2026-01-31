@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import type { TodoTask, TaskPriority, TodoStatus } from '../types';
+import type { TodoTask, TaskPriority, TodoStatus, ActivityType } from '../types';
 import { X, UserPlus, Calendar, AlertCircle, CheckCircle2 } from './icons';
 import { getStaffMembers } from '../utils/api';
 
@@ -75,7 +75,6 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, editTask
             description,
             dueDate,
             status,
-
             priority,
             assignedTo: Number(assignedTo),
             contactId: contactId ? Number(contactId) : undefined,
@@ -162,69 +161,40 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, editTask
                     </div>
                     {/* Use a backdrop invisible div to handle closing logic better if needed, but simple blur or outside click is handled by the ui normally. For now, let's just use focus/click logic. Actually, a click outside listener is better but let's keep it simple first. The user asks for suggestion dropdown. */}
 
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Due Date <span className="text-red-500">*</span></label>
-                            <div className="relative">
-                                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                                <input
-                                    type="date"
-                                    value={dueDate}
-                                    onChange={(e) => setDueDate(e.target.value)}
-                                    className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-lyceum-blue focus:border-lyceum-blue outline-none dark:text-white"
-                                />
-                            </div>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Assign To</label>
-                            <div className="relative">
-                                <UserPlus className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                                <select
-                                    value={assignedTo}
-                                    onChange={(e) => setAssignedTo(Number(e.target.value))}
-                                    className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-lyceum-blue focus:border-lyceum-blue outline-none dark:text-white appearance-none"
-                                >
-                                    {staff.map(s => (
-                                        <option key={s.id} value={s.id}>{s.name} ({s.role}) - {s.email}</option>
-                                    ))}
-                                </select>
-                            </div>
+                    <div>
+                        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Priority</label>
+                        <div className="relative">
+                            <AlertCircle className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                            <select
+                                value={priority}
+                                onChange={(e) => setPriority(e.target.value as TaskPriority)}
+                                className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-lyceum-blue focus:border-lyceum-blue outline-none dark:text-white appearance-none"
+                            >
+                                <option value="Low">Low</option>
+                                <option value="Medium">Medium</option>
+                                <option value="High">High</option>
+                            </select>
                         </div>
                     </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Priority</label>
-                            <div className="relative">
-                                <AlertCircle className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                                <select
-                                    value={priority}
-                                    onChange={(e) => setPriority(e.target.value as TaskPriority)}
-                                    className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-lyceum-blue focus:border-lyceum-blue outline-none dark:text-white appearance-none"
-                                >
-                                    <option value="Low">Low</option>
-                                    <option value="Medium">Medium</option>
-                                    <option value="High">High</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Status</label>
-                            <div className="relative">
-                                <CheckCircle2 className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                                <select
-                                    value={status}
-                                    onChange={(e) => setStatus(e.target.value as TodoStatus)}
-                                    className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-lyceum-blue focus:border-lyceum-blue outline-none dark:text-white appearance-none"
-                                >
-                                    <option value="todo">To Do</option>
-                                    <option value="inProgress">In Progress</option>
-                                    <option value="done">Completed</option>
-                                </select>
-                            </div>
+                    <div>
+                        <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Status</label>
+                        <div className="relative">
+                            <CheckCircle2 className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                            <select
+                                value={status}
+                                onChange={(e) => setStatus(e.target.value as TodoStatus)}
+                                className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-lyceum-blue focus:border-lyceum-blue outline-none dark:text-white appearance-none"
+                            >
+                                <option value="todo">To Do</option>
+                                <option value="inProgress">In Progress</option>
+                                <option value="done">Completed</option>
+                            </select>
                         </div>
                     </div>
                 </div>
+
+
+
 
                 <div className="p-6 border-t border-gray-100 dark:border-gray-700 flex justify-end gap-3">
                     <button

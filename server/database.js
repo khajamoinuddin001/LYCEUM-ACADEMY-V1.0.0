@@ -260,6 +260,7 @@ export async function initDatabase() {
       await client.query('ALTER TABLE tasks ADD COLUMN IF NOT EXISTS contact_id INTEGER REFERENCES contacts(id)');
       // Add due_date column to transactions if it doesn't exist
       await client.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS due_date TEXT');
+      await client.query('ALTER TABLE tasks ADD COLUMN IF NOT EXISTS activity_type TEXT');
 
       // Generate task_id for existing tasks that don't have one
       await client.query(`
@@ -332,6 +333,27 @@ export async function initDatabase() {
     await migrateColumn('notifications', 'linkTo', 'link_to');
     await migrateColumn('notifications', 'recipientUserIds', 'recipient_user_ids');
     await migrateColumn('notifications', 'recipientRoles', 'recipient_roles');
+
+    // Fix notifications.read column type (migrating from integer to boolean if needed)
+    const checkReadType = await client.query(`
+      SELECT data_type FROM information_schema.columns 
+      WHERE table_name = 'notifications' AND column_name = 'read'
+    `);
+    if (checkReadType.rows.length > 0 && checkReadType.rows[0].data_type === 'integer') {
+      console.log('📡 Migrating notifications.read column from integer to boolean');
+      // 1. Drop existing default to avoid casting errors
+      await client.query('ALTER TABLE notifications ALTER COLUMN read DROP DEFAULT');
+
+      // 2. Convert column type with explicit casting logic
+      await client.query(`
+        ALTER TABLE notifications 
+        ALTER COLUMN read TYPE BOOLEAN 
+        USING CASE WHEN read::integer = 1 THEN true ELSE false END
+      `);
+
+      // 3. Set new boolean default
+      await client.query('ALTER TABLE notifications ALTER COLUMN read SET DEFAULT false');
+    }
 
     // Channels table (ensure createdAt)
     await client.query(`

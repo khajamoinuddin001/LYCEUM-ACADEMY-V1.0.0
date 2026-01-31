@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { HelpCircle, Sparkles, MailPlus, Flag, PlusCircle, StickyNote, Video as VideoIcon, CheckCircle2, VideoOff, Camera, Plus, Trash2, ChevronDown, Upload } from './icons';
-import type { Contact, FileStatus, User, ContactActivity, ContactActivityAction, RecordedSession, AccountingTransaction } from '../types';
+import type { Contact, FileStatus, User, ContactActivity, ContactActivityAction, RecordedSession, AccountingTransaction, TodoTask } from '../types';
 import { summarizeText } from '../utils/gemini';
 import VideoRecordingModal from './video_recording_modal';
 import CameraModal from './camera_modal';
 import { uploadContactPhoto } from '../utils/api';
+import ContactCrmView from './contact_crm_view';
 
 interface NewContactFormProps {
     contact?: Contact;
@@ -23,6 +24,8 @@ interface NewContactFormProps {
     onAddSessionVideo: (contactId: number, videoBlob: Blob) => Promise<void>;
     onDeleteSessionVideo: (contactId: number, sessionId: number) => Promise<void>;
     transactions?: AccountingTransaction[];
+    tasks?: TodoTask[];
+    onSaveTask?: (task: Partial<TodoTask>) => Promise<void>;
 }
 
 const SessionPlayer: React.FC<{
@@ -184,8 +187,27 @@ const initialFormState = {
 
 
 
-const NewContactForm: React.FC<NewContactFormProps> = ({ contact, contacts, onNavigateBack, onNavigateToDocuments, onNavigateToVisa, onNavigateToChecklist, onNavigateToVisits, onNavigateToCRM, onNavigateToTasks, onSave, onComposeAIEmail, user, users, onAddSessionVideo, onDeleteSessionVideo, transactions = [] }) => {
-    const [currentTab, setCurrentTab] = useState<'details' | 'finance'>('details');
+const NewContactForm: React.FC<NewContactFormProps> = ({
+    contact,
+    contacts,
+    onNavigateBack,
+    onNavigateToDocuments,
+    onNavigateToVisa,
+    onNavigateToChecklist,
+    onNavigateToVisits,
+    onNavigateToCRM,
+    onNavigateToTasks,
+    onSave,
+    onComposeAIEmail,
+    user,
+    users,
+    onAddSessionVideo,
+    onDeleteSessionVideo,
+    transactions = [],
+    tasks = [],
+    onSaveTask
+}) => {
+    const [currentTab, setCurrentTab] = useState<'details' | 'finance' | 'crm'>('details');
     const [formData, setFormData] = useState(initialFormState);
     const [isSummarizing, setIsSummarizing] = useState(false);
     const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
@@ -465,6 +487,13 @@ const NewContactForm: React.FC<NewContactFormProps> = ({ contact, contacts, onNa
                 >
                     Finance
                 </button>
+                <button
+                    onClick={() => setCurrentTab('crm')}
+                    disabled={!contact}
+                    className={`ml-4 px-1 py-3 font-semibold transition-colors disabled:opacity-50 ${currentTab === 'crm' ? 'text-lyceum-blue border-b-2 border-lyceum-blue' : 'text-gray-500 dark:text-gray-400 hover:text-lyceum-blue'}`}
+                >
+                    CRM
+                </button>
                 <button onClick={onNavigateToDocuments} disabled={!contact} className="ml-4 px-1 py-3 font-medium text-gray-500 dark:text-gray-400 hover:text-lyceum-blue disabled:opacity-50 disabled:cursor-not-allowed">Documents</button>
                 <button onClick={onNavigateToChecklist} disabled={!contact} className="ml-4 px-1 py-3 font-medium text-gray-500 dark:text-gray-400 hover:text-lyceum-blue disabled:opacity-50 disabled:cursor-not-allowed">Checklist</button>
                 <button onClick={onNavigateToVisa} disabled={!contact} className="ml-4 px-1 py-3 font-medium text-gray-500 dark:text-gray-400 hover:text-lyceum-blue disabled:opacity-50 disabled:cursor-not-allowed">Visa Filing</button>
@@ -565,7 +594,7 @@ const NewContactForm: React.FC<NewContactFormProps> = ({ contact, contacts, onNa
                         </div>
                     </div>
                 </>
-            ) : (
+            ) : currentTab === 'finance' ? (
                 <div className="p-6">
                     <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
                         <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
@@ -604,7 +633,16 @@ const NewContactForm: React.FC<NewContactFormProps> = ({ contact, contacts, onNa
                         </table>
                     </div>
                 </div>
-            )}
+            ) : currentTab === 'crm' && contact ? (
+                <ContactCrmView
+                    contact={contact}
+                    leads={[]} // If leads are needed, pass them too, assuming parent handles or empty for now
+                    onNavigateBack={() => setCurrentTab('details')}
+                    user={user}
+                    tasks={tasks}
+                    onSaveTask={onSaveTask}
+                />
+            ) : null}
 
             {/* Activity and Sessions Section */}
             <div className="px-6 py-4 mt-6">

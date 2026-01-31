@@ -28,6 +28,8 @@ export interface Channel {
 export type TodoStatus = 'todo' | 'inProgress' | 'done';
 export type TaskPriority = 'Low' | 'Medium' | 'High';
 
+export type ActivityType = 'Call' | 'Meeting' | 'Start Application' | 'Email' | 'To-Do' | 'Upload Document' | 'Request Signature' | 'Grant Approval' | 'Other';
+
 export interface TodoTask {
   id: number;
   taskId?: string;
@@ -38,6 +40,7 @@ export interface TodoTask {
   assignedTo?: string;
   assignedBy?: string;
   priority?: 'Low' | 'Medium' | 'High';
+  activityType?: ActivityType;
   createdAt?: string;
   updatedAt?: string;
   replies?: TaskReply[];

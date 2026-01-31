@@ -20,14 +20,7 @@ const StudentTasksView: React.FC<StudentTasksViewProps> = ({ student, tasks, onN
         });
     }, [tasks, student.id]);
 
-    const getPriorityColor = (priority?: string) => {
-        switch (priority) {
-            case 'High': return 'text-red-600 bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800';
-            case 'Medium': return 'text-yellow-600 bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800';
-            case 'Low': return 'text-green-600 bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800';
-            default: return 'text-gray-600 bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700';
-        }
-    };
+
 
     const getStatusColor = (status?: string) => {
         switch (status) {
@@ -86,9 +79,7 @@ const StudentTasksView: React.FC<StudentTasksViewProps> = ({ student, tasks, onN
                                 </div>
                             </div>
                             <div className="flex flex-col items-end gap-2">
-                                <span className={`text-xs px-2 py-1 rounded border ${getPriorityColor(task.priority)}`}>
-                                    {task.priority || 'Medium'}
-                                </span>
+
                                 <span className={`text-xs px-2 py-1 rounded border ${getStatusColor(task.status)} capitalize`}>
                                     {task.status === 'inProgress' ? 'In Progress' : task.status}
                                 </span>
@@ -125,14 +116,7 @@ const StudentTasksView: React.FC<StudentTasksViewProps> = ({ student, tasks, onN
                                     </h3>
                                     <p className="text-gray-800 dark:text-gray-100 font-medium">{selectedTask.dueDate}</p>
                                 </div>
-                                <div>
-                                    <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2 flex items-center">
-                                        <AlertCircle size={14} className="mr-1.5" /> Priority
-                                    </h3>
-                                    <span className={`inline-block text-xs px-2 py-1 rounded border ${getPriorityColor(selectedTask.priority)}`}>
-                                        {selectedTask.priority || 'Medium'}
-                                    </span>
-                                </div>
+
                                 <div>
                                     <h3 className="text-sm font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2 flex items-center">
                                         <CheckCircle2 size={14} className="mr-1.5" /> Status

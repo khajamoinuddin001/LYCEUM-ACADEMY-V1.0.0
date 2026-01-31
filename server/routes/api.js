@@ -391,7 +391,7 @@ router.post('/contacts/:id/photo', authenticateToken, uploadAvatar.single('photo
     }
 
     const file = req.file;
-    const avatarUrl = `/api/contacts/${contactId}/avatar?t=${Date.now()}`;
+    const avatarUrl = `/contacts/${contactId}/avatar?t=${Date.now()}`;
 
     // Update avatar_data, mimetype, and set the URL to point to our serving endpoint
     const result = await query(
@@ -930,8 +930,34 @@ router.delete('/users/:id', authenticateToken, async (req, res) => {
   }
 });
 
-router.get('/leads', authenticateToken, requireRole('Admin', 'Staff'), async (req, res) => {
+router.get('/leads', authenticateToken, async (req, res) => {
   try {
+    // If student, return only their leads
+    if (req.user.role === 'Student') {
+      // Get student contact to match name
+      const contactRes = await query('SELECT * FROM contacts WHERE user_id = $1', [req.user.id]);
+      const contact = contactRes.rows[0];
+
+      if (!contact) {
+        return res.json([]);
+      }
+
+      // Match by User Email OR Contact Name
+      const result = await query(`
+        SELECT * FROM leads 
+        WHERE (email IS NOT NULL AND LOWER(email) = LOWER($1))
+           OR (contact IS NOT NULL AND LOWER(contact) = LOWER($2))
+        ORDER BY created_at DESC
+      `, [req.user.email || '', contact.name || '']);
+
+      return res.json(result.rows.map(transformLead));
+    }
+
+    // For others, strictly require Admin/Staff
+    if (req.user.role !== 'Admin' && req.user.role !== 'Staff') {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
     const result = await query('SELECT * FROM leads ORDER BY created_at DESC');
     res.json(result.rows.map(transformLead));
   } catch (error) {
@@ -1416,13 +1442,27 @@ router.get('/tasks', authenticateToken, async (req, res) => {
         params.push(req.user.id);
       }
     } else {
-      q += ' WHERE assigned_to = $1';
-      params.push(req.user.id);
+      // Find the contact associated with this user
+      const contactRes = await query('SELECT id FROM contacts WHERE user_id = $1', [req.user.id]);
+      const contactId = contactRes.rows[0]?.id;
+
+      if (contactId) {
+        q += ' WHERE (assigned_to = $1 OR contact_id = $2)';
+        params.push(req.user.id, contactId);
+      } else {
+        q += ' WHERE assigned_to = $1';
+        params.push(req.user.id);
+      }
     }
 
-    // Allow filtering by contactId if provided
+    // Allow filtering by contactId if provided (and authorized)
     if (req.query.contactId) {
-      // Append AND if WHERE clause exists, else add WHERE
+      // For Admins or if the requested contactId matches the user's contactId (already handled above roughly but let's be explicit)
+      // The above logic for non-admins fetches EVERYTHING relevant.
+      // If they specifically ask for a contactId, we can filter further, but we must ensure they assume they can't fish for others.
+      // However, the base query above restricts them to ONLY their assigned tasks or their contact's tasks.
+      // So checking contact_id again is safe as an AND condition.
+
       if (q.includes('WHERE')) {
         q += ` AND contact_id = $${params.length + 1}`;
       } else {
@@ -1458,19 +1498,22 @@ router.post('/tasks', authenticateToken, async (req, res) => {
     }
 
     const result = await query(`
-      INSERT INTO tasks(title, description, due_date, status, assigned_to, assigned_by, priority, task_id, contact_id)
-      VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      INSERT INTO tasks(
+        task_id, title, description, due_date, status, assigned_to, assigned_by, priority, replies, contact_id, activity_type
+      ) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       RETURNING *
     `, [
-      task.title,
-      task.description || null,
-      task.dueDate,
-      task.status || 'todo',
-      task.assignedTo || req.user.id,
-      req.user.id,
-      task.priority || 'Medium',
       taskId,
-      task.contactId || null
+      task.title,
+      task.description,
+      task.dueDate,
+      task.status,
+      task.assignedTo,
+      req.user.id, // assigned_by
+      task.priority || 'Medium',
+      JSON.stringify([]), // replies
+      task.contactId || null,
+      task.activityType || null
     ]);
     res.json(transformTask(result.rows[0]));
   } catch (error) {
@@ -1488,7 +1531,8 @@ const transformTask = (task) => ({
   assignedBy: task.assigned_by,
   completedBy: task.completed_by,
   completedAt: task.completed_at,
-  contactId: task.contact_id
+  contactId: task.contact_id,
+  activityType: task.activity_type
 });
 
 
@@ -1532,10 +1576,10 @@ router.put('/tasks/:id', authenticateToken, async (req, res) => {
 
     // Re-doing params construction for clarity
     const updateFields = [
-      'title = $1', 'description = $2', 'due_date = $3', 'status = $4', 'assigned_to = $5', 'priority = $6'
+      'title = $1', 'description = $2', 'due_date = $3', 'status = $4', 'assigned_to = $5', 'priority = $6', 'activity_type = $7'
     ];
     const updateParams = [
-      task.title, task.description, task.dueDate, task.status, task.assignedTo, task.priority
+      task.title, task.description, task.dueDate, task.status, task.assignedTo, task.priority, task.activityType || null
     ];
 
     // Add replies if present

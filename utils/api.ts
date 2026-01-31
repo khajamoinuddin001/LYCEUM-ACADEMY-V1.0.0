@@ -313,9 +313,10 @@ export const saveQuotation = async (leadId: number, quotationData: Omit<Quotatio
 
   let updatedQuotations;
   if (isEditing) {
-    updatedQuotations = quotations.map(q => q.id === quotationData.id ? { ...q, ...quotationData, status: 'Draft' as const } : q);
+    updatedQuotations = quotations.map(q => q.id === quotationData.id ? { ...q, ...quotationData } : q);
   } else {
-    const newQuotation: Quotation = { ...quotationData, id: Date.now(), status: 'Draft', date: new Date().toISOString().split('T')[0] };
+    // Default to 'In Review' so it is visible to students immediately
+    const newQuotation: Quotation = { ...quotationData, id: Date.now(), status: 'In Review', date: new Date().toISOString().split('T')[0] };
     updatedQuotations = [...quotations, newQuotation];
   }
 
@@ -1184,4 +1185,21 @@ export const analyzeDocumentWithGemini = async (documentText: string): Promise<{
 export const draftEmailWithGemini = async (prompt: string, studentName: string): Promise<{ draft: string }> => {
   const mockDraft = `Dear ${studentName},\n\nThis is a simulated email draft based on your prompt: "${prompt}".\n\nPlease review and edit this content as needed before sending.\n\nBest regards,\nThe Lyceum Academy Team`;
   return { draft: mockDraft };
+};
+
+// Session Video
+export const addSessionVideo = async (contactId: number, videoBlob: Blob): Promise<void> => {
+  const formData = new FormData();
+  formData.append('video', videoBlob, 'session_recording.webm');
+  await apiRequest(`/contacts/${contactId}/sessions`, {
+    method: 'POST',
+    body: formData,
+    // Content-Type is generated automatically by FormData with boundary
+  });
+};
+
+export const deleteSessionVideo = async (contactId: number, sessionId: number): Promise<void> => {
+  await apiRequest(`/contacts/${contactId}/sessions/${sessionId}`, {
+    method: 'DELETE'
+  });
 };
