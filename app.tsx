@@ -624,6 +624,62 @@ const DashboardLayout: React.FC = () => {
     return savedContact;
   };
 
+  const handleDeleteContact = async (id: number) => {
+    try {
+      if (currentUser?.role !== 'Admin' && (!currentUser?.permissions || !currentUser?.permissions['Contacts']?.delete)) {
+        addNotification({ title: 'Permission Denied', description: 'You do not have permission to delete contacts.', type: 'error' });
+        return;
+      }
+
+      await api.deleteContact(id);
+
+      // Update local state
+      setContacts(prev => prev.filter(c => c.id !== id));
+
+      // Navigate out
+      setEditingContact(null);
+      setContactViewMode('details');
+
+      addNotification({ title: 'Contact Deleted', description: 'Contact has been successfully deleted.', type: 'success' });
+      logActivity(`Deleted contact (ID: ${id})`);
+    } catch (error: any) {
+      console.error('Failed to delete contact:', error);
+      addNotification({ title: 'Delete Failed', description: error.message || 'Failed to delete contact', type: 'error' });
+    }
+  };
+
+  const handleApproveQuotation = async (leadId: number, quotationId: number) => {
+    try {
+      const updatedLeads = await api.approveQuotation(leadId, quotationId);
+      setLeads(updatedLeads);
+
+      // Refresh contacts to get updated AR metadata
+      const updatedContacts = await api.getContacts();
+      setContacts(updatedContacts);
+
+      addNotification({ title: 'Quotation Approved', description: 'Quotation has been approved and Lead marked as WON.', type: 'success' });
+    } catch (error: any) {
+      console.error('Failed to approve quotation:', error);
+      addNotification({ title: 'Approval Failed', description: error.message, type: 'error' });
+    }
+  };
+
+  const handleManualAcceptQuotation = async (leadId: number, quotationId: number) => {
+    try {
+      const updatedLeads = await api.manualAcceptQuotation(leadId, quotationId);
+      setLeads(updatedLeads);
+
+      // Refresh contacts to get updated AR metadata
+      const updatedContacts = await api.getContacts();
+      setContacts(updatedContacts);
+
+      addNotification({ title: 'Quotation Accepted', description: 'Quotation marked as accepted and Lead marked as WON.', type: 'success' });
+    } catch (error: any) {
+      console.error('Failed to manual accept quotation:', error);
+      addNotification({ title: 'Action Failed', description: error.message, type: 'error' });
+    }
+  };
+
   const handleLeadSelect = (lead: CrmLead) => {
     // Try to find a matching contact locally
     const matchedContact = contacts.find(c => {
@@ -672,6 +728,9 @@ const DashboardLayout: React.FC = () => {
       }
       setIsTransactionModalOpen(false);
       setEditingTransaction(null);
+      // Refresh contacts to update AR metadata if affected
+      const freshContacts = await api.getContacts();
+      setContacts(freshContacts);
     } catch (error) {
       console.error('Failed to save transaction:', error);
     }
@@ -1506,7 +1565,7 @@ const DashboardLayout: React.FC = () => {
           if (contactData && contactViewMode === 'visaFiling') return <ContactVisaView user={currentUser} contact={contactData} onNavigateBack={() => setContactViewMode('details')} onSave={handleSaveContact} />;
           if (contactData && contactViewMode === 'checklist') return <ContactChecklistView user={currentUser} contact={contactData} onNavigateBack={() => setContactViewMode('details')} onUpdateChecklistItem={handleUpdateChecklistItem} onSave={handleSaveContact} />;
           if (contactData && contactViewMode === 'visits') return <ContactVisitsView user={currentUser} contact={contactData} onNavigateBack={() => setContactViewMode('details')} />;
-          if (contactData && contactViewMode === 'crm') return <ContactCrmView contact={contactData} leads={leads} onNavigateBack={() => setContactViewMode('details')} user={currentUser} onSaveQuotation={handleSaveContactQuotation} quotationTemplates={quotationTemplates} onSaveTemplate={handleSaveQuotationTemplate} onDeleteTemplate={handleDeleteQuotationTemplate} />;
+          if (contactData && contactViewMode === 'crm') return <ContactCrmView contact={contactData} leads={leads} onNavigateBack={() => setContactViewMode('details')} user={currentUser} onSaveQuotation={handleSaveContactQuotation} quotationTemplates={quotationTemplates} onSaveTemplate={handleSaveQuotationTemplate} onDeleteTemplate={handleDeleteQuotationTemplate} onDeleteContact={handleDeleteContact} onApproveQuotation={handleApproveQuotation} onManualAcceptQuotation={handleManualAcceptQuotation} onDeleteQuotation={async (leadId, quotationId) => { if (window.confirm('Are you sure you want to delete this quotation? This action cannot be undone.')) { const updatedLeads = await api.deleteQuotation(leadId, quotationId); setLeads(updatedLeads); const updatedContacts = await api.getContacts(); setContacts(updatedContacts); } }} />;
           if (contactData && contactViewMode === 'tasks') return <ContactTasksView contact={contactData} tasks={tasks} user={currentUser} onNavigateBack={() => setContactViewMode('details')} onSaveTask={handleSaveTask} />;
 
           // Render form if we have data OR if we are creating a new contact
@@ -1698,7 +1757,18 @@ const DashboardLayout: React.FC = () => {
                   c.userId === currentUser.id ||
                   (c.email && currentUser.email && c.email.toLowerCase() === currentUser.email.toLowerCase())
                 );
-                return studentContact ? <StudentAccountsView student={studentContact} /> : <div>Loading...</div>;
+                return studentContact ? (
+                  <StudentAccountsView
+                    student={studentContact}
+                    quotations={leads
+                      .filter(l =>
+                        (l.email && currentUser.email && l.email.toLowerCase() === currentUser.email.toLowerCase()) ||
+                        (l.contact && studentContact.name && l.contact.toLowerCase() === studentContact.name.toLowerCase())
+                      )
+                      .flatMap(l => l.quotations || [])
+                    }
+                  />
+                ) : <div>Loading...</div>;
               }
 
               // Student Quotations Page

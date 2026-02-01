@@ -124,7 +124,10 @@ export async function initDatabase() {
     await migrateColumn('contacts', 'counselorAssigned', 'counselor_assigned');
     await migrateColumn('contacts', 'applicationEmail', 'application_email');
     await migrateColumn('contacts', 'applicationPassword', 'application_password');
+    await migrateColumn('contacts', 'applicationPassword', 'application_password');
     await migrateColumn('contacts', 'createdAt', 'created_at');
+    // Ensure metadata column exists
+    await client.query('ALTER TABLE contacts ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT \'{}\'');
 
     // LEADS
     await client.query(`

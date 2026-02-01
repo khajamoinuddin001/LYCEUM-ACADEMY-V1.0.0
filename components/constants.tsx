@@ -24,6 +24,9 @@ import {
   UserCheck,
   CheckCircle,
   Clock,
+  Receipt,
+  Paperclip,
+  UserCircle
 } from './icons';
 
 export const ODOO_APPS: OdooApp[] = [
@@ -134,6 +137,36 @@ export const ODOO_APPS: OdooApp[] = [
     icon: <Clock size={36} />,
     bgColor: 'bg-pink-100',
     iconColor: 'text-pink-600',
+  },
+  {
+    name: 'Attendance',
+    icon: <Clock size={36} />,
+    bgColor: 'bg-pink-100',
+    iconColor: 'text-pink-600',
+  },
+  {
+    name: 'Accounts',
+    icon: <Receipt size={36} />,
+    bgColor: 'bg-emerald-100',
+    iconColor: 'text-emerald-600',
+  },
+  {
+    name: 'Quotations',
+    icon: <FileText size={36} />,
+    bgColor: 'bg-indigo-100',
+    iconColor: 'text-indigo-600',
+  },
+  {
+    name: 'My Profile',
+    icon: <UserCircle size={36} />,
+    bgColor: 'bg-purple-100',
+    iconColor: 'text-purple-600',
+  },
+  {
+    name: 'Documents',
+    icon: <Paperclip size={36} />,
+    bgColor: 'bg-green-100',
+    iconColor: 'text-green-600',
   },
 ];
 

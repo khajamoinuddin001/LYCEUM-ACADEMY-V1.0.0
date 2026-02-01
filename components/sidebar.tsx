@@ -86,6 +86,11 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, activeApp, onAppSe
   const [isOverTrash, setIsOverTrash] = useState(false);
   const [isOverSidebar, setIsOverSidebar] = useState(false);
 
+  // Apps that cannot be removed from sidebar
+  const PROTECTED_APPS = [
+    'Apps', 'dashboard', 'student_dashboard', 'My Profile'
+  ];
+
   useEffect(() => {
     const storageKey = `sidebar_order_${user.id}`;
     const savedOrder = localStorage.getItem(storageKey);
@@ -111,9 +116,8 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, activeApp, onAppSe
         }).filter(Boolean);
 
         // Add any missing "permanent" items if they were accidentally removed
-        const permanentNames = ['Apps', 'dashboard', 'student_dashboard'];
         const missingPermanent = defaults.filter(item =>
-          permanentNames.includes(item.name || (item as any).label) &&
+          PROTECTED_APPS.includes(item.name || (item as any).label) &&
           !orderNames.includes(item.name || (item as any).label)
         );
 
@@ -193,7 +197,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, activeApp, onAppSe
       const removedItem = items[draggedItem];
 
       // Prevent removing core apps
-      if (['Apps', 'dashboard', 'student_dashboard'].includes(removedItem.name || removedItem.label)) {
+      if (PROTECTED_APPS.includes(removedItem.name || removedItem.label)) {
         return;
       }
 

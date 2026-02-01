@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { FileText, IndianRupee, Building2, User as UserIcon, AlertCircle, ArrowLeft, Plus, Calendar, CheckCircle2, Phone, Mail, File, PenTool, LayoutDashboard, Clock, History, MoreVertical, TrendingUp, CheckSquare } from 'lucide-react';
+import { FileText, IndianRupee, Building2, User as UserIcon, AlertCircle, ArrowLeft, Plus, Calendar, CheckCircle2, Phone, Mail, File, PenTool, LayoutDashboard, Clock, History, MoreVertical, TrendingUp, CheckSquare, Trash2 } from 'lucide-react';
 import type { Contact, CrmLead, User, TodoTask, ActivityType, Quotation, QuotationTemplate } from '../types';
 import ActivityModal from './activity_modal';
 import NewQuotationPage from './new_quotation_modal';
@@ -15,9 +15,12 @@ interface ContactCrmViewProps {
     quotationTemplates?: QuotationTemplate[];
     onSaveTemplate?: (template: QuotationTemplate) => void;
     onDeleteTemplate?: (templateId: number) => void;
+    onDeleteContact?: (contactId: number) => void;
+    onApproveQuotation?: (leadId: number, quotationId: number) => Promise<void>;
+    onManualAcceptQuotation?: (leadId: number, quotationId: number) => Promise<void>;
 }
 
-const ContactCrmView: React.FC<ContactCrmViewProps> = ({ contact, leads, onNavigateBack, user, tasks = [], onSaveTask, onSaveQuotation, quotationTemplates = [], onSaveTemplate, onDeleteTemplate }) => {
+const ContactCrmView: React.FC<ContactCrmViewProps> = ({ contact, leads, onNavigateBack, user, tasks = [], onSaveTask, onSaveQuotation, quotationTemplates = [], onSaveTemplate, onDeleteTemplate, onDeleteContact, onApproveQuotation, onManualAcceptQuotation, onDeleteQuotation }) => {
     const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
     const [quotationViewMode, setQuotationViewMode] = useState<'list' | 'create' | 'edit'>('list');
     const [selectedLeadForQuote, setSelectedLeadForQuote] = useState<CrmLead | null>(null);
@@ -130,12 +133,27 @@ const ContactCrmView: React.FC<ContactCrmViewProps> = ({ contact, leads, onNavig
                             </p>
                         </div>
                     </div>
-                    <button
-                        onClick={() => setIsActivityModalOpen(true)}
-                        className="px-5 py-2.5 bg-gradient-to-r from-lyceum-blue to-blue-600 text-white rounded-xl font-semibold shadow-lg shadow-blue-500/20 hover:shadow-blue-500/30 hover:scale-105 transition-all flex items-center gap-2"
-                    >
-                        <Plus size={18} /> Schedule Activity
-                    </button>
+                    <div className="flex items-center gap-3">
+                        {onDeleteContact && (
+                            <button
+                                onClick={() => {
+                                    if (window.confirm('Are you sure you want to delete this contact? This action cannot be undone.')) {
+                                        onDeleteContact(contact.id);
+                                    }
+                                }}
+                                className="px-5 py-2.5 bg-red-100 text-red-600 dark:bg-red-900/20 dark:text-red-400 rounded-xl font-semibold hover:bg-red-200 dark:hover:bg-red-900/40 transition-all flex items-center gap-2"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /></svg>
+                                Delete
+                            </button>
+                        )}
+                        <button
+                            onClick={() => setIsActivityModalOpen(true)}
+                            className="px-5 py-2.5 bg-gradient-to-r from-lyceum-blue to-blue-600 text-white rounded-xl font-semibold shadow-lg shadow-blue-500/20 hover:shadow-blue-500/30 hover:scale-105 transition-all flex items-center gap-2"
+                        >
+                            <Plus size={18} /> Schedule Activity
+                        </button>
+                    </div>
                 </div>
 
                 {/* Statistics Cards */}
@@ -368,6 +386,18 @@ const ContactCrmView: React.FC<ContactCrmViewProps> = ({ contact, leads, onNavig
                                                     <span className="text-xs font-bold text-gray-400 block group-hover:text-lyceum-blue transition-colors">
                                                         {quote.quotationNumber || `#${quote.id}`}
                                                     </span>
+                                                    {onDeleteQuotation && (
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                onDeleteQuotation(associatedLeads.find(l => l.quotations?.some(q => q.id === quote.id))!.id, quote.id);
+                                                            }}
+                                                            className="p-1 -mr-1 hover:bg-red-100 dark:hover:bg-red-900/30 rounded text-gray-400 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+                                                            title="Delete Quotation"
+                                                        >
+                                                            <Trash2 size={14} />
+                                                        </button>
+                                                    )}
                                                 </div>
                                                 <h4 className="font-bold text-gray-800 dark:text-gray-100 text-sm mb-1">{quote.title}</h4>
 
@@ -377,6 +407,36 @@ const ContactCrmView: React.FC<ContactCrmViewProps> = ({ contact, leads, onNavig
                                                         <IndianRupee size={12} className="mr-0.5" />
                                                         {quote.total.toLocaleString('en-IN')}
                                                     </div>
+                                                </div>
+
+                                                {/* Approval Actions */}
+                                                <div className="mt-3 pt-2 border-t border-gray-50 dark:border-gray-600 flex justify-end gap-2">
+                                                    {quote.status === 'Accepted by Student' && onApproveQuotation && (
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                if (window.confirm('Approve this quotation? This will mark the lead as WON.')) {
+                                                                    onApproveQuotation(associatedLeads.find(l => l.quotations?.some(q => q.id === quote.id))!.id, quote.id);
+                                                                }
+                                                            }}
+                                                            className="px-3 py-1.5 bg-green-600 text-white text-xs font-bold rounded-lg shadow-sm hover:bg-green-700 transition-colors flex items-center gap-1"
+                                                        >
+                                                            <CheckCircle2 size={12} /> Approve
+                                                        </button>
+                                                    )}
+                                                    {quote.status === 'In Review' && onManualAcceptQuotation && (
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                if (window.confirm('Mark this quotation as accepted (verbal)? This will mark the lead as WON.')) {
+                                                                    onManualAcceptQuotation(associatedLeads.find(l => l.quotations?.some(q => q.id === quote.id))!.id, quote.id);
+                                                                }
+                                                            }}
+                                                            className="px-3 py-1.5 bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 text-xs font-bold rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors flex items-center gap-1"
+                                                        >
+                                                            <CheckSquare size={12} /> Mark Accepted
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </div>
                                         ))}

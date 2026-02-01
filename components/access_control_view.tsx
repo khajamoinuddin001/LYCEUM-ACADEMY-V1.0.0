@@ -89,13 +89,13 @@ const ManageAppsModal: React.FC<ManageAppsModalProps> = ({ user, onClose, onSave
 
     return (
         <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6"
             onClick={onClose}
         >
             <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm transition-opacity" aria-hidden="true" />
 
             <div
-                className="relative bg-white dark:bg-gray-800 rounded-xl md:rounded-2xl shadow-2xl w-full max-w-4xl flex flex-col max-h-[90vh] border border-gray-100 dark:border-gray-700 animate-fade-in-fast"
+                className="relative bg-white dark:bg-gray-800 rounded-xl md:rounded-2xl shadow-2xl w-full max-w-4xl flex flex-col h-auto max-h-[85vh] border border-gray-100 dark:border-gray-700 animate-fade-in-fast"
                 onClick={(e) => e.stopPropagation()}
             >
                 <div className="flex items-center justify-between px-4 md:px-6 py-4 md:py-5 border-b border-gray-100 dark:border-gray-700 flex-shrink-0 bg-white dark:bg-gray-800 rounded-t-xl md:rounded-t-2xl">
@@ -336,156 +336,157 @@ const AccessControlView: React.FC<AccessControlViewProps> = ({ users, activityLo
     const staffUsers = users.filter(u => STAFF_ROLES.includes(u.role));
 
     return (
-        <div className="animate-fade-in p-4 md:p-0">
-            {/* Header - Stack on mobile */}
-            <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-4 md:mb-6 gap-3 md:gap-4">
-                <div>
-                    <button
-                        onClick={onNavigateBack}
-                        className="flex items-center text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-lyceum-blue mb-2 transition-colors touch-manipulation"
-                        aria-label="Back to apps"
-                    >
-                        <ArrowLeft size={16} className="mr-2" />
-                        Back to Apps
-                    </button>
-                    <h1 className="text-2xl md:text-3xl font-bold text-gray-800 dark:text-gray-100">Access Control</h1>
+        <>
+            <div className="animate-fade-in p-4 md:p-0">
+                {/* Header - Stack on mobile */}
+                <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-4 md:mb-6 gap-3 md:gap-4">
+                    <div>
+                        <button
+                            onClick={onNavigateBack}
+                            className="flex items-center text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-lyceum-blue mb-2 transition-colors touch-manipulation"
+                            aria-label="Back to apps"
+                        >
+                            <ArrowLeft size={16} className="mr-2" />
+                            Back to Apps
+                        </button>
+                        <h1 className="text-2xl md:text-3xl font-bold text-gray-800 dark:text-gray-100">Access Control</h1>
+                    </div>
+                    {(currentUser.role === 'Admin' || currentUser.permissions['Access Control']?.create) && activeTab === 'staff' && (
+                        <button
+                            onClick={() => setShowNewUserModal(true)}
+                            className="w-full md:w-auto px-4 py-2.5 md:py-2 bg-lyceum-blue text-white rounded-md shadow-sm hover:bg-lyceum-blue-dark focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-800 focus:ring-lyceum-blue transition-colors touch-manipulation flex items-center justify-center gap-2"
+                        >
+                            <UserPlus size={18} />
+                            Add User
+                        </button>
+                    )}
                 </div>
-                {(currentUser.role === 'Admin' || currentUser.permissions['Access Control']?.create) && activeTab === 'staff' && (
-                    <button
-                        onClick={() => setShowNewUserModal(true)}
-                        className="w-full md:w-auto px-4 py-2.5 md:py-2 bg-lyceum-blue text-white rounded-md shadow-sm hover:bg-lyceum-blue-dark focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-800 focus:ring-lyceum-blue transition-colors touch-manipulation flex items-center justify-center gap-2"
-                    >
-                        <UserPlus size={18} />
-                        Add User
-                    </button>
-                )}
-            </div>
 
-            {/* Tabs - Scrollable on mobile */}
-            <div className="mb-4 md:mb-6 border-b border-gray-200 dark:border-gray-700 overflow-x-auto">
-                <nav className="-mb-px flex space-x-4 md:space-x-8 min-w-max px-1">
-                    <button
-                        onClick={() => setActiveTab('staff')}
-                        className={`py-3 md:py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap transition-colors ${activeTab === 'staff'
-                            ? 'border-lyceum-blue text-lyceum-blue'
-                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
-                            }`}
-                    >
-                        Staff Members
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('log')}
-                        className={`py-3 md:py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap transition-colors ${activeTab === 'log'
-                            ? 'border-lyceum-blue text-lyceum-blue'
-                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
-                            }`}
-                    >
-                        Activity Log
-                    </button>
-                </nav>
-            </div>
+                {/* Tabs - Scrollable on mobile */}
+                <div className="mb-4 md:mb-6 border-b border-gray-200 dark:border-gray-700 overflow-x-auto">
+                    <nav className="-mb-px flex space-x-4 md:space-x-8 min-w-max px-1">
+                        <button
+                            onClick={() => setActiveTab('staff')}
+                            className={`py-3 md:py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap transition-colors ${activeTab === 'staff'
+                                ? 'border-lyceum-blue text-lyceum-blue'
+                                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                                }`}
+                        >
+                            Staff Members
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('log')}
+                            className={`py-3 md:py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap transition-colors ${activeTab === 'log'
+                                ? 'border-lyceum-blue text-lyceum-blue'
+                                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                                }`}
+                        >
+                            Activity Log
+                        </button>
+                    </nav>
+                </div>
 
-            {activeTab === 'staff' && (
-                <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
-                    {/* Table - Horizontal scroll on mobile */}
-                    <div className="overflow-x-auto -mx-4 md:mx-0">
-                        <div className="inline-block min-w-full align-middle">
-                            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                                <thead className="bg-gray-50 dark:bg-gray-700/50">
-                                    <tr>
-                                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Name</th>
-                                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Role</th>
-                                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">App Permissions</th>
-                                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                                    {staffUsers.map(user => (
-                                        <tr key={user.id}>
-                                            <td className="px-6 py-4 whitespace-nowrap">
-                                                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{user.name}</div>
-                                                <div className="text-xs text-gray-500 dark:text-gray-400">{user.email}</div>
-                                                {(user as any).phone && <div className="text-xs text-gray-400 dark:text-gray-500">{(user as any).phone}</div>}
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
-                                                <select
-                                                    value={user.role}
-                                                    onChange={(e) => handleRoleChange(user.id, e.target.value as UserRole)}
-                                                    disabled={user.id === currentUser.id}
-                                                    className="w-full p-2 border border-gray-300 rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:ring-lyceum-blue focus:border-lyceum-blue disabled:opacity-50 disabled:cursor-not-allowed"
-                                                    aria-label={`Role for ${user.name}`}
-                                                >
-                                                    {STAFF_ROLES.map(role => (
-                                                        <option key={role} value={role}>{role}</option>
-                                                    ))}
-                                                </select>
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
-                                                <button
-                                                    onClick={() => setModalUser(user)}
-                                                    disabled={user.id === currentUser.id}
-                                                    className="px-3 py-2 text-sm font-medium text-lyceum-blue bg-lyceum-blue/10 rounded-md hover:bg-lyceum-blue/20 dark:bg-lyceum-blue/20 dark:hover:bg-lyceum-blue/30 disabled:opacity-50 disabled:cursor-not-allowed"
-                                                >
-                                                    Manage ({Object.keys(user.permissions || {}).length} Apps)
-                                                </button>
-                                            </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
-                                                <div className="flex items-center gap-2">
-                                                    <button
-                                                        onClick={() => onStartImpersonation(user)}
-                                                        disabled={user.id === currentUser.id}
-                                                        className="flex items-center px-3 py-2 text-sm font-medium text-yellow-700 bg-yellow-100 rounded-md hover:bg-yellow-200 dark:bg-yellow-900/50 dark:text-yellow-300 dark:hover:bg-yellow-900/80 disabled:opacity-50 disabled:cursor-not-allowed"
-                                                        title={`Impersonate ${user.name}`}
-                                                    >
-                                                        <Eye size={16} className="mr-2" />
-                                                        Impersonate
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleEditClick(user)}
-                                                        className="p-2 text-gray-500 hover:text-lyceum-blue dark:hover:text-blue-400"
-                                                        title="Edit User Details"
-                                                    >
-                                                        <UserIcon size={18} />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleDeleteUser(user.id, user.name)}
-                                                        disabled={user.id === currentUser.id}
-                                                        className="p-2 text-gray-500 hover:text-red-600 dark:hover:text-red-400 disabled:opacity-50 disabled:cursor-not-allowed"
-                                                        title={user.id === currentUser.id ? "Can't delete yourself" : `Delete ${user.name}`}
-                                                    >
-                                                        <Trash2 size={18} />
-                                                    </button>
-                                                </div>
-                                            </td>
+                {activeTab === 'staff' && (
+                    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+                        {/* Table - Horizontal scroll on mobile */}
+                        <div className="overflow-x-auto -mx-4 md:mx-0">
+                            <div className="inline-block min-w-full align-middle">
+                                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                                    <thead className="bg-gray-50 dark:bg-gray-700/50">
+                                        <tr>
+                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Name</th>
+                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Role</th>
+                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">App Permissions</th>
+                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Actions</th>
                                         </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                                    </thead>
+                                    <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                                        {staffUsers.map(user => (
+                                            <tr key={user.id}>
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{user.name}</div>
+                                                    <div className="text-xs text-gray-500 dark:text-gray-400">{user.email}</div>
+                                                    {(user as any).phone && <div className="text-xs text-gray-400 dark:text-gray-500">{(user as any).phone}</div>}
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
+                                                    <select
+                                                        value={user.role}
+                                                        onChange={(e) => handleRoleChange(user.id, e.target.value as UserRole)}
+                                                        disabled={user.id === currentUser.id}
+                                                        className="w-full p-2 border border-gray-300 rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:ring-lyceum-blue focus:border-lyceum-blue disabled:opacity-50 disabled:cursor-not-allowed"
+                                                        aria-label={`Role for ${user.name}`}
+                                                    >
+                                                        {STAFF_ROLES.map(role => (
+                                                            <option key={role} value={role}>{role}</option>
+                                                        ))}
+                                                    </select>
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
+                                                    <button
+                                                        onClick={() => setModalUser(user)}
+                                                        disabled={user.id === currentUser.id}
+                                                        className="px-3 py-2 text-sm font-medium text-lyceum-blue bg-lyceum-blue/10 rounded-md hover:bg-lyceum-blue/20 dark:bg-lyceum-blue/20 dark:hover:bg-lyceum-blue/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    >
+                                                        Manage ({Object.keys(user.permissions || {}).length} Apps)
+                                                    </button>
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
+                                                    <div className="flex items-center gap-2">
+                                                        <button
+                                                            onClick={() => onStartImpersonation(user)}
+                                                            disabled={user.id === currentUser.id}
+                                                            className="flex items-center px-3 py-2 text-sm font-medium text-yellow-700 bg-yellow-100 rounded-md hover:bg-yellow-200 dark:bg-yellow-900/50 dark:text-yellow-300 dark:hover:bg-yellow-900/80 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                            title={`Impersonate ${user.name}`}
+                                                        >
+                                                            <Eye size={16} className="mr-2" />
+                                                            Impersonate
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleEditClick(user)}
+                                                            className="p-2 text-gray-500 hover:text-lyceum-blue dark:hover:text-blue-400"
+                                                            title="Edit User Details"
+                                                        >
+                                                            <UserIcon size={18} />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleDeleteUser(user.id, user.name)}
+                                                            disabled={user.id === currentUser.id}
+                                                            className="p-2 text-gray-500 hover:text-red-600 dark:hover:text-red-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                            title={user.id === currentUser.id ? "Can't delete yourself" : `Delete ${user.name}`}
+                                                        >
+                                                            <Trash2 size={18} />
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )}
 
-            {activeTab === 'log' && (
-                <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
-                    <div className="p-4">
-                        <h3 className="text-lg font-semibold">Administrator Activity</h3>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">Recent administrative actions are logged here.</p>
+                {activeTab === 'log' && (
+                    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+                        <div className="p-4">
+                            <h3 className="text-lg font-semibold">Administrator Activity</h3>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">Recent administrative actions are logged here.</p>
+                        </div>
+                        <ul className="divide-y divide-gray-200 dark:divide-gray-700 max-h-[60vh] overflow-y-auto">
+                            {activityLog.map(log => (
+                                <li key={log.id} className="p-4 flex items-center justify-between">
+                                    <div>
+                                        <p className="text-sm font-medium text-gray-800 dark:text-gray-100">{log.action}</p>
+                                        <p className="text-xs text-gray-500 dark:text-gray-400">by {log.adminName}</p>
+                                    </div>
+                                    <p className="text-xs text-gray-400 dark:text-gray-500">{new Date(log.timestamp).toLocaleString()}</p>
+                                </li>
+                            ))}
+                        </ul>
                     </div>
-                    <ul className="divide-y divide-gray-200 dark:divide-gray-700 max-h-[60vh] overflow-y-auto">
-                        {activityLog.map(log => (
-                            <li key={log.id} className="p-4 flex items-center justify-between">
-                                <div>
-                                    <p className="text-sm font-medium text-gray-800 dark:text-gray-100">{log.action}</p>
-                                    <p className="text-xs text-gray-500 dark:text-gray-400">by {log.adminName}</p>
-                                </div>
-                                <p className="text-xs text-gray-400 dark:text-gray-500">{new Date(log.timestamp).toLocaleString()}</p>
-                            </li>
-                        ))}
-                    </ul>
-                </div>
-            )}
-
+                )}
+            </div>
 
             {
                 modalUser && (
@@ -652,7 +653,7 @@ const AccessControlView: React.FC<AccessControlViewProps> = ({ users, activityLo
               @keyframes fade-in-fast { from { opacity: 0; } to { opacity: 1; } }
               .animate-fade-in-fast { animation: fade-in-fast 0.2s ease-out forwards; }
             `}</style>
-        </div>
+        </>
     );
 };
 

@@ -40,11 +40,30 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, users, onRegister, onFor
     const [registerAsAdmin, setRegisterAsAdmin] = useState(false);
     const [adminKey, setAdminKey] = useState('');
 
+    // Verification UI State
+    const [verificationSent, setVerificationSent] = useState(false);
+    const [resendCountdown, setResendCountdown] = useState(0);
+    const [registeredEmail, setRegisteredEmail] = useState('');
+    const [isResending, setIsResending] = useState(false);
+
     useEffect(() => {
         if (initialIsRegister !== undefined) {
             setIsRegisterView(initialIsRegister);
         }
     }, [initialIsRegister]);
+
+    // Countdown Timer Effect
+    useEffect(() => {
+        let timer: NodeJS.Timeout;
+        if (resendCountdown > 0) {
+            timer = setInterval(() => {
+                setResendCountdown((prev) => prev - 1);
+            }, 1000);
+        }
+        return () => {
+            if (timer) clearInterval(timer);
+        };
+    }, [resendCountdown]);
 
     const handleLoginSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -71,8 +90,28 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, users, onRegister, onFor
         const result = await onRegister(name, email, password, registerAsAdmin ? adminKey : undefined);
         if (!result.success) {
             setError(result.message);
+        } else {
+            // Registration successful - show verification UI
+            setRegisteredEmail(email);
+            setVerificationSent(true);
+            setResendCountdown(30);
+            setError(''); // Clear any previous errors
         }
         setIsLoading(false);
+    };
+
+    const handleResendVerification = async () => {
+        if (!registeredEmail) return;
+        setIsResending(true);
+        try {
+            await api.resendVerificationEmail(registeredEmail);
+            setResendCountdown(30);
+            alert('Verification email sent successfully!');
+        } catch (error: any) {
+            setError(error.message || 'Failed to resend verification email.');
+        } finally {
+            setIsResending(false);
+        }
     };
 
     const toggleView = (e: React.MouseEvent) => {
@@ -84,6 +123,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, users, onRegister, onFor
         setName('');
         setRegisterAsAdmin(false);
         setAdminKey('');
+        setVerificationSent(false); // Reset verification state
     };
     const handleGoogleSuccess = async (credentialResponse: any) => {
         if (credentialResponse.credential) {
@@ -120,14 +160,14 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, users, onRegister, onFor
                     </div>
                     <h1 className="text-3xl font-black text-center text-lyceum-blue tracking-tighter">lyceum</h1>
                     <h2 className="mt-2 text-xl font-semibold text-center text-gray-800 dark:text-gray-100">
-                        {isRegisterView ? 'Create Student Account' : 'Welcome Back!'}
+                        {verificationSent ? 'Account Created' : isRegisterView ? 'Create Student Account' : 'Welcome Back!'}
                     </h2>
                     <p className="mt-1 text-sm text-center text-gray-500 dark:text-gray-400">
-                        {isRegisterView ? 'Register to start your journey' : 'Sign in to continue'}
+                        {verificationSent ? 'Please verify your email' : isRegisterView ? 'Register to start your journey' : 'Sign in to continue'}
                     </p>
                 </div>
 
-                {isRegisterView ? (
+                {isRegisterView && !verificationSent ? (
                     <form className="mt-8 space-y-6" onSubmit={handleRegisterSubmit}>
                         <div>
                             <label htmlFor="name" className="sr-only">Full Name</label>
@@ -190,6 +230,43 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, users, onRegister, onFor
                             </a>
                         </div>
                     </form>
+                ) : verificationSent ? (
+                    <div className="mt-8 space-y-6">
+                        <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-6 text-center">
+                            <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100 dark:bg-green-900 mb-4">
+                                <Mail className="h-6 w-6 text-green-600 dark:text-green-400" />
+                            </div>
+                            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                                Check your email
+                            </h3>
+                            <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
+                                We've sent a verification link to <strong>{registeredEmail}</strong>. Please check your inbox to activate your account.
+                            </p>
+
+                            <div className="space-y-3">
+                                <button
+                                    type="button"
+                                    onClick={handleResendVerification}
+                                    disabled={resendCountdown > 0 || isResending}
+                                    className="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-lyceum-blue hover:bg-lyceum-blue-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-lyceum-blue disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    {isResending ? 'Sending...' : resendCountdown > 0 ? `Resend email in ${resendCountdown}s` : 'Resend Verification Email'}
+                                </button>
+
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setVerificationSent(false);
+                                        setIsRegisterView(false);
+                                        setError('');
+                                    }}
+                                    className="w-full inline-flex justify-center items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-lyceum-blue dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-600"
+                                >
+                                    Back to Login
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                 ) : (
                     <form className="mt-8 space-y-6" onSubmit={handleLoginSubmit}>
                         <div>

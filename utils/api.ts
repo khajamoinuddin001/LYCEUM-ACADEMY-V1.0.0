@@ -58,7 +58,7 @@ async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promi
   });
 
   if (!response.ok) {
-    if (response.status === 401) {
+    if (response.status === 401 && !endpoint.includes('/auth/login')) {
       removeToken();
       window.location.href = '/';
     }
@@ -92,6 +92,13 @@ export const registerStudent = async (name: string, email: string, password: str
   return apiRequest<{ success: boolean; message: string }>('/auth/register', {
     method: 'POST',
     body: JSON.stringify({ name, email, password, ...(adminKey && { adminKey }) }),
+  });
+};
+
+export const resendVerificationEmail = async (email: string): Promise<{ success: boolean; message: string }> => {
+  return apiRequest<{ success: boolean; message: string }>('/auth/resend-verification', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
   });
 };
 
@@ -228,6 +235,13 @@ export const deleteDocument = async (documentId: number): Promise<void> => {
 // Contacts
 export const getContacts = async (): Promise<Contact[]> => {
   return apiRequest<Contact[]>('/contacts');
+};
+
+export const deleteContact = async (id: number): Promise<Contact[]> => {
+  await apiRequest<{ success: boolean; message: string }>(`/contacts/${id}`, {
+    method: 'DELETE',
+  });
+  return getContacts();
 };
 
 export const saveContact = async (contactToSave: Contact, isNew: boolean): Promise<Contact> => {
@@ -396,6 +410,74 @@ export const markQuotationAccepted = async (leadId: number, quotationId: number)
   if (lead.stage === 'Won') {
     await createAccountsReceivable(leadId, quotationId);
   }
+
+  return getLeads();
+};
+
+export const approveQuotation = async (leadId: number, quotationId: number): Promise<CrmLead[]> => {
+  const lead = await apiRequest<CrmLead>(`/leads/${leadId}`, { method: 'GET' });
+  const quotations = [...(lead.quotations || [])];
+  const quotationIndex = quotations.findIndex(q => q.id === quotationId);
+
+  if (quotationIndex === -1) {
+    throw new Error('Quotation not found');
+  }
+
+  // Update Quotation Status
+  quotations[quotationIndex] = {
+    ...quotations[quotationIndex],
+    status: 'Agreed'
+  };
+
+  // Update Lead Stage to Won & Save
+  await apiRequest(`/leads/${leadId}`, {
+    method: 'PUT',
+    body: JSON.stringify({ ...lead, stage: 'Won', quotations }),
+  });
+
+  // Create AR
+  await createAccountsReceivable(leadId, quotationId);
+
+  return getLeads();
+};
+
+export const deleteQuotation = async (leadId: number, quotationId: number): Promise<CrmLead[]> => {
+  const lead = await apiRequest<CrmLead>(`/leads/${leadId}`, { method: 'GET' });
+  const quotations = (lead.quotations || []).filter(q => q.id !== quotationId);
+
+  await apiRequest(`/leads/${leadId}`, {
+    method: 'PUT',
+    body: JSON.stringify({ ...lead, quotations }),
+  });
+
+  return getLeads();
+};
+
+export const manualAcceptQuotation = async (leadId: number, quotationId: number): Promise<CrmLead[]> => {
+  const lead = await apiRequest<CrmLead>(`/leads/${leadId}`, { method: 'GET' });
+  const quotations = [...(lead.quotations || [])];
+  const quotationIndex = quotations.findIndex(q => q.id === quotationId);
+
+  if (quotationIndex === -1) {
+    throw new Error('Quotation not found');
+  }
+
+  // Update Quotation Status
+  quotations[quotationIndex] = {
+    ...quotations[quotationIndex],
+    studentAccepted: true,
+    studentAcceptedAt: new Date().toISOString(),
+    status: 'Agreed'
+  };
+
+  // Update Lead Stage to Won & Save
+  await apiRequest(`/leads/${leadId}`, {
+    method: 'PUT',
+    body: JSON.stringify({ ...lead, stage: 'Won', quotations }),
+  });
+
+  // Create AR
+  await createAccountsReceivable(leadId, quotationId);
 
   return getLeads();
 };

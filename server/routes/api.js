@@ -325,6 +325,7 @@ const transformContact = (dbContact) => {
     lmsProgress: typeof dbContact.lms_progress === 'object' ? dbContact.lms_progress : JSON.parse(dbContact.lms_progress || '{}'),
     lmsNotes: typeof dbContact.lms_notes === 'object' ? dbContact.lms_notes : JSON.parse(dbContact.lms_notes || '{}'),
     courses: Array.isArray(dbContact.courses) ? dbContact.courses : JSON.parse(dbContact.courses || '[]'),
+    metadata: typeof dbContact.metadata === 'object' ? dbContact.metadata : JSON.parse(dbContact.metadata || '{}')
   };
   return contact;
 };
@@ -520,8 +521,8 @@ router.post('/contacts', authenticateToken, async (req, res) => {
     agent_assigned, checklist, activity_log, recorded_sessions, documents, visa_information,
     lms_progress, lms_notes, gpa, advisor, courses, street1, street2, city, state, zip,
     country, gstin, pan, tags, visa_type, country_of_application, source, contact_type,
-    stream, intake, counselor_assigned, application_email, application_password, avatar_url
-  ) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39)
+    stream, intake, counselor_assigned, application_email, application_password, avatar_url, metadata
+  ) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40)
 RETURNING *
   `, [
       contact.userId || null,
@@ -562,10 +563,49 @@ RETURNING *
       contact.counselorAssigned || null,
       contact.applicationEmail || null,
       contact.applicationPassword || null,
-      contact.avatarUrl || null
+      contact.avatarUrl || null,
+      JSON.stringify(contact.metadata || {})
     ]);
     res.json(transformContact(result.rows[0]));
   } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
+// Delete Contact
+router.delete('/contacts/:id', authenticateToken, async (req, res) => {
+  try {
+    const contactId = parseInt(req.params.id);
+
+    // Permission check
+    if (req.user.role !== 'Admin' && req.user.role !== 'Staff') {
+      // Students cannot delete contacts? Or maybe they can?
+      // Usually only Admin/Staff should delete.
+      if (req.user.role !== 'Admin' && (!req.user.permissions || !req.user.permissions['Contacts']?.delete)) {
+        return res.status(403).json({ error: 'Permission denied' });
+      }
+    }
+
+    // Check if contact exists
+    const check = await query('SELECT * FROM contacts WHERE id = $1', [contactId]);
+    if (check.rows.length === 0) {
+      return res.status(404).json({ error: 'Contact not found' });
+    }
+    const contact = check.rows[0];
+
+    // Delete contact first
+    await query('DELETE FROM contacts WHERE id = $1', [contactId]);
+
+    // If contact has a linked user, delete the user account as well
+    if (contact.user_id) {
+      await query('DELETE FROM users WHERE id = $1', [contact.user_id]);
+      console.log(`Associated user account (ID: ${contact.user_id}) deleted for contact ${contactId}`);
+    }
+
+    res.json({ success: true, message: 'Contact and associated user account deleted successfully' });
+  } catch (error) {
+    console.error('Delete contact error:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -589,7 +629,7 @@ name = $1, email = $2, phone = $3, department = $4, major = $5, notes = $6,
   city = $21, state = $22, zip = $23, country = $24, gstin = $25, pan = $26, tags = $27,
   visa_type = $28, country_of_application = $29, source = $30, contact_type = $31,
   stream = $32, intake = $33, counselor_assigned = $34, application_email = $35,
-  application_password = $36, avatar_url = $37
+  application_password = $36, metadata = $37
       WHERE id = $38
   `, [
       contact.name,
@@ -628,7 +668,7 @@ name = $1, email = $2, phone = $3, department = $4, major = $5, notes = $6,
       contact.counselorAssigned,
       contact.applicationEmail,
       contact.applicationPassword,
-      contact.avatarUrl,
+      JSON.stringify(contact.metadata || {}),
       req.params.id
     ]);
 
@@ -1321,7 +1361,83 @@ router.post('/transactions', authenticateToken, async (req, res) => {
       transaction.paymentMethod || null,
       transaction.dueDate || null
     ]);
-    res.json(result.rows[0]);
+    const newTransaction = result.rows[0];
+
+    // Automatic AR Deduction for Invoices (and Income if linked to contact)
+    // First, robustly determine contact ID
+    let targetContactId = newTransaction.contact_id;
+
+    if (!targetContactId && newTransaction.customer_name) {
+      try {
+        const nameRes = await query('SELECT id FROM contacts WHERE LOWER(name) = LOWER($1)', [newTransaction.customer_name]);
+        if (nameRes.rows.length > 0) {
+          targetContactId = nameRes.rows[0].id;
+          console.log(`🔗 Linked Invoice ${newTransaction.id} to Contact ${targetContactId} by name "${newTransaction.customer_name}"`);
+          // Optionally back-fill the transaction
+          await query('UPDATE transactions SET contact_id = $1 WHERE id = $2', [targetContactId, newTransaction.id]);
+        }
+      } catch (linkError) {
+        console.error('Failed to link contact by name:', linkError);
+      }
+    }
+
+    if ((newTransaction.type === 'Invoice' || newTransaction.type === 'Income') && targetContactId) {
+      try {
+        const contactId = targetContactId;
+        const contactRes = await query('SELECT metadata FROM contacts WHERE id = $1', [contactId]);
+
+        if (contactRes.rows.length > 0) {
+          const contact = contactRes.rows[0];
+          let metadata = contact.metadata || {};
+
+          // Ensure structure exists
+          if (typeof metadata === 'string') {
+            try { metadata = JSON.parse(metadata); } catch (e) { metadata = {}; }
+          }
+          if (!metadata.accountsReceivable) metadata.accountsReceivable = [];
+
+          let amountToDeduct = parseFloat(newTransaction.amount);
+          let arUpdated = false;
+
+          // Process AR entries (FIFO)
+          metadata.accountsReceivable = metadata.accountsReceivable.map(entry => {
+            if (amountToDeduct <= 0 || entry.status === 'Paid') return entry;
+
+            const remaining = parseFloat(entry.remainingAmount);
+            if (remaining <= 0) return entry;
+
+            let deduction = 0;
+            if (remaining > amountToDeduct) {
+              // Partial deduction of this entry, fully covers the invoice
+              deduction = amountToDeduct;
+              entry.remainingAmount = remaining - deduction;
+              entry.paidAmount = (entry.paidAmount || 0) + deduction;
+              amountToDeduct = 0;
+            } else {
+              // Fully deduct this entry, invoice might still have remainder
+              deduction = remaining;
+              entry.remainingAmount = 0;
+              entry.paidAmount = (entry.paidAmount || 0) + deduction;
+              entry.status = 'Paid';
+              entry.paidAt = new Date().toISOString();
+              amountToDeduct -= deduction;
+            }
+            arUpdated = true;
+            return entry;
+          });
+
+          if (arUpdated) {
+            await query('UPDATE contacts SET metadata = $1 WHERE id = $2', [JSON.stringify(metadata), contactId]);
+            console.log(`✅ Updated AR for Contact ${contactId} based on Invoice ${newTransaction.id}`);
+          }
+        }
+      } catch (arError) {
+        console.error('Failed to update Accounts Receivable:', arError);
+        // Do not fail the transaction creation itself
+      }
+    }
+
+    res.json(newTransaction);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

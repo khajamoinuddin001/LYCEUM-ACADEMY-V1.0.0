@@ -214,10 +214,30 @@ const NewContactForm: React.FC<NewContactFormProps> = ({
     const [isAvatarMenuOpen, setIsAvatarMenuOpen] = useState(false);
     const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
     const [pendingPhotoBlob, setPendingPhotoBlob] = useState<Blob | null>(null);
+    const [logNoteText, setLogNoteText] = useState('');
     const avatarMenuRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const isNew = !contact;
     const canWrite = user.role === 'Admin' || (isNew ? user.permissions?.['Contacts']?.create : user.permissions?.['Contacts']?.update);
+
+    const handleAddLogNote = async () => {
+        if (!logNoteText.trim() || !contact) return;
+
+        const newActivity: ContactActivity = {
+            id: Date.now() + Math.random(), // Ensure unique ID
+            timestamp: new Date().toISOString(),
+            action: 'note',
+            description: logNoteText
+        };
+
+        const updatedContact = {
+            ...contact,
+            activityLog: [newActivity, ...(contact.activityLog || [])]
+        };
+
+        await onSave(updatedContact);
+        setLogNoteText('');
+    };
 
 
     useEffect(() => {
@@ -678,9 +698,32 @@ const NewContactForm: React.FC<NewContactFormProps> = ({
                     </div>
                     <div className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700">
                         <h3 className="text-sm font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Recent Activity</h3>
-                        <ul className="mt-3 space-y-4 max-h-96 overflow-y-auto">
-                            {contact?.activityLog?.map(activity => (
-                                <li key={activity.id} className="flex items-start gap-3">
+
+                        {/* Log Note Input */}
+                        <div className="mt-3 mb-4">
+                            <div className="flex gap-2">
+                                <input
+                                    value={logNoteText}
+                                    onChange={(e) => setLogNoteText(e.target.value)}
+                                    placeholder="Add a log note..."
+                                    disabled={!canWrite}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleAddLogNote()}
+                                    className="flex-1 text-sm bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-md px-3 py-2 focus:outline-none focus:border-lyceum-blue disabled:opacity-60 disabled:cursor-not-allowed"
+                                />
+                                <button
+                                    onClick={handleAddLogNote}
+                                    disabled={!logNoteText.trim() || !canWrite}
+                                    className="p-2 bg-lyceum-blue text-white rounded-md hover:bg-lyceum-blue-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                    title="Add Note"
+                                >
+                                    <Plus size={16} />
+                                </button>
+                            </div>
+                        </div>
+
+                        <ul className="space-y-4 max-h-96 overflow-y-auto custom-scrollbar pr-2">
+                            {contact?.activityLog?.map((activity, index) => (
+                                <li key={`${activity.id}-${index}`} className="flex items-start gap-3">
                                     <ActivityIcon action={activity.action} />
                                     <div>
                                         <p className="text-sm text-gray-700 dark:text-gray-200">{activity.description}</p>

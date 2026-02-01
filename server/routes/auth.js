@@ -187,6 +187,58 @@ router.post('/register', async (req, res) => {
   }
 });
 
+// Resend Verification Email
+router.post('/resend-verification', async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
+    const result = await query('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
+
+    if (result.rows.length === 0) {
+      // Return success to avoid email enumeration
+      return res.json({ success: true, message: 'If an account exists, a verification email has been sent.' });
+    }
+
+    const user = result.rows[0];
+
+    if (user.is_verified) {
+      return res.status(400).json({ error: 'This account is already verified. Please log in.' });
+    }
+
+    // Reuse existing token or generate new one if missing
+    let verificationToken = user.verification_token;
+    if (!verificationToken) {
+      const crypto = await import('crypto');
+      verificationToken = crypto.randomBytes(32).toString('hex');
+      await query('UPDATE users SET verification_token = $1 WHERE id = $2', [verificationToken, user.id]);
+    }
+
+    // Send email
+    try {
+      const { sendVerificationEmail } = await import('../email.js');
+      const emailResult = await sendVerificationEmail(email.toLowerCase(), user.name, verificationToken);
+
+      if (!emailResult.success) {
+        throw new Error(emailResult.error);
+      }
+
+      console.log(`✅ Verification email resent to ${email}`);
+      res.json({ success: true, message: 'Verification email sent successfully.' });
+    } catch (emailError) {
+      console.error('❌ Failed to resend verification email:', emailError);
+      res.status(500).json({ error: 'Failed to send email. Please try again later.' });
+    }
+
+  } catch (error) {
+    console.error('Resend verification error:', error);
+    res.status(500).json({ error: 'Request failed' });
+  }
+});
+
 // Verify Email
 router.post('/verify-email', async (req, res) => {
   try {

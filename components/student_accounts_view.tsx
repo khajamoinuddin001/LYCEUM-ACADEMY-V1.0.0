@@ -1,15 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { Receipt, Calendar, DollarSign, FileText, AlertCircle } from 'lucide-react';
-import type { Contact, AccountingTransaction } from '../types';
+import type { Contact, AccountingTransaction, Quotation } from '../types';
 import * as api from '../utils/api';
+import TransactionPrintView from './transaction_print_view';
+import QuotationDetailsModal from './quotation_details_modal';
 
 interface StudentAccountsViewProps {
     student: Contact;
+    quotations?: Quotation[];
 }
 
-const StudentAccountsView: React.FC<StudentAccountsViewProps> = ({ student }) => {
+const StudentAccountsView: React.FC<StudentAccountsViewProps> = ({ student, quotations = [] }) => {
     const [transactions, setTransactions] = useState<AccountingTransaction[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [viewingTransaction, setViewingTransaction] = useState<AccountingTransaction | null>(null);
+    const [viewingQuotation, setViewingQuotation] = useState<Quotation | null>(null);
 
     useEffect(() => {
         loadTransactions();
@@ -19,11 +24,41 @@ const StudentAccountsView: React.FC<StudentAccountsViewProps> = ({ student }) =>
         try {
             setIsLoading(true);
             const allTransactions = await api.getTransactions();
-            // Filter to show only this student's transactions AND only Invoices
-            const studentTransactions = allTransactions.filter(
-                (t) => t.contactId === student.id && t.type === 'Income'
+
+            // 1. Get real transactions (Invoices/Income) - Match by ID or Name
+            const realTransactions = allTransactions.filter(
+                (t) => (t.contactId === student.id || (t.customerName && student.name && t.customerName.toLowerCase().trim() === student.name.toLowerCase().trim())) && (t.type === 'Income' || t.type === 'Invoice')
             );
-            setTransactions(studentTransactions);
+
+            // 2. Synthesize AR entries from metadata
+            const arEntries = (student as any).metadata?.accountsReceivable || [];
+            const arTransactions: AccountingTransaction[] = arEntries.map((ar: any) => {
+                let status: 'Pending' | 'Paid' | 'Overdue' | 'Cancelled' = 'Pending';
+                if (ar.status === 'Paid') status = 'Paid';
+                else if (ar.status === 'Overdue') status = 'Overdue';
+
+                return {
+                    id: `AR-${ar.id}`,
+                    contactId: student.id,
+                    customerName: student.name,
+                    date: ar.createdAt,
+                    description: `Quotation #${ar.quotationRef} (Due)`,
+                    type: 'Due', // Distinct type for AR
+                    status: status,
+                    amount: ar.remainingAmount, // Show remaining due
+                    paymentMethod: 'Online',
+                    invoiceNumber: ar.quotationRef, // Store ref for lookup
+                    createdAt: ar.createdAt,
+                    updatedAt: ar.updatedAt
+                } as AccountingTransaction;
+            }).filter((t: AccountingTransaction) => t.status !== 'Paid' && t.amount > 0); // Only show unpaid AR as "Due"
+
+            // Combine and sort by date desc
+            const combined = [...arTransactions, ...realTransactions].sort((a, b) =>
+                new Date(b.date).getTime() - new Date(a.date).getTime()
+            );
+
+            setTransactions(combined);
         } catch (error) {
             console.error('Error loading transactions:', error);
         } finally {
@@ -47,38 +82,79 @@ const StudentAccountsView: React.FC<StudentAccountsViewProps> = ({ student }) =>
     };
 
     const getTypeColor = (type: string) => {
-        return type === 'Income'
+        if (type === 'Due') return 'text-orange-600 dark:text-orange-400';
+        return type === 'Income' || type === 'Invoice'
             ? 'text-green-600 dark:text-green-400'
             : 'text-red-600 dark:text-red-400';
     };
 
     const formatCurrency = (amount: number) => {
-        return new Intl.NumberFormat('en-US', {
+        return new Intl.NumberFormat('en-IN', {
             style: 'currency',
-            currency: 'USD',
+            currency: 'INR',
+            maximumFractionDigits: 0
         }).format(amount);
     };
 
     const formatDate = (dateString: string) => {
-        return new Date(dateString).toLocaleDateString('en-US', {
+        return new Date(dateString).toLocaleDateString('en-IN', {
             year: 'numeric',
             month: 'short',
             day: 'numeric',
         });
     };
 
-    const totalAmount = transactions.reduce((sum, t) => sum + t.amount, 0);
+    const handleIDClick = (transaction: AccountingTransaction) => {
+        if (transaction.type === 'Due') {
+            // It's a Quotation AR entry. Find the quotation.
+            // The 'invoiceNumber' field in our synthetic transaction holds the quotationRef (e.g., Q-1001 or just the ID)
+            const ref = transaction.invoiceNumber;
+            // The Quotations list has 'quotationNumber' (e.g. Q-1001) and 'id' (numeric)
+
+            let quotation = quotations.find(q => q.quotationNumber === ref);
+            if (!quotation && ref) {
+                // Try parsing ID if ref is just a number string? Or if ref matches ID
+                quotation = quotations.find(q => q.id.toString() === ref || q.quotationNumber === `Q-${ref}`);
+            }
+
+            if (quotation) {
+                setViewingQuotation(quotation);
+            } else {
+                console.warn('Quotation not found for ref:', ref);
+                alert('Detailed quotation not found.');
+            }
+        } else {
+            // It's a standard Invoice/Receipt
+            setViewingTransaction(transaction);
+        }
+    };
+
+    // Calculate Totals specifically based on User Requirements
+    // 1. Total Amount = Total Agreed Amount (Sum of all AR entries' original totals)
+    const arEntries = (student as any).metadata?.accountsReceivable || [];
+    const totalAgreedAmount = arEntries.reduce((sum: number, entry: any) => {
+        const remaining = parseFloat(entry.remainingAmount) || 0;
+        const paid = parseFloat(entry.paidAmount) || 0;
+        return sum + remaining + paid;
+    }, 0);
+
+    // 2. Paid Amount = Sum of Paid Invoices/Income
     const paidAmount = transactions
-        .filter((t) => t.status?.toLowerCase() === 'paid')
+        .filter((t) => (t.type === 'Income' || t.type === 'Invoice') && t.status === 'Paid')
         .reduce((sum, t) => sum + t.amount, 0);
-    const pendingAmount = transactions
-        .filter((t) => t.status?.toLowerCase() === 'pending')
+
+    // 3. Pending = Total Agreed - Total Invoiced (regardless of payment status)
+    const totalInvoiced = transactions
+        .filter((t) => (t.type === 'Income' || t.type === 'Invoice'))
         .reduce((sum, t) => sum + t.amount, 0);
+
+    const calculatedPending = Math.max(0, totalAgreedAmount - totalInvoiced);
+    const totalPending = arEntries.length > 0 ? calculatedPending : 0;
 
     if (isLoading) {
         return (
             <div className="flex items-center justify-center h-64">
-                <div className="text-gray-500">Loading invoices...</div>
+                <div className="text-gray-500">Loading payment records...</div>
             </div>
         );
     }
@@ -86,13 +162,12 @@ const StudentAccountsView: React.FC<StudentAccountsViewProps> = ({ student }) =>
     return (
         <div className="h-full bg-gray-50 dark:bg-gray-900 p-6">
             <div className="max-w-6xl mx-auto">
-                {/* Header */}
                 <div className="mb-6">
                     <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-                        My Invoices
+                        Accounts & Billing
                     </h1>
                     <p className="text-gray-600 dark:text-gray-400">
-                        View all your payment records and invoices
+                        Manage your payments, invoices, and quotations
                     </p>
                 </div>
 
@@ -103,7 +178,7 @@ const StudentAccountsView: React.FC<StudentAccountsViewProps> = ({ student }) =>
                             <div>
                                 <p className="text-sm text-gray-600 dark:text-gray-400">Total Amount</p>
                                 <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                                    {formatCurrency(totalAmount)}
+                                    {formatCurrency(totalAgreedAmount)}
                                 </p>
                             </div>
                             <DollarSign className="text-blue-500" size={32} />
@@ -127,7 +202,7 @@ const StudentAccountsView: React.FC<StudentAccountsViewProps> = ({ student }) =>
                             <div>
                                 <p className="text-sm text-gray-600 dark:text-gray-400">Pending</p>
                                 <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
-                                    {formatCurrency(pendingAmount)}
+                                    {formatCurrency(totalPending)}
                                 </p>
                             </div>
                             <AlertCircle className="text-yellow-500" size={32} />
@@ -179,12 +254,15 @@ const StudentAccountsView: React.FC<StudentAccountsViewProps> = ({ student }) =>
                                             className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
                                         >
                                             <td className="px-6 py-4 whitespace-nowrap">
-                                                <div className="flex items-center">
-                                                    <FileText size={16} className="text-gray-400 mr-2" />
-                                                    <span className="text-sm font-medium text-gray-900 dark:text-white">
-                                                        INV-{transaction.id.toString().padStart(4, '0')}
+                                                <button
+                                                    onClick={() => handleIDClick(transaction)}
+                                                    className="flex items-center group text-lyceum-blue hover:text-lyceum-blue-dark transition-colors"
+                                                >
+                                                    <FileText size={16} className="mr-2 opacity-70 group-hover:opacity-100" />
+                                                    <span className="text-sm font-medium underline decoration-dotted underline-offset-2">
+                                                        {transaction.id.toString().startsWith('AR-') ? transaction.id : `INV-${transaction.id.toString().padStart(4, '0')}`}
                                                     </span>
-                                                </div>
+                                                </button>
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
@@ -243,6 +321,23 @@ const StudentAccountsView: React.FC<StudentAccountsViewProps> = ({ student }) =>
                             </div>
                         </div>
                     </div>
+                )}
+
+                {/* Modals */}
+                {viewingTransaction && (
+                    <TransactionPrintView
+                        transaction={viewingTransaction}
+                        contact={student}
+                        onClose={() => setViewingTransaction(null)}
+                    />
+                )}
+
+                {viewingQuotation && (
+                    <QuotationDetailsModal
+                        quotation={viewingQuotation}
+                        student={student}
+                        onClose={() => setViewingQuotation(null)}
+                    />
                 )}
             </div>
         </div>

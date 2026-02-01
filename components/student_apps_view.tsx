@@ -83,7 +83,12 @@ const StudentAppsView: React.FC<StudentAppsViewProps> = ({ onAppSelect }) => {
                         <button
                             key={app.name}
                             onClick={() => onAppSelect(app.name)}
-                            className="group relative bg-white dark:bg-gray-800 rounded-xl shadow-md hover:shadow-xl transition-all duration-300 p-6 text-left border border-gray-200 dark:border-gray-700 hover:border-lyceum-blue dark:hover:border-lyceum-blue transform hover:-translate-y-1"
+                            draggable
+                            onDragStart={(e) => {
+                                e.dataTransfer.setData('application/json', JSON.stringify({ name: app.name, type: 'APP_GRID_ITEM' }));
+                                e.dataTransfer.effectAllowed = 'copyMove';
+                            }}
+                            className="group relative bg-white dark:bg-gray-800 rounded-xl shadow-md hover:shadow-xl transition-all duration-300 p-6 text-left border border-gray-200 dark:border-gray-700 hover:border-lyceum-blue dark:hover:border-lyceum-blue transform hover:-translate-y-1 cursor-grab active:cursor-grabbing"
                         >
                             {/* Icon Container */}
                             <div className={`${app.bgColor} ${app.iconColor} w-20 h-20 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300`}>

@@ -392,7 +392,7 @@ export interface LeadDetailsModalProps {
   user: User;
 }
 
-export type TransactionType = 'Income' | 'Purchase' | 'Expense' | 'Transfer';
+export type TransactionType = 'Income' | 'Purchase' | 'Expense' | 'Transfer' | 'Invoice' | 'Bill' | 'Due';
 export type TransactionStatus = 'Paid' | 'Pending' | 'Overdue';
 
 export interface AccountingTransaction {

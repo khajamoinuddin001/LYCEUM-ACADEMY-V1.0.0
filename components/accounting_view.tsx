@@ -60,7 +60,7 @@ const AccountingView: React.FC<AccountingViewProps> = ({
 
         // 1. Total Revenue = Sales (Income)
         const revenue = recentTransactions
-            .filter(t => t.type === 'Income' && t.status === 'Paid')
+            .filter(t => (t.type === 'Income' || t.type === 'Invoice') && t.status === 'Paid')
             .reduce((sum, t) => sum + t.amount, 0);
 
         // 2. Purchases
@@ -88,7 +88,7 @@ const AccountingView: React.FC<AccountingViewProps> = ({
                 return sum + t.amount; // To Cash (assuming only Bank/Cash exist)
             }
             if (t.paymentMethod !== 'Cash') return sum;
-            return sum + (t.type === 'Income' ? t.amount : -t.amount);
+            return sum + ((t.type === 'Income' || t.type === 'Invoice') ? t.amount : -t.amount);
         }, 0));
 
         const accountBalance = Math.round(transactions.filter(t => t.status === 'Paid').reduce((sum, t) => {
@@ -97,7 +97,7 @@ const AccountingView: React.FC<AccountingViewProps> = ({
                 return sum + t.amount; // To Bank
             }
             if (t.paymentMethod !== 'Online') return sum;
-            return sum + (t.type === 'Income' ? t.amount : -t.amount);
+            return sum + ((t.type === 'Income' || t.type === 'Invoice') ? t.amount : -t.amount);
         }, 0));
 
         // Accounts Receivable - sum of all expected incoming payments
@@ -143,7 +143,41 @@ const AccountingView: React.FC<AccountingViewProps> = ({
 
     // Recent transactions (last 20) with search and filter
     const recentTransactions = useMemo(() => {
-        let filtered = [...transactions];
+        // 1. Start with regular transactions
+        let combined: AccountingTransaction[] = [...transactions];
+
+        // 2. Convert AR Entries from Contacts into pseudo-transactions for display
+        contacts.forEach(contact => {
+            const arEntries = (contact as any).metadata?.accountsReceivable || [];
+            arEntries.forEach((ar: any) => {
+                // Only show outstanding or partially paid AR entries as 'Income' (Pending)
+                const isPaid = ar.status === 'Paid';
+                // Define status mapping
+                let status: 'Pending' | 'Paid' | 'Overdue' | 'Cancelled' = 'Pending';
+                if (ar.status === 'Paid') status = 'Paid';
+                else if (ar.status === 'Overdue') status = 'Overdue';
+
+                const arTransaction: AccountingTransaction = {
+                    id: `AR-${ar.id}`, // Unique ID prefix
+                    date: ar.createdAt,
+                    amount: ar.remainingAmount, // Show remaining pending amount
+                    type: 'Due',
+                    // category: 'Sales', // Removed as it is not part of AccountingTransaction type
+                    description: `Quotation #${ar.quotationRef} (Due)`,
+                    status: status,
+                    paymentMethod: 'Online',
+                    contactId: contact.id,
+                    contact: contact.name,
+                    customerName: contact.name, // Added mapping for customerName
+                    invoiceNumber: ar.quotationRef
+                };
+                combined.push(arTransaction);
+            });
+        });
+
+
+        // 3. Apply Filters
+        let filtered = combined;
 
         // Apply type filter
         if (typeFilter !== 'All') {
@@ -172,8 +206,8 @@ const AccountingView: React.FC<AccountingViewProps> = ({
 
         return filtered
             .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-            .slice(0, 20);
-    }, [transactions, searchQuery, typeFilter]);
+            .slice(0, 50); // Increased slice to show more context
+    }, [transactions, contacts, searchQuery, typeFilter, startDate, endDate]);
 
     const formatCurrency = (amount: number) => {
         return new Intl.NumberFormat('en-IN', {
@@ -628,6 +662,18 @@ const AccountingView: React.FC<AccountingViewProps> = ({
             </div>
         </div>
     );
+};
+
+const getTypeColor = (type: string) => {
+    switch (type) {
+        case 'Income': return 'text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/20 px-2 py-1 rounded-full text-xs';
+        case 'Invoice': return 'text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/20 px-2 py-1 rounded-full text-xs';
+        case 'Due': return 'text-orange-600 dark:text-orange-400 bg-orange-100 dark:bg-orange-900/20 px-2 py-1 rounded-full text-xs';
+        case 'Purchase': return 'text-purple-600 dark:text-purple-400 bg-purple-100 dark:bg-purple-900/20 px-2 py-1 rounded-full text-xs';
+        case 'Expense': return 'text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/20 px-2 py-1 rounded-full text-xs';
+        case 'Transfer': return 'text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded-full text-xs';
+        default: return 'text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded-full text-xs';
+    }
 };
 
 export default AccountingView;
