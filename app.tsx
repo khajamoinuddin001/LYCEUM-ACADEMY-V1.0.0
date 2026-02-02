@@ -710,7 +710,39 @@ const DashboardLayout: React.FC = () => {
   const handleSaveTransaction = async (data: Omit<AccountingTransaction, 'id'> & { id?: string }) => {
     try {
       if (data.id) {
-        // Update existing
+        // Handle AR- transactions (derived from Contact metadata)
+        if (data.id.toString().startsWith('AR-')) {
+          const arId = Number(data.id.toString().split('-')[1]);
+          const contact = contacts.find(c => (c as any).metadata?.accountsReceivable?.some((ar: any) => ar.id === arId));
+
+          if (contact) {
+            const updatedMetadata = { ...((contact as any).metadata || {}) };
+            updatedMetadata.accountsReceivable = updatedMetadata.accountsReceivable.map((ar: any) => {
+              if (ar.id === arId) {
+                // Update AR entry with editable fields
+                return {
+                  ...ar,
+                  status: data.status,
+                  // We map Transaction fields back to AR fields where applicable
+                  remainingAmount: data.status === 'Paid' ? 0 : ar.remainingAmount, // Auto-clear remaining if paid
+                  paidAmount: data.status === 'Paid' ? ar.originalAmount : ar.paidAmount,
+                  dueDate: data.dueDate
+                };
+              }
+              return ar;
+            });
+            const updatedContact = { ...contact, metadata: updatedMetadata };
+            await api.saveContact(updatedContact, false);
+            setContacts(prev => prev.map(c => c.id === contact.id ? updatedContact : c));
+            addNotification({ title: 'Success', description: 'Updated Approved Quotation status.', type: 'success' });
+            logActivity(`Updated AR transaction ${data.id} for contact ${contact.name}`);
+          }
+          setIsTransactionModalOpen(false);
+          setEditingTransaction(null);
+          return;
+        }
+
+        // Update existing regular transaction
         const { allTransactions } = await api.updateTransaction(data.id, data);
         setTransactions(allTransactions);
         logActivity(`Updated ${data.type} ${data.id}.`);
