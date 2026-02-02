@@ -47,6 +47,7 @@ export interface TodoTask {
   completedBy?: number;
   completedAt?: string;
   contactId?: number;
+  contactName?: string;
 }
 
 export interface TaskReply {
@@ -408,6 +409,7 @@ export interface AccountingTransaction {
   invoiceNumber?: string;
   contact?: string;
   dueDate?: string;
+  additionalDiscount?: number;
 }
 export type UserRole = 'Admin' | 'Staff' | 'Student';
 

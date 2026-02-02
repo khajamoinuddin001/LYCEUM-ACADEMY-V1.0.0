@@ -1,8 +1,9 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { FileText, IndianRupee, Building2, User as UserIcon, AlertCircle, ArrowLeft, Plus, Calendar, CheckCircle2, Phone, Mail, File, PenTool, LayoutDashboard, Clock, History, MoreVertical, TrendingUp, CheckSquare, Trash2 } from 'lucide-react';
 import type { Contact, CrmLead, User, TodoTask, ActivityType, Quotation, QuotationTemplate } from '../types';
 import ActivityModal from './activity_modal';
 import NewQuotationPage from './new_quotation_modal';
+import * as api from '../utils/api';
 
 interface ContactCrmViewProps {
     contact: Contact;
@@ -26,6 +27,24 @@ const ContactCrmView: React.FC<ContactCrmViewProps> = ({ contact, leads, onNavig
     const [selectedLeadForQuote, setSelectedLeadForQuote] = useState<CrmLead | null>(null);
     const [quotationToEdit, setQuotationToEdit] = useState<Quotation | null>(null);
 
+    // Local state for tasks to ensure we see EVERYTHING for this contact
+    const [crmTasks, setCrmTasks] = useState<TodoTask[]>(tasks);
+
+    useEffect(() => {
+        let isMounted = true;
+        const fetchContactTasks = async () => {
+            try {
+                // Fetch ALL tasks for this contact, ignoring user assignment
+                const tasks = await api.getTasks({ contactId: contact.id });
+                if (isMounted) setCrmTasks(tasks);
+            } catch (error) {
+                console.error("Failed to fetch contact tasks", error);
+            }
+        };
+        fetchContactTasks();
+        return () => { isMounted = false; };
+    }, [contact.id]);
+
     // Filter leads
     const associatedLeads = useMemo(() => {
         return leads.filter(lead => {
@@ -41,12 +60,12 @@ const ContactCrmView: React.FC<ContactCrmViewProps> = ({ contact, leads, onNavig
 
     // Filter Scheduled Activities (Open Tasks) & History (Completed Tasks)
     const scheduledActivities = useMemo(() => {
-        return tasks.filter(t => t.contactId === contact.id && t.status !== 'done').sort((a, b) => new Date(a.dueDate || '').getTime() - new Date(b.dueDate || '').getTime());
-    }, [tasks, contact.id]);
+        return crmTasks.filter(t => t.contactId === contact.id && t.status !== 'done').sort((a, b) => new Date(a.dueDate || '').getTime() - new Date(b.dueDate || '').getTime());
+    }, [crmTasks, contact.id]);
 
     const activityHistory = useMemo(() => {
-        return tasks.filter(t => t.contactId === contact.id && t.status === 'done').sort((a, b) => new Date(b.completedAt || b.createdAt || '').getTime() - new Date(a.completedAt || a.createdAt || '').getTime());
-    }, [tasks, contact.id]);
+        return crmTasks.filter(t => t.contactId === contact.id && t.status === 'done').sort((a, b) => new Date(b.completedAt || b.createdAt || '').getTime() - new Date(a.completedAt || a.createdAt || '').getTime());
+    }, [crmTasks, contact.id]);
 
     // Calculate Statistics
     const totalPipelineValue = associatedLeads.reduce((sum, lead) => sum + lead.value, 0);
@@ -67,6 +86,9 @@ const ContactCrmView: React.FC<ContactCrmViewProps> = ({ contact, leads, onNavig
     const handleSaveActivity = async (taskData: Partial<TodoTask>) => {
         if (onSaveTask) {
             await onSaveTask({ ...taskData, contactId: contact.id });
+            // Refresh local list
+            const updatedTasks = await api.getTasks({ contactId: contact.id });
+            setCrmTasks(updatedTasks);
         }
         setIsActivityModalOpen(false);
     };

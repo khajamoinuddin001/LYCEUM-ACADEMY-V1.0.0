@@ -22,7 +22,8 @@ const NewExpenseModal: React.FC<NewExpenseModalProps> = ({
         amount: '',
         paymentMethod: 'Cash' as 'Cash' | 'Online',
         status: 'Paid' as 'Paid' | 'Pending' | 'Overdue',
-        description: ''
+        description: '',
+        additionalDiscount: ''
     });
 
     const [payees, setPayees] = useState<api.ExpensePayee[]>([]);
@@ -84,18 +85,21 @@ const NewExpenseModal: React.FC<NewExpenseModalProps> = ({
 
         setSaving(true);
         try {
+            const finalAmount = Math.max(0, parseFloat(formData.amount) - (parseFloat(formData.additionalDiscount) || 0));
+
             const expense = {
                 customerName: formData.payeeName, // Payee Name stored as customerName
                 contactId: null, // Expenses don't link to contacts
                 date: formData.date,
                 type: 'Expense',
-                amount: parseFloat(formData.amount),
+                amount: finalAmount,
                 paymentMethod: formData.paymentMethod,
                 status: formData.status,
+                additionalDiscount: parseFloat(formData.additionalDiscount) || 0,
                 // Combine category and description for the main description field
                 description: formData.category
                     ? `${formData.category}: ${formData.description}`
-                    : formData.description || 'General Expense'
+                    : formData.description
             };
 
             await onSave(expense);
@@ -227,7 +231,7 @@ const NewExpenseModal: React.FC<NewExpenseModalProps> = ({
                             </div>
                         </div>
 
-                        {/* Payment Method & Status */}
+                        {/* Payment Method & Discount */}
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -245,18 +249,39 @@ const NewExpenseModal: React.FC<NewExpenseModalProps> = ({
 
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                    Status
+                                    Additional Discount
                                 </label>
-                                <select
-                                    value={formData.status}
-                                    onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
-                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
-                                >
-                                    <option value="Paid">Paid</option>
-                                    <option value="Pending">Pending</option>
-                                    <option value="Overdue">Overdue</option>
-                                </select>
+                                <div className="flex gap-2 items-center">
+                                    <span className="text-gray-500 text-sm">-₹</span>
+                                    <input
+                                        type="number"
+                                        value={formData.additionalDiscount}
+                                        onChange={(e) => setFormData({ ...formData, additionalDiscount: e.target.value })}
+                                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                                        placeholder="0.00"
+                                        min="0"
+                                        step="0.01"
+                                    />
+                                </div>
                             </div>
+                        </div>
+
+
+
+                        {/* Status */}
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                Status
+                            </label>
+                            <select
+                                value={formData.status}
+                                onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
+                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                            >
+                                <option value="Paid">Paid</option>
+                                <option value="Pending">Pending</option>
+                                <option value="Overdue">Overdue</option>
+                            </select>
                         </div>
 
                         {/* Description */}
@@ -290,9 +315,9 @@ const NewExpenseModal: React.FC<NewExpenseModalProps> = ({
                                 {saving ? 'Recording...' : 'Record Expense'}
                             </button>
                         </div>
-                    </form>
-                </div>
-            </div>
+                    </form >
+                </div >
+            </div >
 
             <AddPayeeModal
                 isOpen={showAddPayee}

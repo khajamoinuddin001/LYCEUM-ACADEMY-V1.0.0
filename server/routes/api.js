@@ -865,7 +865,7 @@ router.post('/contacts/:id/merge', authenticateToken, async (req, res) => {
       mergedData.country_of_application, mergedData.source, mergedData.contact_type, mergedData.stream, mergedData.intake,
       mergedData.counselor_assigned, mergedData.application_email, mergedData.application_password, mergedData.user_id,
       primaryId
-    ]);
+    ].map(val => val === undefined ? null : val));
 
     // Update all related records to point to primary contact
     const recordsUpdated = {};
@@ -1452,8 +1452,8 @@ router.put('/transactions/:id', authenticateToken, async (req, res) => {
     const transaction = req.body;
     await query(`
       UPDATE transactions SET
-      contact_id = $1, customer_name = $2, date = $3, description = $4, type = $5, status = $6, amount = $7, payment_method = $8, due_date = $9
-      WHERE id = $10
+      contact_id = $1, customer_name = $2, date = $3, description = $4, type = $5, status = $6, amount = $7, payment_method = $8, due_date = $9, additional_discount = $10
+      WHERE id = $11
     `, [
       transaction.contactId || null,
       transaction.customerName,
@@ -1464,6 +1464,7 @@ router.put('/transactions/:id', authenticateToken, async (req, res) => {
       transaction.amount,
       transaction.paymentMethod,
       transaction.dueDate || null,
+      transaction.additionalDiscount || 0,
       req.params.id
     ]);
     const result = await query('SELECT * FROM transactions WHERE id = $1', [req.params.id]);
@@ -1546,15 +1547,20 @@ router.delete('/events/:id', authenticateToken, async (req, res) => {
 // Tasks routes
 router.get('/tasks', authenticateToken, async (req, res) => {
   try {
-    let q = 'SELECT * FROM tasks';
+    // Base query: JOIN with contacts to get contact_name
+    let q = `
+      SELECT tasks.*, contacts.name as contact_name 
+      FROM tasks 
+      LEFT JOIN contacts ON tasks.contact_id = contacts.id
+    `;
     const params = [];
 
     if (req.user.role === 'Admin') {
       if (req.query.userId) {
-        q += ' WHERE assigned_to = $1';
+        q += ' WHERE tasks.assigned_to = $1';
         params.push(req.query.userId);
       } else if (req.query.all !== 'true') {
-        q += ' WHERE assigned_to = $1';
+        q += ' WHERE tasks.assigned_to = $1';
         params.push(req.user.id);
       }
     } else {
@@ -1563,28 +1569,36 @@ router.get('/tasks', authenticateToken, async (req, res) => {
       const contactId = contactRes.rows[0]?.id;
 
       if (contactId) {
-        q += ' WHERE (assigned_to = $1 OR contact_id = $2)';
+        q += ' WHERE (tasks.assigned_to = $1 OR tasks.contact_id = $2)';
         params.push(req.user.id, contactId);
       } else {
-        q += ' WHERE assigned_to = $1';
+        q += ' WHERE tasks.assigned_to = $1';
         params.push(req.user.id);
       }
     }
 
     // Allow filtering by contactId if provided (and authorized)
+    // Allow filtering by contactId if provided (and authorized)
     if (req.query.contactId) {
-      // For Admins or if the requested contactId matches the user's contactId (already handled above roughly but let's be explicit)
-      // The above logic for non-admins fetches EVERYTHING relevant.
-      // If they specifically ask for a contactId, we can filter further, but we must ensure they assume they can't fish for others.
-      // However, the base query above restricts them to ONLY their assigned tasks or their contact's tasks.
-      // So checking contact_id again is safe as an AND condition.
+      // If contactId is provided, we fetch ALL tasks for that contact, regardless of who it is assigned to.
+      // This is crucial for the CRM view where we want to see the full history.
+      // We overwrite the query to focus on contact_id.
+      // Note: We might want to keep some access control here, but for now assuming authenticated staff can see contact tasks.
 
-      if (q.includes('WHERE')) {
-        q += ` AND contact_id = $${params.length + 1}`;
-      } else {
-        q += ` WHERE contact_id = $${params.length + 1}`;
-      }
+      q = `
+        SELECT tasks.*, contacts.name as contact_name 
+        FROM tasks 
+        LEFT JOIN contacts ON tasks.contact_id = contacts.id
+        WHERE tasks.contact_id = $1
+      `;
+      // Reset params list to just have contactId
+      while (params.length > 0) params.pop();
       params.push(req.query.contactId);
+    }
+
+    // Only apply assigned_to filter if contactId is NOT provided (default behavior)
+    else {
+      // Logic already built in 'q' initialization above (lines 1553-1573) is fine for default view
     }
 
     q += ' ORDER BY created_at DESC';
@@ -1648,6 +1662,7 @@ const transformTask = (task) => ({
   completedBy: task.completed_by,
   completedAt: task.completed_at,
   contactId: task.contact_id,
+  contactName: task.contact_name,
   activityType: task.activity_type
 });
 

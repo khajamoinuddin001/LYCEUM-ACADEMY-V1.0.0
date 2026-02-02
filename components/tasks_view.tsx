@@ -32,6 +32,11 @@ const HistoryRow: React.FC<{ task: TodoTask, staff: { id: number; name: string; 
     return (
         <tr className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
             <td className="px-6 py-4">
+                {task.contactName && (
+                    <div className="text-xs font-semibold text-lyceum-blue mb-0.5 flex items-center gap-1">
+                        <UserIcon size={10} /> {task.contactName}
+                    </div>
+                )}
                 <div className="font-bold text-gray-800 dark:text-gray-100">{task.title}</div>
                 <div className="text-xs text-gray-500 mt-1">{task.description}</div>
             </td>
@@ -166,7 +171,7 @@ const TasksView: React.FC<TasksViewProps> = ({
     };
 
     const filteredTasks = useMemo(() => {
-        return tasks.filter(t => {
+        return (tasks || []).filter(t => {
             const matchesSearch = t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 (t.description?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
                 (t.taskId?.toLowerCase() || '').includes(searchQuery.toLowerCase());
@@ -301,6 +306,11 @@ const TasksView: React.FC<TasksViewProps> = ({
                                                 <div className="text-xs font-mono text-lyceum-blue font-bold">{task.taskId || 'N/A'}</div>
                                             </td>
                                             <td className="px-6 py-4">
+                                                {task.contactName && (
+                                                    <div className="text-xs font-semibold text-lyceum-blue mb-0.5 flex items-center gap-1">
+                                                        <UserIcon size={10} /> {task.contactName}
+                                                    </div>
+                                                )}
                                                 <div className="font-bold text-gray-800 dark:text-gray-100">{task.title}</div>
                                                 <div className="text-xs text-gray-500 mt-1 line-clamp-1">{task.description}</div>
                                             </td>

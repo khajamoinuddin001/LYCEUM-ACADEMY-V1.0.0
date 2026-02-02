@@ -101,14 +101,35 @@ const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = ({ trans
                         </div>
                     </div>
 
-                    {/* Amount */}
+                    {/* Amount Details */}
                     <div className="flex items-start gap-3">
                         <DollarSign className="w-5 h-5 text-gray-400 mt-0.5" />
-                        <div className="flex-1">
-                            <p className="text-sm text-gray-500 dark:text-gray-400">Amount</p>
-                            <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                                {formatCurrency(transaction.amount)}
-                            </p>
+                        <div className="flex-1 space-y-1">
+                            {transaction.additionalDiscount ? (
+                                <>
+                                    <div className="flex justify-between text-sm text-gray-500 dark:text-gray-400">
+                                        <span>Subtotal</span>
+                                        <span>{formatCurrency((transaction.amount || 0) + (transaction.additionalDiscount || 0))}</span>
+                                    </div>
+                                    <div className="flex justify-between text-sm text-red-500 dark:text-red-400">
+                                        <span>Discount</span>
+                                        <span>-{formatCurrency(transaction.additionalDiscount)}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center pt-2 border-t border-gray-200 dark:border-gray-700">
+                                        <span className="font-medium text-gray-900 dark:text-white">Total</span>
+                                        <span className="text-2xl font-bold text-gray-900 dark:text-white">
+                                            {formatCurrency(transaction.amount)}
+                                        </span>
+                                    </div>
+                                </>
+                            ) : (
+                                <div>
+                                    <p className="text-sm text-gray-500 dark:text-gray-400">Amount</p>
+                                    <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                                        {formatCurrency(transaction.amount)}
+                                    </p>
+                                </div>
+                            )}
                         </div>
                     </div>
 

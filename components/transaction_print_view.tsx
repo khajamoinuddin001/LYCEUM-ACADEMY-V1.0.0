@@ -67,8 +67,8 @@ const TransactionPrintView: React.FC<TransactionPrintViewProps> = ({ transaction
                                 <button
                                     onClick={() => setFormat('a4')}
                                     className={`px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition-all ${format === 'a4'
-                                            ? 'bg-white text-lyceum-blue shadow-sm'
-                                            : 'text-gray-600 hover:text-gray-900'
+                                        ? 'bg-white text-lyceum-blue shadow-sm'
+                                        : 'text-gray-600 hover:text-gray-900'
                                         }`}
                                 >
                                     <FileText size={16} />
@@ -77,8 +77,8 @@ const TransactionPrintView: React.FC<TransactionPrintViewProps> = ({ transaction
                                 <button
                                     onClick={() => setFormat('thermal')}
                                     className={`px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-2 transition-all ${format === 'thermal'
-                                            ? 'bg-white text-lyceum-blue shadow-sm'
-                                            : 'text-gray-600 hover:text-gray-900'
+                                        ? 'bg-white text-lyceum-blue shadow-sm'
+                                        : 'text-gray-600 hover:text-gray-900'
                                         }`}
                                 >
                                     <Receipt size={16} />
@@ -212,8 +212,14 @@ const TransactionPrintView: React.FC<TransactionPrintViewProps> = ({ transaction
                                     <div className="w-64 bg-gray-50 p-6 rounded-lg border border-gray-100">
                                         <div className="flex justify-between mb-3 text-sm text-gray-600">
                                             <span>Subtotal</span>
-                                            <span>{formatCurrency(transaction.amount)}</span>
+                                            <span>{formatCurrency((transaction.amount || 0) + (transaction.additionalDiscount || 0))}</span>
                                         </div>
+                                        {transaction.additionalDiscount ? (
+                                            <div className="flex justify-between mb-3 text-sm text-red-600">
+                                                <span>Discount</span>
+                                                <span>-{formatCurrency(transaction.additionalDiscount)}</span>
+                                            </div>
+                                        ) : null}
                                         <div className="flex justify-between mb-4 text-sm text-gray-600">
                                             <span>Tax (0%)</span>
                                             <span>₹0.00</span>
@@ -319,6 +325,19 @@ const TransactionPrintView: React.FC<TransactionPrintViewProps> = ({ transaction
 
                                 {/* Totals */}
                                 <div className="text-right">
+                                    {transaction.additionalDiscount ? (
+                                        <>
+                                            <div className="flex justify-between text-xs">
+                                                <span>Subtotal</span>
+                                                <span>{formatCurrency((transaction.amount || 0) + (transaction.additionalDiscount || 0))}</span>
+                                            </div>
+                                            <div className="flex justify-between text-xs text-red-600">
+                                                <span>Discount</span>
+                                                <span>-{formatCurrency(transaction.additionalDiscount)}</span>
+                                            </div>
+                                            <div className="border-t border-black border-dashed my-1"></div>
+                                        </>
+                                    ) : null}
                                     <div className="flex justify-between font-bold text-base">
                                         <span>TOTAL</span>
                                         <span>{formatCurrency(transaction.amount)}</span>

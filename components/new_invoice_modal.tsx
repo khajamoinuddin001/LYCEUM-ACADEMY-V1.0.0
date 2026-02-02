@@ -36,7 +36,8 @@ const NewInvoiceModal: React.FC<NewInvoiceModalProps> = ({
     dueDate: '',
     paymentMethod: 'Cash' as 'Cash' | 'Online',
     status: 'Pending' as 'Paid' | 'Pending' | 'Overdue',
-    notes: ''
+    notes: '',
+    additionalDiscount: '' as string | number
   });
 
   const [lineItems, setLineItems] = useState<LineItem[]>([
@@ -44,6 +45,8 @@ const NewInvoiceModal: React.FC<NewInvoiceModalProps> = ({
   ]);
 
   const [products, setProducts] = useState<api.Product[]>([]);
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [saving, setSaving] = useState(false);
 
   // Filter customers
@@ -68,7 +71,7 @@ const NewInvoiceModal: React.FC<NewInvoiceModalProps> = ({
 
   // Calculate totals
   const subtotal = lineItems.reduce((sum, item) => sum + item.amount, 0);
-  const total = subtotal;
+  const total = Math.max(0, subtotal - (parseFloat(formData.additionalDiscount.toString()) || 0));
 
   const handleCustomerNameChange = (name: string) => {
     // 1. Update name immediately
@@ -152,6 +155,7 @@ const NewInvoiceModal: React.FC<NewInvoiceModalProps> = ({
         amount: total,
         paymentMethod: formData.paymentMethod,
         status: formData.status,
+        additionalDiscount: parseFloat(formData.additionalDiscount?.toString() || '0'),
         description: lineItems
           .filter(item => item.description.trim())
           .map(item => `${item.description} (${item.quantity} × ₹${item.rate})`)
@@ -171,7 +175,8 @@ const NewInvoiceModal: React.FC<NewInvoiceModalProps> = ({
         dueDate: '',
         paymentMethod: 'Cash',
         status: 'Pending',
-        notes: ''
+        notes: '',
+        additionalDiscount: ''
       });
       setLineItems([{ description: '', quantity: 1, rate: 0, amount: 0 }]);
     } catch (error) {
@@ -351,6 +356,21 @@ const NewInvoiceModal: React.FC<NewInvoiceModalProps> = ({
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600 dark:text-gray-400">Subtotal:</span>
                     <span className="font-medium text-gray-900 dark:text-white">₹{subtotal.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-gray-600 dark:text-gray-400">Additional Discount:</span>
+                    <div className="flex items-center gap-1">
+                      <span className="text-gray-500">-₹</span>
+                      <input
+                        type="number"
+                        value={formData.additionalDiscount}
+                        onChange={(e) => setFormData({ ...formData, additionalDiscount: e.target.value })}
+                        className="w-24 px-2 py-1 text-right text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-1 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                        min="0"
+                        step="0.01"
+                        placeholder="0.00"
+                      />
+                    </div>
                   </div>
                   <div className="flex justify-between text-lg font-bold border-t border-gray-200 dark:border-gray-700 pt-2">
                     <span className="text-gray-900 dark:text-white">Total:</span>
