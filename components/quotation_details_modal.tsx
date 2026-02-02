@@ -225,8 +225,13 @@ const QuotationDetailsModal: React.FC<QuotationDetailsModalProps> = ({ quotation
           <div class="totals-box">
             <div class="total-row">
               <span class="total-label">Subtotal</span>
-              <span class="total-value">${formatCurrency(quotation.total)}</span>
+              <span class="total-value">${formatCurrency(quotation.subtotal || quotation.total + (quotation.discount || 0))}</span>
             </div>
+            ${quotation.discount && quotation.discount > 0 ? `
+            <div class="total-row" style="color: #059669;">
+              <span class="total-label">Discount</span>
+              <span class="total-value">- ${formatCurrency(quotation.discount)}</span>
+            </div>` : ''}
             <div class="total-row">
               <span class="total-label">Tax (0%)</span>
               <span class="total-value">₹0.00</span>
@@ -359,12 +364,33 @@ const QuotationDetailsModal: React.FC<QuotationDetailsModalProps> = ({ quotation
                     </div>
 
                     {/* Total */}
-                    <div className="bg-lyceum-blue text-white rounded-lg p-4 flex items-center justify-between">
-                        <span className="text-lg font-semibold">Total Amount</span>
-                        <span className="text-2xl font-bold flex items-center">
-                            <IndianRupee size={24} className="mr-1" />
-                            {quotation.total.toLocaleString('en-IN')}
-                        </span>
+                    {/* Total Section with Breakdown */}
+                    <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 mb-6">
+                        <div className="flex justify-between text-sm mb-2 text-gray-600 dark:text-gray-400">
+                            <span>Subtotal</span>
+                            <span className="font-semibold text-gray-900 dark:text-white">
+                                {formatCurrency(quotation.subtotal || quotation.total + (quotation.discount || 0))}
+                            </span>
+                        </div>
+                        {quotation.discount && quotation.discount > 0 && (
+                            <div className="flex justify-between text-sm mb-2 text-green-600 dark:text-green-400">
+                                <span>Discount</span>
+                                <span className="font-bold">
+                                    - {formatCurrency(quotation.discount)}
+                                </span>
+                            </div>
+                        )}
+                        <div className="flex justify-between text-sm mb-4 text-gray-600 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700 pb-2">
+                            <span>Tax (0%)</span>
+                            <span>₹0.00</span>
+                        </div>
+                        <div className="flex items-center justify-between text-lyceum-blue">
+                            <span className="text-lg font-semibold">Total Amount</span>
+                            <span className="text-2xl font-bold flex items-center">
+                                <IndianRupee size={24} className="mr-1" />
+                                {quotation.total.toLocaleString('en-IN')}
+                            </span>
+                        </div>
                     </div>
 
                     {/* Terms & Conditions */}

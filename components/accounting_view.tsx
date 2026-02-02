@@ -12,6 +12,7 @@ import NewInvoiceModal from './new_invoice_modal';
 import NewPurchaseModal from './new_purchase_modal';
 import NewExpenseModal from './new_expense_modal';
 import TransactionDetailsModal from './transaction_details_modal';
+import ProfitReportsView from './profit_reports_view';
 
 interface AccountingViewProps {
     transactions: AccountingTransaction[];
@@ -47,6 +48,7 @@ const AccountingView: React.FC<AccountingViewProps> = ({
     const [typeFilter, setTypeFilter] = useState<'All' | 'Income' | 'Purchase' | 'Expense' | 'Transfer'>('All');
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
+    const [viewMode, setViewMode] = useState<'dashboard' | 'reports'>('dashboard');
 
     // Calculate summary statistics for last 30 days
     const summary = useMemo(() => {
@@ -254,6 +256,16 @@ const AccountingView: React.FC<AccountingViewProps> = ({
         }
     };
 
+    // If viewing reports, show the ProfitReportsView component
+    if (viewMode === 'reports') {
+        return (
+            <ProfitReportsView
+                transactions={transactions}
+                onBack={() => setViewMode('dashboard')}
+            />
+        );
+    }
+
     return (
         <div className="h-full bg-gray-50 dark:bg-gray-900 p-6 overflow-y-auto">
             <div className="max-w-7xl mx-auto">
@@ -416,6 +428,24 @@ const AccountingView: React.FC<AccountingViewProps> = ({
                             </div>
                             <div className="p-3 bg-red-100 dark:bg-red-900/20 rounded-lg">
                                 <AlertCircle className="text-red-700 dark:text-red-500" size={24} />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* 8. Profit Reports - Clickable Box */}
+                    <div
+                        onClick={() => setViewMode('reports')}
+                        className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 border-l-4 border-indigo-500 cursor-pointer hover:shadow-lg transition-shadow"
+                    >
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Profit Reports</p>
+                                <p className="text-lg font-semibold text-indigo-600 dark:text-indigo-400">
+                                    View Reports
+                                </p>
+                            </div>
+                            <div className="p-3 bg-indigo-100 dark:bg-indigo-900/20 rounded-lg">
+                                <PieChart className="text-indigo-600 dark:text-indigo-400" size={24} />
                             </div>
                         </div>
                     </div>

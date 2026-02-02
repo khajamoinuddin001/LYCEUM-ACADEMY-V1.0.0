@@ -34,6 +34,7 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, courses, e
     const [showChecklistDetails, setShowChecklistDetails] = useState(false);
     const [showUniversityDetails, setShowUniversityDetails] = useState(false);
     const [isAppointmentModalOpen, setIsAppointmentModalOpen] = useState(false);
+    const [activeCounselor, setActiveCounselor] = useState<{ name: string; details: any } | null>(null);
 
     useEffect(() => {
         if (student) {
@@ -104,7 +105,7 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, courses, e
             await api.saveVisitor({
                 name: student.name,
                 company: student.phone || '',
-                host: student.counselorAssigned || 'Reception', // Use name for now as API resolves it? Or better: send counselor name
+                host: activeCounselor?.name || student.counselorAssigned || 'Reception',
                 scheduledCheckIn,
                 purpose: purpose,
                 status: 'Scheduled'
@@ -535,66 +536,81 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, courses, e
                 {/* Your Counselor Section */}
                 {/* Your Counselor Section */}
                 {/* Your Counselor Section */}
-                <InfoCard icon={<UserIcon size={20} />} title="Your Counselor">
-                    {student.counselorAssigned ? (
-                        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-                            <div className="flex items-center gap-4 w-full sm:w-auto">
-                                <div className="w-12 h-12 rounded-full bg-lyceum-blue/10 flex items-center justify-center text-lyceum-blue font-bold text-xl flex-shrink-0">
-                                    {student.counselorAssigned.charAt(0)}
-                                </div>
-                                <div>
-                                    <h3 className="font-bold text-lg text-gray-900 dark:text-gray-100">{student.counselorAssigned}</h3>
-                                    {student.counselorDetails?.phone ? (() => {
-                                        let isAvailable = true;
-                                        const details = student.counselorDetails;
-                                        if (details.shiftStart && details.shiftEnd) {
-                                            const now = new Date();
-                                            const dayName = now.toLocaleDateString('en-US', { weekday: 'long' });
-                                            if (details.workingDays && Array.isArray(details.workingDays) && !details.workingDays.includes(dayName)) {
-                                                isAvailable = false;
-                                            } else {
-                                                const [startH, startM] = details.shiftStart.split(':').map(Number);
-                                                const [endH, endM] = details.shiftEnd.split(':').map(Number);
-                                                const currentH = now.getHours();
-                                                const currentM = now.getMinutes();
-                                                const currentTime = currentH * 60 + currentM;
-                                                const startTime = startH * 60 + startM;
-                                                const endTime = endH * 60 + endM;
-                                                isAvailable = currentTime >= startTime && currentTime < endTime;
-                                            }
-                                        }
-
-                                        return (
-                                            <div className="flex items-center gap-2 mt-0.5">
-                                                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${isAvailable ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                                                    {isAvailable ? 'Available' : 'Unavailable'}
-                                                </span>
-                                                <span className="text-sm font-medium text-gray-600 dark:text-gray-300 tracking-wide">{student.counselorDetails.phone}</span>
+                {/* Your Counselor Section */}
+                <InfoCard icon={<UserIcon size={20} />} title="Your Counselors">
+                    {student.counselorAssigned || student.counselorAssigned2 ? (
+                        <div className="space-y-6 divide-y divide-gray-100 dark:divide-gray-700">
+                            {[
+                                { name: student.counselorAssigned, details: student.counselorDetails },
+                                { name: student.counselorAssigned2, details: student.counselorDetails2 }
+                            ].filter(c => c.name).map((counselor, idx) => (
+                                <div key={idx} className={`flex flex-col sm:flex-row items-center justify-between gap-4 ${idx > 0 ? 'pt-6' : ''}`}>
+                                    <div className="flex items-center gap-4 w-full sm:w-auto">
+                                        <div className="w-12 h-12 rounded-full bg-lyceum-blue/10 flex items-center justify-center text-lyceum-blue font-bold text-xl flex-shrink-0">
+                                            {counselor.name!.charAt(0)}
+                                        </div>
+                                        <div>
+                                            <div className="flex items-center gap-2">
+                                                <h3 className="font-bold text-lg text-gray-900 dark:text-gray-100">{counselor.name}</h3>
                                             </div>
-                                        );
-                                    })() : (
-                                        <p className="text-sm text-gray-500 dark:text-gray-400">Assigned Counselor</p>
-                                    )}
-                                </div>
-                            </div>
-                            <div className="flex flex-col gap-2 w-full sm:w-auto">
-                                <button
-                                    onClick={() => setIsAppointmentModalOpen(true)}
-                                    className="w-full px-5 py-2.5 bg-lyceum-blue text-white text-sm font-semibold rounded-lg shadow-md hover:bg-lyceum-blue-dark hover:shadow-lg transition-all transform hover:-translate-y-0.5 whitespace-nowrap"
-                                >
-                                    Schedule Appointment
-                                </button>
-                                {visits.filter(v => v.status === 'Scheduled' && new Date(v.scheduledCheckIn || '') > new Date()).map(appt => (
-                                    <div key={appt.id} className="bg-blue-50 dark:bg-blue-900/20 px-4 py-2 rounded-lg border border-blue-100 dark:border-blue-800 text-right mt-2">
-                                        <p className="text-xs font-bold text-lyceum-blue uppercase tracking-wide mb-0.5">Upcoming</p>
-                                        <p className="text-xs font-semibold text-gray-800 dark:text-gray-200">
-                                            {new Date(appt.scheduledCheckIn!).toLocaleString(undefined, {
-                                                month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
-                                            })}
-                                        </p>
+                                            {counselor.details?.phone ? (() => {
+                                                let isAvailable = true;
+                                                const details = counselor.details;
+                                                if (details.shiftStart && details.shiftEnd) {
+                                                    const now = new Date();
+                                                    const dayName = now.toLocaleDateString('en-US', { weekday: 'long' });
+                                                    if (details.workingDays && Array.isArray(details.workingDays) && !details.workingDays.includes(dayName)) {
+                                                        isAvailable = false;
+                                                    } else {
+                                                        const [startH, startM] = details.shiftStart.split(':').map(Number);
+                                                        const [endH, endM] = details.shiftEnd.split(':').map(Number);
+                                                        const currentH = now.getHours();
+                                                        const currentM = now.getMinutes();
+                                                        const currentTime = currentH * 60 + currentM;
+                                                        const startTime = startH * 60 + startM;
+                                                        const endTime = endH * 60 + endM;
+                                                        isAvailable = currentTime >= startTime && currentTime < endTime;
+                                                    }
+                                                }
+
+                                                return (
+                                                    <div className="flex items-center gap-2 mt-0.5">
+                                                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${isAvailable ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                                            {isAvailable ? 'Available' : 'Unavailable'}
+                                                        </span>
+                                                        <span className="text-sm font-medium text-gray-600 dark:text-gray-300 tracking-wide">{counselor.details.phone}</span>
+                                                    </div>
+                                                );
+                                            })() : null}
+                                        </div>
                                     </div>
-                                ))}
-                            </div>
+                                    <div className="flex flex-col gap-2 w-full sm:w-auto">
+                                        <button
+                                            onClick={() => {
+                                                setActiveCounselor({ name: counselor.name!, details: counselor.details });
+                                                setIsAppointmentModalOpen(true);
+                                            }}
+                                            className="w-full px-5 py-2.5 bg-lyceum-blue text-white text-sm font-semibold rounded-lg shadow-md hover:bg-lyceum-blue-dark hover:shadow-lg transition-all transform hover:-translate-y-0.5 whitespace-nowrap"
+                                        >
+                                            Schedule Appointment
+                                        </button>
+                                        {visits.filter(v =>
+                                            v.status === 'Scheduled' &&
+                                            v.host === counselor.name &&
+                                            new Date(v.scheduledCheckIn || '') > new Date()
+                                        ).map(appt => (
+                                            <div key={appt.id} className="bg-blue-50 dark:bg-blue-900/20 px-4 py-2 rounded-lg border border-blue-100 dark:border-blue-800 text-right mt-2">
+                                                <p className="text-xs font-bold text-lyceum-blue uppercase tracking-wide mb-0.5">Upcoming</p>
+                                                <p className="text-xs font-semibold text-gray-800 dark:text-gray-200">
+                                                    {new Date(appt.scheduledCheckIn!).toLocaleString(undefined, {
+                                                        month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                                                    })}
+                                                </p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
                         </div>
                     ) : (
                         <div className="flex flex-col items-center justify-center py-6 text-center">
@@ -639,9 +655,9 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, courses, e
                 isOpen={isAppointmentModalOpen}
                 onClose={() => setIsAppointmentModalOpen(false)}
                 onSave={handleScheduleAppointment}
-                counselorName={student.counselorAssigned || 'Counselor'}
-                shiftStart={student.counselorDetails?.shiftStart}
-                shiftEnd={student.counselorDetails?.shiftEnd}
+                counselorName={activeCounselor?.name || student.counselorAssigned || 'Counselor'}
+                shiftStart={activeCounselor?.details?.shiftStart || student.counselorDetails?.shiftStart}
+                shiftEnd={activeCounselor?.details?.shiftEnd || student.counselorDetails?.shiftEnd}
             />
         </div>
     );

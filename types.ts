@@ -320,6 +320,21 @@ export interface Contact {
   stream?: string;
   intake?: string;
   counselorAssigned?: string;
+  counselorAssigned2?: string;
+  counselorDetails?: {
+    email?: string;
+    phone?: string;
+    shiftStart?: string;
+    shiftEnd?: string;
+    workingDays?: string[];
+  };
+  counselorDetails2?: {
+    email?: string;
+    phone?: string;
+    shiftStart?: string;
+    shiftEnd?: string;
+    workingDays?: string[];
+  };
   applicationEmail?: string;
   applicationPassword?: string;
   createdAt?: string;
@@ -345,6 +360,8 @@ export interface Quotation {
   description: string;
   lineItems: QuotationLineItem[];
   total: number;
+  discount?: number; // Added discount
+  subtotal?: number; // Added subtotal
   status: QuotationStatus;
   studentAccepted?: boolean;
   studentAcceptedAt?: string;

@@ -305,6 +305,7 @@ const transformContact = (dbContact) => {
     stream: dbContact.stream,
     intake: dbContact.intake,
     counselorAssigned: dbContact.counselor_assigned,
+    counselorAssigned2: dbContact.counselor_assigned_2,
     applicationEmail: dbContact.application_email,
     applicationPassword: dbContact.application_password,
     avatarUrl: dbContact.avatar_url,
@@ -459,12 +460,31 @@ RETURNING *
               phone: cUser.phone,
               shiftStart: cUser.shift_start,
               shiftEnd: cUser.shift_end,
-              workingDays: cUser.working_days // DB stores as JSON string or array? Schema says "working_days TEXT" or array?
+              workingDays: cUser.working_days
             };
-            // Need to handle working_days parsing if it's stored as JSON string in DB but returned as string
             try {
               if (typeof cUser.working_days === 'string') {
                 transformed.counselorDetails.workingDays = JSON.parse(cUser.working_days);
+              }
+            } catch (e) { }
+          }
+        }
+
+        // Fetch details for second counselor
+        if (transformed.counselorAssigned2) {
+          const counselorRes2 = await query('SELECT email, phone, shift_start, shift_end, working_days FROM users WHERE name = $1', [transformed.counselorAssigned2]);
+          if (counselorRes2.rows.length > 0) {
+            const cUser2 = counselorRes2.rows[0];
+            transformed.counselorDetails2 = {
+              email: cUser2.email,
+              phone: cUser2.phone,
+              shiftStart: cUser2.shift_start,
+              shiftEnd: cUser2.shift_end,
+              workingDays: cUser2.working_days
+            };
+            try {
+              if (typeof cUser2.working_days === 'string') {
+                transformed.counselorDetails2.workingDays = JSON.parse(cUser2.working_days);
               }
             } catch (e) { }
           }
@@ -629,8 +649,8 @@ name = $1, email = $2, phone = $3, department = $4, major = $5, notes = $6,
   city = $21, state = $22, zip = $23, country = $24, gstin = $25, pan = $26, tags = $27,
   visa_type = $28, country_of_application = $29, source = $30, contact_type = $31,
   stream = $32, intake = $33, counselor_assigned = $34, application_email = $35,
-  application_password = $36, metadata = $37
-      WHERE id = $38
+  application_password = $36, metadata = $37, counselor_assigned_2 = $38
+      WHERE id = $39
   `, [
       contact.name,
       contact.email,
@@ -669,6 +689,7 @@ name = $1, email = $2, phone = $3, department = $4, major = $5, notes = $6,
       contact.applicationEmail,
       contact.applicationPassword,
       JSON.stringify(contact.metadata || {}),
+      contact.counselorAssigned2,
       req.params.id
     ]);
 
@@ -1564,15 +1585,17 @@ router.get('/tasks', authenticateToken, async (req, res) => {
         params.push(req.user.id);
       }
     } else {
-      // Find the contact associated with this user
+      // For Staff/Student: Show tasks where they are assigned, OR they created the task, OR linked to their contact
       const contactRes = await query('SELECT id FROM contacts WHERE user_id = $1', [req.user.id]);
       const contactId = contactRes.rows[0]?.id;
 
       if (contactId) {
-        q += ' WHERE (tasks.assigned_to = $1 OR tasks.contact_id = $2)';
+        // Show: assigned to me, created by me, or linked to my contact
+        q += ' WHERE (tasks.assigned_to = $1 OR tasks.assigned_by = $1 OR tasks.contact_id = $2)';
         params.push(req.user.id, contactId);
       } else {
-        q += ' WHERE tasks.assigned_to = $1';
+        // Show: assigned to me or created by me
+        q += ' WHERE (tasks.assigned_to = $1 OR tasks.assigned_by = $1)';
         params.push(req.user.id);
       }
     }

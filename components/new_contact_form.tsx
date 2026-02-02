@@ -182,7 +182,7 @@ const initialFormState = {
     gstin: '', referenceNumber: '', pan: '',
     phone: '', email: '', tags: '', visaType: '', countryOfApplication: '', source: '', contactType: '',
     majors: '', stream: '', course: '', intake: '',
-    counselorAssigned: '', agentAssigned: '', applicationEmail: '', applicationPassword: '', fileStatus: '',
+    counselorAssigned: '', counselorAssigned2: '', agentAssigned: '', applicationEmail: '', applicationPassword: '', fileStatus: '',
     notes: '',
 };
 
@@ -272,6 +272,7 @@ const NewContactForm: React.FC<NewContactFormProps> = ({
                 stream: contact.stream || '',
                 intake: contact.intake || '',
                 counselorAssigned: contact.counselorAssigned || '',
+                counselorAssigned2: contact.counselorAssigned2 || '',
                 applicationEmail: contact.applicationEmail || '',
                 applicationPassword: contact.applicationPassword || '',
             });
@@ -362,6 +363,7 @@ const NewContactForm: React.FC<NewContactFormProps> = ({
             stream: formData.stream,
             intake: formData.intake,
             counselorAssigned: formData.counselorAssigned,
+            counselorAssigned2: formData.counselorAssigned2,
             applicationEmail: formData.applicationEmail,
             applicationPassword: formData.applicationPassword,
         };
@@ -564,6 +566,14 @@ const NewContactForm: React.FC<NewContactFormProps> = ({
                             <FormRow label="Intake"><FormInput name="intake" value={formData.intake} onChange={handleChange} disabled={!canWrite} /></FormRow>
                             <FormRow label="Counselor Assigned">
                                 <select name="counselorAssigned" value={formData.counselorAssigned} onChange={handleChange} disabled={!canWrite} className="w-full bg-transparent text-gray-800 dark:text-gray-200 text-sm focus:outline-none dark:bg-gray-800 disabled:opacity-70 disabled:cursor-not-allowed">
+                                    <option value="">Select a Counselor</option>
+                                    {users.filter(u => u.role === 'Staff' || u.role === 'Admin').map(staffMember => (
+                                        <option key={staffMember.id} value={staffMember.name}>{staffMember.name}</option>
+                                    ))}
+                                </select>
+                            </FormRow>
+                            <FormRow label="Counselor Assigned 2">
+                                <select name="counselorAssigned2" value={formData.counselorAssigned2} onChange={handleChange} disabled={!canWrite} className="w-full bg-transparent text-gray-800 dark:text-gray-200 text-sm focus:outline-none dark:bg-gray-800 disabled:opacity-70 disabled:cursor-not-allowed">
                                     <option value="">Select a Counselor</option>
                                     {users.filter(u => u.role === 'Staff' || u.role === 'Admin').map(staffMember => (
                                         <option key={staffMember.id} value={staffMember.name}>{staffMember.name}</option>

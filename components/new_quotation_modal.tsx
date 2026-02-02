@@ -21,6 +21,7 @@ const BLANK_QUOTATION: Omit<Quotation, 'id' | 'status' | 'date'> = {
   description: '',
   lineItems: [{ description: '', price: 0 }],
   total: 0,
+  discount: 0,
 };
 
 const formatCurrency = (amount: number) => {
@@ -98,11 +99,14 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ lead, onCancel, onS
   }, [onSave, canWrite, user]);
 
   useEffect(() => {
-    const newTotal = quotation.lineItems.reduce((sum, item) => sum + (Number(item.price) || 0), 0);
-    if (newTotal !== quotation.total) {
-      setQuotation(q => ({ ...q, total: newTotal }));
+    const subtotal = quotation.lineItems.reduce((sum, item) => sum + (Number(item.price) || 0), 0);
+    const discount = Number(quotation.discount) || 0;
+    const newTotal = Math.max(0, subtotal - discount);
+
+    if (newTotal !== quotation.total || subtotal !== (quotation.subtotal || 0)) {
+      setQuotation(q => ({ ...q, total: newTotal, subtotal }));
     }
-  }, [quotation.lineItems, quotation.total]);
+  }, [quotation.lineItems, quotation.discount, quotation.total, quotation.subtotal]);
 
   const handleSelectTemplate = (template: QuotationTemplate) => {
     setQuotation({
@@ -159,13 +163,17 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ lead, onCancel, onS
       return;
     }
 
-    const finalTotal = finalLineItems.reduce((sum, item) => sum + item.price, 0);
+    const subtotal = finalLineItems.reduce((sum, item) => sum + item.price, 0);
+    const discount = Number(quotation.discount) || 0;
+    const finalTotal = Math.max(0, subtotal - discount);
 
     // Generate ID if new
     let quotationToSave = {
       ...quotation,
       lineItems: finalLineItems,
       total: finalTotal,
+      subtotal: subtotal,
+      discount: discount,
     };
 
     if (!isEditing && !quotationToSave.quotationNumber) {
@@ -362,8 +370,14 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ lead, onCancel, onS
             <div className="w-80 bg-gray-50/80 rounded-lg p-4 border border-gray-100">
               <div className="flex justify-between py-2 text-sm text-gray-600 border-b border-gray-200/50">
                 <span className="font-medium">Subtotal</span>
-                <span className="font-bold text-gray-900">{formatCurrency(quotation.total)}</span>
+                <span className="font-bold text-gray-900">{formatCurrency(quotation.subtotal || quotation.total + (quotation.discount || 0))}</span>
               </div>
+              {quotation.discount && quotation.discount > 0 ? (
+                <div className="flex justify-between py-2 text-sm text-green-600 border-b border-gray-200/50">
+                  <span className="font-medium">Discount</span>
+                  <span className="font-bold">- {formatCurrency(quotation.discount)}</span>
+                </div>
+              ) : null}
               <div className="flex justify-between py-2 text-sm text-gray-600 border-b border-gray-200/50">
                 <span className="font-medium">Tax (0%)</span>
                 <span className="font-bold text-gray-900">₹0.00</span>
@@ -508,15 +522,38 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ lead, onCancel, onS
             </div>
           </div>
 
-          <div className="flex items-center justify-between p-6 bg-gray-50 dark:bg-gray-800/50 border-t border-gray-200 dark:border-gray-700 rounded-b-lg">
-            <div>
-              <span className="text-lg font-semibold text-gray-700 dark:text-gray-200">Total:</span>
-              <span className="text-2xl font-bold text-lyceum-blue flex items-center ml-2">
-                <IndianRupee size={20} className="mr-1" />
-                {quotation.total.toLocaleString('en-IN')}
-              </span>
+          <div className="p-6 bg-gray-50 dark:bg-gray-800/50 border-t border-gray-200 dark:border-gray-700 rounded-b-lg">
+
+            <div className="flex justify-between mb-4">
+              <div className="w-1/2">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Discount (Amount)</label>
+                <div className="relative rounded-md shadow-sm max-w-[150px]">
+                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                    <span className="text-gray-500 sm:text-sm">₹</span>
+                  </div>
+                  <input
+                    type="number"
+                    name="discount"
+                    value={quotation.discount || 0}
+                    onChange={(e) => setQuotation(q => ({ ...q, discount: parseFloat(e.target.value) || 0 }))}
+                    className="block w-full rounded-md border-gray-300 pl-7 dark:bg-gray-700 dark:border-gray-600 dark:text-white sm:text-sm focus:border-lyceum-blue focus:ring-lyceum-blue py-2"
+                    placeholder="0.00"
+                    min="0"
+                  />
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-sm text-gray-500 dark:text-gray-400 mb-1">Subtotal: {formatCurrency(quotation.subtotal || 0)}</div>
+                <div className="text-lg font-semibold text-gray-700 dark:text-gray-200">Total:</div>
+                <span className="text-2xl font-bold text-lyceum-blue flex items-center justify-end ml-2">
+                  <IndianRupee size={20} className="mr-1" />
+                  {quotation.total.toLocaleString('en-IN')}
+                </span>
+              </div>
             </div>
-            <div>
+
+
+            <div className="flex justify-end pt-4 border-t border-gray-200 dark:border-gray-700">
               <button type="button" onClick={onCancel} className="px-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium">Cancel</button>
               <button
                 type="button"

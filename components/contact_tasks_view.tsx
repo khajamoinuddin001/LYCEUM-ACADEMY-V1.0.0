@@ -1,37 +1,52 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { CheckCircle2, Clock, Calendar, Plus, ArrowLeft, AlertCircle } from 'lucide-react';
 import type { Contact, TodoTask, User } from '../types';
 import TaskModal from './task_modal';
+import * as api from '../utils/api';
 
 interface ContactTasksViewProps {
     contact: Contact;
-    tasks: TodoTask[];
+    tasks: TodoTask[]; // Keep for compatibility but won't use
     user: User;
     onNavigateBack: () => void;
     onSaveTask: (task: Partial<TodoTask>) => Promise<void>;
 }
 
-const ContactTasksView: React.FC<ContactTasksViewProps> = ({ contact, tasks, user, onNavigateBack, onSaveTask }) => {
+const ContactTasksView: React.FC<ContactTasksViewProps> = ({ contact, user, onNavigateBack, onSaveTask }) => {
     const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
     const [editingTask, setEditingTask] = useState<TodoTask | null>(null);
+    const [contactTasks, setContactTasks] = useState<TodoTask[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
 
+    // Fetch ALL tasks for this contact (visible to all staff)
+    const fetchContactTasks = React.useCallback(async () => {
+        setIsLoading(true);
+        try {
+            const tasks = await api.getTasks({ contactId: contact.id });
+            setContactTasks(tasks.sort((a, b) => {
+                if (a.status === 'Done' && b.status !== 'Done') return 1;
+                if (a.status !== 'Done' && b.status === 'Done') return -1;
+                return new Date(b.createdAt || '').getTime() - new Date(a.createdAt || '').getTime();
+            }));
+        } catch (error) {
+            console.error('Failed to fetch contact tasks:', error);
+        } finally {
+            setIsLoading(false);
+        }
+    }, [contact.id]);
 
-    // Filter tasks for this contact
-    const contactTasks = useMemo(() => {
-        return tasks.filter(t => t.contactId === contact.id).sort((a, b) => {
-            if (a.status === 'done' && b.status !== 'done') return 1;
-            if (a.status !== 'done' && b.status === 'done') return -1;
-            return new Date(b.createdAt || '').getTime() - new Date(a.createdAt || '').getTime();
-        });
-    }, [tasks, contact.id]);
-
+    useEffect(() => {
+        fetchContactTasks();
+    }, [fetchContactTasks]);
 
 
     const handleSave = async (taskData: Partial<TodoTask>) => {
         // Inject contactId
         const finalTask = { ...taskData, contactId: contact.id };
         await onSaveTask(finalTask);
+        // Refresh tasks after save
+        await fetchContactTasks();
         setIsTaskModalOpen(false);
         setEditingTask(null);
     };
@@ -86,11 +101,11 @@ const ContactTasksView: React.FC<ContactTasksViewProps> = ({ contact, tasks, use
                             className="group flex items-center justify-between p-4 bg-white dark:bg-gray-750 border border-gray-200 dark:border-gray-700 rounded-lg hover:shadow-md transition-all cursor-pointer hover:border-lyceum-blue dark:hover:border-lyceum-blue"
                         >
                             <div className="flex items-start space-x-3">
-                                <div className={`mt-1 p-1 rounded-full ${task.status === 'done' ? 'text-green-500 bg-green-50' : 'text-gray-300 bg-gray-100'}`}>
-                                    <CheckCircle2 size={16} className={task.status === 'done' ? 'fill-current' : ''} />
+                                <div className={`mt-1 p-1 rounded-full ${task.status === 'Done' ? 'text-green-500 bg-green-50' : 'text-gray-300 bg-gray-100'}`}>
+                                    <CheckCircle2 size={16} className={task.status === 'Done' ? 'fill-current' : ''} />
                                 </div>
                                 <div>
-                                    <h3 className={`font-semibold text-gray-900 dark:text-gray-100 ${task.status === 'done' ? 'line-through text-gray-500 dark:text-gray-500' : ''}`}>
+                                    <h3 className={`font-semibold text-gray-900 dark:text-gray-100 ${task.status === 'Done' ? 'line-through text-gray-500 dark:text-gray-500' : ''}`}>
                                         {task.title}
                                     </h3>
                                     {task.description && (
