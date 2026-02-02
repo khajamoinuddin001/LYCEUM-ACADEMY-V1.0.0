@@ -86,6 +86,7 @@ const TasksView: React.FC<TasksViewProps> = ({
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState<'All' | TodoStatus>('todo');
     const [priorityFilter, setPriorityFilter] = useState<'All' | TaskPriority>('All');
+    const [dateFilter, setDateFilter] = useState(''); // New date filter state
     const [adminFilterUser, setAdminFilterUser] = useState<string>('self'); // 'self', 'all', or userId
     const [activeTab, setActiveTab] = useState<'Tasks' | 'History' | 'Personal'>('Tasks');
     const [staff, setStaff] = useState<{ id: number; name: string; role: string }[]>([]);
@@ -176,12 +177,28 @@ const TasksView: React.FC<TasksViewProps> = ({
                 (t.description?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
                 (t.taskId?.toLowerCase() || '').includes(searchQuery.toLowerCase());
 
+            // Date filtering logic
+            let matchesDate = true;
+            if (dateFilter) {
+                if (t.status === 'done' && t.completedAt) {
+                    // For completed tasks, compare with completion date (local time YYYY-MM-DD)
+                    const completedDate = new Date(t.completedAt).toLocaleDateString('en-CA');
+                    matchesDate = completedDate === dateFilter;
+                } else if (t.dueDate) {
+                    // For pending tasks, compare with due date
+                    matchesDate = t.dueDate === dateFilter;
+                } else {
+                    // If pending and no due date, hide when date filter is active
+                    matchesDate = false;
+                }
+            }
+
             if (activeTab === 'History') {
-                return t.status === 'done' && matchesSearch;
+                return t.status === 'done' && matchesSearch && matchesDate;
             }
 
             if (activeTab === 'Personal') {
-                return t.assignedTo === user.id && t.assignedBy === user.id && t.status !== 'done' && matchesSearch;
+                return t.assignedTo === user.id && t.assignedBy === user.id && t.status !== 'done' && matchesSearch && matchesDate;
             }
 
             // Default Tasks Tab - show active tasks (not done)
@@ -193,9 +210,9 @@ const TasksView: React.FC<TasksViewProps> = ({
                 ? matchesStatus
                 : t.status !== 'done' && matchesStatus;
 
-            return matchesSearch && shouldShowTask && matchesPriority;
+            return matchesSearch && shouldShowTask && matchesPriority && matchesDate;
         });
-    }, [tasks, searchQuery, statusFilter, priorityFilter, activeTab, user.id]);
+    }, [tasks, searchQuery, statusFilter, priorityFilter, activeTab, user.id, dateFilter]);
 
     return (
         <div className="animate-fade-in space-y-6">
@@ -224,7 +241,26 @@ const TasksView: React.FC<TasksViewProps> = ({
                         className="w-full pl-10 pr-4 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-100 dark:border-gray-600 rounded-lg outline-none focus:ring-2 focus:ring-lyceum-blue/50 dark:text-white"
                     />
                 </div>
-                <div className="flex gap-2 w-full md:w-auto">
+                <div className="flex gap-2 w-full md:w-auto overflow-x-auto pb-2 md:pb-0">
+                    {/* Date Filter */}
+                    <div className="relative">
+                        <input
+                            type="date"
+                            value={dateFilter}
+                            onChange={(e) => setDateFilter(e.target.value)}
+                            className="px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-100 dark:border-gray-600 rounded-lg text-sm outline-none dark:text-white h-[38px]"
+                        />
+                        {dateFilter && (
+                            <button
+                                onClick={() => setDateFilter('')}
+                                className="absolute right-8 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                                title="Clear date filter"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                            </button>
+                        )}
+                    </div>
+
                     <select
                         value={statusFilter}
                         onChange={(e) => setStatusFilter(e.target.value as any)}

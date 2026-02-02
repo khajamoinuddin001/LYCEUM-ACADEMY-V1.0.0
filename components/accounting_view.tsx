@@ -167,8 +167,8 @@ const AccountingView: React.FC<AccountingViewProps> = ({
                     status: status,
                     paymentMethod: 'Online',
                     contactId: contact.id,
-                    contact: contact.name,
-                    customerName: contact.name, // Added mapping for customerName
+                    contact: contact.department !== 'Unassigned' ? contact.department : '', // Map Department to Client (Entity)
+                    customerName: contact.name, // Map Name to Customer Name
                     invoiceNumber: ar.quotationRef
                 };
                 combined.push(arTransaction);
@@ -535,7 +535,7 @@ const AccountingView: React.FC<AccountingViewProps> = ({
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                                                    {transaction.contact || transaction.customerName}
+                                                    {transaction.customerName || transaction.contact}
                                                 </span>
                                             </td>
                                             <td className="px-6 py-4">

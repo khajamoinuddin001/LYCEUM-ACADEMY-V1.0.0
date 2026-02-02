@@ -516,7 +516,7 @@ const createAccountsReceivable = async (leadId: number, quotationId: number): Pr
 
   // Get contact from lead
   const contacts = await getContacts();
-  const contact = contacts.find(c => c.name === lead.contact || c.email === lead.email);
+  const contact = contacts.find(c => c.name === lead.contact || (lead.email && c.email === lead.email));
 
   if (!contact) {
     throw new Error('Contact not found');

@@ -79,12 +79,8 @@ const NewLeadModal: React.FC<NewLeadModalProps> = ({ isOpen, onClose, onSave, le
     setFormData(prev => ({ ...prev, contact: value }));
 
     // Only show dropdown if there's a value and matching contacts
-    const hasMatches = contacts.some(c =>
-      c.name.toLowerCase().includes(value.toLowerCase()) ||
-      c.email?.toLowerCase().includes(value.toLowerCase()) ||
-      c.phone?.includes(value)
-    );
-    setShowContactDropdown(value.length > 0 && hasMatches);
+    // Only show dropdown if there's a value (even if no matches, to show the "Create new" message)
+    setShowContactDropdown(value.length > 0);
 
     // Auto-fill if exact match found
     const exactMatch = contacts.find(c => c.name.toLowerCase() === value.toLowerCase());

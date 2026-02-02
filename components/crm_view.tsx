@@ -21,6 +21,7 @@ interface CrmViewProps {
     onUpdateLeadStage: (leadId: number, newStage: CrmStage) => void;
     onDeleteLead: (leadId: number) => void;
     user: User;
+    onNavigateToContact: (contactName: string) => void;
 }
 
 const getInitials = (name: string = '') => {
@@ -51,7 +52,7 @@ const getColorForAgent = (agentName: string = '') => {
     return agentColors[index];
 };
 
-const LeadCard: React.FC<{ lead: CrmLead; onSelect: (lead: CrmLead) => void; onDelete: (id: number) => void; draggable: boolean; canDelete: boolean }> = ({ lead, onSelect, onDelete, draggable, canDelete }) => {
+const LeadCard: React.FC<{ lead: CrmLead; onSelect: (lead: CrmLead) => void; onDelete: (id: number) => void; draggable: boolean; canDelete: boolean; onNavigateToContact: (name: string) => void }> = ({ lead, onSelect, onDelete, draggable, canDelete, onNavigateToContact }) => {
     const agentAvatar = lead.assignedTo ? (
         <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${getColorForAgent(lead.assignedTo)}`} title={lead.assignedTo}>
             {getInitials(lead.assignedTo)}
@@ -91,7 +92,15 @@ const LeadCard: React.FC<{ lead: CrmLead; onSelect: (lead: CrmLead) => void; onD
                     </div>
                     <div className="flex items-center">
                         <UserIcon size={14} className="mr-2 text-gray-400" />
-                        <span>{lead.contact}</span>
+                        <span
+                            className="cursor-pointer hover:underline hover:text-lyceum-blue"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onNavigateToContact(lead.contact);
+                            }}
+                        >
+                            {lead.contact}
+                        </span>
                     </div>
                 </div>
             </div>
@@ -136,7 +145,7 @@ const LeadCard: React.FC<{ lead: CrmLead; onSelect: (lead: CrmLead) => void; onD
 };
 
 
-const CrmView: React.FC<CrmViewProps> = ({ leads, onLeadSelect, onNewLeadClick, onUpdateLeadStage, onDeleteLead, user }) => {
+const CrmView: React.FC<CrmViewProps> = ({ leads, onLeadSelect, onNewLeadClick, onUpdateLeadStage, onDeleteLead, user, onNavigateToContact }) => {
     const [dragOverStage, setDragOverStage] = useState<CrmStage | null>(null);
     const [agentFilter, setAgentFilter] = useState('All Agents');
     const [searchQuery, setSearchQuery] = useState('');
@@ -298,7 +307,7 @@ const CrmView: React.FC<CrmViewProps> = ({ leads, onLeadSelect, onNewLeadClick, 
                             {(!isCollapsible || !isCollapsed) && (
                                 <div className="p-2 flex-1 overflow-y-auto">
                                     {stageLeads.map(lead => (
-                                        <LeadCard key={lead.id} lead={lead} onSelect={onLeadSelect} onDelete={onDeleteLead} draggable={canUpdate} canDelete={canDelete} />
+                                        <LeadCard key={lead.id} lead={lead} onSelect={onLeadSelect} onDelete={onDeleteLead} draggable={canUpdate} canDelete={canDelete} onNavigateToContact={onNavigateToContact} />
                                     ))}
                                 </div>
                             )}

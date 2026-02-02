@@ -43,7 +43,10 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
 
     // Filter contacts based on transaction type
     const filteredContacts = contacts.filter(c => {
-        if (transaction.type === 'Income') {
+        // Always include the current contact if it matches
+        if (c.id === transaction.contactId) return true;
+
+        if (transaction.type === 'Income' || transaction.type === 'Invoice' || transaction.type === 'Due') {
             return !c.contactType || c.contactType === 'Customer' || c.contactType === 'Both';
         } else {
             return !c.contactType || c.contactType === 'Vendor' || c.contactType === 'Both';
@@ -106,7 +109,7 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
                     {/* Customer Dropdown */}
                     <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                            {transaction.type === 'Income' ? 'Customer' : 'Vendor'} Name <span className="text-red-500">*</span>
+                            {['Income', 'Invoice', 'Due'].includes(transaction.type) ? 'Customer' : 'Vendor'} Name <span className="text-red-500">*</span>
                         </label>
                         <select
                             value={formData.contactId}
@@ -114,7 +117,7 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
                             className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
                             required
                         >
-                            <option value={0}>Select {transaction.type === 'Income' ? 'Customer' : 'Vendor'}...</option>
+                            <option value={0}>Select {['Income', 'Invoice', 'Due'].includes(transaction.type) ? 'Customer' : 'Vendor'}...</option>
                             {filteredContacts.map(contact => (
                                 <option key={contact.id} value={contact.id}>
                                     {contact.name}

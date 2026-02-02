@@ -840,6 +840,8 @@ const DashboardLayout: React.FC = () => {
     } else {
       setLeads(prev => prev.map(l => l.id === savedLead.id ? savedLead : l));
     }
+    // Refresh contacts in case a new one was created
+    api.getContacts().then(setContacts);
     setIsNewLeadModalOpen(false);
     setEditingLead(null);
   };
@@ -1422,6 +1424,19 @@ const DashboardLayout: React.FC = () => {
       return c;
     }));
   };
+
+  const handleNavigateToContactFromCrm = (contactName: string) => {
+    // Find contact by name (case insensitive)
+    const contact = contacts.find(c => c.name.toLowerCase() === contactName.toLowerCase());
+
+    if (contact) {
+      setEditingContact(contact);
+      setContactViewMode('crm'); // Default to CRM tab as requested
+      setActiveApp('Contacts');
+    } else {
+      alert(`Contact "${contactName}" not found in Contacts.`);
+    }
+  };
   const handleSaveNote = (lessonId: string, note: string) => {
     const studentContact = contacts.find(c => c.userId === currentUser?.id);
     if (!currentUser || !studentContact) return;
@@ -1638,7 +1653,7 @@ const DashboardLayout: React.FC = () => {
         if (leadForQuotation) {
           return <NewQuotationPage user={currentUser} lead={leadForQuotation} onCancel={handleCancelQuotation} onSave={handleSaveQuotation} templates={quotationTemplates} quotationToEdit={editingQuotation} onSaveTemplate={handleSaveQuotationTemplate} onDeleteTemplate={handleDeleteQuotationTemplate} />;
         }
-        return <CrmView user={currentUser} leads={leads} onLeadSelect={handleLeadSelect} onNewLeadClick={handleNewLeadClick} onUpdateLeadStage={handleUpdateLeadStage} onDeleteLead={handleDeleteLead} />;
+        return <CrmView user={currentUser} leads={leads} onLeadSelect={handleLeadSelect} onNewLeadClick={handleNewLeadClick} onUpdateLeadStage={handleUpdateLeadStage} onDeleteLead={handleDeleteLead} onNavigateToContact={handleNavigateToContactFromCrm} />;
       case 'Agents':
         return <AgentsView onNavigateBack={() => handleAppSelect('Apps')} />;
       case 'Reception': return <ReceptionView visitors={visitors} onNewVisitorClick={() => setIsNewVisitorModalOpen(true)} onScheduleVisitorClick={() => setIsNewAppointmentModalOpen(true)} onCheckOut={handleVisitorCheckOut} onCheckInScheduled={handleCheckInScheduledVisitor} onEditVisitor={handleEditVisitor} onDeleteVisitor={handleDeleteVisitor} user={currentUser} />;
