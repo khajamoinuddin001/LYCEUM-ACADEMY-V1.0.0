@@ -148,6 +148,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, activeApp, onAppSe
 
     const items = [...navItems];
     const item = items[draggedItem];
+    if (!item) return;
     items.splice(draggedItem, 1);
     items.splice(index, 0, item);
     setNavItems(items);
@@ -238,7 +239,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, activeApp, onAppSe
 
     const userPermissions = user.permissions || {};
     const visibleNavItems = navItems.filter(item =>
-      item.name === 'Apps' || user.role === 'Admin' || userPermissions[item.name]
+      item && item.name && (item.name === 'Apps' || user.role === 'Admin' || (userPermissions && userPermissions[item.name]))
     );
 
     return visibleNavItems.map((item, index) => (

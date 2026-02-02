@@ -737,6 +737,33 @@ const DashboardLayout: React.FC = () => {
   };
 
   const handleDeleteTransaction = async (id: string) => {
+    // Handle AR- transactions (derived from Contact metadata)
+    if (id.toString().startsWith('AR-')) {
+      const arId = Number(id.toString().split('-')[1]);
+      const contact = contacts.find(c => (c as any).metadata?.accountsReceivable?.some((ar: any) => ar.id === arId));
+
+      if (contact) {
+        if (!window.confirm('Are you sure you want to delete this approved quotation record? This does not delete the quotation itself, only this accounting entry.')) {
+          return;
+        }
+
+        const updatedMetadata = { ...((contact as any).metadata || {}) };
+        updatedMetadata.accountsReceivable = updatedMetadata.accountsReceivable.filter((ar: any) => ar.id !== arId);
+        const updatedContact = { ...contact, metadata: updatedMetadata };
+
+        try {
+          await api.saveContact(updatedContact, false);
+          setContacts(prev => prev.map(c => c.id === contact.id ? updatedContact : c));
+          addNotification({ title: 'Success', description: 'Transaction record deleted.', type: 'success' });
+          logActivity(`Deleted AR transaction ${id} for contact ${contact.name}`);
+        } catch (e) {
+          console.error("Failed to delete AR entry", e);
+          addNotification({ title: 'Error', description: 'Failed to delete transaction.', type: 'error' });
+        }
+      }
+      return;
+    }
+
     try {
       const allTransactions = await api.deleteTransaction(id);
       setTransactions(allTransactions);
@@ -1570,7 +1597,7 @@ const DashboardLayout: React.FC = () => {
 
           // Render form if we have data OR if we are creating a new contact
           if (contactData || editingContact === 'new') {
-            return <NewContactForm user={currentUser} users={users} contact={contactData} contacts={contacts} onNavigateBack={handleBackToContacts} onNavigateToDocuments={() => setContactViewMode('documents')} onNavigateToVisa={() => setContactViewMode('visaFiling')} onNavigateToChecklist={() => setContactViewMode('checklist')} onNavigateToVisits={() => setContactViewMode('visits')} onNavigateToCRM={() => setContactViewMode('crm')} onNavigateToTasks={() => setContactViewMode('tasks')} onSave={handleSaveContact} onComposeAIEmail={handleGenerateEmailDraft} onAddSessionVideo={api.addSessionVideo} onDeleteSessionVideo={api.deleteSessionVideo} transactions={transactions} tasks={tasks} onSaveTask={handleSaveTask} />;
+            return <NewContactForm user={currentUser} users={users} contact={contactData} contacts={contacts} onNavigateBack={handleBackToContacts} onNavigateToDocuments={() => setContactViewMode('documents')} onNavigateToVisa={() => setContactViewMode('visaFiling')} onNavigateToChecklist={() => setContactViewMode('checklist')} onNavigateToVisits={() => setContactViewMode('visits')} onNavigateToCRM={() => setContactViewMode('crm')} onNavigateToTasks={() => setContactViewMode('tasks')} onSave={handleSaveContact} onComposeAIEmail={handleGenerateEmailDraft} onAddSessionVideo={api.addSessionVideo} onDeleteSessionVideo={api.deleteSessionVideo} transactions={transactions} tasks={tasks} onSaveTask={handleSaveTask} onDeleteContact={handleDeleteContact} />;
           }
         }
         return <ContactsView contacts={contacts} onContactSelect={handleContactSelect} onNewContactClick={handleNewContactClick} user={currentUser} />;
@@ -1583,7 +1610,7 @@ const DashboardLayout: React.FC = () => {
       case 'Agents':
         return <AgentsView onNavigateBack={() => handleAppSelect('Apps')} />;
       case 'Reception': return <ReceptionView visitors={visitors} onNewVisitorClick={() => setIsNewVisitorModalOpen(true)} onScheduleVisitorClick={() => setIsNewAppointmentModalOpen(true)} onCheckOut={handleVisitorCheckOut} onCheckInScheduled={handleCheckInScheduledVisitor} onEditVisitor={handleEditVisitor} onDeleteVisitor={handleDeleteVisitor} user={currentUser} />;
-      case 'Accounting': return (
+      case 'Accounts': return (
         <AccountingView
           user={currentUser}
           transactions={transactions}

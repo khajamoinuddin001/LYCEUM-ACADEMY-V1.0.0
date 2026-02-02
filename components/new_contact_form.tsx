@@ -26,6 +26,7 @@ interface NewContactFormProps {
     transactions?: AccountingTransaction[];
     tasks?: TodoTask[];
     onSaveTask?: (task: Partial<TodoTask>) => Promise<void>;
+    onDeleteContact?: (id: number) => void;
 }
 
 const SessionPlayer: React.FC<{
@@ -205,7 +206,8 @@ const NewContactForm: React.FC<NewContactFormProps> = ({
     onDeleteSessionVideo,
     transactions = [],
     tasks = [],
-    onSaveTask
+    onSaveTask,
+    onDeleteContact
 }) => {
     const [currentTab, setCurrentTab] = useState<'details' | 'finance' | 'crm'>('details');
     const [formData, setFormData] = useState(initialFormState);
@@ -507,13 +509,7 @@ const NewContactForm: React.FC<NewContactFormProps> = ({
                 >
                     Finance
                 </button>
-                <button
-                    onClick={() => setCurrentTab('crm')}
-                    disabled={!contact}
-                    className={`ml-4 px-1 py-3 font-semibold transition-colors disabled:opacity-50 ${currentTab === 'crm' ? 'text-lyceum-blue border-b-2 border-lyceum-blue' : 'text-gray-500 dark:text-gray-400 hover:text-lyceum-blue'}`}
-                >
-                    CRM
-                </button>
+
                 <button onClick={onNavigateToDocuments} disabled={!contact} className="ml-4 px-1 py-3 font-medium text-gray-500 dark:text-gray-400 hover:text-lyceum-blue disabled:opacity-50 disabled:cursor-not-allowed">Documents</button>
                 <button onClick={onNavigateToChecklist} disabled={!contact} className="ml-4 px-1 py-3 font-medium text-gray-500 dark:text-gray-400 hover:text-lyceum-blue disabled:opacity-50 disabled:cursor-not-allowed">Checklist</button>
                 <button onClick={onNavigateToVisa} disabled={!contact} className="ml-4 px-1 py-3 font-medium text-gray-500 dark:text-gray-400 hover:text-lyceum-blue disabled:opacity-50 disabled:cursor-not-allowed">Visa Filing</button>
@@ -653,16 +649,8 @@ const NewContactForm: React.FC<NewContactFormProps> = ({
                         </table>
                     </div>
                 </div>
-            ) : currentTab === 'crm' && contact ? (
-                <ContactCrmView
-                    contact={contact}
-                    leads={[]} // If leads are needed, pass them too, assuming parent handles or empty for now
-                    onNavigateBack={() => setCurrentTab('details')}
-                    user={user}
-                    tasks={tasks}
-                    onSaveTask={onSaveTask}
-                />
             ) : null}
+
 
             {/* Activity and Sessions Section */}
             <div className="px-6 py-4 mt-6">
@@ -737,13 +725,29 @@ const NewContactForm: React.FC<NewContactFormProps> = ({
                 </div>
             </div>
 
-            <div className="flex items-center justify-end space-x-3 p-6 border-t border-gray-200 dark:border-gray-700">
-                <button onClick={onNavigateBack} className="px-6 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-800 focus:ring-lyceum-blue">
-                    Cancel
-                </button>
-                <button onClick={handleSave} disabled={!canWrite} className="px-6 py-2 bg-lyceum-blue border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-lyceum-blue-dark focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-800 focus:ring-lyceum-blue disabled:bg-gray-400 dark:disabled:bg-gray-600 disabled:cursor-not-allowed">
-                    Save Changes
-                </button>
+            <div className="flex items-center justify-between p-6 border-t border-gray-200 dark:border-gray-700">
+                <div>
+                    {contact && contact.id && onDeleteContact && (
+                        <button
+                            onClick={() => {
+                                if (window.confirm('Are you sure you want to delete this contact? This action cannot be undone.')) {
+                                    onDeleteContact(contact.id);
+                                }
+                            }}
+                            className="px-4 py-2 bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400 rounded-md hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors flex items-center gap-2 text-sm font-medium"
+                        >
+                            <Trash2 size={16} /> Delete Contact
+                        </button>
+                    )}
+                </div>
+                <div className="flex items-center space-x-3">
+                    <button onClick={onNavigateBack} className="px-6 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-800 focus:ring-lyceum-blue">
+                        Cancel
+                    </button>
+                    <button onClick={handleSave} disabled={!canWrite} className="px-6 py-2 bg-lyceum-blue border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-lyceum-blue-dark focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-800 focus:ring-lyceum-blue disabled:bg-gray-400 dark:disabled:bg-gray-600 disabled:cursor-not-allowed">
+                        Save Changes
+                    </button>
+                </div>
             </div>
 
             {!isNew && (

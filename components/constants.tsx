@@ -54,12 +54,7 @@ export const ODOO_APPS: OdooApp[] = [
     bgColor: 'bg-indigo-100',
     iconColor: 'text-indigo-600',
   },
-  {
-    name: 'Agents',
-    icon: <UserCheck size={36} />,
-    bgColor: 'bg-violet-100',
-    iconColor: 'text-violet-600',
-  },
+
   {
     name: 'Calendar',
     icon: <Calendar size={36} />,
@@ -73,17 +68,12 @@ export const ODOO_APPS: OdooApp[] = [
     iconColor: 'text-teal-600',
   },
   {
-    name: 'Accounting',
+    name: 'Accounts',
     icon: <FileText size={36} />,
     bgColor: 'bg-green-100',
     iconColor: 'text-green-600',
   },
-  {
-    name: 'Sales',
-    icon: <ShoppingCart size={36} />,
-    bgColor: 'bg-purple-100',
-    iconColor: 'text-purple-600',
-  },
+
   {
     name: 'Marketing',
     icon: <Share2 size={36} />,
@@ -138,36 +128,7 @@ export const ODOO_APPS: OdooApp[] = [
     bgColor: 'bg-pink-100',
     iconColor: 'text-pink-600',
   },
-  {
-    name: 'Attendance',
-    icon: <Clock size={36} />,
-    bgColor: 'bg-pink-100',
-    iconColor: 'text-pink-600',
-  },
-  {
-    name: 'Accounts',
-    icon: <Receipt size={36} />,
-    bgColor: 'bg-emerald-100',
-    iconColor: 'text-emerald-600',
-  },
-  {
-    name: 'Quotations',
-    icon: <FileText size={36} />,
-    bgColor: 'bg-indigo-100',
-    iconColor: 'text-indigo-600',
-  },
-  {
-    name: 'My Profile',
-    icon: <UserCircle size={36} />,
-    bgColor: 'bg-purple-100',
-    iconColor: 'text-purple-600',
-  },
-  {
-    name: 'Documents',
-    icon: <Paperclip size={36} />,
-    bgColor: 'bg-green-100',
-    iconColor: 'text-green-600',
-  },
+
 ];
 
 export const STAFF_ROLES: UserRole[] = ['Admin', 'Staff'];
@@ -181,7 +142,7 @@ const adminPermissions = ODOO_APPS.reduce((acc, app) => {
 }, {} as { [appName: string]: AppPermissions });
 
 const employeeFullAccessApps = new Set(['Contacts', 'CRM', 'Agents', 'Calendar', 'Discuss', 'Tasks', 'Tickets', 'Reception', 'Sales', 'Marketing', 'LMS', 'Visitor Display', 'Department Dashboard', 'Attendance']);
-const employeeReadOnlyApps = new Set(['dashboard', 'Accounting']);
+const employeeReadOnlyApps = new Set(['dashboard', 'Accounts']);
 const employeePermissions: { [appName: string]: AppPermissions } = ODOO_APPS.reduce((acc, app) => {
   if (employeeFullAccessApps.has(app.name)) {
     acc[app.name] = { ...fullAccess };

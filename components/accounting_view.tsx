@@ -261,7 +261,7 @@ const AccountingView: React.FC<AccountingViewProps> = ({
                 <div className="flex items-center justify-between mb-6">
                     <div>
                         <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-                            Accounting Dashboard
+                            Accounts Dashboard
                         </h1>
                         <p className="text-gray-600 dark:text-gray-400 mt-1">
                             Complete financial overview and transactions
