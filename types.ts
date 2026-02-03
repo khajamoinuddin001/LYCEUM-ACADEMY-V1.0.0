@@ -371,6 +371,7 @@ export interface Quotation {
 export interface QuotationLineItem {
   description: string;
   price: number;
+  quantity?: number;
 }
 
 export interface QuotationTemplate {

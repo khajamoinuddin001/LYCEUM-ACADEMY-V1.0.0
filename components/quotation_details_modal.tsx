@@ -208,6 +208,8 @@ const QuotationDetailsModal: React.FC<QuotationDetailsModalProps> = ({ quotation
           <thead>
             <tr>
               <th>Description</th>
+              <th class="text-right">Qty</th>
+              <th class="text-right">Unit Price</th>
               <th class="text-right">Amount</th>
             </tr>
           </thead>
@@ -215,7 +217,9 @@ const QuotationDetailsModal: React.FC<QuotationDetailsModalProps> = ({ quotation
             ${quotation.lineItems.map(item => `
               <tr>
                 <td class="font-bold">${item.description}</td>
-                <td class="font-bold text-right">${formatCurrency(item.price)}</td>
+                <td class="text-right">${item.quantity || 1}</td>
+                <td class="text-right">${formatCurrency(item.price)}</td>
+                <td class="font-bold text-right">${formatCurrency((item.price) * (item.quantity || 1))}</td>
               </tr>
             `).join('')}
           </tbody>
@@ -343,7 +347,13 @@ const QuotationDetailsModal: React.FC<QuotationDetailsModalProps> = ({ quotation
                                             Description
                                         </th>
                                         <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
-                                            Price
+                                            Qty
+                                        </th>
+                                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                                            Unit Price
+                                        </th>
+                                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                                            Amount
                                         </th>
                                     </tr>
                                 </thead>
@@ -353,8 +363,14 @@ const QuotationDetailsModal: React.FC<QuotationDetailsModalProps> = ({ quotation
                                             <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
                                                 {item.description}
                                             </td>
-                                            <td className="px-4 py-3 text-sm text-right font-medium text-gray-900 dark:text-white">
+                                            <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-white">
+                                                {item.quantity || 1}
+                                            </td>
+                                            <td className="px-4 py-3 text-sm text-right text-gray-900 dark:text-white">
                                                 {formatCurrency(item.price)}
+                                            </td>
+                                            <td className="px-4 py-3 text-sm text-right font-medium text-gray-900 dark:text-white">
+                                                {formatCurrency((item.price) * (item.quantity || 1))}
                                             </td>
                                         </tr>
                                     ))}

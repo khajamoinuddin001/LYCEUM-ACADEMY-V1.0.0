@@ -19,7 +19,7 @@ interface NewQuotationPageProps {
 const BLANK_QUOTATION: Omit<Quotation, 'id' | 'status' | 'date'> = {
   title: 'New Quotation',
   description: '',
-  lineItems: [{ description: '', price: 0 }],
+  lineItems: [{ description: '', price: 0, quantity: 1 }],
   total: 0,
   discount: 0,
 };
@@ -99,7 +99,7 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ lead, onCancel, onS
   }, [onSave, canWrite, user]);
 
   useEffect(() => {
-    const subtotal = quotation.lineItems.reduce((sum, item) => sum + (Number(item.price) || 0), 0);
+    const subtotal = quotation.lineItems.reduce((sum, item) => sum + ((Number(item.price) || 0) * (Number(item.quantity) || 1)), 0);
     const discount = Number(quotation.discount) || 0;
     const newTotal = Math.max(0, subtotal - discount);
 
@@ -134,7 +134,7 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ lead, onCancel, onS
   };
 
   const addLineItem = () => {
-    setQuotation(q => ({ ...q, lineItems: [...q.lineItems, { description: '', price: 0 }] }));
+    setQuotation(q => ({ ...q, lineItems: [...q.lineItems, { description: '', price: 0, quantity: 1 }] }));
   };
 
   const removeLineItem = (index: number) => {
@@ -163,7 +163,7 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ lead, onCancel, onS
       return;
     }
 
-    const subtotal = finalLineItems.reduce((sum, item) => sum + item.price, 0);
+    const subtotal = finalLineItems.reduce((sum, item) => sum + ((item.price || 0) * (item.quantity || 1)), 0);
     const discount = Number(quotation.discount) || 0;
     const finalTotal = Math.max(0, subtotal - discount);
 
@@ -345,6 +345,8 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ lead, onCancel, onS
               <thead>
                 <tr className="bg-gray-50 border-y border-gray-200">
                   <th className="py-2 px-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">DESCRIPTION</th>
+                  <th className="py-2 px-3 text-right text-[10px] font-bold text-gray-500 uppercase tracking-wider w-16">QTY</th>
+                  <th className="py-2 px-3 text-right text-[10px] font-bold text-gray-500 uppercase tracking-wider w-24">UNIT PRICE</th>
                   <th className="py-2 px-3 text-right text-[10px] font-bold text-gray-500 uppercase tracking-wider w-32">AMOUNT</th>
                 </tr>
               </thead>
@@ -356,8 +358,14 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ lead, onCancel, onS
                         {item.description}
                       </p>
                     </td>
-                    <td className="py-1.5 px-3 text-right align-top font-bold text-sm text-gray-900">
+                    <td className="py-1.5 px-3 text-right align-top text-sm text-gray-900">
+                      {item.quantity || 1}
+                    </td>
+                    <td className="py-1.5 px-3 text-right align-top text-sm text-gray-900">
                       {formatCurrency(item.price)}
+                    </td>
+                    <td className="py-1.5 px-3 text-right align-top font-bold text-sm text-gray-900">
+                      {formatCurrency((item.price || 0) * (item.quantity || 1))}
                     </td>
                   </tr>
                 ))}
@@ -503,7 +511,16 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ lead, onCancel, onS
                     />
                     <input
                       type="number"
-                      placeholder="Price"
+                      placeholder="Qty"
+                      value={item.quantity || 1}
+                      onChange={(e) => handleLineItemChange(index, 'quantity', parseFloat(e.target.value) || 0)}
+                      className={inputClasses.replace('w-full', 'w-24')}
+                      min="1"
+                      disabled={!canWrite}
+                    />
+                    <input
+                      type="number"
+                      placeholder="Unit Price"
                       value={item.price}
                       onChange={(e) => handleLineItemChange(index, 'price', parseFloat(e.target.value) || 0)}
                       className={`${inputClasses} w-32`}
