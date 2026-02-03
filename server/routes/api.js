@@ -1041,6 +1041,18 @@ router.post('/leads', authenticateToken, async (req, res) => {
   try {
     const lead = req.body;
 
+    // Validate that contact exists in the database
+    const contactCheck = await query(
+      'SELECT id FROM contacts WHERE LOWER(name) = LOWER($1)',
+      [lead.contact]
+    );
+
+    if (contactCheck.rows.length === 0) {
+      return res.status(400).json({
+        error: 'Contact does not exist. Please create the contact first in the Contacts section.'
+      });
+    }
+
     // 1. Create the Lead
     const leadResult = await query(`
       INSERT INTO leads(title, company, value, contact, stage, email, phone, source, assigned_to, notes, quotations)
@@ -1062,43 +1074,8 @@ RETURNING *
 
     const newLead = leadResult.rows[0];
 
-    // 2. Automatically Create a Contact
-    // Generate Contact ID
-    const now = new Date();
-    const yy = now.getFullYear().toString().slice(-2);
-    const mm = String(now.getMonth() + 1).padStart(2, '0');
-    const dd = String(now.getDate()).padStart(2, '0');
-    const datePrefix = `LA${yy}${mm}${dd} `;
-
-    const todayContacts = await query(
-      "SELECT contact_id FROM contacts WHERE contact_id LIKE $1 ORDER BY contact_id DESC LIMIT 1",
-      [`${datePrefix}% `]
-    );
-
-    let sequence = 0;
-    if (todayContacts.rows.length > 0) {
-      const lastId = todayContacts.rows[0].contact_id;
-      sequence = parseInt(lastId.slice(-3)) + 1;
-    }
-    const newContactId = `${datePrefix}${String(sequence).padStart(3, '0')} `;
-
-    // Insert Contact
-    await query(`
-      INSERT INTO contacts(
-    name, contact_id, email, phone, department, major, notes, source, contact_type, checklist, created_at
-  ) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
-    `, [
-      lead.contact, // Contact Name
-      newContactId,
-      lead.email || null,
-      lead.phone || null,
-      'Unassigned',
-      'Unassigned',
-      `Auto - created from Lead: ${lead.title} `,
-      lead.source || 'CRM Lead',
-      'Lead',
-      JSON.stringify(DEFAULT_CHECKLIST_ITEMS)
-    ]);
+    // Contacts are NOT automatically created from leads
+    // Users must manually create contacts separately
 
     // 3. Send Notification
     if (lead.assignedTo) {
@@ -1152,43 +1129,8 @@ RETURNING *
 
     const newLead = leadResult.rows[0];
 
-    // 2. Automatically Create a Contact
-    // Generate Contact ID
-    const now = new Date();
-    const yy = now.getFullYear().toString().slice(-2);
-    const mm = String(now.getMonth() + 1).padStart(2, '0');
-    const dd = String(now.getDate()).padStart(2, '0');
-    const datePrefix = `LA${yy}${mm}${dd} `;
-
-    const todayContacts = await query(
-      "SELECT contact_id FROM contacts WHERE contact_id LIKE $1 ORDER BY contact_id DESC LIMIT 1",
-      [`${datePrefix}% `]
-    );
-
-    let sequence = 0;
-    if (todayContacts.rows.length > 0) {
-      const lastId = todayContacts.rows[0].contact_id;
-      sequence = parseInt(lastId.slice(-3)) + 1;
-    }
-    const newContactId = `${datePrefix}${String(sequence).padStart(3, '0')} `;
-
-    // Insert Contact
-    await query(`
-      INSERT INTO contacts(
-    name, contact_id, email, phone, department, major, notes, source, contact_type, checklist, created_at
-  ) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
-    `, [
-      enquiry.name,
-      newContactId,
-      enquiry.email,
-      enquiry.phone,
-      'Unassigned',
-      'Unassigned',
-      `Auto - created from Website Enquiry: ${enquiry.interest} `,
-      'Website',
-      'Lead',
-      JSON.stringify([{ id: 0, text: 'Initial Inquiry Received', completed: true, type: 'checkbox' }])
-    ]);
+    // Contacts are NOT automatically created from enquiries
+    // Admins must manually create contacts if needed
 
     // 3. Notify Admins (Optional - typically leads are unassigned initially)
     // You could query all admins and notify them here if desired.

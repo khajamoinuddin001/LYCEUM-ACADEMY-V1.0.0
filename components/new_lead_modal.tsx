@@ -18,6 +18,7 @@ const NewLeadModal: React.FC<NewLeadModalProps> = ({ isOpen, onClose, onSave, le
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [contactSearchQuery, setContactSearchQuery] = useState('');
   const [showContactDropdown, setShowContactDropdown] = useState(false);
+  const [selectedContactId, setSelectedContactId] = useState<number | null>(null);
   const [formData, setFormData] = useState({
     contact: '',
     email: '',
@@ -70,6 +71,7 @@ const NewLeadModal: React.FC<NewLeadModalProps> = ({ isOpen, onClose, onSave, le
       email: contact.email || '',
       phone: contact.phone || ''
     }));
+    setSelectedContactId(contact.id);
     setContactSearchQuery('');
     setShowContactDropdown(false);
   };
@@ -77,6 +79,7 @@ const NewLeadModal: React.FC<NewLeadModalProps> = ({ isOpen, onClose, onSave, le
   const handleContactSearch = (value: string) => {
     setContactSearchQuery(value);
     setFormData(prev => ({ ...prev, contact: value }));
+    setSelectedContactId(null); // Clear selected contact when user types
 
     // Only show dropdown if there's a value and matching contacts
     // Only show dropdown if there's a value (even if no matches, to show the "Create new" message)
@@ -144,19 +147,19 @@ const NewLeadModal: React.FC<NewLeadModalProps> = ({ isOpen, onClose, onSave, le
 
     setIsSubmitting(true);
     try {
-      // Check if contact exists, if not create it
+      // Validate that contact exists
       const existingContact = contacts.find(c =>
         c.name.toLowerCase() === formData.contact.trim().toLowerCase()
       );
 
-      if (!existingContact) {
-        // Create new contact automatically
-        await api.saveContact({
-          name: formData.contact.trim(),
-          email: formData.email.trim() || undefined,
-          phone: formData.phone.trim(),
-        } as Contact, true); // true = isNew
+      if (!existingContact && !selectedContactId) {
+        setError('Contact must exist before creating a lead. Please create the contact first in the Contacts section.');
+        setIsSubmitting(false);
+        return;
       }
+
+      // Leads do not automatically create contacts
+      // User must manually create contacts separately
 
       const leadToSave = {
         contact: formData.contact.trim(),

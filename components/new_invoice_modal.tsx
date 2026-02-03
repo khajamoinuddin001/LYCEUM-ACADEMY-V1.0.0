@@ -35,7 +35,7 @@ const NewInvoiceModal: React.FC<NewInvoiceModalProps> = ({
     date: new Date().toISOString().split('T')[0],
     dueDate: '',
     paymentMethod: 'Cash' as 'Cash' | 'Online',
-    status: 'Pending' as 'Paid' | 'Pending' | 'Overdue',
+    status: 'Paid' as 'Paid' | 'Pending' | 'Overdue',
     notes: '',
     additionalDiscount: '' as string | number
   });
@@ -45,6 +45,7 @@ const NewInvoiceModal: React.FC<NewInvoiceModalProps> = ({
   ]);
 
   const [products, setProducts] = useState<api.Product[]>([]);
+  const [previousDescriptions, setPreviousDescriptions] = useState<string[]>([]);
   const [customerSearch, setCustomerSearch] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -64,6 +65,17 @@ const NewInvoiceModal: React.FC<NewInvoiceModalProps> = ({
     try {
       const data = await api.getProducts();
       setProducts(data);
+
+      // Also load previous transaction descriptions
+      const transactions = await api.getTransactions();
+      const uniqueDescriptions = Array.from(
+        new Set(
+          transactions
+            .map(t => t.description)
+            .filter(d => d && d.trim().length > 0)
+        )
+      ) as string[];
+      setPreviousDescriptions(uniqueDescriptions);
     } catch (error) {
       console.error('Failed to fetch products:', error);
     }
@@ -174,7 +186,7 @@ const NewInvoiceModal: React.FC<NewInvoiceModalProps> = ({
         date: new Date().toISOString().split('T')[0],
         dueDate: '',
         paymentMethod: 'Cash',
-        status: 'Pending',
+        status: 'Paid',
         notes: '',
         additionalDiscount: ''
       });
@@ -300,6 +312,9 @@ const NewInvoiceModal: React.FC<NewInvoiceModalProps> = ({
               <datalist id="products-list-invoice">
                 {products.map(p => (
                   <option key={p.id} value={p.name} />
+                ))}
+                {previousDescriptions.map((desc, idx) => (
+                  <option key={`desc-${idx}`} value={desc} />
                 ))}
               </datalist>
 
