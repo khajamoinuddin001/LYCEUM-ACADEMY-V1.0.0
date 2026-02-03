@@ -120,7 +120,7 @@ const TransactionPrintView: React.FC<TransactionPrintViewProps> = ({ transaction
                                     <div className="flex flex-col">
                                         <img src="/logo.png" alt="Lyceum Academy" className="h-16 w-auto object-contain mb-4 select-none" />
                                         <h1 className="text-2xl font-bold text-lyceum-blue tracking-tight">LYCEUM ACADEMY</h1>
-                                        <p className="text-sm text-gray-600 font-medium">Professional Education & Training Services</p>
+                                        <p className="text-sm text-gray-600 font-medium">Creative Learning</p>
                                     </div>
 
                                     {/* Invoice Meta */}
@@ -147,10 +147,10 @@ const TransactionPrintView: React.FC<TransactionPrintViewProps> = ({ transaction
                                         <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">From</h3>
                                         <div className="text-gray-800 font-medium leading-relaxed">
                                             <p className="text-lg font-bold text-lyceum-blue mb-1">Lyceum Academy</p>
-                                            <p>Asif Nagar, Hyderabad</p>
-                                            <p>Telangana, India 500028</p>
+                                            <p>Opp. HP petrol pump, Falaknuma,</p>
+                                            <p>Hyderabad 500053</p>
                                             <p className="mt-2 text-sm text-gray-600">
-                                                <span className="font-semibold">Email:</span> omar@lyceumacademy.com<br />
+                                                <span className="font-semibold">Email:</span> omar@lyceumacad.com<br />
                                                 <span className="font-semibold">Phone:</span> +91 7893078791
                                             </p>
                                         </div>
@@ -212,7 +212,7 @@ const TransactionPrintView: React.FC<TransactionPrintViewProps> = ({ transaction
                                     <div className="w-64 bg-gray-50 p-6 rounded-lg border border-gray-100">
                                         <div className="flex justify-between mb-3 text-sm text-gray-600">
                                             <span>Subtotal</span>
-                                            <span>{formatCurrency((transaction.amount || 0) + (transaction.additionalDiscount || 0))}</span>
+                                            <span>{formatCurrency(Number(transaction.amount || 0) + Number(transaction.additionalDiscount || 0))}</span>
                                         </div>
                                         {transaction.additionalDiscount ? (
                                             <div className="flex justify-between mb-3 text-sm text-red-600">
@@ -248,6 +248,9 @@ const TransactionPrintView: React.FC<TransactionPrintViewProps> = ({ transaction
                                 {transaction.status === 'Paid' && (
                                     <div className="flex justify-between items-end mt-auto mb-12">
                                         <div className="text-xs text-gray-400 max-w-sm">
+                                            <div className="border border-red-500 text-red-500 bg-red-50 px-4 py-2 rounded mb-3 text-center text-xs font-medium">
+                                                Amount once paid are not refundable
+                                            </div>
                                             <p>This is a computer-generated document. No signature is required.</p>
                                         </div>
                                         <div className="text-center w-48">
@@ -265,7 +268,7 @@ const TransactionPrintView: React.FC<TransactionPrintViewProps> = ({ transaction
                                 <div className="absolute bottom-0 left-0 w-full p-10">
                                     <div className="border-t border-gray-100 pt-6 flex flex-col items-center justify-center text-center text-xs text-gray-400 space-y-2">
                                         <p className="font-medium text-gray-500">Thank you for your business!</p>
-                                        <p>Lyceum Academy Pvt Ltd • Asif Nagar, Hyderabad • +91 7893078791</p>
+                                        <p>Lyceum Academy • Opp. HP petrol pump, Falaknuma, Hyderabad 500053 • +91 7893078791</p>
                                         <p>www.lyceumacademy.com</p>
                                     </div>
                                 </div>
@@ -277,7 +280,7 @@ const TransactionPrintView: React.FC<TransactionPrintViewProps> = ({ transaction
                                 <div className="flex flex-col items-center mb-4">
                                     <img src="/logo.png" alt="Logo" className="h-12 w-auto mb-2 grayscale" />
                                     <h2 className="font-bold text-base uppercase">Lyceum Academy</h2>
-                                    <p className="text-[10px] text-gray-600">Asif Nagar, Hyderabad</p>
+                                    <p className="text-[10px] text-gray-600">Opp. HP petrol pump, Falaknuma, Hyderabad 500053</p>
                                     <p className="text-[10px] text-gray-600">Ph: +91 7893078791</p>
                                 </div>
 
@@ -329,7 +332,7 @@ const TransactionPrintView: React.FC<TransactionPrintViewProps> = ({ transaction
                                         <>
                                             <div className="flex justify-between text-xs">
                                                 <span>Subtotal</span>
-                                                <span>{formatCurrency((transaction.amount || 0) + (transaction.additionalDiscount || 0))}</span>
+                                                <span>{formatCurrency(Number(transaction.amount || 0) + Number(transaction.additionalDiscount || 0))}</span>
                                             </div>
                                             <div className="flex justify-between text-xs text-red-600">
                                                 <span>Discount</span>

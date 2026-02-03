@@ -4,27 +4,29 @@
 
 import React, { useState, useMemo } from 'react';
 import type { LmsCourse, LmsLesson, LmsModule, Contact, User } from '../types';
-import { ArrowLeft, BookOpen, ChevronDown, CheckCircle2, Circle, Video, Plus, Edit, Trash2, X, Paperclip, FileQuestion, BarChart3, GraduationCap, IndianRupee, FileText, MessageCircle } from './icons';
+import { ArrowLeft, BookOpen, ChevronDown, CheckCircle2, Circle, Video, Plus, Edit, Trash2, X, Paperclip, FileQuestion, BarChart3, GraduationCap, IndianRupee, FileText, MessageCircle, UserPlus } from './icons';
 import CourseAnalyticsView from './course_analytics_view';
 import CourseDiscussionsView from './course_discussions_view';
+import ManualEnrollmentModal from './manual_enrollment_modal';
 
 interface CourseDetailViewProps {
-  course: LmsCourse;
-  student?: Contact;
-  user: User;
-  users: User[];
-  contacts: Contact[];
-  onSelectLesson: (lesson: LmsLesson) => void;
-  onBack: () => void;
-  onModuleCreate: (courseId: string, title: string) => void;
-  onModuleUpdate: (courseId: string, moduleId: string, newTitle: string) => void;
-  onModuleDelete: (courseId: string, moduleId: string) => void;
-  onLessonCreate: (moduleId: string) => void;
-  onLessonUpdate: (lesson: LmsLesson) => void;
-  onLessonDelete: (courseId: string, lessonId: string) => void;
-  onViewCertificate: (course: LmsCourse) => void;
-  onInitiatePurchase: (course: LmsCourse) => void;
-  onSavePost: (courseId: string, threadId: string | 'new', postContent: { title?: string; content: string }) => void;
+    course: LmsCourse;
+    student?: Contact;
+    user: User;
+    users: User[];
+    contacts: Contact[];
+    onSelectLesson: (lesson: LmsLesson) => void;
+    onBack: () => void;
+    onModuleCreate: (courseId: string, title: string) => void;
+    onModuleUpdate: (courseId: string, moduleId: string, newTitle: string) => void;
+    onModuleDelete: (courseId: string, moduleId: string) => void;
+    onLessonCreate: (moduleId: string) => void;
+    onLessonUpdate: (lesson: LmsLesson) => void;
+    onLessonDelete: (courseId: string, lessonId: string) => void;
+    onViewCertificate: (course: LmsCourse) => void;
+    onInitiatePurchase: (course: LmsCourse) => void;
+    onSavePost: (courseId: string, threadId: string | 'new', postContent: { title?: string; content: string }) => void;
+    onManualEnroll: (data: { contactId: string; generateInvoice: boolean; markAsPaid: boolean; paymentMethod: string; price: number }) => Promise<void>;
 }
 
 const ModuleEditor: React.FC<{
@@ -42,10 +44,10 @@ const ModuleEditor: React.FC<{
         }
         setIsEditing(false);
     }
-    
+
     return isEditing ? (
-        <div className="flex items-center gap-2">
-            <input 
+        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+            <input
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
@@ -54,14 +56,14 @@ const ModuleEditor: React.FC<{
                 className="bg-transparent text-gray-800 dark:text-gray-100 font-semibold focus:ring-1 focus:ring-lyceum-blue focus:outline-none rounded-md px-1 -ml-1"
                 autoFocus
             />
-             <button onClick={handleSave} className="p-1 text-green-600 hover:bg-green-100 rounded-full"><CheckCircle2 size={16} /></button>
-             <button onClick={() => setIsEditing(false)} className="p-1 text-red-600 hover:bg-red-100 rounded-full"><X size={16} /></button>
+            <button onClick={handleSave} className="p-1 text-green-600 hover:bg-green-100 rounded-full"><CheckCircle2 size={16} /></button>
+            <button onClick={() => setIsEditing(false)} className="p-1 text-red-600 hover:bg-red-100 rounded-full"><X size={16} /></button>
         </div>
     ) : (
         <div className="flex items-center gap-2 group">
             <h3 className="font-semibold text-gray-800 dark:text-gray-100">{module.title}</h3>
-            <button onClick={() => setIsEditing(true)} className="p-1 text-gray-400 hover:text-lyceum-blue opacity-0 group-hover:opacity-100 transition-opacity"><Edit size={16} /></button>
-            <button onClick={() => onModuleDelete(courseId, module.id)} className="p-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={16} /></button>
+            <button onClick={(e) => { e.stopPropagation(); setIsEditing(true); }} className="p-1 text-gray-400 hover:text-lyceum-blue opacity-0 group-hover:opacity-100 transition-opacity"><Edit size={16} /></button>
+            <button onClick={(e) => { e.stopPropagation(); onModuleDelete(courseId, module.id); }} className="p-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={16} /></button>
         </div>
     );
 };
@@ -79,7 +81,7 @@ const CourseEnrollmentView: React.FC<{ course: LmsCourse; onPurchase: () => void
                     <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-4 -mr-4">
                         {course.modules.map((module, index) => (
                             <div key={module.id} className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                                <h4 className="font-semibold text-gray-700 dark:text-gray-200">Module {index+1}: {module.title}</h4>
+                                <h4 className="font-semibold text-gray-700 dark:text-gray-200">Module {index + 1}: {module.title}</h4>
                                 <ul className="mt-2 ml-4 list-disc list-inside text-sm text-gray-600 dark:text-gray-400 space-y-1">
                                     {module.lessons.map(lesson => (
                                         <li key={lesson.id}>{lesson.title}</li>
@@ -98,7 +100,7 @@ const CourseEnrollmentView: React.FC<{ course: LmsCourse; onPurchase: () => void
                         <button onClick={onPurchase} className="w-full mt-4 px-6 py-3 bg-lyceum-blue text-white rounded-md shadow-sm text-lg font-semibold hover:bg-lyceum-blue-dark transition-colors">
                             Buy Now
                         </button>
-                         <div className="mt-4 pt-4 border-t border-lyceum-blue/20 space-y-2 text-sm">
+                        <div className="mt-4 pt-4 border-t border-lyceum-blue/20 space-y-2 text-sm">
                             <h4 className="font-semibold text-gray-700 dark:text-gray-200">This course includes:</h4>
                             <p className="flex items-center text-gray-600 dark:text-gray-300"><BookOpen size={16} className="mr-2 text-gray-500" /> {course.modules.length} modules</p>
                             <p className="flex items-center text-gray-600 dark:text-gray-300"><Paperclip size={16} className="mr-2 text-gray-500" /> {totalLessons} lessons</p>
@@ -113,18 +115,19 @@ const CourseEnrollmentView: React.FC<{ course: LmsCourse; onPurchase: () => void
 };
 
 const CourseDetailView: React.FC<CourseDetailViewProps> = (props) => {
-    const { course, student, user, users, contacts, onSelectLesson, onBack, onModuleCreate, onModuleUpdate, onModuleDelete, onLessonCreate, onLessonUpdate, onLessonDelete, onViewCertificate, onInitiatePurchase } = props;
+    const { course, student, user, users, contacts, onSelectLesson, onBack, onModuleCreate, onModuleUpdate, onModuleDelete, onLessonCreate, onLessonUpdate, onLessonDelete, onViewCertificate, onInitiatePurchase, onSavePost, onManualEnroll } = props;
     const [openModuleId, setOpenModuleId] = useState<string | null>(course.modules[0]?.id || null);
     const [newModuleTitle, setNewModuleTitle] = useState('');
     const [viewMode, setViewMode] = useState<'content' | 'analytics' | 'discussions'>('content');
+    const [showEnrollModal, setShowEnrollModal] = useState(false);
 
     const isAdmin = user.role === 'Admin';
     const isEnrolled = !!(student?.lmsProgress?.[course.id]);
     const isStudent = user.role === 'Student';
 
-    const enrolledStudents = useMemo(() => 
-        contacts.filter(c => c.lmsProgress && course.id in c.lmsProgress), 
-    [contacts, course.id]);
+    const enrolledStudents = useMemo(() =>
+        contacts.filter(c => c.lmsProgress && course.id in c.lmsProgress),
+        [contacts, course.id]);
 
     const toggleModule = (moduleId: string) => {
         setOpenModuleId(openModuleId === moduleId ? null : moduleId);
@@ -147,7 +150,6 @@ const CourseDetailView: React.FC<CourseDetailViewProps> = (props) => {
                     <ArrowLeft size={16} className="mr-2" />
                     Back to Courses
                 </button>
-                
                 <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
                     <div className="p-6">
                         <div className="flex items-start justify-between">
@@ -163,10 +165,10 @@ const CourseDetailView: React.FC<CourseDetailViewProps> = (props) => {
                             </div>
                         </div>
                     </div>
-                    
+
                     <CourseEnrollmentView course={course} onPurchase={() => onInitiatePurchase(course)} />
                 </div>
-                 <style>{`
+                <style>{`
                     @keyframes fade-in {
                         from { opacity: 0; transform: translateY(10px); }
                         to { opacity: 1; transform: translateY(0); }
@@ -179,19 +181,19 @@ const CourseDetailView: React.FC<CourseDetailViewProps> = (props) => {
         )
     }
 
-    const CourseContent = () => (
+    const courseContent = (
         <div className="border-t border-gray-200 dark:border-gray-700">
             {course.modules.map((module, index) => (
                 <div key={module.id} className="border-b border-gray-200 dark:border-gray-700 last:border-b-0">
                     <div className="flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                        <button onClick={() => toggleModule(module.id)} className="flex items-center text-left flex-grow">
+                        <div onClick={() => toggleModule(module.id)} className="flex items-center text-left flex-grow cursor-pointer select-none">
                             <span className="text-lg font-bold text-lyceum-blue mr-4">{String(index + 1).padStart(2, '0')}</span>
                             {isAdmin ? (
                                 <ModuleEditor module={module} courseId={course.id} onModuleUpdate={onModuleUpdate} onModuleDelete={onModuleDelete} />
                             ) : (
                                 <h3 className="font-semibold text-gray-800 dark:text-gray-100">{module.title}</h3>
                             )}
-                        </button>
+                        </div>
                         <button onClick={() => toggleModule(module.id)}>
                             <ChevronDown size={20} className={`text-gray-500 transition-transform ${openModuleId === module.id ? 'rotate-180' : ''}`} />
                         </button>
@@ -237,7 +239,7 @@ const CourseDetailView: React.FC<CourseDetailViewProps> = (props) => {
             ))}
             {isAdmin && (
                 <div className="p-4 flex items-center gap-2">
-                     <input 
+                    <input
                         type="text"
                         placeholder="New module title..."
                         value={newModuleTitle}
@@ -258,7 +260,7 @@ const CourseDetailView: React.FC<CourseDetailViewProps> = (props) => {
                 <ArrowLeft size={16} className="mr-2" />
                 Back to Courses
             </button>
-            
+
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
                 <div className="p-6">
                     <div className="flex items-start justify-between">
@@ -280,7 +282,7 @@ const CourseDetailView: React.FC<CourseDetailViewProps> = (props) => {
                                 <BookOpen size={24} />
                             </div>
                             {user.role === 'Student' && isCourseCompleted && (
-                                <button 
+                                <button
                                     onClick={() => onViewCertificate(course)}
                                     className="inline-flex items-center px-3 py-2 text-sm font-semibold text-yellow-900 bg-yellow-400 rounded-md shadow-sm hover:bg-yellow-500 whitespace-nowrap"
                                 >
@@ -290,7 +292,7 @@ const CourseDetailView: React.FC<CourseDetailViewProps> = (props) => {
                             )}
                         </div>
                     </div>
-                     <div className="mt-4">
+                    <div className="mt-4">
                         <div className="flex justify-between mb-1">
                             <span className="text-sm font-medium text-lyceum-blue">Course Progress</span>
                             <span className="text-sm font-medium text-lyceum-blue">{completedLessons.length} of {totalLessons} complete</span>
@@ -300,6 +302,17 @@ const CourseDetailView: React.FC<CourseDetailViewProps> = (props) => {
                         </div>
                     </div>
                 </div>
+                {isAdmin && (
+                    <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
+                        <button
+                            onClick={() => setShowEnrollModal(true)}
+                            className="flex items-center gap-2 px-4 py-2 bg-lyceum-blue text-white rounded-lg hover:bg-lyceum-blue-dark transition-colors text-sm font-medium"
+                        >
+                            <UserPlus size={16} />
+                            Enroll Student Manually
+                        </button>
+                    </div>
+                )}
 
                 <div className="border-b border-t border-gray-200 dark:border-gray-700">
                     <nav className="-mb-px flex space-x-4 px-6">
@@ -309,7 +322,7 @@ const CourseDetailView: React.FC<CourseDetailViewProps> = (props) => {
                         >
                             <BookOpen size={16} /> Content
                         </button>
-                         <button
+                        <button
                             onClick={() => setViewMode('discussions')}
                             className={`flex items-center gap-2 py-3 px-1 text-sm font-medium border-b-2 ${viewMode === 'discussions' ? 'border-lyceum-blue text-lyceum-blue' : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-200'}`}
                         >
@@ -325,15 +338,27 @@ const CourseDetailView: React.FC<CourseDetailViewProps> = (props) => {
                         )}
                     </nav>
                 </div>
-                
+
                 {viewMode === 'analytics' && isAdmin ? (
                     <CourseAnalyticsView course={course} enrolledStudents={enrolledStudents} />
                 ) : viewMode === 'discussions' ? (
                     <CourseDiscussionsView course={course} user={user} users={users} onSavePost={props.onSavePost} />
                 ) : (
-                    <CourseContent />
+                    courseContent
                 )}
             </div>
+
+            {
+                showEnrollModal && (
+                    <ManualEnrollmentModal
+                        isOpen={showEnrollModal}
+                        onClose={() => setShowEnrollModal(false)}
+                        onEnroll={onManualEnroll}
+                        contacts={contacts}
+                        course={course}
+                    />
+                )
+            }
 
             <style>{`
                 @keyframes fade-in {
@@ -344,7 +369,7 @@ const CourseDetailView: React.FC<CourseDetailViewProps> = (props) => {
                     animation: fade-in 0.3s ease-out forwards;
                 }
             `}</style>
-        </div>
+        </div >
     );
 };
 

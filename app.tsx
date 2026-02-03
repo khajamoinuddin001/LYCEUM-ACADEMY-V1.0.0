@@ -45,6 +45,7 @@ import NewAppointmentModal from './components/new_appointment_modal';
 import ContactVisitsView from './components/contact_visits_view';
 import ContactCrmView from './components/contact_crm_view';
 import ContactTasksView from './components/contact_tasks_view';
+import ContactCoursesView from './components/contact_courses_view';
 import ResetPasswordView from './components/reset_password_view';
 import ForgotPasswordView from './components/forgot_password_view';
 import ResetPasswordForm from './components/reset_password_form';
@@ -592,7 +593,9 @@ const DashboardLayout: React.FC = () => {
   };
 
   const handleSaveContact = async (updatedContact: Contact) => {
-    if (currentUser?.role !== 'Admin') {
+    const isSelfUpdate = updatedContact.userId === currentUser?.id;
+
+    if (currentUser?.role !== 'Admin' && !isSelfUpdate) {
       if (editingContact === 'new' && !currentUser?.permissions?.['Contacts']?.create) return null;
       if (editingContact !== 'new' && !currentUser?.permissions?.['Contacts']?.update) return null;
     }
@@ -1587,6 +1590,29 @@ const DashboardLayout: React.FC = () => {
     }
   };
 
+  const handleManualEnroll = async (data: { contactId: string; generateInvoice: boolean; markAsPaid: boolean; paymentMethod: string; price: number }) => {
+    if (!activeCourse) return;
+    try {
+      await api.manualEnroll(activeCourse.id, data);
+      alert('Student enrolled successfully!');
+
+      // Refresh contacts to show updated progress
+      const updatedContacts = await api.getContacts();
+      setContacts(updatedContacts);
+
+      // Refresh transactions if invoice was generated
+      if (data.generateInvoice) {
+        const updatedTransactions = await api.getTransactions();
+        setTransactions(updatedTransactions);
+        // Also refresh summary/dashboard data if needed
+        api.getTransactions().then(setTransactions);
+      }
+    } catch (err: any) {
+      alert('Failed to enroll student: ' + (err.message || 'Unknown error'));
+      console.error(err);
+    }
+  };
+
   const renderAppContent = () => {
     if (!currentUser) return null;
     const studentContact = contacts.find(c => c.userId === currentUser.id);
@@ -1629,7 +1655,7 @@ const DashboardLayout: React.FC = () => {
           return <LmsPlayerView course={activeCourse} student={studentContact} user={currentUser} users={users} onBack={() => { setActiveCourse(null); setActiveLesson(null); }} onMarkComplete={handleMarkLessonComplete} onSaveNote={handleSaveNote} onSavePost={handleSaveDiscussionPost} />;
         }
         if (activeCourse) {
-          return <CourseDetailView course={activeCourse} student={studentContact} contacts={contacts} user={currentUser} users={users} onSelectLesson={() => { }} onBack={() => { setActiveCourse(null); setActiveLesson(null); setViewingCertificateForCourse(null); }} onModuleCreate={handleLmsModuleCreate} onModuleUpdate={handleLmsModuleUpdate} onModuleDelete={handleLmsModuleDelete} onLessonCreate={(moduleId) => setEditingLessonInfo({ courseId: activeCourse.id, moduleId, lesson: 'new' })} onLessonUpdate={(lesson) => setEditingLessonInfo({ courseId: activeCourse.id, moduleId: '', lesson })} onLessonDelete={handleLmsLessonDelete} onViewCertificate={setViewingCertificateForCourse} onInitiatePurchase={handleInitiatePurchase} onSavePost={handleSaveDiscussionPost} />;
+          return <CourseDetailView course={activeCourse} student={studentContact} contacts={contacts} user={currentUser} users={users} onSelectLesson={() => { }} onBack={() => { setActiveCourse(null); setActiveLesson(null); setViewingCertificateForCourse(null); }} onModuleCreate={handleLmsModuleCreate} onModuleUpdate={handleLmsModuleUpdate} onModuleDelete={handleLmsModuleDelete} onLessonCreate={(moduleId) => setEditingLessonInfo({ courseId: activeCourse.id, moduleId, lesson: 'new' })} onLessonUpdate={(lesson) => setEditingLessonInfo({ courseId: activeCourse.id, moduleId: '', lesson })} onLessonDelete={handleLmsLessonDelete} onViewCertificate={setViewingCertificateForCourse} onInitiatePurchase={handleInitiatePurchase} onSavePost={handleSaveDiscussionPost} onManualEnroll={handleManualEnroll} />;
         }
         return <LmsView courses={lmsCourses} onCourseSelect={setActiveCourse} user={currentUser} contacts={contacts} onNewCourse={() => setEditingCourse('new')} onEditCourse={setEditingCourse} onDeleteCourse={handleLmsCourseDelete} onInitiatePurchase={handleInitiatePurchase} />;
       case 'Contacts':
@@ -1641,13 +1667,14 @@ const DashboardLayout: React.FC = () => {
           if (contactData && contactViewMode === 'visits') return <ContactVisitsView user={currentUser} contact={contactData} onNavigateBack={() => setContactViewMode('details')} />;
           if (contactData && contactViewMode === 'crm') return <ContactCrmView contact={contactData} leads={leads} onNavigateBack={() => setContactViewMode('details')} user={currentUser} onSaveTask={handleSaveTask} onSaveQuotation={handleSaveContactQuotation} quotationTemplates={quotationTemplates} onSaveTemplate={handleSaveQuotationTemplate} onDeleteTemplate={handleDeleteQuotationTemplate} onDeleteContact={handleDeleteContact} onApproveQuotation={handleApproveQuotation} onManualAcceptQuotation={handleManualAcceptQuotation} onDeleteQuotation={async (leadId, quotationId) => { if (window.confirm('Are you sure you want to delete this quotation? This action cannot be undone.')) { const updatedLeads = await api.deleteQuotation(leadId, quotationId); setLeads(updatedLeads); const updatedContacts = await api.getContacts(); setContacts(updatedContacts); } }} />;
           if (contactData && contactViewMode === 'tasks') return <ContactTasksView contact={contactData} tasks={tasks} user={currentUser} onNavigateBack={() => setContactViewMode('details')} onSaveTask={handleSaveTask} />;
+          if (contactData && contactViewMode === 'courses') return <ContactCoursesView contact={contactData} user={currentUser} onNavigateBack={() => setContactViewMode('details')} courses={lmsCourses} />;
 
           // Render form if we have data OR if we are creating a new contact
           if (contactData || editingContact === 'new') {
-            return <NewContactForm user={currentUser} users={users} contact={contactData} contacts={contacts} onNavigateBack={handleBackToContacts} onNavigateToDocuments={() => setContactViewMode('documents')} onNavigateToVisa={() => setContactViewMode('visaFiling')} onNavigateToChecklist={() => setContactViewMode('checklist')} onNavigateToVisits={() => setContactViewMode('visits')} onNavigateToCRM={() => setContactViewMode('crm')} onNavigateToTasks={() => setContactViewMode('tasks')} onSave={handleSaveContact} onComposeAIEmail={handleGenerateEmailDraft} onAddSessionVideo={api.addSessionVideo} onDeleteSessionVideo={api.deleteSessionVideo} transactions={transactions} tasks={tasks} onSaveTask={handleSaveTask} onDeleteContact={handleDeleteContact} />;
+            return <NewContactForm user={currentUser} users={users} contact={contactData} contacts={contacts} onNavigateBack={handleBackToContacts} onNavigateToDocuments={() => setContactViewMode('documents')} onNavigateToVisa={() => setContactViewMode('visaFiling')} onNavigateToChecklist={() => setContactViewMode('checklist')} onNavigateToVisits={() => setContactViewMode('visits')} onNavigateToCRM={() => setContactViewMode('crm')} onNavigateToTasks={() => setContactViewMode('tasks')} onNavigateToCourses={() => setContactViewMode('courses')} onSave={handleSaveContact} onComposeAIEmail={handleGenerateEmailDraft} onAddSessionVideo={api.addSessionVideo} onDeleteSessionVideo={api.deleteSessionVideo} transactions={transactions} tasks={tasks} onSaveTask={handleSaveTask} onDeleteContact={handleDeleteContact} />;
           }
         }
-        return <ContactsView contacts={contacts} onContactSelect={handleContactSelect} onNewContactClick={handleNewContactClick} user={currentUser} />;
+        return <ContactsView contacts={contacts} onContactSelect={handleContactSelect} onNewContact={handleNewContactClick} user={currentUser} />;
       case 'Calendar': return <CalendarView events={events} onNewEvent={handleOpenNewEventModal} onSelectEvent={handleSelectEvent} />;
       case 'CRM':
         if (leadForQuotation) {

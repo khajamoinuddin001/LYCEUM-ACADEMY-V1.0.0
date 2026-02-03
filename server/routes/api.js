@@ -649,8 +649,8 @@ name = $1, email = $2, phone = $3, department = $4, major = $5, notes = $6,
   city = $21, state = $22, zip = $23, country = $24, gstin = $25, pan = $26, tags = $27,
   visa_type = $28, country_of_application = $29, source = $30, contact_type = $31,
   stream = $32, intake = $33, counselor_assigned = $34, application_email = $35,
-  application_password = $36, metadata = $37, counselor_assigned_2 = $38
-      WHERE id = $39
+  application_password = $36, metadata = $37
+      WHERE id = $38
   `, [
       contact.name,
       contact.email,
@@ -689,7 +689,6 @@ name = $1, email = $2, phone = $3, department = $4, major = $5, notes = $6,
       contact.applicationEmail,
       contact.applicationPassword,
       JSON.stringify(contact.metadata || {}),
-      contact.counselorAssigned2,
       req.params.id
     ]);
 
@@ -1259,7 +1258,8 @@ router.get('/transactions', authenticateToken, async (req, res) => {
       contactId: t.contact_id,
       customerName: t.customer_name, // Map snake_case to camelCase
       paymentMethod: t.payment_method,
-      dueDate: t.due_date
+      dueDate: t.due_date,
+      additionalDiscount: t.additional_discount
     }));
     res.json(transactions);
   } catch (error) {
@@ -1367,8 +1367,8 @@ router.post('/transactions', authenticateToken, async (req, res) => {
     const transaction = req.body;
     const id = transaction.id || `${transaction.type === 'Bill' ? 'BILL' : 'INV'}-${String(Date.now()).slice(-6)}`;
     const result = await query(`
-      INSERT INTO transactions(id, contact_id, customer_name, date, description, type, status, amount, payment_method, due_date)
-      VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      INSERT INTO transactions(id, contact_id, customer_name, date, description, type, status, amount, payment_method, due_date, additional_discount)
+      VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       RETURNING *
     `, [
       id,
@@ -1380,7 +1380,8 @@ router.post('/transactions', authenticateToken, async (req, res) => {
       transaction.status || 'Pending',
       transaction.amount,
       transaction.paymentMethod || null,
-      transaction.dueDate || null
+      transaction.dueDate || null,
+      transaction.additionalDiscount || 0
     ]);
     const newTransaction = result.rows[0];
 
@@ -1489,7 +1490,15 @@ router.put('/transactions/:id', authenticateToken, async (req, res) => {
       req.params.id
     ]);
     const result = await query('SELECT * FROM transactions WHERE id = $1', [req.params.id]);
-    res.json(result.rows[0]);
+    const updated = result.rows[0];
+    res.json({
+      ...updated,
+      contactId: updated.contact_id,
+      customerName: updated.customer_name,
+      paymentMethod: updated.payment_method,
+      dueDate: updated.due_date,
+      additionalDiscount: updated.additional_discount
+    });
   } catch (error) {
     console.error('PUT /transactions/:id - Error:', error);
     res.status(500).json({ error: error.message });
@@ -2120,6 +2129,72 @@ RETURNING *
     ]);
     res.json(result.rows[0]);
   } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/lms-courses/:id/enroll', authenticateToken, async (req, res) => {
+  try {
+    const { id: courseId } = req.params;
+    const { contactId, generateInvoice, markAsPaid, paymentMethod, price } = req.body;
+
+    if (!contactId) return res.status(400).json({ error: 'Contact ID is required' });
+
+    // 1. Get Course details
+    const courseRes = await query('SELECT * FROM lms_courses WHERE id = $1', [courseId]);
+    if (courseRes.rows.length === 0) return res.status(404).json({ error: 'Course not found' });
+    const course = courseRes.rows[0];
+
+    // 2. Get Contact
+    const contactRes = await query('SELECT * FROM contacts WHERE id = $1', [contactId]);
+    if (contactRes.rows.length === 0) return res.status(404).json({ error: 'Contact not found' });
+    const contact = contactRes.rows[0];
+
+    // 3. Update Contact Enrollment
+    let courses = Array.isArray(contact.courses) ? contact.courses : JSON.parse(contact.courses || '[]');
+    if (!courses.includes(courseId)) {
+      courses.push(courseId);
+    }
+
+    let lmsProgress = typeof contact.lms_progress === 'string' ? JSON.parse(contact.lms_progress || '{}') : (contact.lms_progress || {});
+    if (!lmsProgress[courseId]) {
+      lmsProgress[courseId] = { completedLessons: [] };
+    }
+
+    await query('UPDATE contacts SET courses = $1, lms_progress = $2 WHERE id = $3', [
+      JSON.stringify(courses),
+      JSON.stringify(lmsProgress),
+      contactId
+    ]);
+
+    // 4. Generate Invoice (if requested)
+    if (generateInvoice) {
+      const transactionId = `txn-${Date.now()}`;
+      const description = `Enrollment in ${course.title}`;
+      const status = markAsPaid ? 'Paid' : 'Due';
+      const type = 'Invoice';
+      const date = new Date().toISOString().split('T')[0];
+
+      await query(`
+        INSERT INTO transactions(id, contact_id, customer_name, date, description, type, status, amount, payment_method)
+        VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      `, [
+        transactionId,
+        contactId,
+        contact.name,
+        date,
+        description,
+        type,
+        status,
+        price,
+        markAsPaid ? paymentMethod : null
+      ]);
+    }
+
+    res.json({ success: true });
+
+  } catch (error) {
+    console.error('Enrollment error:', error);
     res.status(500).json({ error: error.message });
   }
 });

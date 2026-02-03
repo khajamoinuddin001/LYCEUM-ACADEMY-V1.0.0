@@ -283,7 +283,7 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ lead, onCancel, onS
                 <img src="/logo.png" alt="Lyceum Academy" className="h-12 w-auto object-contain select-none" />
               </div>
               <h1 className="text-lg font-extrabold text-lyceum-blue uppercase tracking-tight mb-0.5">Lyceum Academy</h1>
-              <p className="text-xs text-gray-500 font-medium">Professional Education & Training Services</p>
+              <p className="text-xs text-gray-500 font-medium">Creative Learning</p>
             </div>
 
             {/* Quotation Meta - Right Aligned */}
@@ -314,10 +314,10 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ lead, onCancel, onS
               <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">FROM</h3>
               <div className="text-gray-900 text-sm leading-relaxed">
                 <p className="text-lg font-bold text-lyceum-blue mb-2">Lyceum Academy</p>
-                <p>Asif Nagar, Hyderabad</p>
-                <p>Telangana, India 500028</p>
+                <p>Opp. HP petrol pump, Falaknuma,</p>
+                <p>Hyderabad 500053</p>
                 <div className="mt-4 space-y-1">
-                  <p><span className="font-semibold text-gray-600">Email:</span> omar@lyceumacademy.com</p>
+                  <p><span className="font-semibold text-gray-600">Email:</span> omar@lyceumacad.com </p>
                   <p><span className="font-semibold text-gray-600">Phone:</span> +91 7893078791</p>
                 </div>
               </div>
@@ -395,6 +395,9 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ lead, onCancel, onS
           <div className="mt-2 shrink-0 break-inside-avoid">
             <div className="grid grid-cols-2 gap-4 items-end mb-2 pb-2 border-b border-gray-100">
               <div className="text-[10px] text-gray-500 leading-relaxed">
+                <div className="border border-red-500 text-red-500 bg-red-50 px-3 py-1.5 rounded mb-3 text-center text-[11px] font-medium w-full">
+                  Amount once paid are not refundable
+                </div>
                 <p className="text-gray-400 mb-2 block italic">This is a computer-generated document. No signature is required.</p>
 
                 <div className="mb-2">
@@ -423,7 +426,7 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ lead, onCancel, onS
               <div className="flex gap-3 text-gray-500 text-[11px] font-medium">
                 <span>Lyceum Academy</span>
                 <span>•</span>
-                <span>Asif Nagar, Hyderabad, Telangana, India 500028</span>
+                <span>Opp. HP petrol pump, Falaknuma, Hyderabad 500053</span>
                 <span>•</span>
                 <span>+91 7893078791</span>
               </div>

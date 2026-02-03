@@ -162,7 +162,7 @@ const QuotationDetailsModal: React.FC<QuotationDetailsModalProps> = ({ quotation
           <div class="logo-section">
             <img src="https://lyceum-academy-assets.s3.amazonaws.com/logo.png" alt="Lyceum Academy" class="logo" onerror="this.src='/logo.png'" />
             <div class="company-name">Lyceum Academy</div>
-            <div class="tagline">Professional Education & Training Services</div>
+            <div class="tagline">Creative Learning</div>
           </div>
           
           <div class="meta-section">
@@ -185,10 +185,10 @@ const QuotationDetailsModal: React.FC<QuotationDetailsModalProps> = ({ quotation
             <div class="address-label">From</div>
             <div class="address-content">
               <div class="address-name">Lyceum Academy</div>
-              <div>Asif Nagar, Hyderabad</div>
-              <div>Telangana, India 500028</div>
+              <div>Opp. HP petrol pump, Falaknuma,</div>
+              <div>Hyderabad 500053</div>
               <div class="contact-row">
-                <div><span style="font-weight: 600;">Email:</span> omar@lyceumacademy.com</div>
+                <div><span style="font-weight: 600;">Email:</span> omar@lyceumacad.com</div>
                 <div><span style="font-weight: 600;">Phone:</span> +91 7893078791</div>
               </div>
             </div>
@@ -270,8 +270,8 @@ const QuotationDetailsModal: React.FC<QuotationDetailsModalProps> = ({ quotation
         <div class="page-footer">
             <div class="footer-msg">Thank you for your business!</div>
             <div class="footer-info">
-                <span>Lyceum Academy Pvt Ltd</span> • 
-                <span>Asif Nagar, Hyderabad, Telangana, India 500028</span> • 
+                <span>Lyceum Academy</span> • 
+                <span>Opp. HP petrol pump, Falaknuma, Hyderabad 500053</span> • 
                 <span>+91 7893078791</span>
             </div>
             <a href="https://www.lyceumacademy.com" class="footer-link">www.lyceumacademy.com</a>

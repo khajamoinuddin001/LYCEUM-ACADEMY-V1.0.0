@@ -1041,6 +1041,13 @@ export const saveDiscussionPost = async (courseId: string, threadId: string | 'n
   return getLmsCourses();
 };
 
+export const manualEnroll = async (courseId: string, data: { contactId: string; generateInvoice: boolean; markAsPaid: boolean; paymentMethod: string; price: number }): Promise<void> => {
+  await apiRequest(`/lms-courses/${courseId}/enroll`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+};
+
 // Visitors
 export const getVisitors = async (): Promise<Visitor[]> => {
   return apiRequest<Visitor[]>('/visitors');
