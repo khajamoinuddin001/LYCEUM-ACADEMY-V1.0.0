@@ -403,8 +403,11 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ lead, onCancel, onS
           <div className="mt-2 shrink-0 break-inside-avoid">
             <div className="grid grid-cols-2 gap-4 items-end mb-2 pb-2 border-b border-gray-100">
               <div className="text-[10px] text-gray-500 leading-relaxed">
-                <div className="border border-red-500 text-red-500 bg-red-50 px-3 py-1.5 rounded mb-3 text-center text-[11px] font-medium w-full">
-                  Amount once paid are not refundable
+                <div className="border border-red-500 text-red-500 bg-red-50 px-3 py-1.5 rounded mb-3 text-[10px] font-medium leading-relaxed">
+                  <p className="font-bold mb-1">TERMS & CONDITIONS:</p>
+                  <p className="mb-1">1. All the payments made to Lyceum Academy are non-refundable under any circumstances.</p>
+                  <p className="mb-1">2. By purchasing services, you agree to be bound by the current terms and conditions available at lyceumacad.com/terms-conditions.</p>
+                  <p>3. Lyceum Academy may cancel services if payments are delayed or terms are violated.</p>
                 </div>
                 <p className="text-gray-400 mb-2 block italic">This is a computer-generated document. No signature is required.</p>
 

@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import type { TodoTask, User, TaskPriority, TodoStatus } from '../types';
-import { Search, Filter, Plus, Edit, Trash2, Calendar, User as UserIcon, AlertCircle, CheckCircle2, Clock, MoreHorizontal } from './icons';
+import { Search, Filter, Plus, Edit, Trash2, Calendar, User as UserIcon, AlertCircle, CheckCircle2, Clock, MoreHorizontal, X } from './icons';
 import { getStaffMembers } from '../utils/api';
 import TaskDetailModal from './task_detail_modal';
 
@@ -86,7 +86,8 @@ const TasksView: React.FC<TasksViewProps> = ({
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState<'All' | TodoStatus>('todo');
     const [priorityFilter, setPriorityFilter] = useState<'All' | TaskPriority>('All');
-    const [dateFilter, setDateFilter] = useState(''); // New date filter state
+    const [startDate, setStartDate] = useState(''); // New start date filter
+    const [endDate, setEndDate] = useState(''); // New end date filter
     const [adminFilterUser, setAdminFilterUser] = useState<string>('self'); // 'self', 'all', or userId
     const [activeTab, setActiveTab] = useState<'Tasks' | 'History' | 'Personal'>('Tasks');
     const [staff, setStaff] = useState<{ id: number; name: string; role: string }[]>([]);
@@ -179,17 +180,16 @@ const TasksView: React.FC<TasksViewProps> = ({
 
             // Date filtering logic
             let matchesDate = true;
-            if (dateFilter) {
-                if (t.status === 'done' && t.completedAt) {
-                    // For completed tasks, compare with completion date (local time YYYY-MM-DD)
-                    const completedDate = new Date(t.completedAt).toLocaleDateString('en-CA');
-                    matchesDate = completedDate === dateFilter;
-                } else if (t.dueDate) {
-                    // For pending tasks, compare with due date
-                    matchesDate = t.dueDate === dateFilter;
-                } else {
-                    // If pending and no due date, hide when date filter is active
+            const taskDateStr = (t.status === 'done' && t.completedAt)
+                ? new Date(t.completedAt).toLocaleDateString('en-CA')
+                : t.dueDate;
+
+            if (startDate || endDate) {
+                if (!taskDateStr) {
                     matchesDate = false;
+                } else {
+                    if (startDate && taskDateStr < startDate) matchesDate = false;
+                    if (endDate && taskDateStr > endDate) matchesDate = false;
                 }
             }
 
@@ -212,7 +212,7 @@ const TasksView: React.FC<TasksViewProps> = ({
 
             return matchesSearch && shouldShowTask && matchesPriority && matchesDate;
         });
-    }, [tasks, searchQuery, statusFilter, priorityFilter, activeTab, user.id, dateFilter]);
+    }, [tasks, searchQuery, statusFilter, priorityFilter, activeTab, user.id, startDate, endDate]);
 
     return (
         <div className="animate-fade-in space-y-6">
@@ -242,23 +242,45 @@ const TasksView: React.FC<TasksViewProps> = ({
                     />
                 </div>
                 <div className="flex gap-2 w-full md:w-auto overflow-x-auto pb-2 md:pb-0">
-                    {/* Date Filter */}
-                    <div className="relative">
-                        <input
-                            type="date"
-                            value={dateFilter}
-                            onChange={(e) => setDateFilter(e.target.value)}
-                            className="px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-100 dark:border-gray-600 rounded-lg text-sm outline-none dark:text-white h-[38px]"
-                        />
-                        {dateFilter && (
-                            <button
-                                onClick={() => setDateFilter('')}
-                                className="absolute right-8 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                                title="Clear date filter"
-                            >
-                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                            </button>
-                        )}
+                    {/* Date Filters */}
+                    <div className="flex items-center gap-2">
+                        <div className="relative">
+                            <input
+                                type="date"
+                                value={startDate}
+                                onChange={(e) => setStartDate(e.target.value)}
+                                className="pl-3 pr-8 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-100 dark:border-gray-600 rounded-lg text-sm outline-none dark:text-white h-[38px] w-[140px]"
+                                title="From Date"
+                            />
+                            {startDate && (
+                                <button
+                                    onClick={() => setStartDate('')}
+                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                                    title="Clear start date"
+                                >
+                                    <X size={14} />
+                                </button>
+                            )}
+                        </div>
+                        <span className="text-gray-400 text-xs font-bold">TO</span>
+                        <div className="relative">
+                            <input
+                                type="date"
+                                value={endDate}
+                                onChange={(e) => setEndDate(e.target.value)}
+                                className="pl-3 pr-8 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-100 dark:border-gray-600 rounded-lg text-sm outline-none dark:text-white h-[38px] w-[140px]"
+                                title="To Date"
+                            />
+                            {endDate && (
+                                <button
+                                    onClick={() => setEndDate('')}
+                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                                    title="Clear end date"
+                                >
+                                    <X size={14} />
+                                </button>
+                            )}
+                        </div>
                     </div>
 
                     <select
