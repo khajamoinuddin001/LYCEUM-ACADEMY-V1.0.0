@@ -56,7 +56,26 @@ const ContactTasksView: React.FC<ContactTasksViewProps> = ({ contact, user, onNa
             case 'High': return 'text-red-600 bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800';
             case 'Medium': return 'text-yellow-600 bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800';
             case 'Low': return 'text-green-600 bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800';
+            case 'Low': return 'text-green-600 bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800';
             default: return 'text-gray-600 bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700';
+        }
+    };
+
+    const handleToggleVisibility = async (task: TodoTask, e: React.MouseEvent) => {
+        e.stopPropagation();
+        const updatedVisibility = !task.isVisibleToStudent;
+        try {
+            // Optimistic update
+            setContactTasks(prev => prev.map(t => t.id === task.id ? { ...t, isVisibleToStudent: updatedVisibility } : t));
+
+            await onSaveTask({
+                ...task,
+                isVisibleToStudent: updatedVisibility
+            });
+        } catch (error) {
+            console.error('Failed to update task visibility:', error);
+            // Revert on error
+            setContactTasks(prev => prev.map(t => t.id === task.id ? { ...t, isVisibleToStudent: !updatedVisibility } : t));
         }
     };
 
@@ -98,10 +117,10 @@ const ContactTasksView: React.FC<ContactTasksViewProps> = ({ contact, user, onNa
                         <div
                             key={task.id}
                             onClick={() => { setEditingTask(task); setIsTaskModalOpen(true); }}
-                            className="group flex items-center justify-between p-4 bg-white dark:bg-gray-750 border border-gray-200 dark:border-gray-700 rounded-lg hover:shadow-md transition-all cursor-pointer hover:border-lyceum-blue dark:hover:border-lyceum-blue"
+                            className="group flex items-center justify-between p-4 bg-white dark:bg-gray-700/50 border border-gray-200 dark:border-gray-700 rounded-lg hover:shadow-md transition-all cursor-pointer hover:border-lyceum-blue dark:hover:border-lyceum-blue"
                         >
                             <div className="flex items-start space-x-3">
-                                <div className={`mt-1 p-1 rounded-full ${task.status === 'Done' ? 'text-green-500 bg-green-50' : 'text-gray-300 bg-gray-100'}`}>
+                                <div className={`mt-1 p-1 rounded-full ${task.status === 'Done' ? 'text-green-500 bg-green-50 dark:bg-green-900/20' : 'text-gray-300 bg-gray-100 dark:bg-gray-700 dark:text-gray-500'}`}>
                                     <CheckCircle2 size={16} className={task.status === 'Done' ? 'fill-current' : ''} />
                                 </div>
                                 <div>
@@ -111,16 +130,38 @@ const ContactTasksView: React.FC<ContactTasksViewProps> = ({ contact, user, onNa
                                     {task.description && (
                                         <p className="text-sm text-gray-500 dark:text-gray-400 line-clamp-1 mt-0.5">{task.description}</p>
                                     )}
-                                    <div className="flex items-center gap-3 mt-2 text-xs text-gray-500 dark:text-gray-400">
+                                    <div className="flex items-center text-xs text-gray-500 space-x-2 mt-1">
                                         <span className="flex items-center">
                                             <Calendar size={12} className="mr-1" />
                                             Due: {task.dueDate}
                                         </span>
                                         {task.assignedTo && (
-                                            <span className="flex items-center bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded">
+                                            <span className="flex items-center px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
                                                 Assignee ID: {task.assignedTo}
                                             </span>
                                         )}
+                                        {/* Duration Display */}
+                                        <span className="flex items-center text-blue-600 dark:text-blue-400">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-1"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
+                                            {(() => {
+                                                const start = new Date(task.createdAt || Date.now()).getTime();
+                                                const end = task.status === 'Done' || task.status === 'done'
+                                                    ? (task.completedAt ? new Date(task.completedAt).getTime() : Date.now()) // Use completedAt if available, else now (fallback)
+                                                    : Date.now();
+                                                const diff = end - start;
+
+                                                if (diff < 0) return 'Just now';
+
+                                                const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+                                                const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                                                const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+
+                                                if (task.status === 'Done' || task.status === 'done') {
+                                                    return `${days > 0 ? days + 'd ' : ''}${hours}h ${minutes}m taken`;
+                                                }
+                                                return `${days > 0 ? days + 'd ' : ''}${hours}h ${minutes}m elapsed`;
+                                            })()}
+                                        </span>
                                     </div>
                                 </div>
                             </div>
@@ -131,6 +172,24 @@ const ContactTasksView: React.FC<ContactTasksViewProps> = ({ contact, user, onNa
                                 <span className="text-xs text-gray-400">
                                     {task.status}
                                 </span>
+
+                                <div className="flex items-center gap-2 mt-1" onClick={(e) => e.stopPropagation()}>
+                                    <button
+                                        onClick={(e) => handleToggleVisibility(task, e)}
+                                        className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-opacity-75 ${task.isVisibleToStudent ? 'bg-lyceum-blue' : 'bg-gray-200 dark:bg-gray-700'}`}
+                                        title={task.isVisibleToStudent ? "Visible to Student" : "Hidden from Student"}
+                                    >
+                                        <span className="sr-only">Use setting</span>
+                                        <span
+                                            aria-hidden="true"
+                                            className={`${task.isVisibleToStudent ? 'translate-x-4' : 'translate-x-0'}
+                                                    pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out`}
+                                        />
+                                    </button>
+                                    <span className="text-[10px] text-gray-400">
+                                        {task.isVisibleToStudent ? 'Visible' : 'Hidden'}
+                                    </span>
+                                </div>
                             </div>
                         </div>
                     ))
@@ -150,7 +209,7 @@ const ContactTasksView: React.FC<ContactTasksViewProps> = ({ contact, user, onNa
                 .animate-fade-in { animation: fadeIn 0.3s ease-in-out; }
                 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
             `}</style>
-        </div>
+        </div >
     );
 };
 

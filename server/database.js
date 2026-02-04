@@ -264,6 +264,19 @@ export async function initDatabase() {
       // Add due_date column to transactions if it doesn't exist
       await client.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS due_date TEXT');
       await client.query('ALTER TABLE tasks ADD COLUMN IF NOT EXISTS activity_type TEXT');
+      await client.query('ALTER TABLE tasks ADD COLUMN IF NOT EXISTS is_visible_to_student BOOLEAN DEFAULT false');
+
+      // Task Time Logs Table
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS task_time_logs (
+          id SERIAL PRIMARY KEY,
+          task_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE,
+          assigned_to INTEGER REFERENCES users(id),
+          start_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          end_time TIMESTAMP,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
 
       // Generate task_id for existing tasks that don't have one
       await client.query(`
@@ -565,4 +578,4 @@ export default {
   query,
   getClient,
   closePool
-};
+};// trigger reload 1770196699

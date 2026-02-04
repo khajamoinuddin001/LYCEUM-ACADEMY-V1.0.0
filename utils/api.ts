@@ -798,8 +798,14 @@ export const saveTask = async (task: Partial<TodoTask>): Promise<TodoTask> => {
   }
 };
 
-export const deleteTask = async (taskId: number): Promise<void> => {
-  await apiRequest(`/tasks/${taskId}`, { method: 'DELETE' });
+export const deleteTask = async (id: number): Promise<void> => {
+  return apiRequest(`/tasks/${id}`, {
+    method: 'DELETE',
+  });
+};
+
+export const getTaskLogs = async (taskId: number): Promise<any> => {
+  return apiRequest(`/tasks/${taskId}/logs`);
 };
 
 // ===== TICKETS API =====

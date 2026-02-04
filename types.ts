@@ -30,6 +30,16 @@ export type TaskPriority = 'Low' | 'Medium' | 'High';
 
 export type ActivityType = 'Call' | 'Meeting' | 'Start Application' | 'Email' | 'To-Do' | 'Upload Document' | 'Request Signature' | 'Grant Approval' | 'Other';
 
+export interface TaskTimeLog {
+  id: number;
+  taskId: number;
+  assignedTo: number;
+  startTime: string;
+  endTime: string | null;
+  assigneeName?: string;
+  duration?: string; // We'll calculate this on the frontend
+}
+
 export interface TodoTask {
   id: number;
   taskId?: string;
@@ -41,6 +51,7 @@ export interface TodoTask {
   assignedBy?: string;
   priority?: 'Low' | 'Medium' | 'High';
   activityType?: ActivityType;
+  isVisibleToStudent?: boolean;
   createdAt?: string;
   updatedAt?: string;
   replies?: TaskReply[];

@@ -1540,7 +1540,16 @@ router.get('/tasks', authenticateToken, async (req, res) => {
       const contactRes = await query('SELECT id FROM contacts WHERE user_id = $1', [req.user.id]);
       const contactId = contactRes.rows[0]?.id;
 
-      if (contactId) {
+      if (req.user.role === 'Student') {
+        // Student view: Only show tasks linked to their contact AND marked visible
+        if (contactId) {
+          q += ' WHERE tasks.contact_id = $1 AND tasks.is_visible_to_student = true';
+          params.push(contactId);
+        } else {
+          // No contact linked? No tasks.
+          q += ' WHERE 1=0';
+        }
+      } else if (contactId) {
         // Show: assigned to me, created by me, or linked to my contact
         q += ' WHERE (tasks.assigned_to = $1 OR tasks.assigned_by = $1 OR tasks.contact_id = $2)';
         params.push(req.user.id, contactId);
@@ -1603,8 +1612,8 @@ router.post('/tasks', authenticateToken, async (req, res) => {
 
     const result = await query(`
       INSERT INTO tasks(
-        task_id, title, description, due_date, status, assigned_to, assigned_by, priority, replies, contact_id, activity_type
-      ) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        task_id, title, description, due_date, status, assigned_to, assigned_by, priority, replies, contact_id, activity_type, is_visible_to_student
+      ) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
       RETURNING *
     `, [
       taskId,
@@ -1617,8 +1626,16 @@ router.post('/tasks', authenticateToken, async (req, res) => {
       task.priority || 'Medium',
       JSON.stringify([]), // replies
       task.contactId || null,
-      task.activityType || null
+      task.activityType || null,
+      task.isVisibleToStudent || false
     ]);
+
+    // Create initial time log
+    await query(`
+      INSERT INTO task_time_logs (task_id, assigned_to)
+      VALUES ($1, $2)
+    `, [result.rows[0].id, task.assignedTo]);
+
     res.json(transformTask(result.rows[0]));
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -1637,7 +1654,10 @@ const transformTask = (task) => ({
   completedAt: task.completed_at,
   contactId: task.contact_id,
   contactName: task.contact_name,
-  activityType: task.activity_type
+  contactId: task.contact_id,
+  contactName: task.contact_name,
+  activityType: task.activity_type,
+  isVisibleToStudent: task.is_visible_to_student
 });
 
 
@@ -1681,10 +1701,10 @@ router.put('/tasks/:id', authenticateToken, async (req, res) => {
 
     // Re-doing params construction for clarity
     const updateFields = [
-      'title = $1', 'description = $2', 'due_date = $3', 'status = $4', 'assigned_to = $5', 'priority = $6', 'activity_type = $7'
+      'title = $1', 'description = $2', 'due_date = $3', 'status = $4', 'assigned_to = $5', 'priority = $6', 'activity_type = $7', 'is_visible_to_student = $8'
     ];
     const updateParams = [
-      task.title, task.description, task.dueDate, task.status, task.assignedTo, task.priority, task.activityType || null
+      task.title, task.description, task.dueDate, task.status, task.assignedTo, task.priority, task.activityType || null, task.isVisibleToStudent
     ];
 
     // Add replies if present
@@ -1693,26 +1713,97 @@ router.put('/tasks/:id', authenticateToken, async (req, res) => {
       updateParams.push(JSON.stringify(task.replies));
     }
 
+    if (task.contactId) {
+      updateFields.push('contact_id = $' + (updateParams.length + 1));
+      updateParams.push(task.contactId);
+    }
+
     if (completedBy) {
-      updateFields.push(`completed_by = $${updateParams.length + 1}`);
+      updateFields.push('completed_by = $' + (updateParams.length + 1));
       updateParams.push(completedBy);
-      updateFields.push(`completed_at = $${updateParams.length + 1}`);
+      updateFields.push('completed_at = $' + (updateParams.length + 1));
       updateParams.push(completedAt);
     }
 
-    // If status is NOT done, clear completion (optional, user asked?) - user said "record if done", implies history. 
+    // If status is NOT done, clear completion (optional, user asked?) - user said "record if done", implies history.
     // If reopening, maybe clear? Let's assume reopening clears completion info for accurate current status.
     if (task.status !== 'done') {
       updateFields.push(`completed_by = NULL`);
       updateFields.push(`completed_at = NULL`);
     }
 
+    const q = 'UPDATE tasks SET ' + updateFields.join(', ') + ' WHERE id = $' + (updateParams.length + 1) + ' RETURNING *';
     updateParams.push(req.params.id);
-    const finalQuery = `UPDATE tasks SET ${updateFields.join(', ')} WHERE id = $${updateParams.length}`;
 
-    await query(finalQuery, updateParams);
-    const result = await query('SELECT * FROM tasks WHERE id = $1', [req.params.id]);
-    res.json(transformTask(result.rows[0]));
+    // Fetch existing task to check for assignment/status changes
+    const beforeUpdate = await query('SELECT assigned_to, status FROM tasks WHERE id = $1', [req.params.id]);
+    const previousAssignee = beforeUpdate.rows[0]?.assigned_to;
+    const previousStatus = beforeUpdate.rows[0]?.status;
+
+    const updated = await query(q, updateParams);
+
+    // Task Time Logging Logic
+    const newAssignee = Number(task.assignedTo);
+    const newStatus = task.status;
+
+    // 1. If assigned_to changed
+    if (previousAssignee !== newAssignee) {
+      // Close previous log
+      await query(`
+        UPDATE task_time_logs 
+        SET end_time = CURRENT_TIMESTAMP 
+        WHERE task_id = $1 AND assigned_to = $2 AND end_time IS NULL
+      `, [req.params.id, previousAssignee]);
+
+      // Start new log
+      await query(`
+        INSERT INTO task_time_logs (task_id, assigned_to)
+        VALUES ($1, $2)
+      `, [req.params.id, newAssignee]);
+    }
+
+    // 2. If status changed to 'done' (and wasn't before)
+    else if (newStatus === 'done' && previousStatus !== 'done') {
+      // Close the active log
+      await query(`
+        UPDATE task_time_logs 
+        SET end_time = CURRENT_TIMESTAMP 
+        WHERE task_id = $1 AND end_time IS NULL
+      `, [req.params.id]);
+    }
+
+    // 3. If status changed *from* 'done' (reopened)
+    else if (previousStatus === 'done' && newStatus !== 'done') {
+      // Start a new log for current assignee
+      await query(`
+        INSERT INTO task_time_logs (task_id, assigned_to)
+        VALUES ($1, $2)
+      `, [req.params.id, newAssignee]);
+    }
+
+    res.json(transformTask(updated.rows[0]));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get task time logs
+router.get('/tasks/:id/logs', authenticateToken, async (req, res) => {
+  try {
+    const result = await query(`
+      SELECT 
+        ttl.id,
+        ttl.task_id as "taskId",
+        ttl.assigned_to as "assignedTo",
+        ttl.start_time as "startTime",
+        ttl.end_time as "endTime",
+        u.name as "assigneeName"
+      FROM task_time_logs ttl
+      LEFT JOIN users u ON ttl.assigned_to = u.id
+      WHERE ttl.task_id = $1
+      ORDER BY ttl.start_time ASC
+    `, [req.params.id]);
+    res.json(result.rows);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -2952,3 +3043,6 @@ router.delete('/visitors/:id', authenticateToken, async (req, res) => {
 });
 
 export default router;
+// trigger reload 1770196752
+// trigger reload 1770196793
+// trigger reload 1770196806

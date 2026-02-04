@@ -50,7 +50,7 @@ const ContactCoursesView: React.FC<ContactCoursesViewProps> = ({ contact, user, 
                             <div
                                 key={course.id}
                                 onClick={() => setSelectedCourse(course)}
-                                className="bg-white dark:bg-gray-750 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden hover:shadow-md transition-shadow cursor-pointer group"
+                                className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden hover:shadow-md transition-shadow cursor-pointer group"
                             >
                                 <div className="h-32 bg-gray-100 dark:bg-gray-700 flex items-center justify-center relative overflow-hidden group-hover:opacity-90 transition-opacity">
                                     <div className="absolute inset-0 bg-gradient-to-br from-lyceum-blue/5 to-lyceum-blue/20 flex items-center justify-center text-lyceum-blue/30">

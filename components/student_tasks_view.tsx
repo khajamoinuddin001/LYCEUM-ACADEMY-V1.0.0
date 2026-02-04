@@ -57,7 +57,7 @@ const StudentTasksView: React.FC<StudentTasksViewProps> = ({ student, tasks, onN
                         <div
                             key={task.id}
                             onClick={() => setSelectedTask(task)}
-                            className="group flex items-center justify-between p-4 bg-white dark:bg-gray-750 border border-gray-200 dark:border-gray-700 rounded-lg hover:shadow-md transition-all cursor-pointer hover:border-lyceum-blue dark:hover:border-lyceum-blue"
+                            className="group flex items-center justify-between p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg hover:shadow-md transition-all cursor-pointer hover:border-lyceum-blue dark:hover:border-lyceum-blue"
                         >
                             <div className="flex items-start space-x-3">
                                 <div className={`mt-1 p-1 rounded-full ${task.status === 'done' ? 'text-green-500 bg-green-50' : 'text-gray-300 bg-gray-100 dark:bg-gray-700'}`}>
