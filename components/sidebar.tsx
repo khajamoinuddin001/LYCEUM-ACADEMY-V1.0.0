@@ -211,7 +211,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, activeApp, onAppSe
   };
 
   const sidebarClasses = `
-    bg-white dark:bg-gray-900 shadow-xl z-50 h-full transition-all duration-300 ease-in-out print:hidden border-r border-gray-200 dark:border-gray-800
+    bg-white dark:bg-gray-900 shadow-xl z-[100] h-full transition-all duration-300 ease-in-out print:hidden border-r border-gray-200 dark:border-gray-800
     ${isMobile
       ? `fixed inset-y-0 left-0 transform ${isOpen ? 'translate-x-0 w-64' : '-translate-x-full w-64'}`
       : `relative flex-shrink-0 min-w-0 ${isOpen ? 'w-64' : 'w-0'}`
@@ -261,7 +261,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, activeApp, onAppSe
     <>
       {isMobile && isOpen && (
         <div
-          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40 transition-opacity"
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[90] transition-opacity"
           onClick={() => setIsOpen(false)}
           aria-hidden="true"
         ></div>
@@ -281,7 +281,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, activeApp, onAppSe
               className="flex items-center gap-3 group focus:outline-none"
             >
               <div className="w-10 h-10 bg-white dark:bg-gray-800 rounded-lg flex items-center justify-center overflow-hidden border border-gray-100 dark:border-gray-800 shadow-sm group-hover:rotate-6 transition-transform">
-                <img src="/logo.png" alt="Logo" className="w-full h-full object-contain p-1" />
+                <img src="/academy logo.png" alt="Logo" className="w-full h-full object-contain p-1" />
               </div>
               <span className="text-2xl font-black bg-clip-text text-transparent bg-gradient-to-r from-lyceum-blue to-blue-600 tracking-tighter">
                 lyceum

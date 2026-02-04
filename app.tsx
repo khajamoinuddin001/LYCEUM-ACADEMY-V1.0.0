@@ -76,6 +76,10 @@ type ContactViewMode = 'details' | 'documents' | 'visaFiling' | 'checklist' | 'v
 // ... (keep existing imports)
 import { Routes, Route } from 'react-router-dom';
 import VerifyEmail from './components/verify_email';
+import DuolingoPage from './components/courses/DuolingoPage';
+import IELTSPage from './components/courses/IELTSPage';
+import PTEPage from './components/courses/PTEPage';
+import TOEFLPage from './components/courses/TOEFLPage';
 
 // ... (keep existing types)
 
@@ -350,11 +354,7 @@ const DashboardLayout: React.FC = () => {
     const handleResize = () => {
       const mobile = window.innerWidth < 768;
       setIsMobile(mobile);
-      // Only close sidebar when switching to mobile, don't force open on desktop
-      if (mobile) {
-        setSidebarOpen(false);
-      }
-      // Removed: setSidebarOpen(true) for desktop - was preventing manual toggle
+      // Removed automatic sidebar closing - let user control it manually
     };
 
     window.addEventListener('resize', handleResize);
@@ -363,7 +363,7 @@ const DashboardLayout: React.FC = () => {
     return () => {
       window.removeEventListener('resize', handleResize);
     };
-  }, [setSidebarOpen]);
+  }, []);
 
   useEffect(() => {
     if (currentUser?.role === 'Student') {
@@ -1582,11 +1582,13 @@ const DashboardLayout: React.FC = () => {
 
   const handleDeleteTask = async (taskId: number) => {
     try {
-      const updatedTasks = await api.deleteTask(taskId);
-      setTasks(updatedTasks);
-      api.getTasks(taskFilters).then(setTasks);
+      await api.deleteTask(taskId);
+      // Update local state by filtering out the deleted task
+      setTasks(prev => prev.filter(t => t.id !== taskId));
     } catch (err) {
       console.error("Delete task error", err);
+      // Re-fetch in case of sync issues
+      api.getTasks(taskFilters).then(setTasks);
     }
   };
 
@@ -2001,6 +2003,10 @@ const App: React.FC = () => {
   return (
     <Routes>
       <Route path="/verify-email" element={<VerifyEmail />} />
+      <Route path="/duolingo" element={<DuolingoPage onBack={() => window.history.back()} />} />
+      <Route path="/ielts" element={<IELTSPage onBack={() => window.history.back()} />} />
+      <Route path="/pte" element={<PTEPage onBack={() => window.history.back()} />} />
+      <Route path="/toefl" element={<TOEFLPage onBack={() => window.history.back()} />} />
       <Route path="/*" element={<DashboardLayout />} />
     </Routes>
   );

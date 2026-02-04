@@ -56,7 +56,7 @@ const ReceiptContent: React.FC<{
                     <div className="flex justify-between items-start mb-8">
                         {/* Company Logo & Name */}
                         <div className="flex flex-col">
-                            <img src="/logo.png" alt="Lyceum Academy" className="h-14 w-auto object-contain mb-3 select-none" />
+                            <img src="/academy logo.png" alt="Lyceum Academy" className="h-14 w-auto object-contain mb-3 select-none" />
                             <h1 className="text-xl font-bold text-lyceum-blue tracking-tight">LYCEUM ACADEMY</h1>
                             <p className="text-xs text-gray-600 font-medium">Creative Learning</p>
                         </div>
@@ -209,7 +209,7 @@ const ReceiptContent: React.FC<{
                 <div className="text-center font-mono text-sm">
                     {/* Thermal Layout */}
                     <div className="flex flex-col items-center mb-4">
-                        <img src="/logo.png" alt="Logo" className="h-12 w-auto mb-2 grayscale" />
+                        <img src="/academy logo.png" alt="Logo" className="h-12 w-auto mb-2 grayscale" />
                         <h2 className="font-bold text-base uppercase">Lyceum Academy</h2>
                         <p className="text-[10px] text-gray-600">Opp. HP petrol pump, Falaknuma, Hyderabad 500053</p>
                         <p className="text-[10px] text-gray-600">Ph: +91 7893078791</p>

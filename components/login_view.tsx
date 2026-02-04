@@ -156,7 +156,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, users, onRegister, onFor
                 )}
                 <div className="flex flex-col items-center">
                     <div className="w-16 h-16 bg-white dark:bg-gray-700 rounded-2xl flex items-center justify-center overflow-hidden border border-gray-100 dark:border-gray-600 shadow-lg mb-4 hover:rotate-6 transition-transform">
-                        <img src="/logo.png" alt="Logo" className="w-full h-full object-contain p-2" />
+                        <img src="/academy logo.png" alt="Logo" className="w-full h-full object-contain p-2" />
                     </div>
                     <h1 className="text-3xl font-black text-center text-lyceum-blue tracking-tighter">lyceum</h1>
                     <h2 className="mt-2 text-xl font-semibold text-center text-gray-800 dark:text-gray-100">

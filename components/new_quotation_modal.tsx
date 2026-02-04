@@ -280,7 +280,7 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ lead, onCancel, onS
             {/* Company Logo & Name */}
             <div className="flex flex-col items-start">
               <div className="mb-1">
-                <img src="/logo.png" alt="Lyceum Academy" className="h-12 w-auto object-contain select-none" />
+                <img src="/academy logo.png" alt="Lyceum Academy" className="h-12 w-auto object-contain select-none" />
               </div>
               <h1 className="text-lg font-extrabold text-lyceum-blue uppercase tracking-tight mb-0.5">Lyceum Academy</h1>
               <p className="text-xs text-gray-500 font-medium">Creative Learning</p>

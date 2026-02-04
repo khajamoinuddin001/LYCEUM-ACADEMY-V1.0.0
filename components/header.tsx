@@ -73,7 +73,7 @@ const Header: React.FC<HeaderProps> = ({ sidebarOpen, setSidebarOpen, activeApp,
           {/* Logo in Header */}
           {!sidebarOpen && (
             <div className="flex-shrink-0 w-8 h-8 bg-white dark:bg-gray-800 rounded-lg flex items-center justify-center overflow-hidden border border-gray-100 dark:border-gray-700 shadow-sm ml-1">
-              <img src="/logo.png" alt="Logo" className="w-full h-full object-contain p-1" />
+              <img src="/academy logo.png" alt="Logo" className="w-full h-full object-contain p-1" />
             </div>
           )}
 

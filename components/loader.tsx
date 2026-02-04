@@ -5,7 +5,7 @@ const Loader: React.FC = () => {
     <div className="flex items-center justify-center h-screen bg-lyceum-light dark:bg-gray-900">
       <div className="flex flex-col items-center gap-6" role="status">
         <div className="w-20 h-20 bg-white dark:bg-gray-800 rounded-2xl flex items-center justify-center overflow-hidden border border-gray-100 dark:border-gray-700 shadow-xl animate-pulse">
-          <img src="/logo.png" alt="Logo" className="w-full h-full object-contain p-2" />
+          <img src="/academy logo.png" alt="Logo" className="w-full h-full object-contain p-2" />
         </div>
         <div className="text-lyceum-blue">
           <svg className="animate-spin h-10 w-10" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
     GraduationCap,
     BookOpen,
@@ -74,7 +75,10 @@ const AnimatedCounter: React.FC<{ target: number; suffix?: string; prefix?: stri
     );
 };
 
+
+
 const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onRegister, onTerms, onPrivacy, onDocuments, darkMode, setDarkMode }) => {
+    const navigate = useNavigate();
     const [enquiry, setEnquiry] = useState({
         name: '',
         email: '',
@@ -88,6 +92,17 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onRegister, onTerms,
     const [newsletterStatus, setNewsletterStatus] = useState<'idle' | 'submitting' | 'success'>('idle');
     const [openFaq, setOpenFaq] = useState<number | null>(0);
     const [logoError, setLogoError] = useState(false);
+    const [scrolled, setScrolled] = useState(false);
+
+    useEffect(() => {
+        const handleScroll = () => {
+            setScrolled(window.scrollY > 50);
+        };
+        window.addEventListener('scroll', handleScroll);
+        return () => window.removeEventListener('scroll', handleScroll);
+    }, []);
+
+
 
     // Overhaul Data Constants
     const statistics = [
@@ -99,25 +114,46 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onRegister, onTerms,
 
     const testimonials = [
         {
-            name: "Sarah Ahmed",
+            name: "Fatima Al-Sayed",
             university: "University of Toronto, Canada",
-            text: "Lyceum Academy made my dream come true. Their guidance on SOP and visa was impeccable. I couldn't have done it without them!",
+            text: "Lyceum Academy made my dream come true. Their guidance on SOP and visa was impeccable. I couldn't have done it without them! The counselors were available 24/7.",
             rating: 5,
             image: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop"
         },
         {
-            name: "Rahul Verma",
+            name: "Rajesh Kumar",
             university: "Imperial College London, UK",
-            text: "The IELTS training I received here was top-notch. I improved from 6.0 to 8.0 in just a month. Highly recommended for test prep!",
+            text: "The IELTS training I received here was top-notch. I improved from 6.0 to 8.0 in just a month. Highly recommended for anyone struggling with language tests!",
             rating: 5,
             image: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop"
         },
         {
-            name: "John Smith",
-            university: "Arizona State University, USA",
-            text: "From university selection to pre-departure briefing, every step was handled professionally. They really care about the students.",
+            name: "Emily Chen",
+            university: "University of Melbourne, Australia",
+            text: "From university selection to pre-departure briefing, every step was handled professionally. They really care about the students and it shows in their work.",
+            rating: 5,
+            image: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=100&h=100&fit=crop"
+        },
+        {
+            name: "Michael Ross",
+            university: "TUM, Germany",
+            text: "Navigating the German education system was tough, but Lyceum simplified everything. I'm now pursuing my Masters in Engineering tuition-free!",
             rating: 5,
             image: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&h=100&fit=crop"
+        },
+        {
+            name: "Aisha Khan",
+            university: "New York University, USA",
+            text: "The scholarship guidance was a game changer. I secured a 50% waiver on my tuition fees thanks to their strategic advice on my application essays.",
+            rating: 5,
+            image: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&h=100&fit=crop"
+        },
+        {
+            name: "David Miller",
+            university: "University of British Columbia, Canada",
+            text: "Excellent service! The visa mock interviews gave me so much confidence. I got my study permit approved in record time.",
+            rating: 5,
+            image: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=100&h=100&fit=crop"
         }
     ];
 
@@ -164,6 +200,10 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onRegister, onTerms,
         }
     };
 
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+        setEnquiry({ ...enquiry, [e.target.name]: e.target.value });
+    };
+
     const handleNewsletterSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setNewsletterStatus('submitting');
@@ -171,55 +211,43 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onRegister, onTerms,
         setTimeout(() => {
             setNewsletterStatus('success');
             setNewsletterEmail('');
-            setTimeout(() => setNewsletterStatus('idle'), 5000);
+            setTimeout(() => setNewsletterStatus('idle'), 3000);
         }, 1500);
     };
 
     const handleDarkToggle = () => {
-        if (!setDarkMode) return;
-        setDarkMode();
-    };
-
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-        setEnquiry({ ...enquiry, [e.target.name]: e.target.value });
+        if (setDarkMode) setDarkMode();
     };
 
     return (
-        <div className="min-h-screen bg-white dark:bg-gray-900 font-sans transition-colors duration-500 overflow-x-hidden">
-            {/* Transparent Navbar */}
-            <nav className="fixed w-full z-50 bg-white/90 dark:bg-gray-900/90 backdrop-blur-md border-b border-gray-100 dark:border-gray-800 transition-all duration-300">
+        <div className={`min-h-screen transition-colors duration-300 ${darkMode ? 'dark' : ''}`}>
+            {/* Navbar */}
+            <nav className={`fixed w-full z-50 transition-all duration-300 ${scrolled ? 'bg-white/90 dark:bg-gray-900/90 backdrop-blur-md border-b border-gray-100 dark:border-gray-800 py-2' : 'bg-transparent py-6'}`}>
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="flex justify-between items-center h-20">
-                        <div className="flex items-center gap-3">
-                            <div className="p-1 bg-white dark:bg-gray-800 rounded-lg group hover:rotate-6 transition-transform h-12 w-12 flex items-center justify-center overflow-hidden border border-gray-100 dark:border-gray-700 shadow-sm">
-                                <img
-                                    src="/logo.png"
-                                    alt="Lyceum Academy Logo"
-                                    className="w-full h-full object-contain p-1"
-                                />
+                    <div className="flex justify-between items-center h-16">
+                        {/* Logo */}
+                        <div className="flex-shrink-0 flex items-center gap-3 group">
+                            <div className="w-10 h-10 group-hover:rotate-12 transition-transform duration-300">
+                                <img src="/academy logo.png" alt="Lyceum Academy Logo" className="w-full h-full object-contain" />
                             </div>
-                            <div className="flex flex-col">
-                                <span className="text-2xl font-black bg-clip-text text-transparent bg-gradient-to-r from-lyceum-blue to-blue-600">
-                                    Lyceum Academy
-                                </span>
-                                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] -mt-1">Education Experts</span>
-                            </div>
+                            <span className="text-2xl font-black tracking-tight text-gray-900 dark:text-white">
+                                Lyceum<span className="text-lyceum-blue">Academy</span>
+                            </span>
                         </div>
-                        <div className="hidden md:flex items-center space-x-8">
-                            <a href="#destinations" className="text-gray-600 dark:text-gray-300 hover:text-lyceum-blue font-bold transition-colors">Destinations</a>
-                            <a href="#test-prep" className="text-gray-600 dark:text-gray-300 hover:text-lyceum-blue font-bold transition-colors">Test Prep</a>
-                            <a href="#services" className="text-gray-600 dark:text-gray-300 hover:text-lyceum-blue font-bold transition-colors">Services</a>
+
+                        {/* Desktop Menu */}
+                        <div className="hidden md:flex items-center gap-8 font-medium text-sm text-slate-600 dark:text-slate-400">
+                            {['Destinations', 'Services', 'Test Prep', 'About'].map(item => (
+                                <a key={item} href={`#${item.toLowerCase().replace(' ', '-')}`} className="hover:text-lyceum-blue dark:hover:text-blue-400 transition-colors">{item}</a>
+                            ))}
                         </div>
-                        <div className="flex items-center gap-4">
-                            <button
-                                onClick={handleDarkToggle}
-                                className="p-2.5 rounded-xl bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-lyceum-blue hover:text-white transition-all shadow-sm"
-                                title="Toggle Dark Mode"
-                            >
+
+                        <div className="hidden md:flex items-center gap-4">
+                            <button onClick={handleDarkToggle} className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-slate-500">
                                 {darkMode ? <Sun size={20} /> : <Moon size={20} />}
                             </button>
-                            <button onClick={onLogin} className="text-gray-700 dark:text-gray-200 hover:text-lyceum-blue font-bold transition-colors">Log In</button>
-                            <button onClick={onRegister} className="px-6 py-3 bg-lyceum-blue text-white rounded-2xl hover:bg-lyceum-blue-dark transition-all transform hover:scale-105 font-black shadow-xl shadow-blue-500/30">
+                            <button onClick={onLogin} className="text-sm font-semibold hover:text-lyceum-blue transition">Log in</button>
+                            <button onClick={onRegister} className="px-5 py-2.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-sm font-bold hover:shadow-lg hover:scale-105 transition-all duration-300">
                                 Get Started
                             </button>
                         </div>
@@ -311,21 +339,41 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onRegister, onTerms,
 
                     <div className="grid md:grid-cols-3 gap-8">
                         {[
-                            { country: 'USA', color: 'bg-blue-500', desc: 'World-class universities and diverse cultural experiences.' },
-                            { country: 'UK', color: 'bg-red-600', desc: 'Historic institutions with short, intensive degree programs.' },
-                            { country: 'Canada', color: 'bg-red-500', desc: 'High quality of life and excellent post-study work opportunities.' },
-                            { country: 'Australia', color: 'bg-indigo-600', desc: 'Cutting-edge research and a vibrant outdoor lifestyle.' },
-                            { country: 'Gulf', color: 'bg-emerald-600', desc: 'Emerging educational hubs with tax-free benefits.' },
-                            { country: 'Europe', color: 'bg-yellow-500', desc: 'Affordable quality education and rich cultural heritage.' },
+                            { country: 'USA', flag: 'us', image: 'https://images.unsplash.com/photo-1501594907352-04cda38ebc29?q=80&w=600&auto=format&fit=crop', desc: 'World-class universities and diverse cultural experiences.' },
+                            { country: 'UK', flag: 'gb', image: 'https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?q=80&w=600&auto=format&fit=crop', desc: 'Historic institutions with short, intensive degree programs.' },
+                            { country: 'Canada', flag: 'ca', image: 'https://images.unsplash.com/photo-1517935706615-2717063c2225?q=80&w=600&auto=format&fit=crop', desc: 'High quality of life and excellent post-study work opportunities.' },
+                            { country: 'Australia', flag: 'au', image: 'https://images.unsplash.com/photo-1506973035872-a4ec16b8e8d9?q=80&w=600&auto=format&fit=crop', desc: 'Cutting-edge research and a vibrant outdoor lifestyle.' },
+                            { country: 'Europe', flag: 'eu', image: 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?q=80&w=600&auto=format&fit=crop', desc: 'Affordable quality education and rich cultural heritage.' },
+                            { country: 'New Zealand', flag: 'nz', image: 'https://images.unsplash.com/photo-1589802829985-817e51171b92?q=80&w=600&auto=format&fit=crop', desc: 'Safe environment with world-ranked universities.' },
                         ].map((dest, idx) => (
-                            <div key={idx} className="group relative overflow-hidden rounded-2xl shadow-lg hover:shadow-2xl transition-all duration-300 h-64">
-                                <div className={`absolute inset-0 ${dest.color} opacity-90 transition-opacity group-hover:opacity-100`}></div>
-                                <div className="absolute inset-0 flex flex-col justify-center items-center text-white p-6 text-center">
-                                    <Globe size={48} className="mb-4 opacity-80 group-hover:scale-110 transition-transform duration-300" />
-                                    <h3 className="text-2xl font-bold mb-2">{dest.country}</h3>
-                                    <p className="text-white/90 translate-y-4 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300">
-                                        {dest.desc}
-                                    </p>
+                            <div key={idx} className="group relative overflow-hidden rounded-[2rem] shadow-lg hover:shadow-2xl transition-all duration-500 h-[400px] cursor-pointer">
+                                {/* Background Image */}
+                                <div className="absolute inset-0">
+                                    <img src={dest.image} alt={dest.country} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
+                                </div>
+
+                                {/* Gradient Overlay */}
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent opacity-80 group-hover:opacity-90 transition-opacity duration-300"></div>
+
+                                {/* Content */}
+                                <div className="absolute inset-0 p-8 flex flex-col justify-between">
+                                    <div className="flex justify-between items-start">
+                                        <div className="w-12 h-12 rounded-full border-2 border-white/30 overflow-hidden shadow-lg bg-black/20 backdrop-blur-sm">
+                                            <img src={`https://flagcdn.com/w80/${dest.flag}.png`} alt={`${dest.country} flag`} className="w-full h-full object-cover" />
+                                        </div>
+                                        <div className="bg-white/10 backdrop-blur-md p-2 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-4 group-hover:translate-x-0">
+                                            <ArrowRight className="text-white" size={20} />
+                                        </div>
+                                    </div>
+
+                                    <div className="transform transition-all duration-500 translate-y-2 group-hover:translate-y-0">
+                                        <h3 className="text-3xl font-black text-white mb-2">{dest.country}</h3>
+                                        <div className="h-0 group-hover:h-auto overflow-hidden transition-all duration-500">
+                                            <p className="text-gray-200 text-sm leading-relaxed opacity-0 group-hover:opacity-100 transition-opacity duration-500 delay-100">
+                                                {dest.desc}
+                                            </p>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         ))}
@@ -334,53 +382,93 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onRegister, onTerms,
             </section>
 
             {/* Test Prep Section */}
-            <section id="tests" className="py-24 bg-gray-50 dark:bg-gray-800/50">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="flex flex-col md:flex-row items-center gap-16">
-                        <div className="w-full md:w-1/2">
-                            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 dark:text-white mb-6">
-                                Ace Your Language Tests
-                            </h2>
-                            <p className="text-lg text-gray-600 dark:text-gray-300 mb-8">
-                                Get comprehensive training for all major English proficiency tests. Our expert trainers ensure you achieve the score required for your dream university.
-                            </p>
-                            <div className="space-y-4">
-                                {[
-                                    { name: 'IELTS', desc: 'International English Language Testing System' },
-                                    { name: 'PTE', desc: 'Pearson Test of English' },
-                                    { name: 'TOEFL', desc: 'Test of English as a Foreign Language' },
-                                    { name: 'Duolingo', desc: 'Duolingo English Test' }
-                                ].map((test) => (
-                                    <div key={test.name} className="flex items-center gap-4 p-4 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
-                                        <div className="h-12 w-12 rounded-full bg-lyceum-blue/10 flex items-center justify-center text-lyceum-blue font-bold">
-                                            {test.name[0]}
-                                        </div>
-                                        <div>
-                                            <h4 className="font-bold text-gray-900 dark:text-white">{test.name}</h4>
-                                            <p className="text-sm text-gray-500 dark:text-gray-400">{test.desc}</p>
-                                        </div>
-                                        <CheckCircle className="ml-auto text-green-500" size={20} />
+            <section id="tests" className="py-24 bg-gray-50 dark:bg-gray-800/50 relative overflow-hidden">
+                {/* Background Decor */}
+                <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
+                    <div className="absolute -top-24 -right-24 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl"></div>
+                    <div className="absolute bottom-0 left-0 w-72 h-72 bg-purple-500/10 rounded-full blur-3xl"></div>
+                </div>
+
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+                    <div className="text-center max-w-3xl mx-auto mb-16">
+                        <span className="text-lyceum-blue font-bold tracking-widest text-xs uppercase mb-2 block animate-fade-in">Global Certification</span>
+                        <h2 className="text-4xl md:text-5xl font-black text-gray-900 dark:text-white mb-6">
+                            Ace Your Language Tests
+                        </h2>
+                        <p className="text-lg text-gray-600 dark:text-gray-300">
+                            Unlock global opportunities with our comprehensive training programs. We provide the strategies, practice, and feedback you need to achieve your target score.
+                        </p>
+                    </div>
+
+                    <div className="grid lg:grid-cols-3 gap-8 items-start">
+                        {/* Course Grid */}
+                        <div className="lg:col-span-2 grid sm:grid-cols-2 gap-5">
+                            {[
+                                { name: 'IELTS', full: 'International English Language Testing System', color: 'text-red-500', bg: 'bg-white dark:bg-gray-800', border: 'hover:border-red-500/30', logo: '/ielts logo.png' },
+                                { name: 'PTE', full: 'Pearson Test of English Academic', color: 'text-blue-500', bg: 'bg-white dark:bg-gray-800', border: 'hover:border-blue-500/30', logo: '/pte logo.png' },
+                                { name: 'TOEFL', full: 'Test of English as a Foreign Language', color: 'text-purple-600', bg: 'bg-white dark:bg-gray-800', border: 'hover:border-purple-500/30', logo: '/tofel logo.png' },
+                                { name: 'Duolingo', full: 'Duolingo English Test', color: 'text-green-500', bg: 'bg-white dark:bg-gray-800', border: 'hover:border-green-500/30', logo: '/duolingo logo.png' }
+                            ].map((test) => (
+                                <button
+                                    key={test.name}
+                                    onClick={() => navigate(`/${test.name.toLowerCase()}`)}
+                                    className={`group flex flex-col items-start text-left p-6 bg-white dark:bg-gray-800 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1 ${test.border} relative overflow-hidden`}
+                                >
+                                    <div className={`absolute top-0 right-0 w-24 h-24 ${test.bg} rounded-bl-[4rem] -mr-4 -mt-4 transition-transform group-hover:scale-110 opacity-50`}></div>
+
+                                    <div className={`h-16 w-28 bg-white dark:bg-gray-700 p-3 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300 shadow-sm relative z-10 border border-gray-100 dark:border-gray-600`}>
+                                        <img src={test.logo} alt={test.name} className="w-full h-full object-contain" />
                                     </div>
-                                ))}
-                            </div>
+
+                                    <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2 group-hover:text-lyceum-blue transition-colors relative z-10">
+                                        {test.name}
+                                    </h3>
+
+                                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-6 line-clamp-2 relative z-10">
+                                        {test.full}
+                                    </p>
+
+                                    <div className="mt-auto flex items-center text-sm font-bold text-gray-900 dark:text-white group-hover:gap-2 transition-all relative z-10">
+                                        View Details <ArrowRight size={16} className="ml-2 text-lyceum-blue" />
+                                    </div>
+                                </button>
+                            ))}
                         </div>
-                        <div className="w-full md:w-1/2 relative">
-                            <div className="aspect-square rounded-full bg-gradient-to-tr from-blue-100 to-purple-100 dark:from-blue-900/20 dark:to-purple-900/20 absolute inset-0 -z-10 animate-pulse"></div>
-                            <div className="bg-white dark:bg-gray-800 p-8 rounded-3xl shadow-2xl border border-gray-100 dark:border-gray-700">
-                                <div className="text-center mb-8">
-                                    <Award size={64} className="mx-auto text-yellow-500 mb-4" />
-                                    <h3 className="text-2xl font-bold text-gray-900 dark:text-white">Success Guarantee</h3>
-                                    <p className="text-gray-500 dark:text-gray-400 mt-2">Join thousands of students who achieved their target scores.</p>
+
+                        {/* Success Card (Right Side Sticky) */}
+                        <div className="lg:col-span-1 border border-gray-100 dark:border-gray-700 p-1 rounded-[2.5rem] bg-white dark:bg-gray-800 shadow-2xl relative">
+                            <div className="absolute inset-0 bg-gradient-to-br from-blue-500/20 to-purple-500/20 blur-xl rounded-[2.5rem] -z-10"></div>
+                            <div className="bg-gray-900 dark:bg-black rounded-[2.3rem] p-8 text-center text-white relative overflow-hidden">
+                                {/* Decor */}
+                                <div className="absolute top-0 left-0 w-full h-full opacity-20">
+                                    <div className="absolute top-10 left-10 w-20 h-20 bg-blue-500 rounded-full blur-2xl"></div>
+                                    <div className="absolute bottom-10 right-10 w-20 h-20 bg-purple-500 rounded-full blur-2xl"></div>
                                 </div>
-                                <div className="grid grid-cols-2 gap-4 text-center">
-                                    <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-xl">
-                                        <div className="text-3xl font-bold text-lyceum-blue">98%</div>
-                                        <div className="text-sm text-gray-500 dark:text-gray-400">Pass Rate</div>
+
+                                <div className="relative z-10">
+                                    <div className="w-20 h-20 mx-auto bg-gradient-to-tr from-yellow-400 to-yellow-600 rounded-2xl flex items-center justify-center shadow-lg shadow-yellow-500/20 mb-6 rotate-3 hover:rotate-12 transition-transform duration-500">
+                                        <Award size={40} className="text-white" />
                                     </div>
-                                    <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-xl">
-                                        <div className="text-3xl font-bold text-purple-600">5000+</div>
-                                        <div className="text-sm text-gray-500 dark:text-gray-400">Students</div>
+
+                                    <h3 className="text-2xl font-black mb-2">Guaranteed Success</h3>
+                                    <p className="text-gray-400 mb-8 text-sm leading-relaxed">
+                                        Join over 5000+ students who have successfully achieved their target scores with our proven methodology.
+                                    </p>
+
+                                    <div className="space-y-4">
+                                        <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/5 hover:bg-white/20 transition-colors">
+                                            <div className="text-3xl font-black text-blue-400">98%</div>
+                                            <div className="text-xs font-bold text-gray-400 uppercase tracking-wider">Pass Rate</div>
+                                        </div>
+                                        <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/5 hover:bg-white/20 transition-colors">
+                                            <div className="text-3xl font-black text-purple-400">5000+</div>
+                                            <div className="text-xs font-bold text-gray-400 uppercase tracking-wider">Students Placed</div>
+                                        </div>
                                     </div>
+
+                                    <button onClick={onRegister} className="w-full mt-8 py-4 bg-white text-gray-900 rounded-xl font-bold hover:scale-105 active:scale-95 transition-all shadow-lg">
+                                        Start Your Journey
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -401,25 +489,32 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onRegister, onTerms,
                                 We go beyond simple applications. Our holistic approach ensures you are prepared for every aspect of your international education.
                             </p>
                         </div>
-                        <a href="#contact" className="hidden md:flex items-center gap-2 text-lyceum-blue font-bold hover:gap-4 transition-all">
-                            View all services <ArrowRight size={20} />
+                        <a href="#contact" className="hidden md:flex items-center gap-2 text-lyceum-blue font-bold hover:gap-4 transition-all group">
+                            View all services <ArrowRight size={20} className="group-hover:text-blue-600" />
                         </a>
                     </div>
 
-                    <div className="grid md:grid-cols-4 gap-8">
+                    <div className="grid md:grid-cols-4 gap-6">
                         {[
-                            { title: 'Counseling', icon: <Users size={28} />, desc: 'Expert career guidance to choose the right course and university.', color: 'bg-blue-500' },
-                            { title: 'Admission', icon: <FileText size={28} />, desc: 'Assistance with application documentation and submission.', color: 'bg-purple-600' },
-                            { title: 'Visa', icon: <Plane size={28} />, desc: 'Complete support for visa application and mock interviews.', color: 'bg-indigo-600' },
-                            { title: 'Pre-Departure', icon: <MapPin size={28} />, desc: 'Briefings on accommodation, lifestyle, and travel.', color: 'bg-rose-500' }
+                            { title: 'Counseling', icon: <Users size={32} />, desc: 'Expert career guidance to choose the right course and university.', color: 'from-blue-500 to-cyan-400', shadow: 'shadow-blue-500/20' },
+                            { title: 'Admission', icon: <FileText size={32} />, desc: 'Assistance with application documentation and submission.', color: 'from-purple-600 to-pink-500', shadow: 'shadow-purple-500/20' },
+                            { title: 'Visa', icon: <Plane size={32} />, desc: 'Complete support for visa application and mock interviews.', color: 'from-indigo-600 to-blue-600', shadow: 'shadow-indigo-500/20' },
+                            { title: 'Pre-Departure', icon: <MapPin size={32} />, desc: 'Briefings on accommodation, lifestyle, and travel.', color: 'from-rose-500 to-orange-400', shadow: 'shadow-rose-500/20' }
                         ].map((srv, i) => (
-                            <div key={i} className="group p-8 rounded-3xl bg-gray-50 dark:bg-gray-800/50 hover:bg-white dark:hover:bg-gray-800 hover:shadow-2xl transition-all duration-500 border border-transparent hover:border-gray-100 dark:hover:border-gray-700">
-                                <div className={`w-16 h-16 ${srv.color} text-white rounded-2xl flex items-center justify-center mb-8 shadow-lg group-hover:scale-110 transition-transform`}>
+                            <div key={i} className="group relative p-8 rounded-[2rem] bg-gray-50 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-700 hover:border-transparent transition-all duration-300 hover:-translate-y-2">
+                                {/* Hover Gradient Border Effect */}
+                                <div className={`absolute inset-0 rounded-[2rem] bg-gradient-to-br ${srv.color} opacity-0 group-hover:opacity-100 -z-10 blur-xl transition-opacity duration-500`}></div>
+
+                                <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${srv.color} text-white flex items-center justify-center mb-8 shadow-lg ${srv.shadow} group-hover:scale-110 group-hover:rotate-6 transition-all duration-300`}>
                                     {srv.icon}
                                 </div>
-                                <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">{srv.title}</h3>
-                                <p className="text-gray-500 dark:text-gray-400 leading-relaxed italic">
-                                    "{srv.desc}"
+
+                                <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-4 group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-gray-900 group-hover:to-gray-600 dark:group-hover:from-white dark:group-hover:to-gray-300 transition-colors">
+                                    {srv.title}
+                                </h3>
+
+                                <p className="text-gray-500 dark:text-gray-400 leading-relaxed font-medium">
+                                    {srv.desc}
                                 </p>
                             </div>
                         ))}
@@ -459,46 +554,34 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onRegister, onTerms,
                 </div>
             </section>
 
-            {/* Testimonials Section */}
-            <section className="py-32 bg-white dark:bg-gray-900 overflow-hidden">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="flex flex-col md:flex-row items-center gap-16">
-                        <div className="w-full md:w-1/3">
-                            <h2 className="text-4xl md:text-5xl font-black text-gray-900 dark:text-white mb-8 leading-tight">
-                                Hear from our <br />
-                                <span className="text-lyceum-blue">Global Alumni</span>
-                            </h2>
-                            <p className="text-lg text-gray-500 dark:text-gray-400 mb-10 leading-relaxed">
-                                Join thousands of students who have already embarked on their international journey with us.
-                            </p>
-                            <div className="flex items-center gap-4">
-                                <div className="flex -space-x-3">
-                                    {[1, 2, 3, 4].map(i => (
-                                        <div key={i} className="w-12 h-12 rounded-full border-4 border-white dark:border-gray-900 bg-gray-200 overflow-hidden">
-                                            <img src={`https://i.pravatar.cc/100?u=${i}`} alt="user" className="w-full h-full object-cover" />
-                                        </div>
-                                    ))}
-                                </div>
-                                <div className="font-bold text-gray-900 dark:text-white">5K+ Success Stories</div>
-                            </div>
-                        </div>
+            {/* 5. Wall of Love (Testimonials) */}
+            <section className="py-32 bg-slate-50 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800">
+                <div className="max-w-7xl mx-auto px-4 text-center mb-16">
+                    <span className="text-lyceum-blue font-bold tracking-widest text-xs uppercase mb-2 block">Community</span>
+                    <h2 className="text-4xl font-black mb-4">Loved by Students</h2>
+                </div>
 
-                        <div className="w-full md:w-2/3 grid sm:grid-cols-2 gap-8">
-                            {testimonials.map((t, i) => (
-                                <div key={i} className={`p-8 rounded-3xl bg-gray-50 dark:bg-gray-800/50 border border-gray-100 dark:border-gray-700 hover:shadow-2xl transition-all duration-500 ${i === 1 ? 'sm:mt-8' : ''}`}>
-                                    <div className="flex items-center gap-1 text-yellow-500 mb-6">
-                                        {[...Array(t.rating)].map((_, idx) => <Star key={idx} size={16} className="fill-current" />)}
+                <div className="flex flex-col gap-6 overflow-hidden max-h-[600px] relative">
+                    <div className="absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-slate-50 dark:from-slate-900 to-transparent z-10"></div>
+                    <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-slate-50 dark:from-slate-900 to-transparent z-10"></div>
+
+                    {/* Infinite Scroll Container */}
+                    <div className="w-full inline-flex flex-nowrap overflow-hidden">
+                        <div className="flex gap-6 animate-scroll hover:pause items-center">
+                            {/* Duplicate list for seamless loop */}
+                            {[...testimonials, ...testimonials, ...testimonials].map((t, i) => (
+                                <div key={i} className="min-w-[350px] max-w-[350px] p-6 rounded-3xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm transition-transform hover:scale-105 duration-300">
+                                    <div className="flex gap-1 text-yellow-500 mb-4">
+                                        {[...Array(5)].map((_, idx) => <Star key={idx} size={16} fill="currentColor" />)}
                                     </div>
-                                    <p className="text-gray-600 dark:text-gray-300 mb-8 italic leading-relaxed">
-                                        "{t.text}"
-                                    </p>
-                                    <div className="flex items-center gap-4">
-                                        <div className="w-12 h-12 rounded-full overflow-hidden bg-gray-200">
+                                    <p className="text-slate-600 dark:text-slate-300 text-sm mb-6 leading-relaxed line-clamp-4">"{t.text}"</p>
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden">
                                             <img src={t.image} alt={t.name} className="w-full h-full object-cover" />
                                         </div>
                                         <div>
-                                            <div className="font-bold text-gray-900 dark:text-white">{t.name}</div>
-                                            <div className="text-xs text-gray-500 dark:text-gray-400">{t.university}</div>
+                                            <div className="font-bold text-sm text-slate-900 dark:text-white">{t.name}</div>
+                                            <div className="text-xs text-slate-400">{t.university}</div>
                                         </div>
                                     </div>
                                 </div>

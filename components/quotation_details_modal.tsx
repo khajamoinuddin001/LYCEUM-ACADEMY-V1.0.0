@@ -160,7 +160,7 @@ const QuotationDetailsModal: React.FC<QuotationDetailsModalProps> = ({ quotation
         
         <div class="header">
           <div class="logo-section">
-            <img src="https://lyceum-academy-assets.s3.amazonaws.com/logo.png" alt="Lyceum Academy" class="logo" onerror="this.src='/logo.png'" />
+            <img src="https://lyceum-academy-assets.s3.amazonaws.com/logo.png" alt="Lyceum Academy" class="logo" onerror="this.src='/academy logo.png'" />
             <div class="company-name">Lyceum Academy</div>
             <div class="tagline">Creative Learning</div>
           </div>
