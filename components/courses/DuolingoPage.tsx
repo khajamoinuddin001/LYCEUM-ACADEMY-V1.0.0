@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ArrowLeft, CheckCircle, Clock, Award, Users, TrendingUp, Star, ChevronDown, Play, Shield, Zap, BookOpen, Target, Globe, MessageSquare, Video, FileText, Headphones, GraduationCap, Home, Package, UserCheck } from 'lucide-react';
 
 interface DuolingoPageProps {
@@ -6,6 +6,10 @@ interface DuolingoPageProps {
 }
 
 const DuolingoPage: React.FC<DuolingoPageProps> = ({ onBack }) => {
+    useEffect(() => {
+        window.scrollTo(0, 0);
+    }, []);
+
     const [openFaq, setOpenFaq] = useState<number | null>(0);
     const [selectedPlan, setSelectedPlan] = useState<'basic' | 'pro' | 'premium'>('pro');
 

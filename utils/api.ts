@@ -38,7 +38,7 @@ function setToken(token: string, remember: boolean = true): void {
 }
 
 // Remove auth token
-function removeToken(): void {
+export function removeToken(): void {
   localStorage.removeItem('authToken');
   sessionStorage.removeItem('authToken');
 }

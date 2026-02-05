@@ -61,7 +61,6 @@ const DEFAULT_STAFF_NAV = [
   { name: 'Calendar', icon: <Calendar size={20} /> },
   { name: 'Contacts', icon: <Contact size={20} /> },
   { name: 'CRM', icon: <Users size={20} /> },
-  { name: 'Agents', icon: <UserCheck size={20} /> },
   { name: 'Accounting', icon: <FileText size={20} /> },
   { name: 'Tasks', icon: <ClipboardList size={20} /> },
   { name: 'Reception', icon: <ConciergeBell size={20} /> },

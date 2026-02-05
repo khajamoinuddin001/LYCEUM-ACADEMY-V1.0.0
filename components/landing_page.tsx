@@ -26,7 +26,9 @@ import {
     ExternalLink,
     Search,
     Sun,
-    Moon
+    Moon,
+    Menu,
+    X
 } from 'lucide-react';
 
 interface LandingPageProps {
@@ -93,6 +95,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onRegister, onTerms,
     const [openFaq, setOpenFaq] = useState<number | null>(0);
     const [logoError, setLogoError] = useState(false);
     const [scrolled, setScrolled] = useState(false);
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
     useEffect(() => {
         const handleScroll = () => {
@@ -176,11 +179,11 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onRegister, onTerms,
         }
     ];
 
-    const partners = ["Harvard", "Oxford", "McGill", "Monash", "TUM", "UCLA", "NTU", "Kings College"];
+    const partners = ["Harvard", "Oxford", "McGill", "Monash", "TUM", "UCLA", "NTU", "Kings College", "Lewis University", "NYIT", "MVNU", "Dallas Baptist University", "New haven University",];
+
 
     const handleEnquirySubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        setStatus('submitting');
         try {
             const response = await fetch('/api/public/enquiries', {
                 method: 'POST',
@@ -222,11 +225,11 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onRegister, onTerms,
     return (
         <div className={`min-h-screen transition-colors duration-300 ${darkMode ? 'dark' : ''}`}>
             {/* Navbar */}
-            <nav className={`fixed w-full z-50 transition-all duration-300 ${scrolled ? 'bg-white/90 dark:bg-gray-900/90 backdrop-blur-md border-b border-gray-100 dark:border-gray-800 py-2' : 'bg-transparent py-6'}`}>
+            <nav className={`fixed w-full z-50 transition-all duration-300 ${scrolled ? 'bg-white/90 dark:bg-gray-900/90 backdrop-blur-md border-b border-gray-100 dark:border-gray-800 py-2' : 'bg-transparent py-4 md:py-6'}`}>
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="flex justify-between items-center h-16">
                         {/* Logo */}
-                        <div className="flex-shrink-0 flex items-center gap-3 group">
+                        <div className="flex-shrink-0 flex items-center gap-3 group relative z-50">
                             <div className="w-10 h-10 group-hover:rotate-12 transition-transform duration-300">
                                 <img src="/academy logo.png" alt="Lyceum Academy Logo" className="w-full h-full object-contain" />
                             </div>
@@ -242,6 +245,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onRegister, onTerms,
                             ))}
                         </div>
 
+                        {/* Desktop Actions */}
                         <div className="hidden md:flex items-center gap-4">
                             <button onClick={handleDarkToggle} className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-slate-500">
                                 {darkMode ? <Sun size={20} /> : <Moon size={20} />}
@@ -251,6 +255,54 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onRegister, onTerms,
                                 Get Started
                             </button>
                         </div>
+
+                        {/* Mobile Toggle Button */}
+                        <div className="md:hidden flex items-center gap-4 z-50">
+                            <button onClick={handleDarkToggle} className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-slate-500">
+                                {darkMode ? <Sun size={20} /> : <Moon size={20} />}
+                            </button>
+                            <button
+                                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+                                className="p-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                            >
+                                {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Mobile Menu Overlay */}
+                <div className={`fixed inset-0 bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl z-40 transition-all duration-300 md:hidden flex flex-col justify-center items-center ${isMobileMenuOpen ? 'opacity-100 visible' : 'opacity-0 invisible pointer-events-none'}`}>
+                    <div className="flex flex-col items-center gap-8 text-lg font-medium">
+                        {['Destinations', 'Services', 'Test Prep', 'About'].map(item => (
+                            <a
+                                key={item}
+                                href={`#${item.toLowerCase().replace(' ', '-')}`}
+                                onClick={() => setIsMobileMenuOpen(false)}
+                                className="text-gray-900 dark:text-white hover:text-lyceum-blue dark:hover:text-lyceum-blue text-2xl font-bold transition-colors"
+                            >
+                                {item}
+                            </a>
+                        ))}
+                        <div className="w-16 h-1 bg-gray-100 dark:bg-gray-800 rounded-full my-4"></div>
+                        <button
+                            onClick={() => {
+                                onLogin();
+                                setIsMobileMenuOpen(false);
+                            }}
+                            className="text-gray-600 dark:text-gray-300 hover:text-lyceum-blue font-semibold"
+                        >
+                            Log In
+                        </button>
+                        <button
+                            onClick={() => {
+                                onRegister();
+                                setIsMobileMenuOpen(false);
+                            }}
+                            className="px-8 py-3 bg-lyceum-blue text-white rounded-xl font-bold hover:shadow-lg hover:scale-105 transition-all"
+                        >
+                            Get Started
+                        </button>
                     </div>
                 </div>
             </nav>
@@ -502,8 +554,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onRegister, onTerms,
                             { title: 'Pre-Departure', icon: <MapPin size={32} />, desc: 'Briefings on accommodation, lifestyle, and travel.', color: 'from-rose-500 to-orange-400', shadow: 'shadow-rose-500/20' }
                         ].map((srv, i) => (
                             <div key={i} className="group relative p-8 rounded-[2rem] bg-gray-50 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-700 hover:border-transparent transition-all duration-300 hover:-translate-y-2">
-                                {/* Hover Gradient Border Effect */}
-                                <div className={`absolute inset-0 rounded-[2rem] bg-gradient-to-br ${srv.color} opacity-0 group-hover:opacity-100 -z-10 blur-xl transition-opacity duration-500`}></div>
+                                {/* Hover Gradient Border Effect Removed */}
 
                                 <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${srv.color} text-white flex items-center justify-center mb-8 shadow-lg ${srv.shadow} group-hover:scale-110 group-hover:rotate-6 transition-all duration-300`}>
                                     {srv.icon}
@@ -803,7 +854,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onRegister, onTerms,
                     <div className="grid md:grid-cols-4 gap-12 mb-12">
                         <div className="col-span-2 md:col-span-1">
                             <div className="flex items-center gap-2 mb-6">
-                                <GraduationCap size={32} className="text-lyceum-blue" />
+                                <img src="/academy logo.png" alt="Lyceum Academy" className="w-10 h-10 object-contain" />
                                 <span className="text-2xl font-bold">Lyceum Academy</span>
                             </div>
                             <p className="text-gray-400 text-sm leading-relaxed mb-6">
@@ -828,8 +879,8 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onRegister, onTerms,
                         <div>
                             <h4 className="font-bold text-lg mb-6">Support</h4>
                             <ul className="space-y-4 text-gray-400 text-sm">
-                                <li><button onClick={onTerms} className="hover:text-lyceum-blue transition-colors text-left">Terms & Conditions</button></li>
-                                <li><button onClick={onPrivacy} className="hover:text-lyceum-blue transition-colors text-left">Privacy Policy</button></li>
+                                <li><button onClick={() => navigate('/terms')} className="hover:text-lyceum-blue transition-colors text-left">Terms & Conditions</button></li>
+                                <li><button onClick={() => navigate('/privacy')} className="hover:text-lyceum-blue transition-colors text-left">Privacy Policy</button></li>
                                 <li><a href="#contact" className="hover:text-lyceum-blue transition-colors">Enquiry Form</a></li>
                                 <li><button onClick={onLogin} className="hover:text-lyceum-blue transition-colors text-left">Student Login</button></li>
                             </ul>
@@ -839,7 +890,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onRegister, onTerms,
                             <ul className="space-y-4 text-gray-400 text-sm">
                                 <li className="flex items-center gap-3">
                                     <Send size={16} className="text-lyceum-blue" />
-                                    <span>info@lyceumacademy.com</span>
+                                    <span>omar@lyceumacad.com</span>
                                 </li>
                                 <li className="flex items-center gap-3">
                                     <Users size={16} className="text-lyceum-blue" />
@@ -855,8 +906,8 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onRegister, onTerms,
                     <div className="border-t border-gray-800 pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-gray-500 text-sm">
                         <p>© 2026 Lyceum Academy. All rights reserved.</p>
                         <div className="flex gap-8">
-                            <button onClick={onPrivacy} className="hover:text-gray-300">Privacy</button>
-                            <button onClick={onTerms} className="hover:text-gray-300">Terms</button>
+                            <button onClick={() => navigate('/privacy')} className="hover:text-gray-300">Privacy</button>
+                            <button onClick={() => navigate('/terms')} className="hover:text-gray-300">Terms</button>
                             <button onClick={onDocuments} className="hover:text-gray-300">Cookies</button>
                         </div>
                     </div>

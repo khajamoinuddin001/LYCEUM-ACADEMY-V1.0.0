@@ -64,7 +64,6 @@ import StudentAppsView from './components/student_apps_view';
 import StudentAccountsView from './components/student_accounts_view';
 import StudentQuotationsView from './components/student_quotations_view';
 import StudentTasksView from './components/student_tasks_view';
-import AgentsView from './components/agents_view';
 import VisitorDisplay from './components/visitor_display';
 import DepartmentDashboard from './components/department_dashboard';
 import AttendanceView from './components/attendance_view';
@@ -80,6 +79,9 @@ import DuolingoPage from './components/courses/DuolingoPage';
 import IELTSPage from './components/courses/IELTSPage';
 import PTEPage from './components/courses/PTEPage';
 import TOEFLPage from './components/courses/TOEFLPage';
+import TermsPage from './components/landing page footer/TermsPage';
+import PrivacyPage from './components/landing page footer/PrivacyPage';
+import UniversityApplicationView from './components/university_application_view';
 
 // ... (keep existing types)
 
@@ -289,7 +291,8 @@ const DashboardLayout: React.FC = () => {
 
     // Real-time Polling
     const pollInterval = setInterval(async () => {
-      if (storedCurrentUser || localStorage.getItem('authToken')) {
+      // Check effective token (handles both localStorage and sessionStorage)
+      if (api.getToken()) {
         try {
           // Parallel fetch of volatile data
           const [freshLeads, freshTasks, freshVisitors, freshNotifications, freshTickets] = await Promise.all([
@@ -470,7 +473,7 @@ const DashboardLayout: React.FC = () => {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('authToken');
+    api.removeToken();
     setStoredCurrentUser(null);
     setImpersonatingUser(null);
     setActiveApp('Apps');
@@ -1643,6 +1646,7 @@ const DashboardLayout: React.FC = () => {
           onFilterChange={setTaskFilters}
         />
       );
+      case 'University Application': return <UniversityApplicationView user={currentUser} />;
       case 'Tickets': return (
         <TicketsView
           tickets={tickets}
@@ -1676,15 +1680,14 @@ const DashboardLayout: React.FC = () => {
             return <NewContactForm user={currentUser} users={users} contact={contactData} contacts={contacts} onNavigateBack={handleBackToContacts} onNavigateToDocuments={() => setContactViewMode('documents')} onNavigateToVisa={() => setContactViewMode('visaFiling')} onNavigateToChecklist={() => setContactViewMode('checklist')} onNavigateToVisits={() => setContactViewMode('visits')} onNavigateToCRM={() => setContactViewMode('crm')} onNavigateToTasks={() => setContactViewMode('tasks')} onNavigateToCourses={() => setContactViewMode('courses')} onSave={handleSaveContact} onComposeAIEmail={handleGenerateEmailDraft} onAddSessionVideo={api.addSessionVideo} onDeleteSessionVideo={api.deleteSessionVideo} transactions={transactions} tasks={tasks} onSaveTask={handleSaveTask} onDeleteContact={handleDeleteContact} />;
           }
         }
-        return <ContactsView contacts={contacts} onContactSelect={handleContactSelect} onNewContact={handleNewContactClick} user={currentUser} />;
+        return <ContactsView contacts={contacts} onContactSelect={handleContactSelect} onNewContactClick={handleNewContactClick} user={currentUser} />;
       case 'Calendar': return <CalendarView events={events} onNewEvent={handleOpenNewEventModal} onSelectEvent={handleSelectEvent} />;
       case 'CRM':
         if (leadForQuotation) {
           return <NewQuotationPage user={currentUser} lead={leadForQuotation} onCancel={handleCancelQuotation} onSave={handleSaveQuotation} templates={quotationTemplates} quotationToEdit={editingQuotation} onSaveTemplate={handleSaveQuotationTemplate} onDeleteTemplate={handleDeleteQuotationTemplate} />;
         }
         return <CrmView user={currentUser} leads={leads} onLeadSelect={handleLeadSelect} onNewLeadClick={handleNewLeadClick} onUpdateLeadStage={handleUpdateLeadStage} onDeleteLead={handleDeleteLead} onNavigateToContact={handleNavigateToContactFromCrm} />;
-      case 'Agents':
-        return <AgentsView onNavigateBack={() => handleAppSelect('Apps')} />;
+
       case 'Reception': return <ReceptionView visitors={visitors} onNewVisitorClick={() => setIsNewVisitorModalOpen(true)} onScheduleVisitorClick={() => setIsNewAppointmentModalOpen(true)} onCheckOut={handleVisitorCheckOut} onCheckInScheduled={handleCheckInScheduledVisitor} onEditVisitor={handleEditVisitor} onDeleteVisitor={handleDeleteVisitor} user={currentUser} />;
       case 'Accounts': return (
         <AccountingView
@@ -2007,6 +2010,8 @@ const App: React.FC = () => {
       <Route path="/ielts" element={<IELTSPage onBack={() => window.history.back()} />} />
       <Route path="/pte" element={<PTEPage onBack={() => window.history.back()} />} />
       <Route path="/toefl" element={<TOEFLPage onBack={() => window.history.back()} />} />
+      <Route path="/terms" element={<TermsPage />} />
+      <Route path="/privacy" element={<PrivacyPage />} />
       <Route path="/*" element={<DashboardLayout />} />
     </Routes>
   );

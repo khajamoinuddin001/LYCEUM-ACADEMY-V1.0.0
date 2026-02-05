@@ -591,12 +591,18 @@ router.post('/google', async (req, res) => {
     const { token } = req.body;
     if (!token) return res.status(400).json({ error: 'Token is required' });
 
+    const googleClientId = process.env.GOOGLE_CLIENT_ID;
+    if (!googleClientId) {
+      console.error('❌ Google Auth Error: GOOGLE_CLIENT_ID is not defined in environment variables');
+      return res.status(500).json({ error: 'Server configuration error: Missing Google Client ID' });
+    }
+
     const { OAuth2Client } = await import('google-auth-library');
-    const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+    const client = new OAuth2Client(googleClientId);
 
     const ticket = await client.verifyIdToken({
       idToken: token,
-      audience: process.env.GOOGLE_CLIENT_ID,
+      audience: googleClientId,
     });
 
     const payload = ticket.getPayload();

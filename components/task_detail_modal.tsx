@@ -160,7 +160,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     return (
         <>
             <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 sm:p-6 md:p-8 lg:p-12">
-                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-3xl flex flex-col border border-gray-200 dark:border-gray-700 mt-52" style={{ maxHeight: '70vh' }}>
+                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-3xl flex flex-col border border-gray-200 dark:border-gray-700" style={{ maxHeight: '70vh' }}>
                     {/* Header */}
                     <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-start flex-shrink-0">
                         <div className="flex-1">
@@ -496,24 +496,84 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
             {/* Document Preview Modal */}
             {previewAttachment && (
                 <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[70] flex items-center justify-center p-4" onClick={() => setPreviewAttachment(null)}>
-                    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-4xl p-6" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-lg font-bold text-gray-900 dark:text-white">{previewAttachment.name}</h3>
-                            <button onClick={() => setPreviewAttachment(null)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">
-                                <X size={20} />
-                            </button>
+                    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex justify-between items-center p-6 border-b border-gray-200 dark:border-gray-700">
+                            <h3 className="text-lg font-bold text-gray-900 dark:text-white truncate pr-4">{previewAttachment.name}</h3>
+                            <div className="flex items-center gap-2">
+                                <a
+                                    href={previewAttachment.url}
+                                    download={previewAttachment.name}
+                                    className="inline-flex items-center gap-2 px-4 py-2 bg-lyceum-blue text-white rounded-lg hover:bg-lyceum-blue-dark transition-colors"
+                                    onClick={(e) => e.stopPropagation()}
+                                >
+                                    <Download size={16} />
+                                    Download
+                                </a>
+                                <button onClick={() => setPreviewAttachment(null)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">
+                                    <X size={20} />
+                                </button>
+                            </div>
                         </div>
-                        <div className="bg-gray-100 dark:bg-gray-900 rounded-lg p-8 text-center">
-                            <FileText size={64} className="mx-auto mb-4 text-gray-400" />
-                            <p className="text-gray-600 dark:text-gray-400 mb-4">File preview not available</p>
-                            <a
-                                href={previewAttachment.url}
-                                download={previewAttachment.name}
-                                className="inline-flex items-center gap-2 px-4 py-2 bg-lyceum-blue text-white rounded-lg hover:bg-lyceum-blue-dark"
-                            >
-                                <Download size={16} />
-                                Download File
-                            </a>
+                        <div className="flex-1 overflow-auto p-6">
+                            {(() => {
+                                const fileName = previewAttachment.name.toLowerCase();
+                                const isImage = fileName.match(/\.(jpg|jpeg|png|gif|bmp|webp|svg)$/);
+                                const isPDF = fileName.endsWith('.pdf');
+
+                                if (isImage) {
+                                    return (
+                                        <div className="flex items-center justify-center min-h-[400px]">
+                                            <img
+                                                src={previewAttachment.url}
+                                                alt={previewAttachment.name}
+                                                className="max-w-full max-h-[70vh] object-contain rounded-lg"
+                                                onError={(e) => {
+                                                    const target = e.target as HTMLImageElement;
+                                                    target.style.display = 'none';
+                                                    const parent = target.parentElement;
+                                                    if (parent) {
+                                                        parent.innerHTML = `
+                                                            <div class="text-center">
+                                                                <svg class="mx-auto mb-4 text-gray-400" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                                                    <polyline points="14 2 14 8 20 8"></polyline>
+                                                                </svg>
+                                                                <p class="text-gray-600 dark:text-gray-400 mb-4">Unable to load image preview</p>
+                                                            </div>
+                                                        `;
+                                                    }
+                                                }}
+                                            />
+                                        </div>
+                                    );
+                                } else if (isPDF) {
+                                    return (
+                                        <iframe
+                                            src={previewAttachment.url}
+                                            className="w-full h-[70vh] rounded-lg border border-gray-200 dark:border-gray-700"
+                                            title={previewAttachment.name}
+                                        />
+                                    );
+                                } else {
+                                    return (
+                                        <div className="bg-gray-100 dark:bg-gray-900 rounded-lg p-8 text-center min-h-[400px] flex flex-col items-center justify-center">
+                                            <FileText size={64} className="mx-auto mb-4 text-gray-400" />
+                                            <p className="text-gray-600 dark:text-gray-400 mb-2 font-semibold">Preview not available for this file type</p>
+                                            <p className="text-sm text-gray-500 dark:text-gray-500 mb-6">
+                                                {fileName.match(/\.(\w+)$/)?.[1]?.toUpperCase() || 'Unknown'} files cannot be previewed in the browser
+                                            </p>
+                                            <a
+                                                href={previewAttachment.url}
+                                                download={previewAttachment.name}
+                                                className="inline-flex items-center gap-2 px-6 py-3 bg-lyceum-blue text-white rounded-lg hover:bg-lyceum-blue-dark transition-colors"
+                                            >
+                                                <Download size={18} />
+                                                Download to View
+                                            </a>
+                                        </div>
+                                    );
+                                }
+                            })()}
                         </div>
                     </div>
                 </div>

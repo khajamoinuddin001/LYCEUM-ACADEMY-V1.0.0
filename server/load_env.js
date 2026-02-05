@@ -28,7 +28,7 @@ if (!fs.existsSync(envPath)) {
 }
 
 // 4. Validate critical variables
-const requiredVars = ['DATABASE_URL', 'JWT_SECRET'];
+const requiredVars = ['DATABASE_URL', 'JWT_SECRET', 'GOOGLE_CLIENT_ID'];
 const missingVars = requiredVars.filter(varName => !process.env[varName]);
 
 if (missingVars.length > 0) {
