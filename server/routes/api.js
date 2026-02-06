@@ -542,8 +542,8 @@ router.post('/contacts', authenticateToken, async (req, res) => {
     agent_assigned, checklist, activity_log, recorded_sessions, documents, visa_information,
     lms_progress, lms_notes, gpa, advisor, courses, street1, street2, city, state, zip,
     country, gstin, pan, tags, visa_type, country_of_application, source, contact_type,
-    stream, intake, counselor_assigned, application_email, application_password, avatar_url, metadata
-  ) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40)
+    stream, intake, counselor_assigned, counselor_assigned_2, application_email, application_password, avatar_url, metadata
+  ) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41)
 RETURNING *
   `, [
       contact.userId || null,
@@ -582,6 +582,7 @@ RETURNING *
       contact.stream || null,
       contact.intake || null,
       contact.counselorAssigned || null,
+      contact.counselorAssigned2 || null,
       contact.applicationEmail || null,
       contact.applicationPassword || null,
       contact.avatarUrl || null,
@@ -649,9 +650,9 @@ name = $1, email = $2, phone = $3, department = $4, major = $5, notes = $6,
   lms_notes = $15, gpa = $16, advisor = $17, courses = $18, street1 = $19, street2 = $20,
   city = $21, state = $22, zip = $23, country = $24, gstin = $25, pan = $26, tags = $27,
   visa_type = $28, country_of_application = $29, source = $30, contact_type = $31,
-  stream = $32, intake = $33, counselor_assigned = $34, application_email = $35,
-  application_password = $36, metadata = $37
-      WHERE id = $38
+      stream = $32, intake = $33, counselor_assigned = $34, counselor_assigned_2 = $35, application_email = $36,
+      application_password = $37, metadata = $38
+      WHERE id = $39
   `, [
       contact.name,
       contact.email,
@@ -687,6 +688,7 @@ name = $1, email = $2, phone = $3, department = $4, major = $5, notes = $6,
       contact.stream,
       contact.intake,
       contact.counselorAssigned,
+      contact.counselorAssigned2,
       contact.applicationEmail,
       contact.applicationPassword,
       JSON.stringify(contact.metadata || {}),
