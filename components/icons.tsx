@@ -90,5 +90,6 @@ export {
   Volume2,
   ArrowRight,
   Monitor,
-  Receipt
+  Receipt,
+  Link
 } from 'lucide-react';

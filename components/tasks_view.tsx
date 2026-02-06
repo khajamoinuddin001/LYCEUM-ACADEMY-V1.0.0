@@ -13,6 +13,8 @@ interface TasksViewProps {
     onStatusChange: (task: TodoTask, newStatus: TodoStatus) => void;
     user: User;
     onFilterChange: (filters: { userId?: number; all?: boolean }) => void;
+    preSelectedTaskId?: number | null;
+    onClearPreSelectedTask?: () => void;
 }
 
 const HistoryRow: React.FC<{ task: TodoTask, staff: { id: number; name: string; role: string }[] }> = ({ task, staff }) => {
@@ -81,7 +83,9 @@ const TasksView: React.FC<TasksViewProps> = ({
     onDeleteTask,
     onStatusChange,
     user,
-    onFilterChange
+    onFilterChange,
+    preSelectedTaskId,
+    onClearPreSelectedTask
 }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState<'All' | TodoStatus>('todo');
@@ -101,6 +105,17 @@ const TasksView: React.FC<TasksViewProps> = ({
             getStaffMembers().then(setStaff).catch(console.error);
         }
     }, [isAdmin]);
+
+    useEffect(() => {
+        if (preSelectedTaskId && tasks.length > 0) {
+            const task = tasks.find(t => t.id === preSelectedTaskId);
+            if (task) {
+                setSelectedTask(task);
+                setIsDetailModalOpen(true);
+                onClearPreSelectedTask?.();
+            }
+        }
+    }, [preSelectedTaskId, tasks, onClearPreSelectedTask]);
 
     const handleAdminFilter = (value: string) => {
         setAdminFilterUser(value);

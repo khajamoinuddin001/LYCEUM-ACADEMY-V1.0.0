@@ -127,6 +127,7 @@ const DashboardLayout: React.FC = () => {
   const [isNewAppointmentModalOpen, setIsNewAppointmentModalOpen] = useState(false);
   const [editingVisitor, setEditingVisitor] = useState<Visitor | null>(null);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+  const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
   const [editingTask, setEditingTask] = useState<TodoTask | null>(null);
   const [taskFilters, setTaskFilters] = useState<{ userId?: number; all?: boolean }>({});
   const taskFiltersRef = useRef(taskFilters);
@@ -259,7 +260,7 @@ const DashboardLayout: React.FC = () => {
 
           const [
             usersData, activityLogData, paymentLogData, contactsData, transactionsData, leadsData,
-            templatesData, visitorsData, tasksData, eventsData, channelsData, couponsData, lmsCoursesData, notificationsData
+            templatesData, visitorsData, tasksData, eventsData, channelsData, couponsData, lmsCoursesData, notificationsData, ticketsData
           ] = await Promise.all([
             effectiveUser.role === 'Admin' || effectiveUser.role === 'Staff' ? fetchWithFallback(api.getUsers()) : Promise.resolve([]),
             fetchWithFallback(api.getActivityLog()),
@@ -275,11 +276,12 @@ const DashboardLayout: React.FC = () => {
             effectiveUser.role === 'Admin' || effectiveUser.role === 'Staff' ? fetchWithFallback(api.getChannels()) : Promise.resolve([]),
             fetchWithFallback(api.getCoupons()),
             fetchWithFallback(api.getLmsCourses()),
-            fetchWithFallback(api.getNotifications())
+            fetchWithFallback(api.getNotifications()),
+            fetchWithFallback(api.getTickets())
           ]);
           setUsers(usersData); setActivityLog(activityLogData); setPaymentActivityLog(paymentLogData); setContacts(contactsData); setTransactions(transactionsData);
           setLeads(leadsData); setQuotationTemplates(templatesData); setVisitors(visitorsData); setTasks(tasksData); setRawEvents(eventsData);
-          setChannels(channelsData); setCoupons(couponsData); setLmsCourses(lmsCoursesData); setNotifications(notificationsData);
+          setChannels(channelsData); setCoupons(couponsData); setLmsCourses(lmsCoursesData); setNotifications(notificationsData); setTickets(ticketsData);
         }
       } catch (error) {
         console.error("Failed to load initial data", error);
@@ -1644,6 +1646,8 @@ const DashboardLayout: React.FC = () => {
           onStatusChange={(task, newStatus) => handleSaveTask({ ...task, status: newStatus })}
           user={currentUser}
           onFilterChange={setTaskFilters}
+          preSelectedTaskId={selectedTaskId}
+          onClearPreSelectedTask={() => setSelectedTaskId(null)}
         />
       );
       case 'University Application': return <UniversityApplicationView user={currentUser} />;
@@ -1653,6 +1657,10 @@ const DashboardLayout: React.FC = () => {
           onUpdate={() => api.getTickets().then(setTickets)}
           user={currentUser}
           contacts={contacts}
+          onNavigateToTask={(taskId) => {
+            setSelectedTaskId(taskId);
+            setActiveApp('Tasks');
+          }}
         />
       );
       case 'LMS':
@@ -1854,7 +1862,16 @@ const DashboardLayout: React.FC = () => {
                   c.userId === currentUser.id ||
                   (c.email && currentUser.email && c.email.toLowerCase() === currentUser.email.toLowerCase())
                 );
-                return studentContact ? <StudentTicketsView student={studentContact} /> : <div>Loading...</div>;
+                return studentContact ? (
+                  <StudentTicketsView
+                    student={studentContact}
+                    tickets={tickets}
+                    onNavigateToTask={(taskId) => {
+                      setSelectedTaskId(taskId);
+                      setActiveApp('Tasks');
+                    }}
+                  />
+                ) : <div>Loading...</div>;
               }
 
               // Student Accounts Page

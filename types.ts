@@ -59,6 +59,7 @@ export interface TodoTask {
   completedAt?: string;
   contactId?: number;
   contactName?: string;
+  ticketId?: number;
 }
 
 export interface TaskReply {
@@ -69,6 +70,15 @@ export interface TaskReply {
   message: string;
   timestamp: string;
   attachments?: { name: string; url: string; size: number }[];
+}
+
+export interface TicketMessage {
+  id: number;
+  ticketId: number;
+  senderId: number;
+  senderName: string;
+  message: string;
+  createdAt: string;
 }
 
 export interface Ticket {
@@ -85,7 +95,9 @@ export interface Ticket {
   createdBy: number;
   createdByName?: string;
   resolutionNotes?: string;
-  attachments?: { name: string; url: string; size: number }[];
+  attachments?: { id: number; name: string; size: number }[];
+  linkedTasks?: TodoTask[];
+  messages?: TicketMessage[];
   createdAt: string;
   updatedAt: string;
 }

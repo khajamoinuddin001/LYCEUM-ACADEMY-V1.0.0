@@ -27,6 +27,7 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, editTask
     const [activeTab, setActiveTab] = useState<'details' | 'history'>('details');
     const [logs, setLogs] = useState<TaskTimeLog[]>([]);
     const [taskDuration, setTaskDuration] = useState<string>('');
+    const [ticketId, setTicketId] = useState<number | undefined>(undefined);
 
     useEffect(() => {
         if (isOpen) {
@@ -40,7 +41,7 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, editTask
             };
             fetchStaff();
 
-            if (editTask) {
+            if (editTask && editTask.id) {
                 // Fetch logs
                 getTaskLogs(editTask.id).then(fetchedLogs => {
                     setLogs(fetchedLogs);
@@ -64,6 +65,7 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, editTask
                 setAssignedTo(editTask.assignedTo || currentUserId);
                 setContactId(editTask.contactId || '');
                 setIsVisibleToStudent(editTask.isVisibleToStudent || false);
+                setTicketId(editTask.ticketId);
                 if (editTask.contactId) {
                     const linkedContact = contacts.find(c => c.id === editTask.contactId);
                     setContactSearch(linkedContact ? linkedContact.name : '');
@@ -71,15 +73,23 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, editTask
                     setContactSearch('');
                 }
             } else {
-                setTitle('');
-                setDescription('');
-                setDueDate(new Date().toISOString().split('T')[0]);
-                setStatus('todo');
-                setPriority('Medium');
-                setAssignedTo(currentUserId);
-                setContactId('');
-                setContactSearch('');
-                setIsVisibleToStudent(false);
+                setTitle(editTask?.title || '');
+                setDescription(editTask?.description || '');
+                setDueDate(editTask?.dueDate || new Date().toISOString().split('T')[0]);
+                setStatus(editTask?.status || 'todo');
+                setPriority(editTask?.priority || 'Medium');
+                setAssignedTo(editTask?.assignedTo || currentUserId);
+                setContactId(editTask?.contactId || '');
+                setTicketId(editTask?.ticketId);
+                setIsVisibleToStudent(editTask?.isVisibleToStudent || false);
+
+                if (editTask?.contactId) {
+                    const linkedContact = contacts.find(c => c.id === editTask.contactId);
+                    setContactSearch(linkedContact ? linkedContact.name : '');
+                } else {
+                    setContactSearch('');
+                }
+
                 setLogs([]);
                 setTaskDuration('');
             }
@@ -102,7 +112,8 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, editTask
             priority,
             assignedTo: Number(assignedTo),
             contactId: contactId ? Number(contactId) : undefined,
-            isVisibleToStudent
+            isVisibleToStudent,
+            ticketId
         });
         onClose();
     };

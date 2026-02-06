@@ -1613,8 +1613,8 @@ router.post('/tasks', authenticateToken, async (req, res) => {
 
     const result = await query(`
       INSERT INTO tasks(
-        task_id, title, description, due_date, status, assigned_to, assigned_by, priority, replies, contact_id, activity_type, is_visible_to_student
-      ) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        task_id, title, description, due_date, status, assigned_to, assigned_by, priority, replies, contact_id, activity_type, is_visible_to_student, ticket_id
+      ) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       RETURNING *
     `, [
       taskId,
@@ -1628,7 +1628,8 @@ router.post('/tasks', authenticateToken, async (req, res) => {
       JSON.stringify([]), // replies
       task.contactId || null,
       task.activityType || null,
-      task.isVisibleToStudent || false
+      task.isVisibleToStudent || false,
+      task.ticketId || null
     ]);
 
     // Create initial time log
@@ -1655,10 +1656,9 @@ const transformTask = (task) => ({
   completedAt: task.completed_at,
   contactId: task.contact_id,
   contactName: task.contact_name,
-  contactId: task.contact_id,
-  contactName: task.contact_name,
   activityType: task.activity_type,
-  isVisibleToStudent: task.is_visible_to_student
+  isVisibleToStudent: task.is_visible_to_student,
+  ticketId: task.ticket_id
 });
 
 
@@ -1826,14 +1826,19 @@ const transformTicket = (ticket) => ({
   id: ticket.id,
   ticketId: ticket.ticket_id,
   contactId: ticket.contact_id,
+  contactName: ticket.contact_name,
   subject: ticket.subject,
   description: ticket.description,
   status: ticket.status,
   priority: ticket.priority,
   assignedTo: ticket.assigned_to,
+  assignedToName: ticket.assigned_to_name,
   createdBy: ticket.created_by,
+  createdByName: ticket.created_by_name,
   resolutionNotes: ticket.resolution_notes,
   attachments: ticket.attachments || [],
+  linkedTasks: ticket.linked_tasks || [],
+  messages: ticket.messages || [],
   createdAt: ticket.created_at,
   updatedAt: ticket.updated_at
 });
@@ -1855,12 +1860,28 @@ router.post('/tickets', authenticateToken, upload.array('attachments', 5), async
       if (existing.rows.length === 0) isUnique = true;
     }
 
-    // Get contact's assigned counselor
-    const contactResult = await client.query('SELECT counselor_assigned FROM contacts WHERE id = $1', [contactId]);
+    // Get contact's assigned counselor(s)
+    const contactResult = await client.query('SELECT counselor_assigned, counselor_assigned_2 FROM contacts WHERE id = $1', [contactId]);
     let assignedTo = null;
-    if (contactResult.rows.length > 0 && contactResult.rows[0].counselor_assigned) {
-      const counselorResult = await client.query('SELECT id FROM users WHERE name = $1', [contactResult.rows[0].counselor_assigned]);
-      if (counselorResult.rows.length > 0) assignedTo = counselorResult.rows[0].id;
+    if (contactResult.rows.length > 0) {
+      const { counselor_assigned, counselor_assigned_2 } = contactResult.rows[0];
+      const counselorName = counselor_assigned || counselor_assigned_2;
+
+      if (counselorName) {
+        // Find counselor by name (case-insensitive)
+        const counselorResult = await client.query(
+          'SELECT id FROM users WHERE name ILIKE $1 AND role IN ($2, $3)',
+          [counselorName, 'Admin', 'Staff']
+        );
+        if (counselorResult.rows.length > 0) {
+          assignedTo = counselorResult.rows[0].id;
+        }
+      }
+
+      // If still no counselor assigned and it's a staff member creating, they become the assignee
+      if (!assignedTo && req.user.role !== 'Student') {
+        assignedTo = req.user.id;
+      }
     }
 
     // Insert Ticket
@@ -1884,12 +1905,16 @@ router.post('/tickets', authenticateToken, upload.array('attachments', 5), async
 
     await client.query('COMMIT');
 
-    // Fetch the ticket with its attachments for the response
+    // Fetch the ticket with its attachments and names for the response
     const finalResult = await client.query(`
-      SELECT t.*, 
+      SELECT t.*, c.name as contact_name, u1.name as assigned_to_name, u2.name as created_by_name,
         (SELECT json_agg(json_build_object('id', ta.id, 'name', ta.filename, 'size', ta.file_size))
          FROM ticket_attachments ta WHERE ta.ticket_id = t.id) as attachments
-      FROM tickets t WHERE t.id = $1
+      FROM tickets t
+      LEFT JOIN contacts c ON t.contact_id = c.id
+      LEFT JOIN users u1 ON t.assigned_to = u1.id
+      LEFT JOIN users u2 ON t.created_by = u2.id
+      WHERE t.id = $1
     `, [newTicket.id]);
 
     res.json(transformTicket(finalResult.rows[0]));
@@ -1927,9 +1952,13 @@ router.get('/tickets', authenticateToken, async (req, res) => {
     if (req.user.role === 'Admin') {
       // Admin sees all tickets
       queryText = `
-        SELECT t.*, c.name as contact_name, u1.name as assigned_to_name, u2.name as created_by_name,
+        SELECT t.*, c.name as contact_name, 
+               COALESCE(u1.name, c.counselor_assigned, c.counselor_assigned_2) as assigned_to_name, 
+               u2.name as created_by_name,
                (SELECT json_agg(json_build_object('id', ta.id, 'name', ta.filename, 'size', ta.file_size))
-                FROM ticket_attachments ta WHERE ta.ticket_id = t.id) as attachments
+                FROM ticket_attachments ta WHERE ta.ticket_id = t.id) as attachments,
+               (SELECT json_agg(json_build_object('id', tk.id, 'taskId', tk.task_id, 'title', tk.title, 'status', tk.status, 'isVisibleToStudent', tk.is_visible_to_student))
+                FROM tasks tk WHERE tk.ticket_id = t.id) as linked_tasks
         FROM tickets t
         LEFT JOIN contacts c ON t.contact_id = c.id
         LEFT JOIN users u1 ON t.assigned_to = u1.id
@@ -1939,14 +1968,18 @@ router.get('/tickets', authenticateToken, async (req, res) => {
     } else if (req.user.role === 'Staff') {
       // Staff sees tickets assigned to them
       queryText = `
-        SELECT t.*, c.name as contact_name, u1.name as assigned_to_name, u2.name as created_by_name,
+        SELECT t.*, c.name as contact_name, 
+               COALESCE(u1.name, c.counselor_assigned, c.counselor_assigned_2) as assigned_to_name, 
+               u2.name as created_by_name,
                (SELECT json_agg(json_build_object('id', ta.id, 'name', ta.filename, 'size', ta.file_size))
-                FROM ticket_attachments ta WHERE ta.ticket_id = t.id) as attachments
+                FROM ticket_attachments ta WHERE ta.ticket_id = t.id) as attachments,
+               (SELECT json_agg(json_build_object('id', tk.id, 'taskId', tk.task_id, 'title', tk.title, 'status', tk.status, 'isVisibleToStudent', tk.is_visible_to_student))
+                FROM tasks tk WHERE tk.ticket_id = t.id) as linked_tasks
         FROM tickets t
         LEFT JOIN contacts c ON t.contact_id = c.id
         LEFT JOIN users u1 ON t.assigned_to = u1.id
         LEFT JOIN users u2 ON t.created_by = u2.id
-        WHERE t.assigned_to = $1
+        WHERE t.assigned_to IS NULL OR t.assigned_to = $1 OR t.created_by = $1 OR c.counselor_assigned IS NOT NULL OR c.counselor_assigned_2 IS NOT NULL
         ORDER BY t.created_at DESC
       `;
       params = [req.user.id];
@@ -1958,9 +1991,13 @@ router.get('/tickets', authenticateToken, async (req, res) => {
       }
 
       queryText = `
-        SELECT t.*, c.name as contact_name, u1.name as assigned_to_name, u2.name as created_by_name,
+        SELECT t.*, c.name as contact_name, 
+               COALESCE(u1.name, c.counselor_assigned, c.counselor_assigned_2) as assigned_to_name, 
+               u2.name as created_by_name,
                (SELECT json_agg(json_build_object('id', ta.id, 'name', ta.filename, 'size', ta.file_size))
-                FROM ticket_attachments ta WHERE ta.ticket_id = t.id) as attachments
+                FROM ticket_attachments ta WHERE ta.ticket_id = t.id) as attachments,
+               (SELECT json_agg(json_build_object('id', tk.id, 'taskId', tk.task_id, 'title', tk.title, 'status', tk.status, 'isVisibleToStudent', tk.is_visible_to_student))
+                FROM tasks tk WHERE tk.ticket_id = t.id AND tk.is_visible_to_student = true) as linked_tasks
         FROM tickets t
         LEFT JOIN contacts c ON t.contact_id = c.id
         LEFT JOIN users u1 ON t.assigned_to = u1.id
@@ -1972,12 +2009,7 @@ router.get('/tickets', authenticateToken, async (req, res) => {
     }
 
     const result = await query(queryText, params);
-    const tickets = result.rows.map(row => ({
-      ...transformTicket(row),
-      contactName: row.contact_name,
-      assignedToName: row.assigned_to_name,
-      createdByName: row.created_by_name
-    }));
+    const tickets = result.rows.map(row => transformTicket(row));
 
     res.json(tickets);
   } catch (error) {
@@ -1990,9 +2022,18 @@ router.get('/tickets', authenticateToken, async (req, res) => {
 router.get('/tickets/:id', authenticateToken, async (req, res) => {
   try {
     const result = await query(`
-      SELECT t.*, c.name as contact_name, u1.name as assigned_to_name, u2.name as created_by_name,
+      SELECT t.*, c.name as contact_name, 
+             COALESCE(u1.name, c.counselor_assigned, c.counselor_assigned_2) as assigned_to_name, 
+             u2.name as created_by_name,
              (SELECT json_agg(json_build_object('id', ta.id, 'name', ta.filename, 'size', ta.file_size))
-              FROM ticket_attachments ta WHERE ta.ticket_id = t.id) as attachments
+              FROM ticket_attachments ta WHERE ta.ticket_id = t.id) as attachments,
+             (SELECT json_agg(json_build_object('id', tk.id, 'taskId', tk.task_id, 'title', tk.title, 'status', tk.status, 'isVisibleToStudent', tk.is_visible_to_student))
+              FROM tasks tk WHERE tk.ticket_id = t.id) as linked_tasks,
+             (SELECT json_agg(json_build_object('id', tm.id, 'message', tm.message, 'senderId', tm.sender_id, 'senderName', u.name, 'createdAt', tm.created_at))
+              FROM ticket_messages tm
+              LEFT JOIN users u ON tm.sender_id = u.id
+              WHERE tm.ticket_id = t.id
+              ORDER BY tm.created_at ASC) as messages
       FROM tickets t
       LEFT JOIN contacts c ON t.contact_id = c.id
       LEFT JOIN users u1 ON t.assigned_to = u1.id
@@ -2004,12 +2045,7 @@ router.get('/tickets/:id', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Ticket not found' });
     }
 
-    const ticket = {
-      ...transformTicket(result.rows[0]),
-      contactName: result.rows[0].contact_name,
-      assignedToName: result.rows[0].assigned_to_name,
-      createdByName: result.rows[0].created_by_name
-    };
+    const ticket = transformTicket(result.rows[0]);
 
     res.json(ticket);
   } catch (error) {
@@ -2029,11 +2065,108 @@ router.put('/tickets/:id', authenticateToken, async (req, res) => {
       RETURNING *
     `, [status, priority, assignedTo, resolutionNotes, req.params.id]);
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Ticket not found' });
+    // Fetch the full record with names after update
+    const finalResult = await query(`
+      SELECT t.*, c.name as contact_name, 
+             COALESCE(u1.name, c.counselor_assigned, c.counselor_assigned_2) as assigned_to_name, 
+             u2.name as created_by_name,
+             (SELECT json_agg(json_build_object('id', ta.id, 'name', ta.filename, 'size', ta.file_size))
+              FROM ticket_attachments ta WHERE ta.ticket_id = t.id) as attachments
+      FROM tickets t
+      LEFT JOIN contacts c ON t.contact_id = c.id
+      LEFT JOIN users u1 ON t.assigned_to = u1.id
+      LEFT JOIN users u2 ON t.created_by = u2.id
+      WHERE t.id = $1
+    `, [req.params.id]);
+
+    res.json(transformTicket(finalResult.rows[0]));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Link an existing task to a ticket
+router.post('/tickets/:id/link-task', authenticateToken, async (req, res) => {
+  try {
+    const { taskId } = req.body; // This is the human-readable taskId like TSK-12345
+    const ticketId = req.params.id;
+
+    // Check if task exists
+    const taskResult = await query('SELECT id, assigned_to FROM tasks WHERE task_id = $1', [taskId]);
+    if (taskResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Task not found' });
     }
 
-    res.json(transformTicket(result.rows[0]));
+    const task = taskResult.rows[0];
+
+    // Update task to link to ticket
+    await query('UPDATE tasks SET ticket_id = $1 WHERE task_id = $2', [ticketId, taskId]);
+
+    res.json({ success: true, message: 'Task linked successfully' });
+  } catch (error) {
+    console.error('Error linking task:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Unlink a task from a ticket
+router.post('/tickets/:id/unlink-task', authenticateToken, async (req, res) => {
+  try {
+    const { taskId } = req.body; // This is the internal DB id of the task
+    const ticketId = req.params.id;
+
+    // Update task to remove link from ticket
+    await query('UPDATE tasks SET ticket_id = NULL WHERE id = $1 AND ticket_id = $2', [taskId, ticketId]);
+
+    res.json({ success: true, message: 'Task unlinked successfully' });
+  } catch (error) {
+    console.error('Error unlinking task:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get ticket messages
+router.get('/tickets/:id/messages', authenticateToken, async (req, res) => {
+  try {
+    const result = await query(`
+      SELECT tm.*, u.name as sender_name
+      FROM ticket_messages tm
+      LEFT JOIN users u ON tm.sender_id = u.id
+      WHERE tm.ticket_id = $1
+      ORDER BY tm.created_at ASC
+    `, [req.params.id]);
+
+    res.json(result.rows.map(row => ({
+      ...row,
+      senderName: row.sender_name,
+      senderId: row.sender_id,
+      createdAt: row.created_at
+    })));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Send ticket message
+router.post('/tickets/:id/messages', authenticateToken, async (req, res) => {
+  try {
+    const { message } = req.body;
+    const ticketId = req.params.id;
+    const senderId = req.user.id;
+
+    const result = await query(`
+      INSERT INTO ticket_messages (ticket_id, sender_id, message)
+      VALUES ($1, $2, $3)
+      RETURNING *
+    `, [ticketId, senderId, message]);
+
+    const newMessage = result.rows[0];
+
+    // Get sender name
+    const userResult = await query('SELECT name FROM users WHERE id = $1', [senderId]);
+    newMessage.senderName = userResult.rows[0].name;
+
+    res.json(newMessage);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

@@ -1,7 +1,7 @@
 import type { CalendarEvent, Contact, CrmLead, AccountingTransaction, CrmStage, Quotation, User, UserRole, AppPermissions, ActivityLog, DocumentAnalysisResult, Document as Doc, ChecklistItem, QuotationTemplate, Visitor, TodoTask, Ticket, PaymentActivityLog, LmsCourse, LmsLesson, LmsModule, Coupon, ContactActivity, ContactActivityAction, DiscussionPost, DiscussionThread, RecordedSession, Channel, Notification } from '../types';
 import { DEFAULT_PERMISSIONS, DEFAULT_CHECKLIST } from '../components/constants';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL;
+export const API_BASE_URL = import.meta.env.VITE_API_URL;
 
 // Get auth token from storage
 export function getToken(): string | null {
@@ -818,6 +818,17 @@ export const getTicket = async (ticketId: number): Promise<Ticket> => {
   return apiRequest<Ticket>(`/tickets/${ticketId}`);
 };
 
+export const getTicketMessages = async (ticketId: number): Promise<any[]> => {
+  return apiRequest<any[]>(`/tickets/${ticketId}/messages`);
+};
+
+export const sendTicketMessage = async (ticketId: number, message: string): Promise<any> => {
+  return apiRequest<any>(`/tickets/${ticketId}/messages`, {
+    method: 'POST',
+    body: JSON.stringify({ message })
+  });
+};
+
 
 export const createTicket = async (ticketData: {
   contactId: number;
@@ -1334,5 +1345,19 @@ export const addSessionVideo = async (contactId: number, videoBlob: Blob): Promi
 export const deleteSessionVideo = async (contactId: number, sessionId: number): Promise<void> => {
   await apiRequest(`/contacts/${contactId}/sessions/${sessionId}`, {
     method: 'DELETE'
+  });
+};
+
+export const linkTaskToTicket = async (ticketId: number, taskId: string): Promise<{ success: boolean; message: string }> => {
+  return apiRequest<{ success: boolean; message: string }>(`/tickets/${ticketId}/link-task`, {
+    method: 'POST',
+    body: JSON.stringify({ taskId }),
+  });
+};
+
+export const unlinkTaskFromTicket = async (ticketId: number, taskId: number): Promise<{ success: boolean; message: string }> => {
+  return apiRequest<{ success: boolean; message: string }>(`/tickets/${ticketId}/unlink-task`, {
+    method: 'POST',
+    body: JSON.stringify({ taskId }),
   });
 };

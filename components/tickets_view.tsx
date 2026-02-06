@@ -1,21 +1,58 @@
 import React, { useState } from 'react';
-import { Plus, Search, X, AlertCircle } from 'lucide-react';
+import { Search, X, AlertCircle, Trash2, Paperclip, FileText } from 'lucide-react';
 import type { Ticket, User, Contact } from '../types';
 import * as api from '../utils/api';
+import { API_BASE_URL } from '../utils/api';
+import TaskModal from './task_modal';
+import { UserPlus, Link as LinkIcon, CheckCircle2, Clock, AlertCircle as AlertIcon } from './icons';
+
+const getStatusColor = (status: string) => {
+    switch (status) {
+        case 'Open': return 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400';
+        case 'In Progress': return 'bg-amber-50 text-amber-600 dark:bg-amber-900/20 dark:text-amber-400';
+        case 'Resolved': return 'bg-green-50 text-green-600 dark:bg-green-900/20 dark:text-green-400';
+        case 'Closed': return 'bg-gray-50 text-gray-600 dark:bg-gray-900/20 dark:text-gray-400';
+        default: return 'bg-gray-50 text-gray-600';
+    }
+};
+
+const getPriorityColor = (priority: string) => {
+    switch (priority) {
+        case 'Low': return 'bg-gray-50 text-gray-600 dark:bg-gray-900/20 dark:text-gray-400';
+        case 'Medium': return 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400';
+        case 'High': return 'bg-orange-50 text-orange-600 dark:bg-orange-900/20 dark:text-orange-400';
+        case 'Urgent': return 'bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400';
+        default: return 'bg-gray-50 text-gray-600';
+    }
+};
 
 interface TicketsViewProps {
     tickets: Ticket[];
     onUpdate: () => void;
     user: User;
     contacts: Contact[];
+    onNavigateToTask?: (taskId: number) => void;
 }
 
-const TicketsView: React.FC<TicketsViewProps> = ({ tickets, onUpdate, user, contacts }) => {
+const TicketsView: React.FC<TicketsViewProps> = ({ tickets, onUpdate, user, contacts, onNavigateToTask }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [filterStatus, setFilterStatus] = useState<string>('all');
     const [filterPriority, setFilterPriority] = useState<string>('all');
     const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+    const [prefilledTask, setPrefilledTask] = useState<any>(null);
+
+    // Expose task creation trigger for the detail modal
+    React.useEffect(() => {
+        (window as any).dispatchCreateTaskFromTicket = (data: any) => {
+            setPrefilledTask(data);
+            setIsTaskModalOpen(true);
+        };
+        return () => {
+            delete (window as any).dispatchCreateTaskFromTicket;
+        };
+    }, []);
 
     const filteredTickets = tickets.filter(ticket => {
         const matchesSearch =
@@ -146,8 +183,14 @@ const TicketsView: React.FC<TicketsViewProps> = ({ tickets, onUpdate, user, cont
                                                 {ticket.priority}
                                             </span>
                                         </div>
-                                        <h3 className="font-semibold text-gray-900 dark:text-white mb-1">{ticket.subject}</h3>
+                                        <h3 className="font-semibold text-gray-900 dark:text-white mb-1 group-hover:text-blue-600 transition-colors">{ticket.subject}</h3>
                                         <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">{ticket.description}</p>
+                                        {ticket.attachments && (ticket.attachments as any).length > 0 && (
+                                            <div className="flex items-center gap-1.5 mt-2 text-[10px] font-bold text-blue-500 bg-blue-50 dark:bg-blue-900/20 w-fit px-2 py-0.5 rounded-full">
+                                                <Paperclip size={10} />
+                                                {(ticket.attachments as any).length} {(ticket.attachments as any).length === 1 ? 'ATTACHMENT' : 'ATTACHMENTS'}
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
 
@@ -174,8 +217,35 @@ const TicketsView: React.FC<TicketsViewProps> = ({ tickets, onUpdate, user, cont
                         setIsModalOpen(false);
                         setSelectedTicket(null);
                     }}
-                    onUpdate={handleUpdateTicket}
+                    onUpdateTicket={handleUpdateTicket}
+                    onRefresh={onUpdate}
                     user={user}
+                    contacts={contacts}
+                    onNavigateToTask={onNavigateToTask}
+                />
+            )}
+
+            {isTaskModalOpen && (
+                <TaskModal
+                    isOpen={isTaskModalOpen}
+                    onClose={() => {
+                        setIsTaskModalOpen(false);
+                        setPrefilledTask(null);
+                    }}
+                    onSave={async (taskData) => {
+                        try {
+                            await api.saveTask(taskData);
+                            setIsTaskModalOpen(false);
+                            setPrefilledTask(null);
+                            onUpdate(); // Refresh tickets to show linked task
+                        } catch (error) {
+                            console.error('Failed to save task:', error);
+                            alert('Failed to create task');
+                        }
+                    }}
+                    editTask={prefilledTask as any}
+                    currentUserId={user.id}
+                    contacts={contacts}
                 />
             )}
         </div>
@@ -186,55 +256,150 @@ const TicketsView: React.FC<TicketsViewProps> = ({ tickets, onUpdate, user, cont
 interface TicketDetailModalProps {
     ticket: Ticket;
     onClose: () => void;
-    onUpdate: (updates: Partial<Ticket>) => void;
+    onUpdateTicket: (updates: Partial<Ticket>) => void;
+    onRefresh: () => void;
     user: User;
+    contacts: Contact[];
+    onNavigateToTask?: (taskId: number) => void;
 }
 
-const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, onUpdate, user }) => {
+const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, onUpdateTicket, onRefresh, user, onNavigateToTask }) => {
     const [status, setStatus] = useState(ticket.status);
     const [priority, setPriority] = useState(ticket.priority);
     const [resolutionNotes, setResolutionNotes] = useState(ticket.resolutionNotes || '');
+    const [isLinkingTask, setIsLinkingTask] = useState(false);
+    const [linkTaskId, setLinkTaskId] = useState('');
+    const [newMessage, setNewMessage] = useState('');
+    const [isSendingMessage, setIsSendingMessage] = useState(false);
+    const [messages, setMessages] = useState(ticket.messages || []);
+
+    const fetchMessages = async () => {
+        try {
+            const freshMessages = await api.getTicketMessages(ticket.id);
+            setMessages(freshMessages);
+        } catch (error) {
+            console.error('Failed to fetch messages:', error);
+        }
+    };
+
+    // Initial fetch and polling every 2 seconds
+    React.useEffect(() => {
+        fetchMessages();
+        const interval = setInterval(fetchMessages, 2000);
+        return () => clearInterval(interval);
+    }, [ticket.id]);
+
+    const handleSendMessage = async () => {
+        if (!newMessage.trim()) return;
+        setIsSendingMessage(true);
+        try {
+            const result = await api.sendTicketMessage(ticket.id, newMessage.trim());
+            setMessages(prev => [...prev, result]);
+            setNewMessage('');
+        } catch (error) {
+            console.error('Failed to send message:', error);
+            alert('Failed to send message');
+        } finally {
+            setIsSendingMessage(false);
+        }
+    };
+
+    const handleDeleteTicket = async () => {
+        if (!confirm('Are you sure you want to delete this ticket? This action cannot be undone.')) return;
+        try {
+            await api.deleteTicket(ticket.id);
+            onRefresh();
+            onClose();
+        } catch (error) {
+            console.error('Failed to delete ticket:', error);
+            alert('Failed to delete ticket');
+        }
+    };
 
     const handleSave = () => {
-        onUpdate({ status, priority, resolutionNotes });
+        onUpdateTicket({ status, priority, resolutionNotes });
+    };
+
+    const handleLinkTask = async () => {
+        if (!linkTaskId.trim()) return;
+        try {
+            await api.linkTaskToTicket(ticket.id, linkTaskId.trim());
+            setIsLinkingTask(false);
+            setLinkTaskId('');
+            onRefresh();
+        } catch (error: any) {
+            console.error('Failed to link task:', error);
+            alert(error.message || 'Failed to link task');
+        }
+    };
+
+    const handleUnlinkTask = async (taskId: number) => {
+        if (!confirm('Are you sure you want to unlink this task from the ticket?')) return;
+        try {
+            await api.unlinkTaskFromTicket(ticket.id, taskId);
+            onRefresh();
+        } catch (error: any) {
+            console.error('Failed to unlink task:', error);
+            alert(error.message || 'Failed to unlink task');
+        }
     };
 
     const canEdit = user.role === 'Admin' || ticket.assignedTo === user.id;
+    const isAdmin = user.role === 'Admin';
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white dark:bg-gray-800 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
                 {/* Header */}
-                <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-                    <div>
-                        <h2 className="text-xl font-bold text-gray-900 dark:text-white">{ticket.ticketId}</h2>
-                        <p className="text-sm text-gray-500">Created {new Date(ticket.createdAt).toLocaleString()}</p>
+                <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+                    <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-lg ${getStatusColor(ticket.status)}`}>
+                            <AlertCircle size={20} />
+                        </div>
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs font-mono font-bold text-gray-500">{ticket.ticketId}</span>
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${getPriorityColor(ticket.priority)}`}>
+                                    {ticket.priority}
+                                </span>
+                            </div>
+                            <h2 className="text-xl font-bold text-gray-900 dark:text-white mt-0.5">{ticket.subject}</h2>
+                        </div>
                     </div>
-                    <button onClick={onClose} className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
-                        <X size={24} />
-                    </button>
+                    <div className="flex items-center gap-2">
+                        {isAdmin && (
+                            <button
+                                onClick={handleDeleteTicket}
+                                className="p-2 text-gray-400 hover:text-red-500 transition-colors"
+                                title="Delete Ticket"
+                            >
+                                <Trash2 size={20} />
+                            </button>
+                        )}
+                        <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                            <X size={24} />
+                        </button>
+                    </div>
                 </div>
 
-                {/* Content */}
-                <div className="p-6 space-y-4">
-                    {/* Subject */}
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Subject</label>
-                        <p className="text-gray-900 dark:text-white font-semibold">{ticket.subject}</p>
-                    </div>
-
+                <div className="flex-1 overflow-y-auto p-6 space-y-8">
                     {/* Description */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
-                        <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{ticket.description}</p>
+                        <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Problem Description</label>
+                        <div className="p-4 bg-gray-50 dark:bg-gray-900/50 border border-gray-100 dark:border-gray-700 rounded-xl text-gray-800 dark:text-gray-200 whitespace-pre-wrap leading-relaxed">
+                            {ticket.description}
+                        </div>
                     </div>
 
-                    {/* Attachments */}
-                    {ticket.attachments && ticket.attachments.length > 0 && (
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Attachments</label>
-                            <div className="space-y-2">
-                                {ticket.attachments.map((attachment, index) => {
+                    {/* Attachments Section */}
+                    {ticket.attachments && (ticket.attachments as any).length > 0 && (
+                        <div className="animate-in slide-in-from-left-4 duration-500">
+                            <div className="flex items-center gap-2 mb-3">
+                                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Attachments</label>
+                                <span className="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-500 rounded text-[10px] font-bold">{(ticket.attachments as any).length}</span>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                {(ticket.attachments as any).map((attachment: any, index: number) => {
                                     const fileExtension = attachment.name.split('.').pop()?.toLowerCase();
                                     const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(fileExtension || '');
                                     const isPDF = fileExtension === 'pdf';
@@ -243,23 +408,22 @@ const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, 
                                     return (
                                         <div
                                             key={index}
-                                            className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg"
+                                            className="flex items-center justify-between p-2 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-lg hover:border-blue-200 transition-all group"
                                         >
                                             <div className="flex items-center gap-3 flex-1 min-w-0">
-                                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-blue-500 flex-shrink-0">
-                                                    <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
-                                                    <polyline points="13 2 13 9 20 9" />
-                                                </svg>
+                                                <div className="p-2 bg-blue-50 dark:bg-blue-900/20 text-blue-500 rounded-lg">
+                                                    <FileText size={16} />
+                                                </div>
                                                 <div className="flex-1 min-w-0">
-                                                    <p className="text-sm font-medium text-gray-700 dark:text-gray-300 truncate">
+                                                    <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 truncate">
                                                         {attachment.name}
                                                     </p>
-                                                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                                                        {(attachment.size / 1024).toFixed(2)} KB
+                                                    <p className="text-[10px] text-gray-400">
+                                                        {(attachment.size / 1024).toFixed(1)} KB
                                                     </p>
                                                 </div>
                                             </div>
-                                            <div className="flex items-center gap-2 ml-3">
+                                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                                 {canPreview && (
                                                     <button
                                                         onClick={async () => {
@@ -274,7 +438,7 @@ const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, 
                                                                         authToken = token;
                                                                     }
                                                                 }
-                                                                const response = await fetch(`http://localhost:5002/api/tickets/attachments/${attachment.id}`, {
+                                                                const response = await fetch(`${API_BASE_URL}/tickets/attachments/${attachment.id}`, {
                                                                     headers: authToken ? { 'Authorization': `Bearer ${authToken}` } : {}
                                                                 });
                                                                 const blob = await response.blob();
@@ -285,13 +449,13 @@ const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, 
                                                                 alert('Failed to preview file');
                                                             }
                                                         }}
-                                                        className="px-3 py-1.5 text-xs font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-md transition-colors flex items-center gap-1"
+                                                        className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"
+                                                        title="View"
                                                     >
-                                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                                                             <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
                                                             <circle cx="12" cy="12" r="3" />
                                                         </svg>
-                                                        Preview
                                                     </button>
                                                 )}
                                                 <button
@@ -307,7 +471,7 @@ const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, 
                                                                     authToken = token;
                                                                 }
                                                             }
-                                                            const response = await fetch(`http://localhost:5002/api/tickets/attachments/${attachment.id}`, {
+                                                            const response = await fetch(`${API_BASE_URL}/tickets/attachments/${attachment.id}`, {
                                                                 headers: authToken ? { 'Authorization': `Bearer ${authToken}` } : {}
                                                             });
                                                             const blob = await response.blob();
@@ -324,14 +488,14 @@ const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, 
                                                             alert('Failed to download file');
                                                         }
                                                     }}
-                                                    className="px-3 py-1.5 text-xs font-medium text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-md transition-colors flex items-center gap-1"
+                                                    className="p-1.5 text-green-600 hover:bg-green-50 rounded"
+                                                    title="Download"
                                                 >
-                                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                                                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                                                         <polyline points="7 10 12 15 17 10" />
                                                         <line x1="12" y1="15" x2="12" y2="3" />
                                                     </svg>
-                                                    Download
                                                 </button>
                                             </div>
                                         </div>
@@ -342,26 +506,167 @@ const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, 
                     )}
 
                     {/* Contact Info */}
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-2 gap-6 p-4 bg-gray-50 dark:bg-gray-900/30 rounded-xl border border-gray-100 dark:border-gray-700">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Contact</label>
-                            <p className="text-gray-900 dark:text-white">{ticket.contactName || 'Unknown'}</p>
+                            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Customer</label>
+                            <p className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-1.5">
+                                <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                                {ticket.contactName || 'Unknown'}
+                            </p>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Created By</label>
-                            <p className="text-gray-900 dark:text-white">{ticket.createdByName || 'Unknown'}</p>
+                            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Created By</label>
+                            <p className="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-1.5">
+                                <span className="w-2 h-2 rounded-full bg-gray-300"></span>
+                                {ticket.createdByName || 'Internal'}
+                            </p>
                         </div>
                     </div>
 
-                    {/* Status and Priority */}
+                    {/* Task Integration Section */}
+                    <div className="pt-4 border-t border-gray-100 dark:border-gray-700">
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Related Tasks</h3>
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={() => {
+                                        (window as any).dispatchCreateTaskFromTicket?.({
+                                            title: `Ticket: ${ticket.subject}`,
+                                            description: `Related to Ticket ${ticket.ticketId}:\n${ticket.description}`,
+                                            contactId: ticket.contactId,
+                                            ticketId: ticket.id,
+                                            isVisibleToStudent: true
+                                        });
+                                    }}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400 rounded-md text-[10px] font-bold hover:bg-blue-100 transition-colors"
+                                >
+                                    <UserPlus size={14} />
+                                    New Task
+                                </button>
+                                <button
+                                    onClick={() => setIsLinkingTask(!isLinkingTask)}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 text-gray-600 dark:bg-gray-700 dark:text-gray-300 rounded-md text-[10px] font-bold hover:bg-gray-100 transition-colors"
+                                >
+                                    <LinkIcon size={14} />
+                                    Link Existing
+                                </button>
+                            </div>
+                        </div>
+
+                        {isLinkingTask && (
+                            <div className="mb-4 flex gap-2 animate-in slide-in-from-top-2 duration-200">
+                                <input
+                                    type="text"
+                                    placeholder="Enter Task ID (e.g. TSK-12345)"
+                                    value={linkTaskId}
+                                    onChange={(e) => setLinkTaskId(e.target.value)}
+                                    className="flex-1 px-3 py-2 border border-blue-200 dark:border-blue-800 rounded-md text-sm outline-none focus:ring-2 focus:ring-blue-500/20 dark:bg-gray-900 dark:text-white"
+                                />
+                                <button
+                                    onClick={handleLinkTask}
+                                    className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm font-bold hover:bg-blue-700 transition-colors"
+                                >
+                                    Link
+                                </button>
+                            </div>
+                        )}
+
+                        <div className="space-y-2">
+                            {ticket.linkedTasks && ticket.linkedTasks.length > 0 ? (
+                                ticket.linkedTasks.map((task) => (
+                                    <div
+                                        key={task.id}
+                                        className="flex items-center justify-between p-3 bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-700 rounded-xl hover:shadow-sm hover:border-gray-200 transition-all group"
+                                    >
+                                        <div className="flex items-center gap-3 cursor-pointer flex-1" onClick={() => onNavigateToTask?.(task.id)}>
+                                            <div className={`p-2 rounded-lg ${task.status === 'Done' ? 'bg-green-50 text-green-600' : 'bg-blue-50 text-blue-600'}`}>
+                                                {task.status === 'Done' ? <CheckCircle2 size={16} /> : <Clock size={16} />}
+                                            </div>
+                                            <div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-[10px] font-mono font-bold text-lyceum-blue">{task.taskId}</span>
+                                                    <h4 className="text-xs font-semibold text-gray-800 dark:text-gray-200 group-hover:text-blue-600 transition-colors">{task.title}</h4>
+                                                </div>
+                                                <div className="flex items-center gap-2 mt-0.5 text-[10px] text-gray-500">
+                                                    <span className={`px-1.5 py-0.5 rounded ${task.status === 'Done' ? 'bg-green-50 text-green-700' : 'bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400'}`}>
+                                                        {task.status}
+                                                    </span>
+                                                    {task.isVisibleToStudent && (
+                                                        <span className="flex items-center gap-0.5 text-blue-500">
+                                                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
+                                                            Visible to Student
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <button
+                                            onClick={() => handleUnlinkTask(task.id)}
+                                            className="p-2 text-gray-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+                                            title="Unlink Task"
+                                        >
+                                            <X size={16} />
+                                        </button>
+                                    </div>
+                                ))
+                            ) : (
+                                <div className="text-center py-6 bg-gray-50 dark:bg-gray-900/30 border border-dashed border-gray-200 dark:border-gray-700 rounded-xl">
+                                    <AlertIcon size={24} className="mx-auto text-gray-300 mb-2" />
+                                    <p className="text-[10px] font-bold text-gray-400 uppercase">No linked tasks</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Messaging Section - NEW */}
+                    <div className="pt-4 border-t border-gray-100 dark:border-gray-700">
+                        <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4">Messages</label>
+                        <div className="space-y-4 mb-4 max-h-[300px] overflow-y-auto p-2">
+                            {messages.length > 0 ? messages.map((msg) => (
+                                <div key={msg.id} className={`flex flex-col ${msg.senderId === user.id ? 'items-end' : 'items-start'}`}>
+                                    <div className="flex items-center gap-2 mb-1 px-1">
+                                        <span className="text-[10px] font-bold text-gray-500">{msg.senderName}</span>
+                                        <span className="text-[10px] text-gray-400">{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                    </div>
+                                    <div className={`px-4 py-2 rounded-2xl max-w-[85%] text-sm ${msg.senderId === user.id
+                                        ? 'bg-blue-600 text-white rounded-tr-none'
+                                        : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-tl-none'
+                                        }`}>
+                                        {msg.message}
+                                    </div>
+                                </div>
+                            )) : (
+                                <div className="text-center py-8 text-gray-400 italic text-xs">No messages yet</div>
+                            )}
+                        </div>
+                        <div className="flex gap-2">
+                            <input
+                                type="text"
+                                placeholder="Type a message..."
+                                value={newMessage}
+                                onChange={(e) => setNewMessage(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+                                className="flex-1 px-4 py-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500/20"
+                            />
+                            <button
+                                onClick={handleSendMessage}
+                                disabled={isSendingMessage || !newMessage.trim()}
+                                className="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                            >
+                                Send
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Status and Priority Integration */}
                     <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Status</label>
+                        <div className="space-y-1.5">
+                            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest">Update Status</label>
                             <select
                                 value={status}
                                 onChange={(e) => setStatus(e.target.value as any)}
                                 disabled={!canEdit}
-                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-700 dark:text-white disabled:opacity-50"
+                                className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-500/20"
                             >
                                 <option value="Open">Open</option>
                                 <option value="In Progress">In Progress</option>
@@ -369,13 +674,13 @@ const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, 
                                 <option value="Closed">Closed</option>
                             </select>
                         </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Priority</label>
+                        <div className="space-y-1.5">
+                            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest">Set Priority</label>
                             <select
                                 value={priority}
                                 onChange={(e) => setPriority(e.target.value as any)}
                                 disabled={!canEdit}
-                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-700 dark:text-white disabled:opacity-50"
+                                className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-500/20"
                             >
                                 <option value="Low">Low</option>
                                 <option value="Medium">Medium</option>
@@ -385,42 +690,34 @@ const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, 
                         </div>
                     </div>
 
-                    {/* Assigned To */}
-                    {ticket.assignedToName && (
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Assigned To</label>
-                            <p className="text-gray-900 dark:text-white">{ticket.assignedToName}</p>
-                        </div>
-                    )}
-
-                    {/* Resolution Notes */}
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Resolution Notes</label>
-                        <textarea
+                    {/* Resolution Notes - Updated to one-line as requested */}
+                    <div className="space-y-1.5 pb-2">
+                        <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest">Resolution Summary</label>
+                        <input
+                            type="text"
                             value={resolutionNotes}
                             onChange={(e) => setResolutionNotes(e.target.value)}
                             disabled={!canEdit}
-                            rows={4}
-                            placeholder="Add resolution notes..."
-                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-700 dark:text-white disabled:opacity-50"
+                            placeholder="Briefly describe the resolution..."
+                            className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500/20"
                         />
                     </div>
                 </div>
 
                 {/* Footer */}
                 {canEdit && (
-                    <div className="flex justify-end gap-3 p-6 border-t border-gray-200 dark:border-gray-700">
+                    <div className="flex justify-end gap-3 p-6 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/30">
                         <button
                             onClick={onClose}
-                            className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                            className="px-6 py-2 border border-gray-300 dark:border-gray-600 rounded-xl text-sm font-bold text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-700 transition-colors"
                         >
                             Cancel
                         </button>
                         <button
-                            onClick={handleSave}
-                            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                            onClick={() => onUpdateTicket({ status, priority, resolutionNotes })}
+                            className="px-8 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-blue-500/20 hover:bg-blue-700 transition-all active:scale-95"
                         >
-                            Save Changes
+                            Update Ticket
                         </button>
                     </div>
                 )}
