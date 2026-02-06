@@ -818,17 +818,54 @@ export const getTicket = async (ticketId: number): Promise<Ticket> => {
   return apiRequest<Ticket>(`/tickets/${ticketId}`);
 };
 
+
 export const createTicket = async (ticketData: {
   contactId: number;
   subject: string;
   description: string;
   priority?: 'Low' | 'Medium' | 'High' | 'Urgent';
-}): Promise<Ticket> => {
+}, attachments?: File[]): Promise<Ticket> => {
+  // If there are attachments, use FormData
+  if (attachments && attachments.length > 0) {
+    const formData = new FormData();
+    formData.append('contactId', ticketData.contactId.toString());
+    formData.append('subject', ticketData.subject);
+    formData.append('description', ticketData.description);
+    if (ticketData.priority) {
+      formData.append('priority', ticketData.priority);
+    }
+
+    // Append all files
+    attachments.forEach((file) => {
+      formData.append('attachments', file);
+    });
+
+    const token = getToken();
+    const headers: HeadersInit = {
+      ...(token && { 'Authorization': `Bearer ${token}` }),
+    };
+
+    const response = await fetch(`${API_BASE_URL}/tickets`, {
+      method: 'POST',
+      headers,
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Failed to create ticket' }));
+      throw new Error(error.error || `HTTP ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  // No attachments, use regular JSON request
   return apiRequest<Ticket>('/tickets', {
     method: 'POST',
     body: JSON.stringify(ticketData),
   });
 };
+
 
 export const updateTicket = async (ticketId: number, updates: {
   status?: 'Open' | 'In Progress' | 'Resolved' | 'Closed';

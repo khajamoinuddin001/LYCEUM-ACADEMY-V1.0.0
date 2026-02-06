@@ -85,9 +85,11 @@ export interface Ticket {
   createdBy: number;
   createdByName?: string;
   resolutionNotes?: string;
+  attachments?: { name: string; url: string; size: number }[];
   createdAt: string;
   updatedAt: string;
 }
+
 
 export interface Document {
   id: number;

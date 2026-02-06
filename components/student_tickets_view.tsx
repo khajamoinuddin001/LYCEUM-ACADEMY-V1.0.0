@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, X, AlertCircle, Ticket as TicketIcon } from 'lucide-react';
+import { Plus, X, AlertCircle, Ticket as TicketIcon, Upload, File, Trash2 } from 'lucide-react';
 import type { Ticket, Contact } from '../types';
 import * as api from '../utils/api';
 
@@ -109,9 +109,6 @@ const StudentTicketsView: React.FC<StudentTicketsViewProps> = ({ student }) => {
                                         <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(ticket.status)}`}>
                                             {ticket.status}
                                         </span>
-                                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(ticket.priority)}`}>
-                                            {ticket.priority}
-                                        </span>
                                     </div>
                                     <h3 className="font-semibold text-lg text-gray-900 dark:text-white mb-2">{ticket.subject}</h3>
                                     <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">{ticket.description}</p>
@@ -174,10 +171,40 @@ interface CreateTicketModalProps {
 const CreateTicketModal: React.FC<CreateTicketModalProps> = ({ student, onClose, onSuccess }) => {
     const [subject, setSubject] = useState('');
     const [description, setDescription] = useState('');
-    const [priority, setPriority] = useState<'Low' | 'Medium' | 'High' | 'Urgent'>('Medium');
+    const [attachments, setAttachments] = useState<File[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
 
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files) {
+            const newFiles = Array.from(e.target.files);
+            // Limit to 5 files total
+            if (attachments.length + newFiles.length > 5) {
+                setError('Maximum 5 files allowed');
+                return;
+            }
+            // Check file size (max 10MB per file)
+            const oversizedFiles = newFiles.filter((file: File) => file.size > 10 * 1024 * 1024);
+            if (oversizedFiles.length > 0) {
+                setError('Each file must be less than 10MB');
+                return;
+            }
+            setAttachments([...attachments, ...newFiles]);
+            setError('');
+        }
+    };
+
+    const removeFile = (index: number) => {
+        setAttachments(attachments.filter((_, i) => i !== index));
+    };
+
+    const formatFileSize = (bytes: number) => {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+    };
     const handleSubmit = async () => {
         if (!subject.trim() || !description.trim()) {
             setError('Please fill in all required fields');
@@ -192,8 +219,8 @@ const CreateTicketModal: React.FC<CreateTicketModalProps> = ({ student, onClose,
                 contactId: student.id!,
                 subject: subject.trim(),
                 description: description.trim(),
-                priority,
-            });
+                priority: 'Medium', // Default priority set by system
+            }, attachments.length > 0 ? attachments : undefined);
             onSuccess();
         } catch (err: any) {
             console.error('Error creating ticket:', err);
@@ -242,20 +269,64 @@ const CreateTicketModal: React.FC<CreateTicketModalProps> = ({ student, onClose,
                         />
                     </div>
 
+                    {/* File Upload Section */}
                     <div>
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                            Priority
+                            Attachments (Optional)
                         </label>
-                        <select
-                            value={priority}
-                            onChange={(e) => setPriority(e.target.value as any)}
-                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500"
-                        >
-                            <option value="Low">Low</option>
-                            <option value="Medium">Medium</option>
-                            <option value="High">High</option>
-                            <option value="Urgent">Urgent</option>
-                        </select>
+                        <div className="space-y-2">
+                            <div className="flex items-center justify-center w-full">
+                                <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 dark:border-gray-600 border-dashed rounded-lg cursor-pointer bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors">
+                                    <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                                        <Upload className="w-8 h-8 mb-2 text-gray-500 dark:text-gray-400" />
+                                        <p className="mb-2 text-sm text-gray-500 dark:text-gray-400">
+                                            <span className="font-semibold">Click to upload</span> or drag and drop
+                                        </p>
+                                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                                            PDF, PNG, JPG, DOC (Max 10MB per file, up to 5 files)
+                                        </p>
+                                    </div>
+                                    <input
+                                        type="file"
+                                        className="hidden"
+                                        multiple
+                                        accept=".pdf,.png,.jpg,.jpeg,.doc,.docx"
+                                        onChange={handleFileChange}
+                                    />
+                                </label>
+                            </div>
+
+                            {/* File List */}
+                            {attachments.length > 0 && (
+                                <div className="space-y-2">
+                                    {attachments.map((file, index) => (
+                                        <div
+                                            key={index}
+                                            className="flex items-center justify-between p-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg"
+                                        >
+                                            <div className="flex items-center gap-2 flex-1 min-w-0">
+                                                <File size={16} className="text-blue-500 flex-shrink-0" />
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-sm font-medium text-gray-700 dark:text-gray-300 truncate">
+                                                        {file.name}
+                                                    </p>
+                                                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                                                        {formatFileSize(file.size)}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => removeFile(index)}
+                                                className="p-1 text-red-500 hover:text-red-700 dark:hover:text-red-400 transition-colors"
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                     </div>
 
                     {student.counselorAssigned && (
@@ -345,16 +416,119 @@ const ViewTicketModal: React.FC<ViewTicketModalProps> = ({ ticket, onClose }) =>
                         </p>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Priority</label>
-                            <p className="text-gray-900 dark:text-white">{ticket.priority}</p>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Assigned To</label>
-                            <p className="text-gray-900 dark:text-white">{ticket.assignedToName || 'Not assigned yet'}</p>
-                        </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Assigned To</label>
+                        <p className="text-gray-900 dark:text-white">{ticket.assignedToName || 'Not assigned yet'}</p>
                     </div>
+
+                    {/* Attachments */}
+                    {ticket.attachments && ticket.attachments.length > 0 && (
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Attachments</label>
+                            <div className="space-y-2">
+                                {ticket.attachments.map((attachment, index) => {
+                                    const fileExtension = attachment.name.split('.').pop()?.toLowerCase();
+                                    const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(fileExtension || '');
+                                    const isPDF = fileExtension === 'pdf';
+                                    const canPreview = isImage || isPDF;
+
+                                    return (
+                                        <div
+                                            key={index}
+                                            className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg"
+                                        >
+                                            <div className="flex items-center gap-3 flex-1 min-w-0">
+                                                <File size={20} className="text-blue-500 flex-shrink-0" />
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-sm font-medium text-gray-700 dark:text-gray-300 truncate">
+                                                        {attachment.name}
+                                                    </p>
+                                                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                                                        {(attachment.size / 1024).toFixed(2)} KB
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-2 ml-3">
+                                                {canPreview && (
+                                                    <button
+                                                        onClick={async () => {
+                                                            try {
+                                                                const token = localStorage.getItem('authToken');
+                                                                let authToken = '';
+                                                                if (token) {
+                                                                    try {
+                                                                        const parsed = JSON.parse(token);
+                                                                        authToken = parsed.token;
+                                                                    } catch (e) {
+                                                                        authToken = token;
+                                                                    }
+                                                                }
+                                                                const response = await fetch(`http://localhost:5002/api/tickets/attachments/${attachment.id}`, {
+                                                                    headers: authToken ? { 'Authorization': `Bearer ${authToken}` } : {}
+                                                                });
+                                                                const blob = await response.blob();
+                                                                const url = window.URL.createObjectURL(blob);
+                                                                window.open(url, '_blank');
+                                                            } catch (error) {
+                                                                console.error('Preview failed:', error);
+                                                                alert('Failed to preview file');
+                                                            }
+                                                        }}
+                                                        className="px-3 py-1.5 text-xs font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-md transition-colors flex items-center gap-1"
+                                                    >
+                                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                                                            <circle cx="12" cy="12" r="3" />
+                                                        </svg>
+                                                        Preview
+                                                    </button>
+                                                )}
+                                                <button
+                                                    onClick={async () => {
+                                                        try {
+                                                            const token = localStorage.getItem('authToken');
+                                                            let authToken = '';
+                                                            if (token) {
+                                                                try {
+                                                                    const parsed = JSON.parse(token);
+                                                                    authToken = parsed.token;
+                                                                } catch (e) {
+                                                                    authToken = token;
+                                                                }
+                                                            }
+                                                            const response = await fetch(`http://localhost:5002/api/tickets/attachments/${attachment.id}`, {
+                                                                headers: authToken ? { 'Authorization': `Bearer ${authToken}` } : {}
+                                                            });
+                                                            const blob = await response.blob();
+                                                            const url = window.URL.createObjectURL(blob);
+                                                            const a = document.createElement('a');
+                                                            a.href = url;
+                                                            a.download = attachment.name;
+                                                            document.body.appendChild(a);
+                                                            a.click();
+                                                            window.URL.revokeObjectURL(url);
+                                                            document.body.removeChild(a);
+                                                        } catch (error) {
+                                                            console.error('Download failed:', error);
+                                                            alert('Failed to download file');
+                                                        }
+                                                    }}
+                                                    className="px-3 py-1.5 text-xs font-medium text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-md transition-colors flex items-center gap-1"
+                                                >
+                                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                                        <polyline points="7 10 12 15 17 10" />
+                                                        <line x1="12" y1="15" x2="12" y2="3" />
+                                                    </svg>
+                                                    Download
+                                                </button>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
 
                     {ticket.resolutionNotes && (
                         <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded border border-green-200 dark:border-green-800">

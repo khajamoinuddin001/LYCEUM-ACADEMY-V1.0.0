@@ -229,6 +229,118 @@ const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, 
                         <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">{ticket.description}</p>
                     </div>
 
+                    {/* Attachments */}
+                    {ticket.attachments && ticket.attachments.length > 0 && (
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Attachments</label>
+                            <div className="space-y-2">
+                                {ticket.attachments.map((attachment, index) => {
+                                    const fileExtension = attachment.name.split('.').pop()?.toLowerCase();
+                                    const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(fileExtension || '');
+                                    const isPDF = fileExtension === 'pdf';
+                                    const canPreview = isImage || isPDF;
+
+                                    return (
+                                        <div
+                                            key={index}
+                                            className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg"
+                                        >
+                                            <div className="flex items-center gap-3 flex-1 min-w-0">
+                                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-blue-500 flex-shrink-0">
+                                                    <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
+                                                    <polyline points="13 2 13 9 20 9" />
+                                                </svg>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-sm font-medium text-gray-700 dark:text-gray-300 truncate">
+                                                        {attachment.name}
+                                                    </p>
+                                                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                                                        {(attachment.size / 1024).toFixed(2)} KB
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-2 ml-3">
+                                                {canPreview && (
+                                                    <button
+                                                        onClick={async () => {
+                                                            try {
+                                                                const token = localStorage.getItem('authToken');
+                                                                let authToken = '';
+                                                                if (token) {
+                                                                    try {
+                                                                        const parsed = JSON.parse(token);
+                                                                        authToken = parsed.token;
+                                                                    } catch (e) {
+                                                                        authToken = token;
+                                                                    }
+                                                                }
+                                                                const response = await fetch(`http://localhost:5002/api/tickets/attachments/${attachment.id}`, {
+                                                                    headers: authToken ? { 'Authorization': `Bearer ${authToken}` } : {}
+                                                                });
+                                                                const blob = await response.blob();
+                                                                const url = window.URL.createObjectURL(blob);
+                                                                window.open(url, '_blank');
+                                                            } catch (error) {
+                                                                console.error('Preview failed:', error);
+                                                                alert('Failed to preview file');
+                                                            }
+                                                        }}
+                                                        className="px-3 py-1.5 text-xs font-medium text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-md transition-colors flex items-center gap-1"
+                                                    >
+                                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                                                            <circle cx="12" cy="12" r="3" />
+                                                        </svg>
+                                                        Preview
+                                                    </button>
+                                                )}
+                                                <button
+                                                    onClick={async () => {
+                                                        try {
+                                                            const token = localStorage.getItem('authToken');
+                                                            let authToken = '';
+                                                            if (token) {
+                                                                try {
+                                                                    const parsed = JSON.parse(token);
+                                                                    authToken = parsed.token;
+                                                                } catch (e) {
+                                                                    authToken = token;
+                                                                }
+                                                            }
+                                                            const response = await fetch(`http://localhost:5002/api/tickets/attachments/${attachment.id}`, {
+                                                                headers: authToken ? { 'Authorization': `Bearer ${authToken}` } : {}
+                                                            });
+                                                            const blob = await response.blob();
+                                                            const url = window.URL.createObjectURL(blob);
+                                                            const a = document.createElement('a');
+                                                            a.href = url;
+                                                            a.download = attachment.name;
+                                                            document.body.appendChild(a);
+                                                            a.click();
+                                                            window.URL.revokeObjectURL(url);
+                                                            document.body.removeChild(a);
+                                                        } catch (error) {
+                                                            console.error('Download failed:', error);
+                                                            alert('Failed to download file');
+                                                        }
+                                                    }}
+                                                    className="px-3 py-1.5 text-xs font-medium text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-md transition-colors flex items-center gap-1"
+                                                >
+                                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                                        <polyline points="7 10 12 15 17 10" />
+                                                        <line x1="12" y1="15" x2="12" y2="3" />
+                                                    </svg>
+                                                    Download
+                                                </button>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+
                     {/* Contact Info */}
                     <div className="grid grid-cols-2 gap-4">
                         <div>

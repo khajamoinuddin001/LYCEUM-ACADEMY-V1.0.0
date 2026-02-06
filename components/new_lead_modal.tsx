@@ -23,7 +23,7 @@ const NewLeadModal: React.FC<NewLeadModalProps> = ({ isOpen, onClose, onSave, le
     contact: '',
     email: '',
     phone: '',
-    value: '',
+    type: '',
     source: '',
     assignedTo: '',
     notes: ''
@@ -48,7 +48,7 @@ const NewLeadModal: React.FC<NewLeadModalProps> = ({ isOpen, onClose, onSave, le
           contact: lead.contact || '',
           email: lead.email || '',
           phone: lead.phone || '',
-          value: lead.value?.toString() || '',
+          type: (lead as any).type || '',
           source: lead.source || '',
           assignedTo: lead.assignedTo || '',
           notes: lead.notes || '',
@@ -56,7 +56,7 @@ const NewLeadModal: React.FC<NewLeadModalProps> = ({ isOpen, onClose, onSave, le
       } else {
         setFormData({
           contact: '', email: '', phone: '',
-          value: '', source: '', assignedTo: agents[0] || '', notes: ''
+          type: '', source: '', assignedTo: agents[0] || '', notes: ''
         });
       }
       setError('');
@@ -134,14 +134,8 @@ const NewLeadModal: React.FC<NewLeadModalProps> = ({ isOpen, onClose, onSave, le
       return;
     }
 
-    if (!formData.value || !formData.notes.trim()) {
-      setError('Estimated Value and Notes are required.');
-      return;
-    }
-
-    const parsedValue = parseFloat(formData.value);
-    if (isNaN(parsedValue) || parsedValue < 0) {
-      setError('Please enter a valid, non-negative value.');
+    if (!formData.type || !formData.notes.trim()) {
+      setError('Type and Notes are required.');
       return;
     }
 
@@ -165,7 +159,8 @@ const NewLeadModal: React.FC<NewLeadModalProps> = ({ isOpen, onClose, onSave, le
         contact: formData.contact.trim(),
         email: formData.email.trim(),
         phone: formData.phone.trim(),
-        value: parsedValue,
+        value: 0, // Set default value to 0
+        type: formData.type,
         source: formData.source,
         assignedTo: formData.assignedTo,
         notes: formData.notes,
@@ -173,7 +168,7 @@ const NewLeadModal: React.FC<NewLeadModalProps> = ({ isOpen, onClose, onSave, le
         title: `${formData.contact.trim()}'s Opportunity`,
         company: 'N/A',
         id: isEditing ? lead.id : undefined,
-      };
+      } as any;
 
       await onSave(leadToSave);
     } catch (err: any) {
@@ -286,8 +281,14 @@ const NewLeadModal: React.FC<NewLeadModalProps> = ({ isOpen, onClose, onSave, le
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label htmlFor="lead-value" className={labelClasses}>Estimated Value (₹) *</label>
-                <input type="number" id="lead-value" name="value" className={inputClasses} value={formData.value} onChange={handleChange} placeholder="e.g., 50000" disabled={!canWrite} />
+                <label htmlFor="lead-type" className={labelClasses}>Type *</label>
+                <select id="lead-type" name="type" value={formData.type} onChange={handleChange} className={inputClasses} disabled={!canWrite}>
+                  <option value="" disabled>Select a type</option>
+                  <option value="Student Visa">Student Visa</option>
+                  <option value="Visit Visa">Visit Visa</option>
+                  <option value="Coaching">Coaching</option>
+                  <option value="Others">Others</option>
+                </select>
               </div>
               <div>
                 <label htmlFor="lead-source" className={labelClasses}>Lead Source</label>

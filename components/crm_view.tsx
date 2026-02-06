@@ -119,7 +119,9 @@ const LeadCard: React.FC<{ lead: CrmLead; onSelect: (lead: CrmLead) => void; onD
             <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-200 dark:border-gray-600">
                 <div className="flex items-center font-medium text-green-600 dark:text-green-400 text-sm">
                     <IndianRupee size={14} className="mr-1" />
-                    <span>{lead.value.toLocaleString('en-IN')}</span>
+                    <span>
+                        {(lead.quotations?.filter(q => q.status === 'Agreed').reduce((sum, q) => sum + q.total, 0) || 0).toLocaleString('en-IN')}
+                    </span>
                 </div>
                 {agentAvatar}
             </div>
@@ -204,7 +206,10 @@ const CrmView: React.FC<CrmViewProps> = ({ leads, onLeadSelect, onNewLeadClick, 
     const getStageValue = (stage: CrmStage) => {
         return filteredLeads
             .filter(lead => lead.stage === stage)
-            .reduce((sum, lead) => sum + lead.value, 0);
+            .reduce((sum, lead) => {
+                const agreedTotal = lead.quotations?.filter(q => q.status === 'Agreed').reduce((qSum, q) => qSum + q.total, 0) || 0;
+                return sum + agreedTotal;
+            }, 0);
     };
 
     return (

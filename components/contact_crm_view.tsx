@@ -23,6 +23,7 @@ interface ContactCrmViewProps {
 
 const ContactCrmView: React.FC<ContactCrmViewProps> = ({ contact, leads, onNavigateBack, user, tasks = [], onSaveTask, onSaveQuotation, quotationTemplates = [], onSaveTemplate, onDeleteTemplate, onDeleteContact, onApproveQuotation, onManualAcceptQuotation, onDeleteQuotation }) => {
     const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
+    const [editingTask, setEditingTask] = useState<TodoTask | null>(null);
     const [quotationViewMode, setQuotationViewMode] = useState<'list' | 'create' | 'edit'>('list');
     const [selectedLeadForQuote, setSelectedLeadForQuote] = useState<CrmLead | null>(null);
     const [quotationToEdit, setQuotationToEdit] = useState<Quotation | null>(null);
@@ -91,6 +92,12 @@ const ContactCrmView: React.FC<ContactCrmViewProps> = ({ contact, leads, onNavig
             setCrmTasks(updatedTasks);
         }
         setIsActivityModalOpen(false);
+        setEditingTask(null);
+    };
+
+    const handleEditActivity = (task: TodoTask) => {
+        setEditingTask(task);
+        setIsActivityModalOpen(true);
     };
 
     const handleNewQuotationClick = () => {
@@ -252,12 +259,20 @@ const ContactCrmView: React.FC<ContactCrmViewProps> = ({ contact, leads, onNavig
                                                             <UserIcon size={12} />
                                                             {activity.assignedTo ? `Assigned to User ${activity.assignedTo}` : 'Unassigned'}
                                                         </div>
-                                                        <button
-                                                            onClick={() => onSaveTask && onSaveTask({ ...activity, status: 'done' })}
-                                                            className="text-xs font-medium text-green-600 hover:text-green-700 dark:text-green-400 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                                                        >
-                                                            <CheckCircle2 size={12} /> Mark Complete
-                                                        </button>
+                                                        <div className="flex items-center gap-2">
+                                                            <button
+                                                                onClick={() => handleEditActivity(activity)}
+                                                                className="text-xs font-medium text-lyceum-blue hover:text-lyceum-blue-dark dark:text-lyceum-blue dark:hover:text-blue-400 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                            >
+                                                                <PenTool size={12} /> Edit
+                                                            </button>
+                                                            <button
+                                                                onClick={() => onSaveTask && onSaveTask({ ...activity, status: 'done' })}
+                                                                className="text-xs font-medium text-green-600 hover:text-green-700 dark:text-green-400 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                            >
+                                                                <CheckCircle2 size={12} /> Mark Complete
+                                                            </button>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
@@ -462,9 +477,12 @@ const ContactCrmView: React.FC<ContactCrmViewProps> = ({ contact, leads, onNavig
 
             <ActivityModal
                 isOpen={isActivityModalOpen}
-                onClose={() => setIsActivityModalOpen(false)}
+                onClose={() => {
+                    setIsActivityModalOpen(false);
+                    setEditingTask(null);
+                }}
                 onSave={handleSaveActivity}
-                editTask={null}
+                editTask={editingTask}
                 currentUserId={user.id}
                 contacts={[contact]}
             />

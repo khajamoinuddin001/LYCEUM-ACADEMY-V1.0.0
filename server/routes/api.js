@@ -19,6 +19,7 @@ const uploadAvatar = multer({
   limits: { fileSize: 50 * 1024 * 1024 } // 50MB limit
 });
 import path from 'path';
+import fs from 'fs';
 
 // Document routes
 router.post('/documents', authenticateToken, async (req, res) => {
@@ -1832,50 +1833,88 @@ const transformTicket = (ticket) => ({
   assignedTo: ticket.assigned_to,
   createdBy: ticket.created_by,
   resolutionNotes: ticket.resolution_notes,
+  attachments: ticket.attachments || [],
   createdAt: ticket.created_at,
   updatedAt: ticket.updated_at
 });
 
 // Create ticket
-router.post('/tickets', authenticateToken, async (req, res) => {
+router.post('/tickets', authenticateToken, upload.array('attachments', 5), async (req, res) => {
+  const client = await getClient();
   try {
+    await client.query('BEGIN');
     const { contactId, subject, description, priority } = req.body;
 
     // Generate unique ticket ID
     let ticketId;
     let isUnique = false;
     while (!isUnique) {
-      const randomNum = Math.floor(Math.random() * 900000) + 100000; // 6-digit number
+      const randomNum = Math.floor(Math.random() * 900000) + 100000;
       ticketId = `TKT-${randomNum}`;
-
-      const existing = await query('SELECT id FROM tickets WHERE ticket_id = $1', [ticketId]);
-      if (existing.rows.length === 0) {
-        isUnique = true;
-      }
+      const existing = await client.query('SELECT id FROM tickets WHERE ticket_id = $1', [ticketId]);
+      if (existing.rows.length === 0) isUnique = true;
     }
 
     // Get contact's assigned counselor
-    const contactResult = await query('SELECT counselor_assigned FROM contacts WHERE id = $1', [contactId]);
+    const contactResult = await client.query('SELECT counselor_assigned FROM contacts WHERE id = $1', [contactId]);
     let assignedTo = null;
-
     if (contactResult.rows.length > 0 && contactResult.rows[0].counselor_assigned) {
-      // Find user ID by counselor name
-      const counselorResult = await query('SELECT id FROM users WHERE name = $1', [contactResult.rows[0].counselor_assigned]);
-      if (counselorResult.rows.length > 0) {
-        assignedTo = counselorResult.rows[0].id;
-      }
+      const counselorResult = await client.query('SELECT id FROM users WHERE name = $1', [contactResult.rows[0].counselor_assigned]);
+      if (counselorResult.rows.length > 0) assignedTo = counselorResult.rows[0].id;
     }
 
-    const result = await query(`
+    // Insert Ticket
+    const ticketResult = await client.query(`
       INSERT INTO tickets(ticket_id, contact_id, subject, description, priority, assigned_to, created_by, status)
       VALUES($1, $2, $3, $4, $5, $6, $7, $8)
       RETURNING *
     `, [ticketId, contactId, subject, description, priority || 'Medium', assignedTo, req.user.id, 'Open']);
 
-    res.json(transformTicket(result.rows[0]));
+    const newTicket = ticketResult.rows[0];
+
+    // Handle file attachments (Store in DB)
+    if (req.files && req.files.length > 0) {
+      for (const file of req.files) {
+        await client.query(`
+          INSERT INTO ticket_attachments(ticket_id, filename, content_type, file_data, file_size)
+          VALUES($1, $2, $3, $4, $5)
+        `, [newTicket.id, file.originalname, file.mimetype, file.buffer, file.size]);
+      }
+    }
+
+    await client.query('COMMIT');
+
+    // Fetch the ticket with its attachments for the response
+    const finalResult = await client.query(`
+      SELECT t.*, 
+        (SELECT json_agg(json_build_object('id', ta.id, 'name', ta.filename, 'size', ta.file_size))
+         FROM ticket_attachments ta WHERE ta.ticket_id = t.id) as attachments
+      FROM tickets t WHERE t.id = $1
+    `, [newTicket.id]);
+
+    res.json(transformTicket(finalResult.rows[0]));
   } catch (error) {
+    await client.query('ROLLBACK');
     console.error('Error creating ticket:', error);
     res.status(500).json({ error: error.message });
+  } finally {
+    client.release();
+  }
+});
+
+// Helper route to serve attachment binary data
+router.get('/tickets/attachments/:id', authenticateToken, async (req, res) => {
+  try {
+    const result = await query('SELECT filename, content_type, file_data FROM ticket_attachments WHERE id = $1', [req.params.id]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Attachment not found' });
+
+    const attachment = result.rows[0];
+    res.setHeader('Content-Type', attachment.content_type);
+    res.setHeader('Content-Disposition', `inline; filename="${attachment.filename}"`);
+    res.send(attachment.file_data);
+  } catch (error) {
+    console.error('Error serving attachment:', error);
+    res.status(500).json({ error: 'Failed to serve attachment' });
   }
 });
 
@@ -1888,7 +1927,9 @@ router.get('/tickets', authenticateToken, async (req, res) => {
     if (req.user.role === 'Admin') {
       // Admin sees all tickets
       queryText = `
-        SELECT t.*, c.name as contact_name, u1.name as assigned_to_name, u2.name as created_by_name
+        SELECT t.*, c.name as contact_name, u1.name as assigned_to_name, u2.name as created_by_name,
+               (SELECT json_agg(json_build_object('id', ta.id, 'name', ta.filename, 'size', ta.file_size))
+                FROM ticket_attachments ta WHERE ta.ticket_id = t.id) as attachments
         FROM tickets t
         LEFT JOIN contacts c ON t.contact_id = c.id
         LEFT JOIN users u1 ON t.assigned_to = u1.id
@@ -1898,7 +1939,9 @@ router.get('/tickets', authenticateToken, async (req, res) => {
     } else if (req.user.role === 'Staff') {
       // Staff sees tickets assigned to them
       queryText = `
-        SELECT t.*, c.name as contact_name, u1.name as assigned_to_name, u2.name as created_by_name
+        SELECT t.*, c.name as contact_name, u1.name as assigned_to_name, u2.name as created_by_name,
+               (SELECT json_agg(json_build_object('id', ta.id, 'name', ta.filename, 'size', ta.file_size))
+                FROM ticket_attachments ta WHERE ta.ticket_id = t.id) as attachments
         FROM tickets t
         LEFT JOIN contacts c ON t.contact_id = c.id
         LEFT JOIN users u1 ON t.assigned_to = u1.id
@@ -1915,7 +1958,9 @@ router.get('/tickets', authenticateToken, async (req, res) => {
       }
 
       queryText = `
-        SELECT t.*, c.name as contact_name, u1.name as assigned_to_name, u2.name as created_by_name
+        SELECT t.*, c.name as contact_name, u1.name as assigned_to_name, u2.name as created_by_name,
+               (SELECT json_agg(json_build_object('id', ta.id, 'name', ta.filename, 'size', ta.file_size))
+                FROM ticket_attachments ta WHERE ta.ticket_id = t.id) as attachments
         FROM tickets t
         LEFT JOIN contacts c ON t.contact_id = c.id
         LEFT JOIN users u1 ON t.assigned_to = u1.id
@@ -1945,7 +1990,9 @@ router.get('/tickets', authenticateToken, async (req, res) => {
 router.get('/tickets/:id', authenticateToken, async (req, res) => {
   try {
     const result = await query(`
-      SELECT t.*, c.name as contact_name, u1.name as assigned_to_name, u2.name as created_by_name
+      SELECT t.*, c.name as contact_name, u1.name as assigned_to_name, u2.name as created_by_name,
+             (SELECT json_agg(json_build_object('id', ta.id, 'name', ta.filename, 'size', ta.file_size))
+              FROM ticket_attachments ta WHERE ta.ticket_id = t.id) as attachments
       FROM tickets t
       LEFT JOIN contacts c ON t.contact_id = c.id
       LEFT JOIN users u1 ON t.assigned_to = u1.id
