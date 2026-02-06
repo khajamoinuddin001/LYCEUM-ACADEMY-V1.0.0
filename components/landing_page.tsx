@@ -28,7 +28,8 @@ import {
     Sun,
     Moon,
     Menu,
-    X
+    X,
+    Download
 } from 'lucide-react';
 
 interface LandingPageProps {
@@ -804,6 +805,131 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onRegister, onTerms,
                                     </button>
                                 </form>
                             )}
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {/* Android App Download Section */}
+            <section className="py-20 bg-gradient-to-br from-lyceum-blue/5 via-white to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <div className="grid lg:grid-cols-2 gap-12 items-center">
+                        {/* Left Side - Mobile Mockup */}
+                        <div className="relative flex justify-center lg:justify-end">
+                            <div className="relative group">
+                                {/* Phone Frame - Android Style */}
+                                <div className="relative w-[280px] h-[580px] bg-gray-900 rounded-[2.5rem] p-2 shadow-2xl">
+                                    {/* Screen */}
+                                    <div className="w-full h-full bg-white rounded-[2rem] overflow-hidden relative">
+                                        {/* Punch-hole Camera (Android style - centered at top) */}
+                                        <div className="absolute top-3 left-1/2 -translate-x-1/2 w-3 h-3 bg-gray-900 rounded-full z-10 shadow-lg"></div>
+
+                                        {/* App Screenshot Placeholder */}
+                                        <div className="w-full h-full bg-gradient-to-br from-lyceum-blue to-purple-600 flex flex-col items-center justify-center p-6 pt-10">
+                                            <div className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center mb-4 shadow-lg p-2">
+                                                <img src="/academy logo.png" alt="Lyceum Academy" className="w-full h-full object-contain" />
+                                            </div>
+                                            <h3 className="text-white font-bold text-xl mb-2">Lyceum Academy</h3>
+                                            <p className="text-white/90 text-sm text-center">Creative Learning</p>
+
+                                            {/* Mock UI Elements */}
+                                            <div className="mt-8 w-full space-y-3">
+                                                <div className="bg-white/20 backdrop-blur-sm rounded-xl p-4 animate-pulse"></div>
+                                                <div className="bg-white/20 backdrop-blur-sm rounded-xl p-4 animate-pulse" style={{ animationDelay: '0.2s' }}></div>
+                                                <div className="bg-white/20 backdrop-blur-sm rounded-xl p-4 animate-pulse" style={{ animationDelay: '0.4s' }}></div>
+                                            </div>
+                                        </div>
+
+                                        {/* Samsung-style Navigation Buttons (appear on hover) */}
+                                        <div className="absolute bottom-0 left-0 right-0 h-12 flex items-center justify-center gap-16 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-y-1 group-hover:translate-y-0 pb-2">
+                                            {/* Recent Apps Button (left) - Three vertical lines */}
+                                            <div className="flex gap-1 items-end">
+                                                <div className="w-0.5 h-4 bg-white rounded-full"></div>
+                                                <div className="w-0.5 h-4 bg-white rounded-full"></div>
+                                                <div className="w-0.5 h-4 bg-white rounded-full"></div>
+                                            </div>
+                                            {/* Home Button (center) - Rounded rectangle/pill */}
+                                            <div className="w-5 h-4 border-2 border-white rounded-full"></div>
+                                            {/* Back Button (right) - Left arrow */}
+                                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" className="text-white">
+                                                <path d="M12 15L7 10L12 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                            </svg>
+                                        </div>
+                                    </div>
+
+                                    {/* Power Button - Android style (right side) */}
+                                    <div className="absolute right-0 top-28 w-1 h-16 bg-gray-700 rounded-l"></div>
+                                    {/* Volume Buttons - Android style (left side) */}
+                                    <div className="absolute left-0 top-24 w-1 h-10 bg-gray-700 rounded-r"></div>
+                                    <div className="absolute left-0 top-36 w-1 h-10 bg-gray-700 rounded-r"></div>
+                                </div>
+
+                                {/* Floating Elements */}
+                                <div className="absolute -top-4 -right-4 w-20 h-20 bg-lyceum-blue/10 rounded-full blur-2xl animate-pulse"></div>
+                                <div className="absolute -bottom-4 -left-4 w-24 h-24 bg-purple-500/10 rounded-full blur-2xl animate-pulse" style={{ animationDelay: '1s' }}></div>
+                            </div>
+                        </div>
+
+                        {/* Right Side - Content */}
+                        <div className="space-y-6">
+                            <div className="inline-block px-4 py-2 bg-lyceum-blue/10 text-lyceum-blue rounded-full text-sm font-semibold mb-2">
+                                📱 Mobile Experience
+                            </div>
+                            <h2 className="text-4xl md:text-5xl font-bold text-gray-900 dark:text-white leading-tight">
+                                Download Our Android App
+                            </h2>
+                            <p className="text-lg text-gray-600 dark:text-gray-400 leading-relaxed">
+                                While our website is fully optimized for the best experience across all devices,
+                                you can also download our Android app for quick access on the go.
+                            </p>
+
+                            {/* Features List */}
+                            <div className="space-y-4 py-4">
+                                <div className="flex items-start gap-3">
+                                    <div className="w-6 h-6 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0 mt-1">
+                                        <CheckCircle size={16} className="text-green-600 dark:text-green-400" />
+                                    </div>
+                                    <div>
+                                        <h4 className="font-semibold text-gray-900 dark:text-white">Optimized Web Experience</h4>
+                                        <p className="text-sm text-gray-600 dark:text-gray-400">Our website provides the best, most comprehensive experience</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-start gap-3">
+                                    <div className="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0 mt-1">
+                                        <Smartphone size={16} className="text-blue-600 dark:text-blue-400" />
+                                    </div>
+                                    <div>
+                                        <h4 className="font-semibold text-gray-900 dark:text-white">Mobile App Available</h4>
+                                        <p className="text-sm text-gray-600 dark:text-gray-400">Download our Android app for convenient mobile access</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-start gap-3">
+                                    <div className="w-6 h-6 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center flex-shrink-0 mt-1">
+                                        <Zap size={16} className="text-purple-600 dark:text-purple-400" />
+                                    </div>
+                                    <div>
+                                        <h4 className="font-semibold text-gray-900 dark:text-white">Quick Access</h4>
+                                        <p className="text-sm text-gray-600 dark:text-gray-400">Access your dashboard and documents anytime, anywhere</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Download Button */}
+                            <div className="pt-4">
+                                <a
+                                    href="https://drive.google.com/file/d/1LoBSulgsER1_K4QxIkpy_9N8B_dRdc1d/view?usp=drivesdk"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-lyceum-blue to-purple-600 text-white font-bold rounded-full hover:shadow-2xl hover:scale-105 transition-all duration-300 group"
+                                >
+                                    <Download size={24} className="group-hover:animate-bounce" />
+                                    <span>Download Android App</span>
+                                    <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
+                                </a>
+                                <p className="text-sm text-gray-500 dark:text-gray-400 mt-3">
+                                    Available for Android devices • Free Download
+                                </p>
+                            </div>
                         </div>
                     </div>
                 </div>
