@@ -1835,6 +1835,7 @@ const transformTicket = (ticket) => ({
   priority: ticket.priority,
   assignedTo: ticket.assigned_to,
   assignedToName: ticket.assigned_to_name,
+  category: ticket.category,
   createdBy: ticket.created_by,
   createdByName: ticket.created_by_name,
   resolutionNotes: ticket.resolution_notes,
@@ -1850,7 +1851,7 @@ router.post('/tickets', authenticateToken, upload.array('attachments', 5), async
   const client = await getClient();
   try {
     await client.query('BEGIN');
-    const { contactId, subject, description, priority } = req.body;
+    const { contactId, subject, description, priority, category } = req.body;
 
     // Generate unique ticket ID
     let ticketId;
@@ -1888,10 +1889,10 @@ router.post('/tickets', authenticateToken, upload.array('attachments', 5), async
 
     // Insert Ticket
     const ticketResult = await client.query(`
-      INSERT INTO tickets(ticket_id, contact_id, subject, description, priority, assigned_to, created_by, status)
-      VALUES($1, $2, $3, $4, $5, $6, $7, $8)
+      INSERT INTO tickets(ticket_id, contact_id, subject, description, priority, assigned_to, created_by, status, category)
+      VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9)
       RETURNING *
-    `, [ticketId, contactId, subject, description, priority || 'Medium', assignedTo, req.user.id, 'Open']);
+    `, [ticketId, contactId, subject, description, priority || 'Medium', assignedTo, req.user.id, 'Open', category || 'Others']);
 
     const newTicket = ticketResult.rows[0];
 
@@ -1932,8 +1933,25 @@ router.post('/tickets', authenticateToken, upload.array('attachments', 5), async
 // Helper route to serve attachment binary data
 router.get('/tickets/attachments/:id', authenticateToken, async (req, res) => {
   try {
-    const result = await query('SELECT filename, content_type, file_data FROM ticket_attachments WHERE id = $1', [req.params.id]);
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Attachment not found' });
+    const result = await query(`
+      SELECT ta.filename, ta.content_type, ta.file_data 
+      FROM ticket_attachments ta
+      JOIN tickets t ON ta.ticket_id = t.id
+      LEFT JOIN contacts c ON t.contact_id = c.id
+      WHERE ta.id = $1 AND (
+        $2 = 'Admin' OR 
+        ($2 = 'Staff' AND (
+          t.assigned_to = $3 OR t.created_by = $3 
+          OR (t.assigned_to IS NULL AND (
+              (c.counselor_assigned IS NULL AND c.counselor_assigned_2 IS NULL)
+              OR c.counselor_assigned = $4
+              OR c.counselor_assigned_2 = $4
+          ))
+        )) OR
+        ($2 = 'Student' AND c.user_id = $3)
+      )
+    `, [req.params.id, req.user.role, req.user.id, req.user.name]);
+    if (result.rows.length === 0) return res.status(403).json({ error: 'Unauthorized: You do not have access to this attachment.' });
 
     const attachment = result.rows[0];
     res.setHeader('Content-Type', attachment.content_type);
@@ -1968,7 +1986,7 @@ router.get('/tickets', authenticateToken, async (req, res) => {
         ORDER BY t.created_at DESC
       `;
     } else if (req.user.role === 'Staff') {
-      // Staff sees tickets assigned to them
+      // Staff sees tickets assigned to them, created by them, or unassigned ones that match their counselor assignment
       queryText = `
         SELECT t.*, c.name as contact_name, 
                COALESCE(u1.name, c.counselor_assigned, c.counselor_assigned_2) as assigned_to_name, 
@@ -1981,10 +1999,15 @@ router.get('/tickets', authenticateToken, async (req, res) => {
         LEFT JOIN contacts c ON t.contact_id = c.id
         LEFT JOIN users u1 ON t.assigned_to = u1.id
         LEFT JOIN users u2 ON t.created_by = u2.id
-        WHERE t.assigned_to IS NULL OR t.assigned_to = $1 OR t.created_by = $1 OR c.counselor_assigned IS NOT NULL OR c.counselor_assigned_2 IS NOT NULL
+        WHERE t.assigned_to = $1 OR t.created_by = $1 
+           OR (t.assigned_to IS NULL AND (
+               (c.counselor_assigned IS NULL AND c.counselor_assigned_2 IS NULL)
+               OR c.counselor_assigned = $2
+               OR c.counselor_assigned_2 = $2
+           ))
         ORDER BY t.created_at DESC
       `;
-      params = [req.user.id];
+      params = [req.user.id, req.user.name];
     } else if (req.user.role === 'Student') {
       // Students see their own tickets
       const contactResult = await query('SELECT id FROM contacts WHERE user_id = $1', [req.user.id]);
@@ -2040,8 +2063,19 @@ router.get('/tickets/:id', authenticateToken, async (req, res) => {
       LEFT JOIN contacts c ON t.contact_id = c.id
       LEFT JOIN users u1 ON t.assigned_to = u1.id
       LEFT JOIN users u2 ON t.created_by = u2.id
-      WHERE t.id = $1
-    `, [req.params.id]);
+      WHERE t.id = $1 AND (
+        $2 = 'Admin' OR 
+        ($2 = 'Staff' AND (
+          t.assigned_to = $3 OR t.created_by = $3 
+          OR (t.assigned_to IS NULL AND (
+              (c.counselor_assigned IS NULL AND c.counselor_assigned_2 IS NULL)
+              OR c.counselor_assigned = $4
+              OR c.counselor_assigned_2 = $4
+          ))
+        )) OR
+        ($2 = 'Student' AND c.user_id = $3)
+      )
+    `, [req.params.id, req.user.role, req.user.id, req.user.name]);
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Ticket not found' });
@@ -2058,14 +2092,32 @@ router.get('/tickets/:id', authenticateToken, async (req, res) => {
 // Update ticket
 router.put('/tickets/:id', authenticateToken, async (req, res) => {
   try {
-    const { status, priority, assignedTo, resolutionNotes } = req.body;
+    const { status, priority, assignedTo, resolutionNotes, category } = req.body;
 
     const result = await query(`
       UPDATE tickets 
-      SET status = $1, priority = $2, assigned_to = $3, resolution_notes = $4, updated_at = CURRENT_TIMESTAMP
-      WHERE id = $5
+      SET status = $1, priority = $2, assigned_to = $3, resolution_notes = $4, updated_at = CURRENT_TIMESTAMP, category = $9
+      WHERE id = $5 AND EXISTS (
+        SELECT 1 FROM tickets t2
+        LEFT JOIN contacts c ON t2.contact_id = c.id
+        WHERE t2.id = $5 AND (
+          $6 = 'Admin' OR
+          ($6 = 'Staff' AND (
+            t2.assigned_to = $7 OR t2.created_by = $7 
+            OR (t2.assigned_to IS NULL AND (
+                (c.counselor_assigned IS NULL AND c.counselor_assigned_2 IS NULL)
+                OR c.counselor_assigned = $8
+                OR c.counselor_assigned_2 = $8
+            ))
+          ))
+        )
+      )
       RETURNING *
-    `, [status, priority, assignedTo, resolutionNotes, req.params.id]);
+    `, [status, priority, assignedTo, resolutionNotes, req.params.id, req.user.role, req.user.id, req.user.name, category]);
+
+    if (result.rows.length === 0) {
+      return res.status(403).json({ error: 'Unauthorized: You do not have permission to update this ticket.' });
+    }
 
     // Fetch the full record with names after update
     const finalResult = await query(`
@@ -2134,9 +2186,22 @@ router.get('/tickets/:id/messages', authenticateToken, async (req, res) => {
       SELECT tm.*, u.name as sender_name
       FROM ticket_messages tm
       LEFT JOIN users u ON tm.sender_id = u.id
-      WHERE tm.ticket_id = $1
+      JOIN tickets t ON tm.ticket_id = t.id
+      LEFT JOIN contacts c ON t.contact_id = c.id
+      WHERE tm.ticket_id = $1 AND (
+        $2 = 'Admin' OR 
+        ($2 = 'Staff' AND (
+          t.assigned_to = $3 OR t.created_by = $3 
+          OR (t.assigned_to IS NULL AND (
+              (c.counselor_assigned IS NULL AND c.counselor_assigned_2 IS NULL)
+              OR c.counselor_assigned = $4
+              OR c.counselor_assigned_2 = $4
+          ))
+        )) OR
+        ($2 = 'Student' AND c.user_id = $3)
+      )
       ORDER BY tm.created_at ASC
-    `, [req.params.id]);
+    `, [req.params.id, req.user.role, req.user.id, req.user.name]);
 
     res.json(result.rows.map(row => ({
       ...row,
@@ -2155,6 +2220,33 @@ router.post('/tickets/:id/messages', authenticateToken, async (req, res) => {
     const { message } = req.body;
     const ticketId = req.params.id;
     const senderId = req.user.id;
+
+    // Check if ticket is closed or resolved AND if user has access
+    const ticketCheck = await query(`
+      SELECT t.status FROM tickets t
+      LEFT JOIN contacts c ON t.contact_id = c.id
+      WHERE t.id = $1 AND(
+    $2 = 'Admin' OR
+    ($2 = 'Staff' AND(
+      t.assigned_to = $3 OR t.created_by = $3 
+          OR(t.assigned_to IS NULL AND(
+        (c.counselor_assigned IS NULL AND c.counselor_assigned_2 IS NULL)
+              OR c.counselor_assigned = $4
+              OR c.counselor_assigned_2 = $4
+      ))
+    )) OR
+      ($2 = 'Student' AND c.user_id = $3)
+      )
+`, [ticketId, req.user.role, req.user.id, req.user.name]);
+
+    if (ticketCheck.rows.length === 0) {
+      return res.status(403).json({ error: 'Unauthorized: You do not have access to this ticket.' });
+    }
+
+    const { status } = ticketCheck.rows[0];
+    if (['Resolved', 'Closed'].includes(status)) {
+      return res.status(403).json({ error: 'Cannot send messages on a resolved or closed ticket' });
+    }
 
     const result = await query(`
       INSERT INTO ticket_messages (ticket_id, sender_id, message)
@@ -2177,7 +2269,17 @@ router.post('/tickets/:id/messages', authenticateToken, async (req, res) => {
 // Delete ticket
 router.delete('/tickets/:id', authenticateToken, async (req, res) => {
   try {
-    await query('DELETE FROM tickets WHERE id = $1', [req.params.id]);
+    const deleteResult = await query(`
+      DELETE FROM tickets 
+      WHERE id = $1 AND (
+        $2 = 'Admin' OR -- Typically only admins delete, but if staff can:
+        ($2 = 'Staff' AND created_by = $3)
+      )
+    `, [req.params.id, req.user.role, req.user.id]);
+
+    if (deleteResult.rowCount === 0) {
+      return res.status(403).json({ error: 'Unauthorized or ticket not found' });
+    }
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -2227,7 +2329,7 @@ router.get('/channels', authenticateToken, requireRole('Admin', 'Staff'), async 
 router.post('/channels', authenticateToken, async (req, res) => {
   try {
     const channel = req.body;
-    const id = channel.id || `channel-${Date.now()}`;
+    const id = channel.id || `channel - ${Date.now()} `;
 
     // Check if channel already exists (for DM channels)
     const existingChannel = await query('SELECT * FROM channels WHERE id = $1', [id]);
@@ -2237,9 +2339,9 @@ router.post('/channels', authenticateToken, async (req, res) => {
 
     const result = await query(`
       INSERT INTO channels(id, name, type, members, messages)
-      VALUES($1, $2, $3, $4, $5)
-      RETURNING *
-    `, [
+VALUES($1, $2, $3, $4, $5)
+RETURNING *
+  `, [
       id,
       channel.name,
       channel.type || 'public',
@@ -2384,16 +2486,16 @@ router.post('/lms-courses/:id/enroll', authenticateToken, async (req, res) => {
 
     // 4. Generate Invoice (if requested)
     if (generateInvoice) {
-      const transactionId = `txn-${Date.now()}`;
-      const description = `Enrollment in ${course.title}`;
+      const transactionId = `txn - ${Date.now()} `;
+      const description = `Enrollment in ${course.title} `;
       const status = markAsPaid ? 'Paid' : 'Due';
       const type = 'Invoice';
       const date = new Date().toISOString().split('T')[0];
 
       await query(`
         INSERT INTO transactions(id, contact_id, customer_name, date, description, type, status, amount, payment_method)
-        VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9)
-      `, [
+VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9)
+  `, [
         transactionId,
         contactId,
         contact.name,
@@ -2470,7 +2572,7 @@ router.get('/visitors', authenticateToken, async (req, res) => {
       SELECT v.*, u.name as host_name 
       FROM visitors v
       LEFT JOIN users u ON v.host = CAST(u.id AS TEXT)
-    `);
+  `);
     const visitors = result.rows.map(v => ({
       ...v,
       scheduledCheckIn: v.scheduled_check_in,
@@ -2645,21 +2747,21 @@ router.put('/visitors/:id', authenticateToken, async (req, res) => {
     // Update with provided values or preserve existing ones
     await query(`
       UPDATE visitors SET
-        name = $1,
-        company = $2,
-        host = $3,
-        purpose = $4,
-        check_in = $5,
-        check_out = $6,
-        status = $7,
-        card_number = $8,
-        visit_segments = $11,
-        daily_sequence_number = $10,
-        called_at = $12,
-        staff_email = $13,
-        staff_name = $14
+name = $1,
+  company = $2,
+  host = $3,
+  purpose = $4,
+  check_in = $5,
+  check_out = $6,
+  status = $7,
+  card_number = $8,
+  visit_segments = $11,
+  daily_sequence_number = $10,
+  called_at = $12,
+  staff_email = $13,
+  staff_name = $14
       WHERE id = $9
-    `, [
+  `, [
       visitor.name || current.name,
       visitor.company || current.company,
       visitor.host || current.host,
@@ -2879,10 +2981,10 @@ router.post('/settings/office-location', authenticateToken, requireRole('Admin')
   try {
     const { lat, lng } = req.body;
     await query(`
-      INSERT INTO system_settings (key, value)
-      VALUES ($1, $2)
-      ON CONFLICT (key) DO UPDATE SET value = $2
-    `, ['OFFICE_LOCATION', { lat, lng }]);
+      INSERT INTO system_settings(key, value)
+VALUES($1, $2)
+      ON CONFLICT(key) DO UPDATE SET value = $2
+  `, ['OFFICE_LOCATION', { lat, lng }]);
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -2912,7 +3014,7 @@ router.post('/attendance/check-in', authenticateToken, async (req, res) => {
       }
       const dist = getDistance(lat, lng, office.lat, office.lng);
       if (dist > 50) {
-        return res.status(400).json({ error: `You are ${(dist - 50).toFixed(0)}m away from office. Must be within 50m.` });
+        return res.status(400).json({ error: `You are ${(dist - 50).toFixed(0)}m away from office.Must be within 50m.` });
       }
     }
 
@@ -2941,8 +3043,8 @@ router.post('/attendance/check-in', authenticateToken, async (req, res) => {
     }
 
     await query(`
-      INSERT INTO attendance_logs (user_id, date, check_in, status)
-      VALUES ($1, $2, NOW(), $3)
+      INSERT INTO attendance_logs(user_id, date, check_in, status)
+VALUES($1, $2, NOW(), $3)
     `, [req.user.id, today, status]);
 
     res.json({ success: true, status });
@@ -2965,7 +3067,7 @@ router.post('/attendance/check-out', authenticateToken, async (req, res) => {
       }
       const dist = getDistance(lat, lng, office.lat, office.lng);
       if (dist > 50) {
-        return res.status(400).json({ error: `You are ${(dist - 50).toFixed(0)}m away. Must be within 50m.` });
+        return res.status(400).json({ error: `You are ${(dist - 50).toFixed(0)}m away.Must be within 50m.` });
       }
     }
 
@@ -2974,8 +3076,8 @@ router.post('/attendance/check-out', authenticateToken, async (req, res) => {
       UPDATE attendance_logs 
       SET check_out = NOW()
       WHERE user_id = $1 AND date = $2 AND check_out IS NULL
-      RETURNING *
-    `, [req.user.id, today]);
+RETURNING *
+  `, [req.user.id, today]);
 
     if (result.rows.length === 0) {
       return res.status(400).json({ error: 'No active check-in found for today' });
@@ -3033,10 +3135,10 @@ router.post('/leaves', authenticateToken, async (req, res) => {
     if (!startDate || !endDate) return res.status(400).json({ error: 'Dates required' });
 
     const result = await query(`
-      INSERT INTO leave_requests (user_id, start_date, end_date, reason)
-      VALUES ($1, $2, $3, $4)
-      RETURNING *
-    `, [req.user.id, startDate, endDate, reason]);
+      INSERT INTO leave_requests(user_id, start_date, end_date, reason)
+VALUES($1, $2, $3, $4)
+RETURNING *
+  `, [req.user.id, startDate, endDate, reason]);
     res.json(result.rows[0]);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -3049,7 +3151,7 @@ router.get('/leaves', authenticateToken, async (req, res) => {
       SELECT l.*, u.name as user_name, u.email as user_email
       FROM leave_requests l
       JOIN users u ON l.user_id = u.id
-    `;
+  `;
     const params = [];
 
     // RBAC: Staff only see their own, Admin sees all
@@ -3074,7 +3176,7 @@ router.put('/leaves/:id', authenticateToken, requireRole('Admin'), async (req, r
     }
     const result = await query(`
       UPDATE leave_requests SET status = $1 WHERE id = $2 RETURNING *
-    `, [status, req.params.id]);
+  `, [status, req.params.id]);
     res.json(result.rows[0]);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -3088,10 +3190,10 @@ router.get('/attendance/payroll', authenticateToken, requireRole('Admin'), async
 
     if (!month || !year) return res.status(400).json({ error: 'Month and Year required' });
 
-    const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+    const startDate = `${year} -${String(month).padStart(2, '0')}-01`;
     // Calculate end date (last day of month)
     const endDay = new Date(Number(year), Number(month), 0).getDate();
-    const endDate = `${year}-${String(month).padStart(2, '0')}-${endDay}`;
+    const endDate = `${year} -${String(month).padStart(2, '0')} -${endDay} `;
 
     // Fetch all users with salary info
     const users = await query('SELECT id, name, base_salary, joining_date FROM users WHERE role != $1', ['Student']);
@@ -3106,10 +3208,10 @@ router.get('/attendance/payroll', authenticateToken, requireRole('Admin'), async
 
     // Fetch APPROVED leaves overlapping this month
     const leavesRes = await query(`
-        SELECT * FROM leave_requests 
+SELECT * FROM leave_requests 
         WHERE status = 'Approved' 
         AND start_date <= $2 AND end_date >= $1
-    `, [startDate, endDate]);
+  `, [startDate, endDate]);
     const leaves = leavesRes.rows;
 
     const report = users.rows.map(user => {

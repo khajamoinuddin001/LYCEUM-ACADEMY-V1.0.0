@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import type { Visitor, User, TodoTask } from '../types';
+import type { Visitor, User, TodoTask, Ticket } from '../types';
 import * as api from '../utils/api';
-import { Users, CheckCircle, Clock, Volume2, ArrowRight } from './icons';
+import { Users, CheckCircle, Clock, Volume2, ArrowRight, AlertCircle } from './icons';
 
 interface DepartmentDashboardProps {
     user: User;
+    tickets: Ticket[];
     onViewVisits?: (contactId?: number, contactName?: string) => void;
+    onTicketSelect?: (ticketId: number) => void;
 }
 
-const DepartmentDashboard: React.FC<DepartmentDashboardProps> = ({ user, onViewVisits }) => {
+const DepartmentDashboard: React.FC<DepartmentDashboardProps> = ({ user, tickets, onViewVisits, onTicketSelect }) => {
     const [visitors, setVisitors] = useState<Visitor[]>([]);
     const [myTasks, setMyTasks] = useState<TodoTask[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -366,6 +368,52 @@ const DepartmentDashboard: React.FC<DepartmentDashboardProps> = ({ user, onViewV
                                 ))}
                             </div>
                         )}
+                    </div>
+
+                    <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+                        <h2 className="text-lg font-bold flex items-center gap-2 mb-6">
+                            <AlertCircle className="text-lyceum-blue" />
+                            My Tickets
+                        </h2>
+                        {(() => {
+                            const myTickets = tickets.filter(t =>
+                                (user.role === 'Admin' || t.assignedTo === user.id) &&
+                                t.status !== 'Closed' && t.status !== 'Resolved'
+                            );
+
+                            return myTickets.length === 0 ? (
+                                <div className="text-center py-8 text-gray-500">No active tickets.</div>
+                            ) : (
+                                <div className="space-y-3">
+                                    {myTickets.map(ticket => (
+                                        <div
+                                            key={ticket.id}
+                                            onClick={() => onTicketSelect?.(ticket.id)}
+                                            className="p-3 bg-gray-50 dark:bg-gray-700/30 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer group"
+                                        >
+                                            <div className="flex justify-between items-start mb-1">
+                                                <div className="text-[10px] font-mono font-bold text-lyceum-blue">{ticket.ticketId}</div>
+                                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase ${ticket.priority === 'Urgent' ? 'bg-red-100 text-red-600' :
+                                                    ticket.priority === 'High' ? 'bg-orange-100 text-orange-600' :
+                                                        'bg-blue-100 text-blue-600'
+                                                    }`}>
+                                                    {ticket.priority}
+                                                </span>
+                                            </div>
+                                            <div className="font-bold text-sm text-gray-800 dark:text-gray-100 truncate group-hover:text-lyceum-blue transition-colors">{ticket.subject}</div>
+                                            <div className="flex items-center justify-between mt-2">
+                                                <div className="text-[10px] font-semibold text-gray-600 dark:text-gray-400">
+                                                    {ticket.contactName || 'General Query'}
+                                                </div>
+                                                <div className="text-[10px] text-gray-400">
+                                                    {new Date(ticket.createdAt).toLocaleDateString()}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            );
+                        })()}
                     </div>
                 </div>
             </div>

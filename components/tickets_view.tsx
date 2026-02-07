@@ -30,11 +30,14 @@ interface TicketsViewProps {
     tickets: Ticket[];
     onUpdate: () => void;
     user: User;
+    users: User[];
     contacts: Contact[];
     onNavigateToTask?: (taskId: number) => void;
+    preSelectedTicketId?: number | null;
+    onClearPreSelectedTicket?: () => void;
 }
 
-const TicketsView: React.FC<TicketsViewProps> = ({ tickets, onUpdate, user, contacts, onNavigateToTask }) => {
+const TicketsView: React.FC<TicketsViewProps> = ({ tickets, onUpdate, user, users, contacts, onNavigateToTask, preSelectedTicketId, onClearPreSelectedTicket }) => {
     const [searchQuery, setSearchQuery] = useState('');
     const [filterStatus, setFilterStatus] = useState<string>('all');
     const [filterPriority, setFilterPriority] = useState<string>('all');
@@ -53,6 +56,17 @@ const TicketsView: React.FC<TicketsViewProps> = ({ tickets, onUpdate, user, cont
             delete (window as any).dispatchCreateTaskFromTicket;
         };
     }, []);
+
+    // Handle pre-selected ticket from dashboard
+    React.useEffect(() => {
+        if (preSelectedTicketId && tickets.length > 0) {
+            const ticketToOpen = tickets.find(t => t.id === preSelectedTicketId);
+            if (ticketToOpen) {
+                setSelectedTicket(ticketToOpen);
+                setIsModalOpen(true);
+            }
+        }
+    }, [preSelectedTicketId, tickets]);
 
     const filteredTickets = tickets.filter(ticket => {
         const matchesSearch =
@@ -182,6 +196,9 @@ const TicketsView: React.FC<TicketsViewProps> = ({ tickets, onUpdate, user, cont
                                             <span className={`px-2 py-0.5 rounded text-xs font-medium ${getPriorityColor(ticket.priority)}`}>
                                                 {ticket.priority}
                                             </span>
+                                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded ml-1">
+                                                {ticket.category || 'General Enquiry'}
+                                            </span>
                                         </div>
                                         <h3 className="font-semibold text-gray-900 dark:text-white mb-1 group-hover:text-blue-600 transition-colors">{ticket.subject}</h3>
                                         <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">{ticket.description}</p>
@@ -216,10 +233,12 @@ const TicketsView: React.FC<TicketsViewProps> = ({ tickets, onUpdate, user, cont
                     onClose={() => {
                         setIsModalOpen(false);
                         setSelectedTicket(null);
+                        onClearPreSelectedTicket?.();
                     }}
                     onUpdateTicket={handleUpdateTicket}
                     onRefresh={onUpdate}
                     user={user}
+                    users={users}
                     contacts={contacts}
                     onNavigateToTask={onNavigateToTask}
                 />
@@ -259,13 +278,16 @@ interface TicketDetailModalProps {
     onUpdateTicket: (updates: Partial<Ticket>) => void;
     onRefresh: () => void;
     user: User;
+    users: User[];
     contacts: Contact[];
     onNavigateToTask?: (taskId: number) => void;
 }
 
-const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, onUpdateTicket, onRefresh, user, onNavigateToTask }) => {
+const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, onUpdateTicket, onRefresh, user, users, onNavigateToTask }) => {
     const [status, setStatus] = useState(ticket.status);
     const [priority, setPriority] = useState(ticket.priority);
+    const [category, setCategory] = useState(ticket.category || 'General Enquiry');
+    const [assignedTo, setAssignedTo] = useState<number | undefined>(ticket.assignedTo);
     const [resolutionNotes, setResolutionNotes] = useState(ticket.resolutionNotes || '');
     const [isLinkingTask, setIsLinkingTask] = useState(false);
     const [linkTaskId, setLinkTaskId] = useState('');
@@ -317,7 +339,7 @@ const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, 
     };
 
     const handleSave = () => {
-        onUpdateTicket({ status, priority, resolutionNotes });
+        onUpdateTicket({ status, priority, assignedTo, resolutionNotes, category });
     };
 
     const handleLinkTask = async () => {
@@ -344,8 +366,9 @@ const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, 
         }
     };
 
-    const canEdit = user.role === 'Admin' || ticket.assignedTo === user.id;
+    const canEdit = user.role === 'Admin' || user.role === 'Staff' || ticket.assignedTo === user.id;
     const isAdmin = user.role === 'Admin';
+    const isClosed = ['Resolved', 'Closed'].includes(ticket.status);
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
@@ -361,6 +384,9 @@ const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, 
                                 <span className="text-xs font-mono font-bold text-gray-500">{ticket.ticketId}</span>
                                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${getPriorityColor(ticket.priority)}`}>
                                     {ticket.priority}
+                                </span>
+                                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded ml-2">
+                                    {ticket.category || 'General Enquiry'}
                                 </span>
                             </div>
                             <h2 className="text-xl font-bold text-gray-900 dark:text-white mt-0.5">{ticket.subject}</h2>
@@ -639,27 +665,33 @@ const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, 
                                 <div className="text-center py-8 text-gray-400 italic text-xs">No messages yet</div>
                             )}
                         </div>
-                        <div className="flex gap-2">
-                            <input
-                                type="text"
-                                placeholder="Type a message..."
-                                value={newMessage}
-                                onChange={(e) => setNewMessage(e.target.value)}
-                                onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-                                className="flex-1 px-4 py-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500/20"
-                            />
-                            <button
-                                onClick={handleSendMessage}
-                                disabled={isSendingMessage || !newMessage.trim()}
-                                className="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-colors"
-                            >
-                                Send
-                            </button>
-                        </div>
+                        {isClosed ? (
+                            <div className="p-3 bg-gray-100 dark:bg-gray-800 rounded-xl text-center text-sm text-gray-500 italic border border-gray-200 dark:border-gray-700">
+                                This ticket is {ticket.status.toLowerCase()}. No further messages can be sent.
+                            </div>
+                        ) : (
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    placeholder="Type a message..."
+                                    value={newMessage}
+                                    onChange={(e) => setNewMessage(e.target.value)}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+                                    className="flex-1 px-4 py-2.5 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500/20"
+                                />
+                                <button
+                                    onClick={handleSendMessage}
+                                    disabled={isSendingMessage || !newMessage.trim()}
+                                    className="px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                                >
+                                    Send
+                                </button>
+                            </div>
+                        )}
                     </div>
 
-                    {/* Status and Priority Integration */}
-                    <div className="grid grid-cols-2 gap-4">
+                    {/* Status, Priority and Category Integration */}
+                    <div className="grid grid-cols-3 gap-4">
                         <div className="space-y-1.5">
                             <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest">Update Status</label>
                             <select
@@ -688,7 +720,43 @@ const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, 
                                 <option value="Urgent">Urgent</option>
                             </select>
                         </div>
+                        <div className="space-y-1.5">
+                            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest">Category</label>
+                            <select
+                                value={category}
+                                onChange={(e) => setCategory(e.target.value)}
+                                disabled={!canEdit}
+                                className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-500/20"
+                            >
+                                <option value="University related">University related</option>
+                                <option value="Embassy related">Embassy related</option>
+                                <option value="Staff related">Staff related</option>
+                                <option value="General enquiry">General enquiry</option>
+                                <option value="Finance">Finance</option>
+                                <option value="Sales">Sales</option>
+                                <option value="Others">Others</option>
+                            </select>
+                        </div>
                     </div>
+
+                    {isAdmin && (
+                        <div className="space-y-1.5 pt-2">
+                            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest">Assign Counselor (Admin Only)</label>
+                            <select
+                                value={assignedTo || ''}
+                                onChange={(e) => setAssignedTo(e.target.value ? Number(e.target.value) : undefined)}
+                                className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-500/20"
+                            >
+                                <option value="">Awaiting Assignment</option>
+                                {users
+                                    .filter(u => u.role !== 'Student')
+                                    .map(u => (
+                                        <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
+                                    ))
+                                }
+                            </select>
+                        </div>
+                    )}
 
                     {/* Resolution Notes - Updated to one-line as requested */}
                     <div className="space-y-1.5 pb-2">
@@ -714,7 +782,7 @@ const TicketDetailModal: React.FC<TicketDetailModalProps> = ({ ticket, onClose, 
                             Cancel
                         </button>
                         <button
-                            onClick={() => onUpdateTicket({ status, priority, resolutionNotes })}
+                            onClick={() => onUpdateTicket({ status, priority, assignedTo, resolutionNotes, category })}
                             className="px-8 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-blue-500/20 hover:bg-blue-700 transition-all active:scale-95"
                         >
                             Update Ticket

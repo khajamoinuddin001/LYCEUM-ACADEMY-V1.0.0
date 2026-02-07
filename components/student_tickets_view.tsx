@@ -97,6 +97,11 @@ const StudentTicketsView: React.FC<StudentTicketsViewProps> = ({ student, ticket
                                         </span>
                                     </div>
                                     <h3 className="font-semibold text-lg text-gray-900 dark:text-white mb-2">{ticket.subject}</h3>
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded">
+                                            {ticket.category || 'General Enquiry'}
+                                        </span>
+                                    </div>
                                     <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">{ticket.description}</p>
                                     {ticket.attachments && (ticket.attachments as any).length > 0 && (
                                         <div className="flex items-center gap-1.5 mt-3 text-[10px] font-bold text-blue-500 bg-blue-50 dark:bg-blue-900/20 w-fit px-2 py-0.5 rounded-full">
@@ -163,6 +168,7 @@ interface CreateTicketModalProps {
 
 const CreateTicketModal: React.FC<CreateTicketModalProps> = ({ student, onClose, onSuccess }) => {
     const [subject, setSubject] = useState('');
+    const [category, setCategory] = useState('General Enquiry');
     const [description, setDescription] = useState('');
     const [attachments, setAttachments] = useState<File[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -211,6 +217,7 @@ const CreateTicketModal: React.FC<CreateTicketModalProps> = ({ student, onClose,
                 contactId: student.id!,
                 subject: subject.trim(),
                 description: description.trim(),
+                category: category,
                 priority: 'Medium',
             }, attachments.length > 0 ? attachments : undefined);
             onSuccess();
@@ -244,6 +251,25 @@ const CreateTicketModal: React.FC<CreateTicketModalProps> = ({ student, onClose,
                             placeholder="Brief description of your issue"
                             className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500"
                         />
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                            Category *
+                        </label>
+                        <select
+                            value={category}
+                            onChange={(e) => setCategory(e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500"
+                        >
+                            <option value="University related">University related</option>
+                            <option value="Embassy related">Embassy related</option>
+                            <option value="Staff related">Staff related</option>
+                            <option value="General enquiry">General enquiry</option>
+                            <option value="Finance">Finance</option>
+                            <option value="Sales">Sales</option>
+                            <option value="Others">Others</option>
+                        </select>
                     </div>
 
                     <div>
@@ -430,6 +456,9 @@ const ViewTicketModal: React.FC<ViewTicketModalProps> = ({ ticket, onClose, onNa
                                 <span className="text-xs font-mono font-bold text-gray-500">{ticket.ticketId}</span>
                                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${getPriorityColor(ticket.priority)}`}>
                                     {ticket.priority}
+                                </span>
+                                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded ml-2">
+                                    {ticket.category || 'General Enquiry'}
                                 </span>
                             </div>
                             <h2 className="text-xl font-bold text-gray-900 dark:text-white mt-0.5">{ticket.subject}</h2>
@@ -622,23 +651,29 @@ const ViewTicketModal: React.FC<ViewTicketModalProps> = ({ ticket, onClose, onNa
                                 </div>
                             )}
                         </div>
-                        <div className="flex gap-2 p-1 bg-gray-50 dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700">
-                            <input
-                                type="text"
-                                placeholder="Type a message to counselor..."
-                                value={newMessage}
-                                onChange={(e) => setNewMessage(e.target.value)}
-                                onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-                                className="flex-1 px-4 py-2.5 bg-transparent text-sm outline-none"
-                            />
-                            <button
-                                onClick={handleSendMessage}
-                                disabled={isSendingMessage || !newMessage.trim()}
-                                className="px-5 py-2 bg-blue-600 text-white rounded-xl font-bold text-xs hover:bg-blue-700 disabled:opacity-50 transition-all flex items-center gap-2 active:scale-95 shadow-lg shadow-blue-500/20"
-                            >
-                                Send
-                            </button>
-                        </div>
+                        {['Resolved', 'Closed'].includes(ticket.status) ? (
+                            <div className="p-3 bg-gray-100 dark:bg-gray-800 rounded-xl text-center text-sm text-gray-500 italic border border-gray-200 dark:border-gray-700">
+                                This ticket is {ticket.status.toLowerCase()}. No further messages can be sent.
+                            </div>
+                        ) : (
+                            <div className="flex gap-2 p-1 bg-gray-50 dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-700">
+                                <input
+                                    type="text"
+                                    placeholder="Type a message to counselor..."
+                                    value={newMessage}
+                                    onChange={(e) => setNewMessage(e.target.value)}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+                                    className="flex-1 px-4 py-2.5 bg-transparent text-sm outline-none"
+                                />
+                                <button
+                                    onClick={handleSendMessage}
+                                    disabled={isSendingMessage || !newMessage.trim()}
+                                    className="px-5 py-2 bg-blue-600 text-white rounded-xl font-bold text-xs hover:bg-blue-700 disabled:opacity-50 transition-all flex items-center gap-2 active:scale-95 shadow-lg shadow-blue-500/20"
+                                >
+                                    Send
+                                </button>
+                            </div>
+                        )}
                     </div>
 
                     {ticket.resolutionNotes && (

@@ -443,23 +443,31 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, courses, e
                             <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-lyceum-blue mx-auto"></div>
                         </div>
                     ) : documents.length > 0 ? (
-                        <ul className="space-y-2 max-h-40 overflow-y-auto pr-1">
-                            {documents.slice(0, 5).map((doc) => (
-                                <li key={doc.id} className="flex items-center justify-between text-sm">
-                                    <div className="flex items-center min-w-0">
-                                        <Paperclip size={14} className="mr-2 text-gray-400 flex-shrink-0" />
-                                        <span className="text-gray-800 dark:text-gray-200 truncate">{doc.name}</span>
-                                    </div>
-                                    <button
-                                        onClick={() => handleDownloadDocument(doc)}
-                                        className="inline-flex items-center text-xs font-semibold text-lyceum-blue hover:underline flex-shrink-0 ml-2"
-                                    >
-                                        <Download size={14} className="mr-1" />
-                                        Download
-                                    </button>
-                                </li>
-                            ))}
-                        </ul>
+                        <>
+                            <ul className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                                {documents.slice(0, 5).map((doc) => (
+                                    <li key={doc.id} className="flex items-center justify-between text-sm">
+                                        <div className="flex items-center min-w-0">
+                                            <Paperclip size={14} className="mr-2 text-gray-400 flex-shrink-0" />
+                                            <span className="text-gray-800 dark:text-gray-200 truncate">{doc.name}</span>
+                                        </div>
+                                        <button
+                                            onClick={() => handleDownloadDocument(doc)}
+                                            className="inline-flex items-center text-xs font-semibold text-lyceum-blue hover:underline flex-shrink-0 ml-2"
+                                        >
+                                            <Download size={14} className="mr-1" />
+                                            Download
+                                        </button>
+                                    </li>
+                                ))}
+                            </ul>
+                            <button
+                                onClick={() => onAppSelect('Documents')}
+                                className="w-full mt-4 py-2 text-xs font-bold text-lyceum-blue bg-lyceum-blue/5 rounded-lg hover:bg-lyceum-blue/10 transition-colors"
+                            >
+                                View All Documents
+                            </button>
+                        </>
                     ) : (
                         <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-2">No documents on file.</p>
                     )}

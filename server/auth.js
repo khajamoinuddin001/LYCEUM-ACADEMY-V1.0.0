@@ -70,6 +70,7 @@ export async function authenticateToken(req, res, next) {
     if (result.rows.length > 0) {
       const userDoc = result.rows[0];
       req.user.role = userDoc.role;
+      req.user.name = userDoc.name;
       // Ensure permissions are an object
       req.user.permissions = typeof userDoc.permissions === 'string'
         ? JSON.parse(userDoc.permissions)

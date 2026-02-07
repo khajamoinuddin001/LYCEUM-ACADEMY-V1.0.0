@@ -92,6 +92,7 @@ export interface Ticket {
   priority: 'Low' | 'Medium' | 'High' | 'Urgent';
   assignedTo?: number;
   assignedToName?: string;
+  category?: string;
   createdBy: number;
   createdByName?: string;
   resolutionNotes?: string;

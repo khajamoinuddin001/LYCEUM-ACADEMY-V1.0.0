@@ -177,6 +177,7 @@ export async function initDatabase() {
         priority TEXT NOT NULL DEFAULT 'Medium' CHECK(priority IN ('Low', 'Medium', 'High', 'Urgent')),
         assigned_to INTEGER REFERENCES users(id),
         created_by INTEGER REFERENCES users(id),
+        category TEXT,
         resolution_notes TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -285,6 +286,7 @@ export async function initDatabase() {
         WHERE task_id IS NULL
       `);
       await client.query('ALTER TABLE documents ADD COLUMN IF NOT EXISTS is_private BOOLEAN DEFAULT false');
+      await client.query('ALTER TABLE tickets ADD COLUMN IF NOT EXISTS category TEXT');
 
       // Avatar DB Storage Support
       await client.query('ALTER TABLE contacts ADD COLUMN IF NOT EXISTS avatar_data BYTEA');

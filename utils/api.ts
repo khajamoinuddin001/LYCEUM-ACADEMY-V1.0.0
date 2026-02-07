@@ -834,6 +834,7 @@ export const createTicket = async (ticketData: {
   contactId: number;
   subject: string;
   description: string;
+  category?: string;
   priority?: 'Low' | 'Medium' | 'High' | 'Urgent';
 }, attachments?: File[]): Promise<Ticket> => {
   // If there are attachments, use FormData
@@ -844,6 +845,9 @@ export const createTicket = async (ticketData: {
     formData.append('description', ticketData.description);
     if (ticketData.priority) {
       formData.append('priority', ticketData.priority);
+    }
+    if (ticketData.category) {
+      formData.append('category', ticketData.category);
     }
 
     // Append all files
@@ -883,6 +887,7 @@ export const updateTicket = async (ticketId: number, updates: {
   priority?: 'Low' | 'Medium' | 'High' | 'Urgent';
   assignedTo?: number;
   resolutionNotes?: string;
+  category?: string;
 }): Promise<Ticket> => {
   return apiRequest<Ticket>(`/tickets/${ticketId}`, {
     method: 'PUT',

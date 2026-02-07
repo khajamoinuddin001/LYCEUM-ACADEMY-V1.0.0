@@ -91,5 +91,6 @@ export {
   ArrowRight,
   Monitor,
   Receipt,
-  Link
+  Link,
+  HardDrive
 } from 'lucide-react';

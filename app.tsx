@@ -68,6 +68,7 @@ import VisitorDisplay from './components/visitor_display';
 import DepartmentDashboard from './components/department_dashboard';
 import AttendanceView from './components/attendance_view';
 import { TermsView, PrivacyView, LandingDocumentsView } from './components/legal_views';
+import StudentDocumentsView from './components/student_documents_view';
 
 
 type ContactViewMode = 'details' | 'documents' | 'visaFiling' | 'checklist' | 'visits' | 'crm' | 'tasks';
@@ -128,6 +129,7 @@ const DashboardLayout: React.FC = () => {
   const [editingVisitor, setEditingVisitor] = useState<Visitor | null>(null);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
+  const [selectedTicketId, setSelectedTicketId] = useState<number | null>(null);
   const [editingTask, setEditingTask] = useState<TodoTask | null>(null);
   const [taskFilters, setTaskFilters] = useState<{ userId?: number; all?: boolean }>({});
   const taskFiltersRef = useRef(taskFilters);
@@ -1656,11 +1658,14 @@ const DashboardLayout: React.FC = () => {
           tickets={tickets}
           onUpdate={() => api.getTickets().then(setTickets)}
           user={currentUser}
+          users={users}
           contacts={contacts}
           onNavigateToTask={(taskId) => {
             setSelectedTaskId(taskId);
             setActiveApp('Tasks');
           }}
+          preSelectedTicketId={selectedTicketId}
+          onClearPreSelectedTicket={() => setSelectedTicketId(null)}
         />
       );
       case 'LMS':
@@ -1760,7 +1765,7 @@ const DashboardLayout: React.FC = () => {
         />
       );
       case 'Visitor Display': return <VisitorDisplay />;
-      case 'Department Dashboard': return <DepartmentDashboard user={currentUser} onViewVisits={handleViewContactVisits} />;
+      case 'Department Dashboard': return <DepartmentDashboard user={currentUser} tickets={tickets} onViewVisits={handleViewContactVisits} onTicketSelect={(ticketId) => { setSelectedTicketId(ticketId); setActiveApp('Tickets'); }} />;
       case 'Attendance': return <AttendanceView user={currentUser} users={users} onUpdateUser={handleUpdateUser} />;
       default: return <AppView appName={activeApp} onNavigateBack={() => handleAppSelect('Apps')} />;
     }
@@ -1939,6 +1944,21 @@ const DashboardLayout: React.FC = () => {
                   <StudentTasksView
                     student={studentContact}
                     tasks={tasks}
+                    onNavigateBack={() => handleAppSelect('Apps')}
+                  />
+                ) : <div>Loading...</div>;
+              }
+
+              // Student Documents Page
+              if (activeApp === 'Documents') {
+                const studentContact = contacts.find(c =>
+                  c.userId === currentUser.id ||
+                  (c.email && currentUser.email && c.email.toLowerCase() === currentUser.email.toLowerCase())
+                );
+                return studentContact ? (
+                  <StudentDocumentsView
+                    student={studentContact}
+                    user={currentUser}
                     onNavigateBack={() => handleAppSelect('Apps')}
                   />
                 ) : <div>Loading...</div>;
