@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import type { User, UserRole, AppPermissions, ActivityLog } from '../types';
 import * as api from '../utils/api';
-import { ArrowLeft, X, Eye, UserPlus, Trash2, Edit as UserIcon } from './icons';
+import { ArrowLeft, X, Eye, UserPlus, Trash2, Edit as UserIcon, Search } from './icons';
 import { ODOO_APPS, STAFF_ROLES } from './constants';
 
 interface ManageAppsModalProps {
@@ -241,6 +241,7 @@ const AccessControlView: React.FC<AccessControlViewProps> = ({ users, activityLo
     const [editingUser, setEditingUser] = useState<User | null>(null);
     const [editForm, setEditForm] = useState({ name: '', email: '', phone: '' });
     const [isUpdating, setIsUpdating] = useState(false);
+    const [logSearch, setLogSearch] = useState('');
 
     const handleEditClick = (user: User) => {
         setEditingUser(user);
@@ -469,12 +470,27 @@ const AccessControlView: React.FC<AccessControlViewProps> = ({ users, activityLo
 
                 {activeTab === 'log' && (
                     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
-                        <div className="p-4">
-                            <h3 className="text-lg font-semibold">Administrator Activity</h3>
-                            <p className="text-sm text-gray-500 dark:text-gray-400">Recent administrative actions are logged here.</p>
+                        <div className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div>
+                                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Administrator Activity</h3>
+                                <p className="text-sm text-gray-500 dark:text-gray-400">Recent administrative actions are logged here.</p>
+                            </div>
+                            <div className="relative w-full md:w-64">
+                                <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                                <input
+                                    type="text"
+                                    placeholder="Search by name or action..."
+                                    className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm focus:ring-2 focus:ring-lyceum-blue"
+                                    onChange={(e) => setLogSearch(e.target.value)}
+                                />
+                            </div>
                         </div>
                         <ul className="divide-y divide-gray-200 dark:divide-gray-700 max-h-[60vh] overflow-y-auto">
-                            {activityLog.map(log => (
+                            {activityLog.filter(log =>
+                                !logSearch ||
+                                log.action.toLowerCase().includes(logSearch.toLowerCase()) ||
+                                log.adminName.toLowerCase().includes(logSearch.toLowerCase())
+                            ).map(log => (
                                 <li key={log.id} className="p-4 flex items-center justify-between">
                                     <div>
                                         <p className="text-sm font-medium text-gray-800 dark:text-gray-100">{log.action}</p>

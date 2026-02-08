@@ -264,7 +264,7 @@ const DashboardLayout: React.FC = () => {
             usersData, activityLogData, paymentLogData, contactsData, transactionsData, leadsData,
             templatesData, visitorsData, tasksData, eventsData, channelsData, couponsData, lmsCoursesData, notificationsData, ticketsData
           ] = await Promise.all([
-            effectiveUser.role === 'Admin' || effectiveUser.role === 'Staff' ? fetchWithFallback(api.getUsers()) : Promise.resolve([]),
+            effectiveUser.role === 'Admin' || effectiveUser.role === 'Staff' || effectiveUser.role === 'Student' ? fetchWithFallback(api.getUsers()) : Promise.resolve([]),
             fetchWithFallback(api.getActivityLog()),
             fetchWithFallback(api.getPaymentActivityLog()),
             fetchWithFallback(api.getContacts()),
@@ -275,7 +275,7 @@ const DashboardLayout: React.FC = () => {
             fetchWithFallback(api.getVisitors()),
             fetchWithFallback(api.getTasks()),
             fetchWithFallback(api.getEvents()),
-            effectiveUser.role === 'Admin' || effectiveUser.role === 'Staff' ? fetchWithFallback(api.getChannels()) : Promise.resolve([]),
+            fetchWithFallback(api.getChannels()),
             fetchWithFallback(api.getCoupons()),
             fetchWithFallback(api.getLmsCourses()),
             fetchWithFallback(api.getNotifications()),
@@ -299,20 +299,28 @@ const DashboardLayout: React.FC = () => {
       if (api.getToken()) {
         try {
           // Parallel fetch of volatile data
-          const [freshLeads, freshTasks, freshVisitors, freshNotifications, freshTickets] = await Promise.all([
-            api.getLeads().catch(() => leads),
-            api.getTasks(taskFiltersRef.current).catch(() => tasks), // Use ref to get latest taskFilters
-            api.getVisitors().catch(() => visitors),
-            api.getNotifications().catch(() => notifications),
-            api.getTickets().catch(() => tickets)
+          // We don't catch and fallback to local state because of stale closures
+          // If a request fails, we just skip that update
+          const results = await Promise.allSettled([
+            api.getLeads(),
+            api.getTasks(taskFiltersRef.current),
+            api.getVisitors(),
+            api.getNotifications(),
+            api.getTickets(),
+            api.getChannels()
           ]);
 
-          // Simple state updates (React will handle diffing)
-          setLeads(prev => JSON.stringify(prev) !== JSON.stringify(freshLeads) ? freshLeads : prev);
-          setTasks(prev => JSON.stringify(prev) !== JSON.stringify(freshTasks) ? freshTasks : prev);
-          setVisitors(prev => JSON.stringify(prev) !== JSON.stringify(freshVisitors) ? freshVisitors : prev);
-          setNotifications(prev => JSON.stringify(prev) !== JSON.stringify(freshNotifications) ? freshNotifications : prev);
-          setTickets(prev => JSON.stringify(prev) !== JSON.stringify(freshTickets) ? freshTickets : prev);
+          const [
+            leadsRes, tasksRes, visitorsRes, notificationsRes, ticketsRes, channelsRes
+          ] = results.map(r => r.status === 'fulfilled' ? r.value : null);
+
+          // Only update if we got fresh data
+          if (leadsRes) setLeads(prev => JSON.stringify(prev) !== JSON.stringify(leadsRes) ? leadsRes : prev);
+          if (tasksRes) setTasks(prev => JSON.stringify(prev) !== JSON.stringify(tasksRes) ? tasksRes : prev);
+          if (visitorsRes) setVisitors(prev => JSON.stringify(prev) !== JSON.stringify(visitorsRes) ? visitorsRes : prev);
+          if (notificationsRes) setNotifications(prev => JSON.stringify(prev) !== JSON.stringify(notificationsRes) ? notificationsRes : prev);
+          if (ticketsRes) setTickets(prev => JSON.stringify(prev) !== JSON.stringify(ticketsRes) ? ticketsRes : prev);
+          if (channelsRes) setChannels(prev => JSON.stringify(prev) !== JSON.stringify(channelsRes) ? channelsRes : prev);
 
         } catch (e) {
           console.log("Polling error silently ignored");

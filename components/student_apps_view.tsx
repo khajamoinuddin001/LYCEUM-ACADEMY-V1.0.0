@@ -1,5 +1,5 @@
 import React from 'react';
-import { BookOpen, FileText, User, Paperclip, Receipt, CheckCircle2 } from 'lucide-react';
+import { BookOpen, FileText, User, Paperclip, Receipt, CheckCircle2, MessagesSquare } from 'lucide-react';
 
 interface StudentAppsViewProps {
     onAppSelect: (appName: string) => void;
@@ -63,6 +63,13 @@ const StudentAppsView: React.FC<StudentAppsViewProps> = ({ onAppSelect }) => {
             description: 'View your assigned tasks and to-dos',
             bgColor: 'bg-orange-100 dark:bg-orange-900/20',
             iconColor: 'text-orange-600 dark:text-orange-400',
+        },
+        {
+            name: 'Discuss',
+            icon: <MessagesSquare size={48} />,
+            description: 'Chat with staff, admins, and fellow students',
+            bgColor: 'bg-teal-100 dark:bg-teal-900/20',
+            iconColor: 'text-teal-600 dark:text-teal-400',
         },
     ];
 

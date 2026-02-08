@@ -53,6 +53,7 @@ async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promi
   };
 
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    cache: 'no-store', // Prevent browser from caching API responses
     ...options,
     headers,
   });
@@ -66,7 +67,13 @@ async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promi
     throw new Error(error.error || `HTTP ${response.status}`);
   }
 
-  return response.json();
+  const text = await response.text();
+  try {
+    return text ? JSON.parse(text) : {} as T;
+  } catch (e) {
+    console.warn(`Failed to parse JSON from ${endpoint}:`, text);
+    return {} as T;
+  }
 }
 
 // Auth functions
@@ -906,8 +913,9 @@ export const getStaffMembers = async (): Promise<{ id: number; name: string; rol
 };
 
 // Channels
-export const getChannels = async (): Promise<Channel[]> => {
-  return apiRequest<Channel[]>('/channels');
+export const getChannels = async (userId?: number): Promise<Channel[]> => {
+  const url = userId ? `/channels?userId=${userId}` : '/channels';
+  return apiRequest<Channel[]>(url);
 };
 
 export const saveChannels = async (channels: Channel[]): Promise<Channel[]> => {
@@ -926,6 +934,27 @@ export const saveChannels = async (channels: Channel[]): Promise<Channel[]> => {
     }
   }
   return getChannels();
+};
+
+export const uploadChannelFile = async (file: File): Promise<{ id: number; name: string; url: string; contentType: string; size: number }> => {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const token = getToken();
+  const response = await fetch(`${API_BASE_URL}/channels/upload`, {
+    method: 'POST',
+    headers: {
+      ...(token && { 'Authorization': `Bearer ${token}` }),
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Upload failed' }));
+    throw new Error(error.error || `HTTP ${response.status}`);
+  }
+
+  return response.json();
 };
 
 export const createGroupChannel = async (name: string, memberIds: number[], user: User): Promise<Channel[]> => {

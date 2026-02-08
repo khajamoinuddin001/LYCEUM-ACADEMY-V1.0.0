@@ -15,6 +15,13 @@ export interface Message {
   text: string;
   timestamp: string;
   edited?: boolean;
+  attachment?: {
+    id: number;
+    name: string;
+    url: string;
+    contentType?: string;
+    size?: number;
+  };
 }
 
 export interface Channel {

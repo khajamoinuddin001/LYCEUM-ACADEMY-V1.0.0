@@ -164,6 +164,7 @@ export const DEFAULT_PERMISSIONS: Record<UserRole, { [appName: string]: AppPermi
   'Staff': employeePermissions,
   'Student': {
     'LMS': readOnly,
+    'Discuss': fullAccess,
   },
 };
 

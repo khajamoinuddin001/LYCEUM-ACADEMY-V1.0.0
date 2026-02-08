@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect, forwardRef } from 'react';
-import { Search, Plus, X, ArrowLeft, Paperclip, CheckCheck, MessageCircle, Send, Edit, ChevronUp, ChevronDown } from './icons';
+import { Search, Plus, X, ArrowLeft, Paperclip, CheckCheck, MessageCircle, Send, Edit, ChevronUp, ChevronDown, Download, FileText } from './icons';
 import type { User, Channel, Message } from '../types';
 import NewGroupModal from './new_group_modal';
 import * as api from '../utils/api';
@@ -69,11 +69,13 @@ interface MessageBubbleProps {
     onSaveEdit: (newText: string) => void;
     onCancelEdit: () => void;
     isHighlighted: boolean;
+    isReadOnly?: boolean;
 }
 
-const MessageBubble = forwardRef<HTMLDivElement, MessageBubbleProps>(({ message, isCurrentUser, isEditing, onStartEdit, onSaveEdit, onCancelEdit, isHighlighted }, ref) => {
+const MessageBubble = forwardRef<HTMLDivElement, MessageBubbleProps>(({ message, isCurrentUser, isEditing, onStartEdit, onSaveEdit, onCancelEdit, isHighlighted, isReadOnly }, ref) => {
     const [editText, setEditText] = useState(message.text);
     const editInputRef = useRef<HTMLTextAreaElement>(null);
+    const [attachmentUrl, setAttachmentUrl] = useState<string | null>(null);
 
     useEffect(() => {
         if (isEditing) {
@@ -82,13 +84,41 @@ const MessageBubble = forwardRef<HTMLDivElement, MessageBubbleProps>(({ message,
         }
     }, [isEditing, message.text]);
 
+    useEffect(() => {
+        let objectUrl: string | null = null;
+        if (message.attachment) {
+            const fetchAttachment = async () => {
+                try {
+                    const token = api.getToken();
+                    // Robust URL construction
+                    const baseUrl = api.API_BASE_URL.endsWith('/api') ? api.API_BASE_URL.slice(0, -4) : api.API_BASE_URL;
+                    const attachmentPath = message.attachment?.url.startsWith('/api') ? message.attachment.url : `/api${message.attachment?.url}`;
+                    const fullUrl = `${baseUrl}${attachmentPath}`;
+
+                    const response = await fetch(fullUrl, {
+                        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+                    });
+                    const blob = await response.blob();
+                    objectUrl = window.URL.createObjectURL(blob);
+                    setAttachmentUrl(objectUrl);
+                } catch (error) {
+                    console.error('Failed to fetch attachment:', error);
+                }
+            };
+            fetchAttachment();
+        }
+        return () => {
+            if (objectUrl) window.URL.revokeObjectURL(objectUrl);
+        };
+    }, [message.attachment]);
+
     const handleSave = () => {
         if (editText.trim()) {
             onSaveEdit(editText.trim());
         }
     };
 
-    const isEditable = isCurrentUser && (new Date().getTime() - new Date(message.timestamp).getTime()) < 3600000;
+    const isEditable = !isReadOnly && isCurrentUser && (new Date().getTime() - new Date(message.timestamp).getTime()) < 600000;
 
     if (isEditing) {
         return (
@@ -133,7 +163,51 @@ const MessageBubble = forwardRef<HTMLDivElement, MessageBubbleProps>(({ message,
             )}
             <div className={`p-2.5 rounded-xl shadow-sm w-fit max-w-lg ${bubbleClasses} ${highlightClass} transition-all duration-300`}>
                 {!isCurrentUser && <span className={`text-sm font-semibold mb-1 ${getAvatarColor(message.author).split(' ')[1]}`}>{message.author}</span>}
-                <p className="text-sm text-gray-800 dark:text-gray-100 whitespace-pre-wrap">{message.text}</p>
+
+                {message.attachment ? (
+                    <div className="mb-2 space-y-2">
+                        {message.attachment.contentType?.startsWith('image/') ? (
+                            <div className="rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800">
+                                {attachmentUrl ? (
+                                    <img
+                                        src={attachmentUrl}
+                                        alt={message.attachment.name}
+                                        className="max-w-full max-h-60 object-contain hover:opacity-90 transition-opacity cursor-pointer"
+                                        onClick={() => window.open(attachmentUrl, '_blank')}
+                                    />
+                                ) : (
+                                    <div className="w-40 h-40 flex items-center justify-center bg-gray-100 dark:bg-gray-700">
+                                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-lyceum-blue"></div>
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 min-w-[200px]">
+                                <div className="p-2 bg-lyceum-blue/10 rounded-lg text-lyceum-blue">
+                                    <FileText size={24} />
+                                </div>
+                                <div className="flex-grow min-w-0">
+                                    <p className="text-sm font-medium text-gray-800 dark:text-gray-100 truncate">{message.attachment.name}</p>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">{((message.attachment.size || 0) / 1024).toFixed(1)} KB</p>
+                                </div>
+                                {attachmentUrl && (
+                                    <a
+                                        href={attachmentUrl}
+                                        download={message.attachment.name}
+                                        className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full text-gray-500 dark:text-gray-400"
+                                        title="Download"
+                                    >
+                                        <Download size={18} />
+                                    </a>
+                                )}
+                            </div>
+                        )}
+                        <p className="text-sm text-gray-800 dark:text-gray-100 whitespace-pre-wrap">{message.text}</p>
+                    </div>
+                ) : (
+                    <p className="text-sm text-gray-800 dark:text-gray-100 whitespace-pre-wrap">{message.text}</p>
+                )}
+
                 <div className="text-right text-xs text-gray-500 dark:text-gray-400 mt-1.5 flex items-center justify-end gap-1">
                     {message.edited && <span className='italic mr-1'>(edited)</span>}
                     <span>{formatTimestamp(message.timestamp)}</span>
@@ -160,7 +234,20 @@ const NewChatModal: React.FC<{
         .flatMap(c => c.members)
         .filter(id => id !== currentUser.id);
 
-    const availableUsers = users.filter(u => u.id !== currentUser.id && !existingDMUsers.includes(u.id) && u.role !== 'Student');
+    const isStudent = currentUser.role === 'Student';
+    const availableUsers = users.filter(u => {
+        if (u.id === currentUser.id) return false;
+        if (existingDMUsers.includes(u.id)) return false;
+
+        // Students can only start DMs with Staff/Admin
+        if (isStudent) {
+            return u.role === 'Admin' || u.role === 'Staff';
+        }
+
+        // Staff/Admin can start DMs with anyone (except maybe other students if privacy is strictly enforced, 
+        // but usually they need to message students)
+        return true;
+    });
 
     return (
         <div className="absolute inset-0 bg-black/30 z-10 flex items-center justify-center p-4" onClick={onClose}>
@@ -206,6 +293,11 @@ const DiscussView: React.FC<DiscussViewProps> = ({ user, users, isMobile, channe
 
     const activeChannel = channels.find(c => c.id === activeChannelId);
     const isAdmin = user.role === 'Admin';
+    const isStaff = user.role === 'Staff';
+    const [auditUser, setAuditUser] = useState<User | null>(null);
+    const [auditChannels, setAuditChannels] = useState<Channel[]>([]);
+    const [isAuditing, setIsAuditing] = useState(false);
+    const [auditSearch, setAuditSearch] = useState('');
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -218,11 +310,33 @@ const DiscussView: React.FC<DiscussViewProps> = ({ user, users, isMobile, channe
     }, []);
 
     const handleNewChatClick = () => {
-        if (isAdmin) {
+        if (isAdmin || isStaff) {
             setIsNewChatMenuOpen(prev => !prev);
         } else {
             setIsNewChatModalOpen(true);
         }
+    };
+
+    const handleStartAudit = async (targetUser: User) => {
+        setAuditUser(targetUser);
+        setIsAuditing(true);
+        setIsNewChatMenuOpen(false);
+        try {
+            const fetchedChannels = await api.getChannels(targetUser.id);
+            setAuditChannels(fetchedChannels);
+            if (fetchedChannels.length > 0) {
+                setActiveChannelId(fetchedChannels[0].id);
+            }
+        } catch (error) {
+            console.error("Failed to fetch audit channels", error);
+        }
+    };
+
+    const stopAuditing = () => {
+        setIsAuditing(false);
+        setAuditUser(null);
+        setAuditChannels([]);
+        setActiveChannelId('general');
     };
 
     const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -284,23 +398,46 @@ const DiscussView: React.FC<DiscussViewProps> = ({ user, users, isMobile, channe
             prevChannels.map(c => c.id === activeChannelId ? updatedChannel : c)
         );
 
+        // Note: persistence is handled by the setChannels prop in app.tsx
         if (!customMessage) {
             setNewMessage('');
         }
-
-        try {
-            await api.saveChannels([updatedChannel]);
-        } catch (error) {
-            console.error("Failed to save message", error);
-            // Revert or show error
-        }
     };
 
-    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files && e.target.files[0]) {
+    const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0] && activeChannel) {
             const file = e.target.files[0];
-            handleSendMessage(e, `[File Attached: ${file.name}]`);
-            e.target.value = '';
+            try {
+                // 1. Upload the file to the server
+                const attachment = await api.uploadChannelFile(file);
+
+                // 2. Prepare the system/user message with attachment metadata
+                const userMessage: Message = {
+                    id: Date.now(),
+                    author: user.name,
+                    avatar: user.name,
+                    text: `Shared a file: ${file.name}`,
+                    timestamp: new Date().toISOString(),
+                    attachment: {
+                        id: attachment.id,
+                        name: attachment.name,
+                        url: attachment.url,
+                        contentType: attachment.contentType,
+                        size: attachment.size
+                    }
+                };
+
+                const updatedChannel = { ...activeChannel, messages: [...activeChannel.messages, userMessage] };
+
+                // 3. Update UI
+                setChannels(prevChannels =>
+                    prevChannels.map(c => c.id === activeChannelId ? updatedChannel : c)
+                );
+            } catch (error) {
+                console.error("File upload failed", error);
+            } finally {
+                e.target.value = '';
+            }
         }
     };
 
@@ -315,22 +452,17 @@ const DiscussView: React.FC<DiscussViewProps> = ({ user, users, isMobile, channe
                 id: channelId, name: targetUser.name, type: 'dm', members: [user.id, targetUser.id],
                 messages: [{ id: Date.now(), author: 'System', avatar: 'System', text: `This is the beginning of your direct message history with ${targetUser.name}.`, timestamp: new Date().toISOString() }],
             };
-            // Optimistic update
             setChannels(prev => [...prev, newDMChannel]);
             setActiveChannelId(newDMChannel.id);
-
-            try {
-                await api.saveChannels([newDMChannel]);
-            } catch (error) {
-                console.error("Failed to create DM channel", error);
-            }
         }
         setIsNewChatModalOpen(false);
+        setIsNewChatMenuOpen(false);
     };
 
     const getChannelDisplay = (channel: Channel) => {
         if (channel.type === 'dm') {
-            const otherUserId = channel.members?.find(id => id !== user.id);
+            const perspectiveUser = isAuditing ? auditUser : user;
+            const otherUserId = channel.members?.find(id => id !== perspectiveUser?.id);
             const otherUser = users.find(u => u.id === otherUserId);
             return { name: otherUser?.name || 'Unknown User', avatarName: otherUser?.name || '?' };
         }
@@ -347,27 +479,23 @@ const DiscussView: React.FC<DiscussViewProps> = ({ user, users, isMobile, channe
 
         setChannels(prev => prev.map(c => c.id === activeChannelId ? updatedChannel : c));
         setEditingMessage(null);
-
-        try {
-            await api.saveChannels([updatedChannel]);
-        } catch (error) {
-            console.error("Failed to save edited message", error);
-        }
     };
 
-    const filteredChannels = channels.filter(channel => {
+    const displayChannels = isAuditing ? auditChannels : channels;
+
+    const filteredChannels = displayChannels.filter(channel => {
         if (!chatListSearch.trim()) return true;
         const { name } = getChannelDisplay(channel);
         return name.toLowerCase().includes(chatListSearch.toLowerCase());
     });
 
-    const ChatListItem: React.FC<{ channel: Channel }> = ({ channel }) => {
+    const renderChatListItem = (channel: Channel) => {
         const { name, avatarName } = getChannelDisplay(channel);
         const lastMessage = channel.messages[channel.messages.length - 1];
         const isActive = channel.id === activeChannelId;
 
         return (
-            <button onClick={() => { setActiveChannelId(channel.id); setIsSearchVisible(false); }} className={`w-full flex items-center p-3 text-left transition-colors ${isActive ? 'bg-lyceum-blue/10 dark:bg-lyceum-blue/20' : 'hover:bg-gray-100 dark:hover:bg-gray-700/50'}`}>
+            <button key={channel.id} onClick={() => { setActiveChannelId(channel.id); setIsSearchVisible(false); }} className={`w-full flex items-center p-3 text-left transition-colors ${isActive ? 'bg-lyceum-blue/10 dark:bg-lyceum-blue/20' : 'hover:bg-gray-100 dark:hover:bg-gray-700/50'}`}>
                 <UserAvatar name={avatarName} />
                 <div className="flex-grow ml-3 overflow-hidden">
                     <div className="flex justify-between items-center">
@@ -380,14 +508,18 @@ const DiscussView: React.FC<DiscussViewProps> = ({ user, users, isMobile, channe
         )
     };
 
-    const ChatWindow = () => {
+    const renderChatWindow = () => {
+        const currentChannels = isAuditing ? auditChannels : channels;
+        const activeChannel = currentChannels.find(c => c.id === activeChannelId);
+
         if (!activeChannel) {
             return (
                 <div className="flex-1 flex-col items-center justify-center hidden md:flex" style={{
-                    backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%232A6F97' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`
+                    backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%232A6F97' fill-opacity='0.1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`
                 }}>
                     <MessageCircle size={64} className="text-gray-300 dark:text-gray-600" />
                     <h2 className="mt-4 text-xl font-medium text-gray-500 dark:text-gray-400">Select a chat to start messaging</h2>
+                    {isAuditing && auditUser && <p className="mt-2 text-sm text-amber-600 bg-amber-50 px-3 py-1 rounded-full font-medium">Auditing: {auditUser.name}</p>}
                 </div>
             );
         }
@@ -421,10 +553,15 @@ const DiscussView: React.FC<DiscussViewProps> = ({ user, users, isMobile, channe
                             <UserAvatar name={avatarName} />
                             <div className="ml-3">
                                 <h2 className="font-bold text-gray-800 dark:text-gray-100">{name}</h2>
-                                <p className="text-xs text-green-500">online</p>
+                                {isAuditing ? (
+                                    <p className="text-xs text-amber-600 font-medium italic">Viewing as Auditor</p>
+                                ) : (
+                                    <p className="text-xs text-green-500">online</p>
+                                )}
                             </div>
                             <div className="ml-auto flex items-center gap-4 text-gray-500 dark:text-gray-400">
                                 <button onClick={() => setIsSearchVisible(true)}><Search size={20} /></button>
+                                {isAuditing && <button onClick={stopAuditing} className="text-xs bg-red-100 text-red-600 px-2 py-1 rounded-md hover:bg-red-200">Exit Audit</button>}
                             </div>
                         </>
                     )}
@@ -439,37 +576,48 @@ const DiscussView: React.FC<DiscussViewProps> = ({ user, users, isMobile, channe
                             key={msg.id}
                             ref={el => { messageRefs.current[msg.id] = el; }}
                             message={msg}
-                            isCurrentUser={msg.author === user.name}
+                            isCurrentUser={msg.author === (isAuditing ? auditUser?.name : user.name)}
                             isEditing={editingMessage?.id === msg.id}
                             onStartEdit={setEditingMessage}
                             onSaveEdit={handleSaveEdit}
                             onCancelEdit={() => setEditingMessage(null)}
                             isHighlighted={searchResultsRef.current[currentResultIndex] === msg.id}
+                            isReadOnly={isAuditing}
                         />
                     ))}
                     <div ref={messagesEndRef} />
                 </div>
 
                 { }
+                {/* Input Area (Disabled in Audit Mode) */}
                 <div className="p-4 bg-gray-50 dark:bg-gray-800 flex-shrink-0">
-                    <form onSubmit={handleSendMessage} className="relative flex items-center">
-                        <input type="file" ref={fileInputRef} onChange={handleFileSelect} className="hidden" />
-                        <button type="button" onClick={() => fileInputRef.current?.click()} className="p-3 text-gray-500 hover:text-lyceum-blue"><Paperclip size={20} /></button>
-                        <input type="text" value={newMessage} onChange={e => setNewMessage(e.target.value)} placeholder="Type a message..." className="w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-full py-3 pl-5 pr-14 text-gray-800 dark:text-gray-100 focus:ring-2 focus:ring-lyceum-blue focus:border-lyceum-blue" />
-                        <button type="submit" className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center text-white bg-lyceum-blue rounded-full hover:bg-lyceum-blue-dark disabled:opacity-50" disabled={!newMessage.trim()}><Send size={20} /></button>
-                    </form>
+                    {isAuditing ? (
+                        <div className="bg-amber-50 border border-amber-200 text-amber-700 px-4 py-3 rounded-xl text-center text-sm font-medium">
+                            Transparency Mode: Messages are read-only during an audit.
+                        </div>
+                    ) : (
+                        <form onSubmit={handleSendMessage} className="relative flex items-center">
+                            <input type="file" ref={fileInputRef} onChange={handleFileSelect} className="hidden" />
+                            <button type="button" onClick={() => fileInputRef.current?.click()} className="p-3 text-gray-500 hover:text-lyceum-blue"><Paperclip size={20} /></button>
+                            <input type="text" value={newMessage} onChange={e => setNewMessage(e.target.value)} placeholder="Type a message..." className="w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-full py-3 pl-5 pr-14 text-gray-800 dark:text-gray-100 focus:ring-2 focus:ring-lyceum-blue focus:border-lyceum-blue" />
+                            <button type="submit" className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center text-white bg-lyceum-blue rounded-full hover:bg-lyceum-blue-dark disabled:opacity-50" disabled={!newMessage.trim()}><Send size={20} /></button>
+                        </form>
+                    )}
                 </div>
             </div>
         )
     };
 
-    const ChatList = () => (
+    const renderChatList = () => (
         <div className="w-full md:w-96 flex-shrink-0 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col">
             <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between h-16">
                 <h2 className="font-bold text-xl text-gray-800 dark:text-gray-100">Chats</h2>
                 <div className="relative">
-                    <button ref={newChatButtonRef} onClick={handleNewChatClick} className="p-1.5 text-gray-500 hover:text-lyceum-blue rounded-full hover:bg-lyceum-blue/10"><Plus size={20} /></button>
-                    {isAdmin && isNewChatMenuOpen && (
+                    <button ref={newChatButtonRef} onClick={handleNewChatClick} className="p-1.5 text-gray-500 hover:text-lyceum-blue rounded-full hover:bg-lyceum-blue/10 flex items-center gap-1">
+                        <Plus size={20} />
+                        {isAuditing && <span className="text-[10px] font-bold text-amber-600">AUDIT</span>}
+                    </button>
+                    {isNewChatMenuOpen && (
                         <div ref={newChatMenuRef} className="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg py-1 z-20 ring-1 ring-black dark:ring-white/10 ring-opacity-5">
                             <button onClick={() => { setIsNewChatModalOpen(true); setIsNewChatMenuOpen(false); }} className="w-full text-left block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
                                 New Direct Message
@@ -477,6 +625,31 @@ const DiscussView: React.FC<DiscussViewProps> = ({ user, users, isMobile, channe
                             <button onClick={() => { setIsNewGroupModalOpen(true); setIsNewChatMenuOpen(false); }} className="w-full text-left block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
                                 New Group
                             </button>
+                            {isAdmin && (
+                                <div className="border-t border-gray-100 dark:border-gray-700 mt-1 pt-1">
+                                    <div className="px-4 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Transparency Admin</div>
+                                    <div className="px-2 pb-2">
+                                        <input
+                                            type="text"
+                                            placeholder="Audit name..."
+                                            value={auditSearch}
+                                            onChange={(e) => setAuditSearch(e.target.value)}
+                                            className="w-full px-2 py-1 text-xs border rounded bg-gray-50 dark:bg-gray-900 border-gray-200 dark:border-gray-700"
+                                        />
+                                    </div>
+                                    <div className="max-h-32 overflow-y-auto">
+                                        {users.filter(u => u.name.toLowerCase().includes(auditSearch.toLowerCase()) && u.id !== user.id).map(u => (
+                                            <button
+                                                key={u.id}
+                                                onClick={() => handleStartAudit(u)}
+                                                className="w-full text-left px-4 py-1.5 text-xs text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20"
+                                            >
+                                                Audit: {u.name}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
@@ -494,7 +667,7 @@ const DiscussView: React.FC<DiscussViewProps> = ({ user, users, isMobile, channe
                 </div>
             </div>
             <div className="flex-1 overflow-y-auto">
-                {filteredChannels.map(c => <ChatListItem key={c.id} channel={c} />)}
+                {filteredChannels.map(c => renderChatListItem(c))}
             </div>
         </div>
     );
@@ -510,8 +683,8 @@ const DiscussView: React.FC<DiscussViewProps> = ({ user, users, isMobile, channe
                     onSelectUser={handleSelectUserForDM}
                     channels={channels}
                 />
-                {isAdmin && <NewGroupModal isOpen={isNewGroupModalOpen} onClose={() => setIsNewGroupModalOpen(false)} users={users} currentUser={user} onCreateGroup={onCreateGroup} />}
-                {activeChannelId ? <ChatWindow /> : <ChatList />}
+                {(isAdmin || isStaff) && <NewGroupModal isOpen={isNewGroupModalOpen} onClose={() => setIsNewGroupModalOpen(false)} users={users} currentUser={user} onCreateGroup={onCreateGroup} />}
+                {activeChannelId ? renderChatWindow() : renderChatList()}
             </div>
         )
     }
@@ -526,9 +699,9 @@ const DiscussView: React.FC<DiscussViewProps> = ({ user, users, isMobile, channe
                 onSelectUser={handleSelectUserForDM}
                 channels={channels}
             />
-            {isAdmin && <NewGroupModal isOpen={isNewGroupModalOpen} onClose={() => setIsNewGroupModalOpen(false)} users={users} currentUser={user} onCreateGroup={onCreateGroup} />}
-            <ChatList />
-            <ChatWindow />
+            {(isAdmin || isStaff) && <NewGroupModal isOpen={isNewGroupModalOpen} onClose={() => setIsNewGroupModalOpen(false)} users={users} currentUser={user} onCreateGroup={onCreateGroup} />}
+            {renderChatList()}
+            {renderChatWindow()}
         </div>
     );
 };

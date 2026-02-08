@@ -159,9 +159,18 @@ router.get('/contacts/:id/documents', authenticateToken, async (req, res) => {
 });
 
 // Users routes
-router.get('/users', authenticateToken, requireRole('Admin', 'Staff'), async (req, res) => {
+router.get('/users', authenticateToken, async (req, res) => {
   try {
-    const result = await query('SELECT id, name, email, phone, role, permissions, must_reset_password, created_at, shift_start, shift_end, working_days, joining_date, base_salary FROM users');
+    const isAdminOrStaff = req.user.role === 'Admin' || req.user.role === 'Staff';
+
+    let result;
+    if (isAdminOrStaff) {
+      result = await query('SELECT id, name, email, phone, role, permissions, must_reset_password, created_at, shift_start, shift_end, working_days, joining_date, base_salary FROM users');
+    } else {
+      // Students should only see what is necessary for chat/identifying users
+      result = await query('SELECT id, name, email, role FROM users');
+    }
+
     res.json(result.rows.map(user => ({
       ...user,
       permissions: typeof user.permissions === 'string' ? JSON.parse(user.permissions || '{}') : (user.permissions || {}),
@@ -2317,9 +2326,24 @@ router.get('/users/staff', authenticateToken, async (req, res) => {
 });
 
 // Channels routes
-router.get('/channels', authenticateToken, requireRole('Admin', 'Staff'), async (req, res) => {
+router.get('/channels', authenticateToken, async (req, res) => {
   try {
-    const result = await query('SELECT * FROM channels');
+    const { userId } = req.query;
+
+    // If Admin is auditing another user
+    if (userId && req.user.role === 'Admin') {
+      const result = await query(`
+        SELECT * FROM channels 
+        WHERE members @> $1::jsonb
+      `, [JSON.stringify([parseInt(userId)])]);
+      return res.json(result.rows);
+    }
+
+    // Normal behavior: only return channels where user is a member
+    const result = await query(`
+      SELECT * FROM channels 
+      WHERE members @> $1::jsonb
+    `, [JSON.stringify([req.user.id])]);
     res.json(result.rows);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -2358,18 +2382,69 @@ RETURNING *
 router.put('/channels/:id', authenticateToken, async (req, res) => {
   try {
     const channel = req.body;
-    await query(`
-      UPDATE channels SET name = $1, type = $2, members = $3, messages = $4
-      WHERE id = $5
-  `, [
+    const result = await query(`
+      INSERT INTO channels(id, name, type, members, messages)
+      VALUES($1, $2, $3, $4, $5)
+      ON CONFLICT (id) DO UPDATE SET
+        name = EXCLUDED.name,
+        type = EXCLUDED.type,
+        members = EXCLUDED.members,
+        messages = EXCLUDED.messages
+      RETURNING *
+    `, [
+      req.params.id,
       channel.name,
       channel.type,
       JSON.stringify(channel.members || []),
-      JSON.stringify(channel.messages || []),
-      req.params.id
+      JSON.stringify(channel.messages || [])
     ]);
-    const result = await query('SELECT * FROM channels WHERE id = $1', [req.params.id]);
     res.json(result.rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Upload channel attachment
+router.post('/channels/upload', authenticateToken, upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const result = await query(`
+      INSERT INTO channel_attachments(filename, content_type, file_data, file_size)
+      VALUES($1, $2, $3, $4)
+      RETURNING id, filename, content_type, file_size
+    `, [req.file.originalname, req.file.mimetype, req.file.buffer, req.file.size]);
+
+    const attachment = result.rows[0];
+    res.json({
+      id: attachment.id,
+      name: attachment.filename,
+      contentType: attachment.content_type,
+      size: attachment.file_size,
+      url: `/channels/attachments/${attachment.id}`
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Serve channel attachment
+router.get('/channels/attachments/:id', authenticateToken, async (req, res) => {
+  try {
+    const result = await query('SELECT filename, content_type, file_data FROM channel_attachments WHERE id = $1', [req.params.id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Attachment not found' });
+    }
+
+    const { filename, content_type, file_data } = result.rows[0];
+    res.set({
+      'Content-Type': content_type,
+      'Content-Disposition': `inline; filename="${filename}"`
+    });
+    res.send(file_data);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -2869,7 +2944,17 @@ router.delete('/quotation-templates/:id', authenticateToken, async (req, res) =>
 // Activity Log routes
 router.get('/activity-log', authenticateToken, async (req, res) => {
   try {
-    const result = await query('SELECT * FROM activity_log ORDER BY timestamp DESC LIMIT 100');
+    const { search } = req.query;
+    let result;
+    if (search) {
+      result = await query(`
+        SELECT * FROM activity_log 
+        WHERE admin_name ILIKE $1 OR action ILIKE $1 
+        ORDER BY timestamp DESC LIMIT 200
+      `, [`%${search}%`]);
+    } else {
+      result = await query('SELECT * FROM activity_log ORDER BY timestamp DESC LIMIT 100');
+    }
     res.json(result.rows);
   } catch (error) {
     res.status(500).json({ error: error.message });

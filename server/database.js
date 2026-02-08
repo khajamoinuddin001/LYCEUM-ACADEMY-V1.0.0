@@ -386,6 +386,18 @@ export async function initDatabase() {
     `);
     await migrateColumn('channels', 'createdAt', 'created_at');
 
+    // Channel Attachments table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS channel_attachments (
+        id SERIAL PRIMARY KEY,
+        filename TEXT NOT NULL,
+        content_type TEXT,
+        file_data BYTEA,
+        file_size INTEGER,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     // Coupons table
     await client.query(`
       CREATE TABLE IF NOT EXISTS coupons (
