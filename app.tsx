@@ -83,6 +83,7 @@ import TOEFLPage from './components/courses/TOEFLPage';
 import TermsPage from './components/landing page footer/TermsPage';
 import PrivacyPage from './components/landing page footer/PrivacyPage';
 import UniversityApplicationView from './components/university_application_view';
+import DestinationPage from './components/destinations/DestinationPage';
 
 // ... (keep existing types)
 
@@ -2074,6 +2075,7 @@ const App: React.FC = () => {
       <Route path="/toefl" element={<TOEFLPage onBack={() => window.history.back()} />} />
       <Route path="/terms" element={<TermsPage />} />
       <Route path="/privacy" element={<PrivacyPage />} />
+      <Route path="/destinations/:countryId" element={<DestinationPage />} />
       <Route path="/*" element={<DashboardLayout />} />
     </Routes>
   );

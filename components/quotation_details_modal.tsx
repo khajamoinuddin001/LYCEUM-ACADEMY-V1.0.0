@@ -258,7 +258,7 @@ const QuotationDetailsModal: React.FC<QuotationDetailsModalProps> = ({ quotation
                
                <div class="privacy-title">Privacy Policy</div>
                <div>Your data is secure with us. We do not share personal information.</div>
-               <div>For full policy, visit www.lyceumacademy.com/privacy</div>
+               <div>For full policy, visit <a href="/privacy" class="footer-link">lyceumacademy.com/privacy</a></div>
            </div>
            
            <div class="signature-box">
@@ -416,10 +416,10 @@ const QuotationDetailsModal: React.FC<QuotationDetailsModalProps> = ({ quotation
                             <li>This quotation is valid for 30 days from the date of issue</li>
                             <li>Payment terms as per agreement</li>
                             <li>All services subject to our standard terms and conditions</li>
-                            <li>For full terms, visit: <a href="https://www.maverickoverseas.in/terms-conditions" className="text-lyceum-blue">Terms & Conditions</a></li>
+                            <li>For full terms, visit: <a href="/terms" className="text-lyceum-blue hover:underline">Terms & Conditions</a></li>
                         </ul>
                         <h4 className="font-semibold mt-3 mb-2">Privacy Policy</h4>
-                        <p>Your privacy is important to us. For details, visit: <a href="https://www.maverickoverseas.in/privacy-policy" className="text-lyceum-blue">Privacy Policy</a></p>
+                        <p>Your privacy is important to us. For details, visit: <a href="/privacy" className="text-lyceum-blue hover:underline">Privacy Policy</a></p>
                     </div>
                 </div>
 

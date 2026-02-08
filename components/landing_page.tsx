@@ -399,7 +399,11 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onRegister, onTerms,
                             { country: 'Europe', flag: 'eu', image: 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?q=80&w=600&auto=format&fit=crop', desc: 'Affordable quality education and rich cultural heritage.' },
                             { country: 'New Zealand', flag: 'nz', image: 'https://images.unsplash.com/photo-1589802829985-817e51171b92?q=80&w=600&auto=format&fit=crop', desc: 'Safe environment with world-ranked universities.' },
                         ].map((dest, idx) => (
-                            <div key={idx} className="group relative overflow-hidden rounded-[2rem] shadow-lg hover:shadow-2xl transition-all duration-500 h-[400px] cursor-pointer">
+                            <div
+                                key={idx}
+                                onClick={() => navigate(`/destinations/${dest.country.toLowerCase().replace(' ', '-')}`)}
+                                className="group relative overflow-hidden rounded-[2rem] shadow-lg hover:shadow-2xl transition-all duration-500 h-[400px] cursor-pointer"
+                            >
                                 {/* Background Image */}
                                 <div className="absolute inset-0">
                                     <img src={dest.image} alt={dest.country} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
