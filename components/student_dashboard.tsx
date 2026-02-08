@@ -1,8 +1,9 @@
 
 
 import React, { useEffect, useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import type { Contact, LmsCourse, CalendarEvent, Visitor, User, AccountingTransaction } from '../types';
-import { GraduationCap, BookOpen, CalendarClock, Paperclip, CheckCircle2, Circle, Trophy, Calendar, Upload, Download, User as UserIcon, ArrowLeft, DollarSign, Receipt, AlertCircle } from './icons';
+import { GraduationCap, BookOpen, CalendarClock, Paperclip, CheckCircle2, Circle, Trophy, Calendar, Upload, Download, User as UserIcon, ArrowLeft, DollarSign, Receipt, AlertCircle, X, Copy, CreditCard } from './icons';
 import * as api from '../utils/api';
 import StudentAppointmentModal from './student_appointment_modal';
 
@@ -28,6 +29,19 @@ const InfoCard: React.FC<{ icon: React.ReactNode; title: string; children: React
 const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, courses, events, onAppSelect }) => {
     const [visits, setVisits] = useState<Visitor[]>([]);
     const [documents, setDocuments] = useState<any[]>([]);
+    const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+    const [paymentSettings, setPaymentSettings] = useState<{ upiId: string; qrCode: string } | null>(null);
+
+    useEffect(() => {
+        if (isPaymentModalOpen) {
+            document.body.style.overflow = 'hidden';
+        } else {
+            document.body.style.overflow = 'auto';
+        }
+        return () => {
+            document.body.style.overflow = 'auto';
+        };
+    }, [isPaymentModalOpen]);
     const [docsLoading, setDocsLoading] = useState(true);
     const [uploading, setUploading] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -45,6 +59,7 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, courses, e
             api.getContactVisits(student.id).then(setVisits).catch(console.error);
             loadDocuments(student.id);
             loadTransactions(student);
+            api.getPaymentSettings().then(setPaymentSettings).catch(console.error);
 
             const interval = setInterval(() => {
                 api.getContactVisits(student.id).then(v => {
@@ -562,7 +577,10 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, courses, e
                                     }).format(totalPaid)}
                                 </p>
                             </div>
-                            <div className="bg-yellow-50 dark:bg-yellow-900/20 rounded-lg p-3 border border-yellow-100 dark:border-yellow-800">
+                            <div
+                                onClick={() => totalPending > 0 && setIsPaymentModalOpen(true)}
+                                className={`bg-yellow-50 dark:bg-yellow-900/20 rounded-lg p-3 border border-yellow-100 dark:border-yellow-800 ${totalPending > 0 ? 'cursor-pointer hover:bg-yellow-100 dark:hover:bg-yellow-900/40 transition-colors' : ''}`}
+                            >
                                 <p className="text-[10px] font-bold text-yellow-700 dark:text-yellow-500 uppercase tracking-wider">Pending</p>
                                 <p className="text-base font-bold text-gray-900 dark:text-white mt-1">
                                     {new Intl.NumberFormat('en-IN', {
@@ -783,6 +801,85 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, courses, e
                 shiftStart={activeCounselor?.details?.shiftStart || student.counselorDetails?.shiftStart}
                 shiftEnd={activeCounselor?.details?.shiftEnd || student.counselorDetails?.shiftEnd}
             />
+
+            {/* Payment Information Modal */}
+            {isPaymentModalOpen && paymentSettings && createPortal(
+                <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md top-0 left-0 w-full h-full">
+                    <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md animate-fade-in border border-gray-100 dark:border-gray-700 flex flex-col max-h-[90vh] overflow-hidden">
+                        <div className="p-6 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center shrink-0">
+                            <div>
+                                <h3 className="text-xl font-bold text-gray-900 dark:text-white">Payment Information</h3>
+                                <p className="text-sm text-gray-500 dark:text-gray-400">Scan QR or use UPI ID to pay</p>
+                            </div>
+                            <button
+                                onClick={() => setIsPaymentModalOpen(false)}
+                                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full text-gray-500 dark:text-gray-400 transition-colors"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <div className="p-6 flex flex-col items-center overflow-y-auto custom-scrollbar">
+                            {paymentSettings.qrCode ? (
+                                <div className="bg-white p-4 rounded-2xl shadow-inner border border-gray-100 mb-6 shrink-0">
+                                    <img
+                                        src={paymentSettings.qrCode}
+                                        alt="Payment QR Code"
+                                        className="w-56 h-56 object-contain"
+                                    />
+                                </div>
+                            ) : (
+                                <div className="w-56 h-56 bg-gray-50 dark:bg-gray-900 rounded-2xl border-2 border-dashed border-gray-200 dark:border-gray-700 flex flex-col items-center justify-center text-center p-4 mb-6 shrink-0">
+                                    <CreditCard size={40} className="text-gray-300 mb-2" />
+                                    <p className="text-xs text-gray-500">QR code not available</p>
+                                </div>
+                            )}
+
+                            {paymentSettings.upiId ? (
+                                <div className="w-full space-y-3 mb-6">
+                                    <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider block text-center">UPI ID</label>
+                                    <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-900 p-3 rounded-xl border border-gray-200 dark:border-gray-700">
+                                        <code className="flex-1 font-mono text-sm text-center text-lyceum-blue font-bold">{paymentSettings.upiId}</code>
+                                        <button
+                                            onClick={() => {
+                                                navigator.clipboard.writeText(paymentSettings.upiId);
+                                                alert('UPI ID copied to clipboard!');
+                                            }}
+                                            className="p-2 hover:bg-gray-200 dark:hover:bg-gray-800 rounded-lg text-gray-400 dark:text-gray-500 transition-colors"
+                                            title="Copy UPI ID"
+                                        >
+                                            <Copy size={16} />
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <p className="text-sm text-gray-500 dark:text-gray-400 text-center mb-6">No UPI ID configured.</p>
+                            )}
+
+                            <div className="w-full space-y-3 bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl border border-blue-100 dark:border-blue-800">
+                                <p className="text-xs text-blue-800 dark:text-blue-300 flex gap-2">
+                                    <span className="font-bold shrink-0">Note:</span>
+                                    <span>This QR code could be changed any time so please do not save it.</span>
+                                </p>
+                                <p className="text-xs text-blue-800 dark:text-blue-300 flex gap-2">
+                                    <span className="font-bold shrink-0">Action:</span>
+                                    <span>After doing successful payment contact your respected counselor or share payment details with your info on <strong>7075840681</strong>.</span>
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="p-4 bg-gray-50 dark:bg-gray-900/50 flex justify-center shrink-0 rounded-b-2xl">
+                            <button
+                                onClick={() => setIsPaymentModalOpen(false)}
+                                className="px-6 py-2 bg-lyceum-blue text-white font-bold rounded-xl shadow-lg hover:bg-lyceum-blue-dark transition-all transform hover:scale-105 active:scale-95"
+                            >
+                                Done
+                            </button>
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
         </div>
     );
 };

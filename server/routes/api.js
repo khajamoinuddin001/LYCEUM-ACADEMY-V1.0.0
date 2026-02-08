@@ -3086,6 +3086,55 @@ router.get('/settings/office-location', authenticateToken, async (req, res) => {
   }
 });
 
+// Payment Settings
+router.get('/settings/payment', authenticateToken, async (req, res) => {
+  try {
+    const upiResult = await query('SELECT value FROM system_settings WHERE key = $1', ['PAYMENT_UPI_ID']);
+    const qrResult = await query('SELECT value FROM system_settings WHERE key = $1', ['PAYMENT_QR_CODE']);
+
+    res.json({
+      upiId: upiResult.rows[0]?.value?.upiId || '',
+      qrCode: qrResult.rows[0]?.value?.qrCode || null // This will be the base64 data
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/settings/payment', authenticateToken, requireRole('Admin'), async (req, res) => {
+  try {
+    const { upiId } = req.body;
+    await query(`
+      INSERT INTO system_settings(key, value)
+      VALUES($1, $2)
+      ON CONFLICT(key) DO UPDATE SET value = $2
+    `, ['PAYMENT_UPI_ID', { upiId }]);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/settings/payment-qr', authenticateToken, requireRole('Admin'), upload.single('qrCode'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const base64Data = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+
+    await query(`
+      INSERT INTO system_settings(key, value)
+      VALUES($1, $2)
+      ON CONFLICT(key) DO UPDATE SET value = $2
+    `, ['PAYMENT_QR_CODE', { qrCode: base64Data }]);
+
+    res.json({ success: true, qrCode: base64Data });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Attendance routes
 router.post('/attendance/check-in', authenticateToken, async (req, res) => {
   try {

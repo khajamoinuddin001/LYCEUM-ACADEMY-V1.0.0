@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Bell, FileText, Edit, Trash2, Plus, User as UserIcon, Lock, Palette, DollarSign } from './icons';
+import { ArrowLeft, Bell, FileText, Edit, Trash2, Plus, User as UserIcon, Lock, Palette, DollarSign, CreditCard } from './icons';
+import * as api from '../utils/api';
 import type { QuotationTemplate, User, Coupon, LmsCourse } from '../types';
 import QuotationTemplateModal from './quotation_template_modal';
 import CouponEditModal from './coupon_edit_modal';
@@ -20,15 +21,16 @@ interface SettingsViewProps {
     courses: LmsCourse[];
 }
 
-type Tab = 'Profile' | 'Security' | 'Appearance' | 'Notifications' | 'Templates' | 'Coupons';
+type Tab = 'Profile' | 'Security' | 'Appearance' | 'Notifications' | 'Templates' | 'Coupons' | 'Payment';
 
-const TABS: { name: Tab; icon: React.ReactNode }[] = [
+const TABS: { name: Tab; icon: React.ReactNode; adminOnly?: boolean }[] = [
     { name: 'Profile', icon: <UserIcon size={18} /> },
     { name: 'Security', icon: <Lock size={18} /> },
     { name: 'Appearance', icon: <Palette size={18} /> },
     { name: 'Notifications', icon: <Bell size={18} /> },
     { name: 'Templates', icon: <FileText size={18} /> },
     { name: 'Coupons', icon: <DollarSign size={18} /> },
+    { name: 'Payment', icon: <CreditCard size={18} />, adminOnly: true },
 ];
 
 const inputClasses = "w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-lyceum-blue focus:border-lyceum-blue sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white";
@@ -304,6 +306,125 @@ const CouponsTab: React.FC<Pick<SettingsViewProps, 'coupons' | 'onSaveCoupon' | 
         </div>
     );
 };
+const PaymentTab: React.FC = () => {
+    const [upiId, setUpiId] = useState('');
+    const [qrCode, setQrCode] = useState<string | null>(null);
+    const [isSaving, setIsSaving] = useState(false);
+    const [isUploading, setIsUploading] = useState(false);
+    const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+
+    React.useEffect(() => {
+        const loadSettings = async () => {
+            try {
+                const settings = await api.getPaymentSettings();
+                setUpiId(settings.upiId || '');
+                setQrCode(settings.qrCode);
+            } catch (error) {
+                console.error('Failed to load payment settings:', error);
+            }
+        };
+        loadSettings();
+    }, []);
+
+    const handleSaveUpi = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsSaving(true);
+        setMessage(null);
+        try {
+            await api.savePaymentSettings(upiId);
+            setMessage({ type: 'success', text: 'UPI ID saved successfully!' });
+        } catch (error: any) {
+            setMessage({ type: 'error', text: error.message || 'Failed to save UPI ID' });
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleQrUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setIsUploading(true);
+        setMessage(null);
+        try {
+            const result = await api.uploadPaymentQr(file);
+            setQrCode(result.qrCode);
+            setMessage({ type: 'success', text: 'QR Code uploaded successfully!' });
+        } catch (error: any) {
+            setMessage({ type: 'error', text: error.message || 'Failed to upload QR Code' });
+        } finally {
+            setIsUploading(false);
+        }
+    };
+
+    return (
+        <div>
+            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+                <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Payment Settings</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Configure payment details for student billing.</p>
+            </div>
+            <div className="p-6 space-y-8">
+                <form onSubmit={handleSaveUpi} className="space-y-4">
+                    <div>
+                        <label htmlFor="upi-id" className={labelClasses}>UPI ID</label>
+                        <div className="flex gap-2">
+                            <input
+                                type="text"
+                                id="upi-id"
+                                value={upiId}
+                                onChange={e => setUpiId(e.target.value)}
+                                className={inputClasses}
+                                placeholder="e.g. academy@upi"
+                            />
+                            <button
+                                type="submit"
+                                disabled={isSaving}
+                                className="px-4 py-2 bg-lyceum-blue text-white rounded-md shadow-sm text-sm font-medium hover:bg-lyceum-blue-dark focus:outline-none disabled:opacity-50"
+                            >
+                                {isSaving ? 'Saving...' : 'Save'}
+                            </button>
+                        </div>
+                    </div>
+                </form>
+
+                <div className="space-y-4">
+                    <label className={labelClasses}>Payment QR Code</label>
+                    <div className="flex flex-col items-center p-6 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-800/50">
+                        {qrCode ? (
+                            <div className="relative mb-4 group">
+                                <img src={qrCode} alt="Payment QR" className="w-48 h-48 object-contain rounded-lg shadow-sm bg-white p-2" />
+                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-lg">
+                                    <label className="cursor-pointer text-white text-sm font-medium bg-lyceum-blue px-3 py-1.5 rounded-md">
+                                        Change Photo
+                                        <input type="file" className="hidden" accept="image/*" onChange={handleQrUpload} disabled={isUploading} />
+                                    </label>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="text-center">
+                                <FileText className="mx-auto h-12 w-12 text-gray-400 mb-2" />
+                                <p className="text-sm text-gray-500 dark:text-gray-400">No QR code uploaded yet.</p>
+                                <label className="mt-4 inline-flex items-center px-4 py-2 bg-lyceum-blue text-white rounded-md shadow-sm text-sm font-medium hover:bg-lyceum-blue-dark cursor-pointer transition-colors">
+                                    Upload QR Code
+                                    <input type="file" className="hidden" accept="image/*" onChange={handleQrUpload} disabled={isUploading} />
+                                </label>
+                            </div>
+                        )}
+                        {isUploading && <p className="mt-2 text-xs text-lyceum-blue animate-pulse">Uploading...</p>}
+                        <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Recommended: Square image, PNG or JPG (max 5MB)</p>
+                    </div>
+                </div>
+
+                {message && (
+                    <div className={`p-4 rounded-md ${message.type === 'success' ? 'bg-green-100/50 text-green-800 border border-green-200' : 'bg-red-100/50 text-red-800 border border-red-200'}`}>
+                        <p className="text-sm">{message.text}</p>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
 const SettingsView: React.FC<SettingsViewProps> = (props) => {
     const [activeTab, setActiveTab] = useState<Tab>('Profile');
 
@@ -315,6 +436,7 @@ const SettingsView: React.FC<SettingsViewProps> = (props) => {
             case 'Notifications': return <NotificationsTab />;
             case 'Templates': return <TemplatesTab {...props} />;
             case 'Coupons': return <CouponsTab {...props} />;
+            case 'Payment': return <PaymentTab />;
             default: return null;
         }
     };
@@ -336,17 +458,19 @@ const SettingsView: React.FC<SettingsViewProps> = (props) => {
                 <aside className="md:w-1/4">
                     <nav className="space-y-1">
                         {TABS.map(tab => (
-                            <button
-                                key={tab.name}
-                                onClick={() => setActiveTab(tab.name)}
-                                className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === tab.name
-                                    ? 'bg-lyceum-blue/10 dark:bg-lyceum-blue/20 text-lyceum-blue'
-                                    : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                                    }`}
-                            >
-                                {tab.icon}
-                                <span className="ml-3">{tab.name}</span>
-                            </button>
+                            tab.adminOnly && props.user.role !== 'Admin' ? null : (
+                                <button
+                                    key={tab.name}
+                                    onClick={() => setActiveTab(tab.name)}
+                                    className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === tab.name
+                                        ? 'bg-lyceum-blue/10 dark:bg-lyceum-blue/20 text-lyceum-blue'
+                                        : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                                        }`}
+                                >
+                                    {tab.icon}
+                                    <span className="ml-3">{tab.name}</span>
+                                </button>
+                            )
                         ))}
                     </nav>
                 </aside>

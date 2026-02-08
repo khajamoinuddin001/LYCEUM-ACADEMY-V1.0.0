@@ -725,6 +725,38 @@ export const getOfficeLocation = async () => {
   return await apiRequest<{ lat: number; lng: number } | null>('/settings/office-location', { method: 'GET' });
 };
 
+export const getPaymentSettings = async () => {
+  return await apiRequest<{ upiId: string; qrCode: string | null }>('/settings/payment', { method: 'GET' });
+};
+
+export const savePaymentSettings = async (upiId: string) => {
+  return await apiRequest<{ success: boolean }>('/settings/payment', {
+    method: 'POST',
+    body: JSON.stringify({ upiId })
+  });
+};
+
+export const uploadPaymentQr = async (file: File) => {
+  const formData = new FormData();
+  formData.append('qrCode', file);
+
+  const token = getToken();
+  const response = await fetch(`${API_BASE_URL}/settings/payment-qr`, {
+    method: 'POST',
+    headers: {
+      ...(token && { 'Authorization': `Bearer ${token}` }),
+    },
+    body: formData
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || 'Failed to upload QR code');
+  }
+
+  return await response.json();
+};
+
 export const applyLeave = async (leave: { startDate: string; endDate: string; reason: string }) => {
   return await apiRequest('/leaves', {
     method: 'POST',
