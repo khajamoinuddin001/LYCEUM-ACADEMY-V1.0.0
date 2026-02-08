@@ -1,8 +1,8 @@
 
 
 import React, { useEffect, useState, useRef } from 'react';
-import type { Contact, LmsCourse, CalendarEvent, Visitor, User } from '../types';
-import { GraduationCap, BookOpen, CalendarClock, Paperclip, CheckCircle2, Circle, Trophy, Calendar, Upload, Download, User as UserIcon, ArrowLeft } from './icons';
+import type { Contact, LmsCourse, CalendarEvent, Visitor, User, AccountingTransaction } from '../types';
+import { GraduationCap, BookOpen, CalendarClock, Paperclip, CheckCircle2, Circle, Trophy, Calendar, Upload, Download, User as UserIcon, ArrowLeft, DollarSign, Receipt, AlertCircle } from './icons';
 import * as api from '../utils/api';
 import StudentAppointmentModal from './student_appointment_modal';
 
@@ -35,11 +35,16 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, courses, e
     const [showUniversityDetails, setShowUniversityDetails] = useState(false);
     const [isAppointmentModalOpen, setIsAppointmentModalOpen] = useState(false);
     const [activeCounselor, setActiveCounselor] = useState<{ name: string; details: any } | null>(null);
+    const [totalPending, setTotalPending] = useState<number>(0);
+    const [totalAgreed, setTotalAgreed] = useState<number>(0);
+    const [totalPaid, setTotalPaid] = useState<number>(0);
+    const [isAccountsLoading, setIsAccountsLoading] = useState(true);
 
     useEffect(() => {
         if (student) {
             api.getContactVisits(student.id).then(setVisits).catch(console.error);
             loadDocuments(student.id);
+            loadTransactions(student);
 
             const interval = setInterval(() => {
                 api.getContactVisits(student.id).then(v => {
@@ -49,6 +54,11 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, courses, e
                 // Silent document reload (no spinner)
                 api.getContactDocuments(student.id).then(d => {
                     setDocuments(prev => JSON.stringify(prev) !== JSON.stringify(d) ? d : prev);
+                }).catch(console.error);
+
+                // Silent accounts reload
+                api.getTransactions().then(allTransactions => {
+                    calculateBalance(student, allTransactions);
                 }).catch(console.error);
             }, 5000);
 
@@ -65,6 +75,45 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, courses, e
             console.error('Failed to load documents:', error);
         } finally {
             setDocsLoading(false);
+        }
+    };
+
+    const calculateBalance = (contact: Contact, allTransactions: AccountingTransaction[]) => {
+        // Match transactions by ID or Name
+        const studentTransactions = allTransactions.filter(
+            (t) => (t.contactId === contact.id || (t.customerName && contact.name && t.customerName.toLowerCase().trim() === contact.name.toLowerCase().trim())) && (t.type === 'Income' || t.type === 'Invoice')
+        );
+
+        // 1. Total Amount = Total Agreed Amount (Sum of all AR entries' original totals)
+        const arEntries = (contact as any).metadata?.accountsReceivable || [];
+        const totalAgreedAmount = arEntries.reduce((sum: number, entry: any) => {
+            const remaining = parseFloat(entry.remainingAmount) || 0;
+            const paid = parseFloat(entry.paidAmount) || 0;
+            return sum + remaining + paid;
+        }, 0);
+        // 2. Paid Amount = Sum of Paid Invoices/Income
+        const studentPaidAmount = studentTransactions
+            .filter((t) => t.status === 'Paid')
+            .reduce((sum, t) => sum + t.amount, 0);
+
+        // 3. Pending = Total Agreed - Total Invoiced (regardless of payment status)
+        const totalInvoiced = studentTransactions.reduce((sum, t) => sum + t.amount, 0);
+
+        const calculatedPending = Math.max(0, totalAgreedAmount - totalInvoiced);
+        setTotalAgreed(totalAgreedAmount);
+        setTotalPaid(studentPaidAmount);
+        setTotalPending(arEntries.length > 0 ? calculatedPending : 0);
+    };
+
+    const loadTransactions = async (contact: Contact) => {
+        try {
+            setIsAccountsLoading(true);
+            const allTransactions = await api.getTransactions();
+            calculateBalance(contact, allTransactions);
+        } catch (error) {
+            console.error('Failed to load transactions:', error);
+        } finally {
+            setIsAccountsLoading(false);
         }
     };
 
@@ -470,6 +519,73 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, courses, e
                         </>
                     ) : (
                         <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-2">No documents on file.</p>
+                    )}
+                </InfoCard>
+
+                <InfoCard icon={<DollarSign size={20} />} title="Accounts">
+                    <div className="flex items-center justify-between mb-3">
+                        <p className="text-sm text-gray-600 dark:text-gray-300">
+                            Account Overview
+                        </p>
+                        {isAccountsLoading && (
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-lyceum-blue"></div>
+                        )}
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-3">
+                        {/* Total Amount */}
+                        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 border border-blue-100 dark:border-blue-800 flex justify-between items-center">
+                            <div>
+                                <p className="text-[10px] font-bold text-blue-700 dark:text-blue-500 uppercase tracking-wider">Total Amount</p>
+                                <p className="text-lg font-bold text-gray-900 dark:text-white">
+                                    {new Intl.NumberFormat('en-IN', {
+                                        style: 'currency',
+                                        currency: 'INR',
+                                        minimumFractionDigits: 0
+                                    }).format(totalAgreed)}
+                                </p>
+                            </div>
+                            <div className="p-2 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-blue-100 dark:border-blue-800">
+                                <DollarSign className="text-blue-500" size={18} />
+                            </div>
+                        </div>
+
+                        {/* Paid & Pending Row */}
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-3 border border-green-100 dark:border-green-800">
+                                <p className="text-[10px] font-bold text-green-700 dark:text-green-500 uppercase tracking-wider">Paid Amount</p>
+                                <p className="text-base font-bold text-gray-900 dark:text-white mt-1">
+                                    {new Intl.NumberFormat('en-IN', {
+                                        style: 'currency',
+                                        currency: 'INR',
+                                        minimumFractionDigits: 0
+                                    }).format(totalPaid)}
+                                </p>
+                            </div>
+                            <div className="bg-yellow-50 dark:bg-yellow-900/20 rounded-lg p-3 border border-yellow-100 dark:border-yellow-800">
+                                <p className="text-[10px] font-bold text-yellow-700 dark:text-yellow-500 uppercase tracking-wider">Pending</p>
+                                <p className="text-base font-bold text-gray-900 dark:text-white mt-1">
+                                    {new Intl.NumberFormat('en-IN', {
+                                        style: 'currency',
+                                        currency: 'INR',
+                                        minimumFractionDigits: 0
+                                    }).format(totalPending)}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button
+                        onClick={() => onAppSelect('Accounts')}
+                        className="w-full mt-4 py-2 text-xs font-bold text-lyceum-blue bg-lyceum-blue/5 rounded-lg hover:bg-lyceum-blue/10 transition-colors flex items-center justify-center gap-2"
+                    >
+                        View Full Accounts
+                    </button>
+                    {totalPending > 0 && (
+                        <div className="mt-3 flex items-start gap-2 text-[10px] text-gray-500 dark:text-gray-400">
+                            <AlertCircle size={12} className="flex-shrink-0 mt-0.5" />
+                            <p>Please ensure all pending payments are cleared at time!</p>
+                        </div>
                     )}
                 </InfoCard>
 

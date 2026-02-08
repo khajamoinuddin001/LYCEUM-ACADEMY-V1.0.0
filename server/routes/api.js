@@ -29,6 +29,7 @@ router.post('/documents', authenticateToken, async (req, res) => {
 
       const contactId = parseInt(req.body.contactId);
       const isPrivate = req.body.isPrivate === 'true';
+      const category = req.body.category || null;
       const file = req.file;
 
       if (!file) {
@@ -65,10 +66,10 @@ router.post('/documents', authenticateToken, async (req, res) => {
       }
 
       const result = await query(`
-        INSERT INTO documents (contact_id, name, type, size, content, is_private)
-        VALUES ($1, $2, $3, $4, $5, $6)
-        RETURNING id, contact_id, name, type, size, uploaded_at, is_private
-      `, [contactId, file.originalname, file.mimetype, file.size, file.buffer, isPrivate]);
+        INSERT INTO documents (contact_id, name, type, size, content, is_private, category)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        RETURNING id, contact_id, name, type, size, uploaded_at, is_private, category
+      `, [contactId, file.originalname, file.mimetype, file.size, file.buffer, isPrivate, category]);
 
       res.json(result.rows[0]);
     });
@@ -142,7 +143,7 @@ router.get('/contacts/:id/documents', authenticateToken, async (req, res) => {
       return res.status(403).json({ error: 'Unauthorized' });
     }
 
-    let queryText = 'SELECT id, contact_id, name, type, size, uploaded_at, is_private FROM documents WHERE contact_id = $1';
+    let queryText = 'SELECT id, contact_id, name, type, size, uploaded_at, is_private, category FROM documents WHERE contact_id = $1';
 
     // Filter private docs for students
     if (req.user.role === 'Student') {

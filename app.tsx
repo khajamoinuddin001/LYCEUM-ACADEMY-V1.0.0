@@ -326,10 +326,10 @@ const DashboardLayout: React.FC = () => {
           console.log("Polling error silently ignored");
         }
       }
-    }, 5000); // 5 seconds
+    }, 30000); // 5 seconds
 
     return () => clearInterval(pollInterval);
-  }, []); // Run once on mount (setup both initial load and interval)
+  }, [currentUser?.id]); // Run once on mount (setup both initial load and interval)
 
   useEffect(() => {
     if (currentUser) {
@@ -490,6 +490,23 @@ const DashboardLayout: React.FC = () => {
     setImpersonatingUser(null);
     setActiveApp('Apps');
     setShowLandingPage(true); // Show landing page after logout
+
+    // Clear all data states to prevent stale data visibility
+    setUsers([]);
+    setActivityLog([]);
+    setPaymentActivityLog([]);
+    setContacts([]);
+    setTransactions([]);
+    setLeads([]);
+    setQuotationTemplates([]);
+    setVisitors([]);
+    setTasks([]);
+    setRawEvents([]);
+    setChannels([]);
+    setCoupons([]);
+    setLmsCourses([]);
+    setNotifications([]);
+    setTickets([]);
   };
 
   const handleForgotPassword = async (email: string): Promise<{ success: boolean; message: string }> => {

@@ -74,13 +74,28 @@ const ContactDocumentsView: React.FC<ContactDocumentsViewProps> = ({ contact, on
   const [uploading, setUploading] = useState(false);
   const [analyzingDocId, setAnalyzingDocId] = useState<number | null>(null);
   const [isPrivate, setIsPrivate] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<string>('Passport');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const categories = [
+    'Passport',
+    'Educational Documents',
+    "Financial Document & Affidavit of Support / CA Report & ITR's",
+    'Gap Justification',
+    'Other'
+  ];
 
   const isStaffOrAdmin = user?.role === 'Admin' || user?.role === 'Staff';
 
   // Separate documents
   const commonDocs = documents.filter(d => !d.is_private);
   const privateDocs = documents.filter(d => d.is_private);
+
+  // Group common documents by category
+  const groupedDocs = categories.reduce((acc, cat) => {
+    acc[cat] = commonDocs.filter(d => d.category === cat || (!d.category && cat === 'Other'));
+    return acc;
+  }, {} as Record<string, Doc[]>);
 
   useEffect(() => {
     loadDocuments();
@@ -104,7 +119,7 @@ const ContactDocumentsView: React.FC<ContactDocumentsViewProps> = ({ contact, on
 
     try {
       setUploading(true);
-      await api.uploadDocument(contact.id, file, isPrivate);
+      await api.uploadDocument(contact.id, file, isPrivate, isPrivate ? null : selectedCategory);
       await loadDocuments();
       setIsPrivate(false); // Reset
     } catch (error) {
@@ -149,7 +164,7 @@ const ContactDocumentsView: React.FC<ContactDocumentsViewProps> = ({ contact, on
 
   return (
     <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm w-full mx-auto animate-fade-in">
-      <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-200 dark:border-gray-700">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between mb-6 pb-4 border-b border-gray-200 dark:border-gray-700 gap-4">
         <div>
           <button
             onClick={onNavigateBack}
@@ -162,7 +177,7 @@ const ContactDocumentsView: React.FC<ContactDocumentsViewProps> = ({ contact, on
             Documents for {contact.name}
           </h1>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-4">
           {isStaffOrAdmin && (
             <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300 cursor-pointer">
               <input
@@ -175,6 +190,18 @@ const ContactDocumentsView: React.FC<ContactDocumentsViewProps> = ({ contact, on
             </label>
           )}
 
+          {!isPrivate && (
+            <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              className="text-sm border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-md shadow-sm focus:border-lyceum-blue focus:ring-lyceum-blue h-10 px-3"
+            >
+              {categories.map(cat => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+          )}
+
           <input
             type="file"
             ref={fileInputRef}
@@ -184,7 +211,7 @@ const ContactDocumentsView: React.FC<ContactDocumentsViewProps> = ({ contact, on
           />
           <label
             htmlFor="file-upload"
-            className={`inline-flex items-center px-4 py-2 bg-lyceum-blue text-white rounded-md shadow-sm hover:bg-lyceum-blue-dark cursor-pointer ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}
+            className={`inline-flex items-center px-4 py-2 bg-lyceum-blue text-white rounded-md shadow-sm hover:bg-lyceum-blue-dark cursor-pointer h-10 ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
             <Upload size={16} className="mr-2" />
             {uploading ? 'Uploading...' : `Upload ${isPrivate ? 'Private ' : ''}Document`}
@@ -199,32 +226,40 @@ const ContactDocumentsView: React.FC<ContactDocumentsViewProps> = ({ contact, on
         </div>
       ) : (
         <div className="space-y-8">
-          {/* Common Section */}
-          <div>
-            {isStaffOrAdmin && <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-2">Common Documents (Visible to Student)</h3>}
-            {commonDocs.length > 0 ? (
-              <ul className="divide-y divide-gray-200 dark:divide-gray-700 bg-gray-50 dark:bg-gray-700/30 rounded-lg px-4">
-                {commonDocs.map((doc) => (
-                  <DocumentItem
-                    key={doc.id}
-                    doc={doc}
-                    analyzingDocId={analyzingDocId}
-                    handleAnalyzeClick={handleAnalyzeClick}
-                    handleDownload={handleDownload}
-                    handleDelete={handleDelete}
-                    isStaffOrAdmin={isStaffOrAdmin}
-                  />
-                ))}
-              </ul>
-            ) : (
-              <p className="text-gray-500 italic text-sm p-4">No common documents.</p>
-            )}
+          {/* Categorized Common Documents */}
+          <div className="space-y-6">
+            <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100 border-l-4 border-lyceum-blue pl-3">Common Documents</h3>
+            {categories.map(category => (
+              <div key={category} className="space-y-3">
+                <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest flex items-center gap-2">
+                  <span>{category}</span>
+                  <div className="h-px bg-gray-200 dark:bg-gray-700 flex-grow"></div>
+                </h4>
+                {groupedDocs[category].length > 0 ? (
+                  <ul className="divide-y divide-gray-200 dark:divide-gray-700 bg-gray-50 dark:bg-gray-700/30 rounded-lg px-4 border border-gray-100 dark:border-gray-800">
+                    {groupedDocs[category].map((doc) => (
+                      <DocumentItem
+                        key={doc.id}
+                        doc={doc}
+                        analyzingDocId={analyzingDocId}
+                        handleAnalyzeClick={handleAnalyzeClick}
+                        handleDownload={handleDownload}
+                        handleDelete={handleDelete}
+                        isStaffOrAdmin={isStaffOrAdmin}
+                      />
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-gray-400 italic text-xs pl-4 pb-2">No documents in this category.</p>
+                )}
+              </div>
+            ))}
           </div>
 
           {/* Private Section */}
           {isStaffOrAdmin && (
-            <div>
-              <h3 className="text-sm font-bold text-red-500 uppercase tracking-wider mb-2 flex items-center gap-2">
+            <div className="pt-6 border-t border-gray-200 dark:border-gray-700">
+              <h3 className="text-sm font-bold text-red-500 uppercase tracking-wider mb-4 flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-red-500"></div>
                 Internal / Staff Only Documents
               </h3>

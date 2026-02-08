@@ -117,6 +117,7 @@ export interface Document {
   size: string;
   uploadDate: string;
   is_private?: boolean;
+  category?: string;
 }
 
 export interface UniversityApplicationDetails {

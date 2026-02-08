@@ -181,11 +181,12 @@ export const addUser = async (newUser: Omit<User, 'id' | 'permissions'>): Promis
 };
 
 // Document endpoints
-export const uploadDocument = async (contactId: number, file: File, isPrivate: boolean = false): Promise<any> => {
+export const uploadDocument = async (contactId: number, file: File, isPrivate: boolean = false, category: string | null = null): Promise<any> => {
   const formData = new FormData();
   formData.append('contactId', contactId.toString());
   formData.append('file', file);
   formData.append('isPrivate', isPrivate.toString());
+  if (category) formData.append('category', category);
 
   const token = getToken();
   const headers: HeadersInit = {
