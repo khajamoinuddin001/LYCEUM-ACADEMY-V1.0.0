@@ -31,6 +31,7 @@ import {
     X,
     Download
 } from 'lucide-react';
+import { DESTINATIONS_DATA } from './destinations/destinations_data';
 
 interface LandingPageProps {
     onLogin: () => void;
@@ -390,18 +391,11 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onRegister, onTerms,
                         <p className="text-lg text-gray-600 dark:text-gray-400">We help you apply to the best universities in the world's top educational hubs.</p>
                     </div>
 
-                    <div className="grid md:grid-cols-3 gap-8">
-                        {[
-                            { country: 'USA', flag: 'us', image: 'https://images.unsplash.com/photo-1501594907352-04cda38ebc29?q=80&w=600&auto=format&fit=crop', desc: 'World-class universities and diverse cultural experiences.' },
-                            { country: 'UK', flag: 'gb', image: 'https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?q=80&w=600&auto=format&fit=crop', desc: 'Historic institutions with short, intensive degree programs.' },
-                            { country: 'Canada', flag: 'ca', image: 'https://images.unsplash.com/photo-1517935706615-2717063c2225?q=80&w=600&auto=format&fit=crop', desc: 'High quality of life and excellent post-study work opportunities.' },
-                            { country: 'Australia', flag: 'au', image: 'https://images.unsplash.com/photo-1506973035872-a4ec16b8e8d9?q=80&w=600&auto=format&fit=crop', desc: 'Cutting-edge research and a vibrant outdoor lifestyle.' },
-                            { country: 'Europe', flag: 'eu', image: 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?q=80&w=600&auto=format&fit=crop', desc: 'Affordable quality education and rich cultural heritage.' },
-                            { country: 'New Zealand', flag: 'nz', image: 'https://images.unsplash.com/photo-1589802829985-817e51171b92?q=80&w=600&auto=format&fit=crop', desc: 'Safe environment with world-ranked universities.' },
-                        ].map((dest, idx) => (
+                    <div className="grid md:grid-cols-3 gap-8 mb-16">
+                        {Object.values(DESTINATIONS_DATA).slice(0, 6).map((dest, idx) => (
                             <div
                                 key={idx}
-                                onClick={() => navigate(`/destinations/${dest.country.toLowerCase().replace(' ', '-')}`)}
+                                onClick={() => navigate(`/destinations/${dest.id}`)}
                                 className="group relative overflow-hidden rounded-[2rem] shadow-lg hover:shadow-2xl transition-all duration-500 h-[400px] cursor-pointer"
                             >
                                 {/* Background Image */}
@@ -427,13 +421,23 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onRegister, onTerms,
                                         <h3 className="text-3xl font-black text-white mb-2">{dest.country}</h3>
                                         <div className="h-0 group-hover:h-auto overflow-hidden transition-all duration-500">
                                             <p className="text-gray-200 text-sm leading-relaxed opacity-0 group-hover:opacity-100 transition-opacity duration-500 delay-100">
-                                                {dest.desc}
+                                                {((dest as any).study?.overview || (dest as any).overview)}
                                             </p>
                                         </div>
                                     </div>
                                 </div>
                             </div>
                         ))}
+                    </div>
+
+                    <div className="text-center">
+                        <button
+                            onClick={() => navigate('/destinations')}
+                            className="inline-flex items-center gap-2 px-8 py-4 bg-lyceum-blue text-white rounded-2xl font-black shadow-xl hover:scale-105 active:scale-95 transition-all group"
+                        >
+                            Explore All Destinations
+                            <ArrowRight className="group-hover:translate-x-1 transition-transform" size={20} />
+                        </button>
                     </div>
                 </div>
             </section>
