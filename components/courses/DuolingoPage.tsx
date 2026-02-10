@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, CheckCircle, Clock, Award, Users, TrendingUp, Star, ChevronDown, Play, Shield, Zap, BookOpen, Target, Globe, MessageSquare, Video, FileText, Headphones, GraduationCap, Home, Package, UserCheck, Phone, ArrowRight } from 'lucide-react';
+import { API_BASE_URL } from '../../utils/api';
 
 interface DuolingoPageProps {
     onBack: () => void;
@@ -26,7 +27,7 @@ const DuolingoPage: React.FC<DuolingoPageProps> = ({ onBack }) => {
         e.preventDefault();
         setFormStatus('submitting');
         try {
-            const response = await fetch('http://localhost:5002/api/public/enquiries', {
+            const response = await fetch(`${API_BASE_URL}/public/enquiries`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
