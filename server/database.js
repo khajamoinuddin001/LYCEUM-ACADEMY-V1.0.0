@@ -212,6 +212,8 @@ export async function initDatabase() {
         assigned_by INTEGER REFERENCES users(id),
         priority TEXT NOT NULL DEFAULT 'Medium' CHECK(priority IN ('Low', 'Medium', 'High')),
         replies JSONB DEFAULT '[]',
+        visibility_emails JSONB DEFAULT '[]',
+        recurring_task_id INTEGER,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -262,10 +264,89 @@ export async function initDatabase() {
       await client.query('ALTER TABLE tasks ADD COLUMN IF NOT EXISTS task_id TEXT UNIQUE');
       await client.query('ALTER TABLE tasks ADD COLUMN IF NOT EXISTS replies JSONB DEFAULT \'[]\'');
       await client.query('ALTER TABLE tasks ADD COLUMN IF NOT EXISTS contact_id INTEGER REFERENCES contacts(id)');
-      // Add due_date column to transactions if it doesn't exist
-      await client.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS due_date TEXT');
+      await client.query('ALTER TABLE tasks ADD COLUMN IF NOT EXISTS due_date TEXT');
       await client.query('ALTER TABLE tasks ADD COLUMN IF NOT EXISTS activity_type TEXT');
       await client.query('ALTER TABLE tasks ADD COLUMN IF NOT EXISTS is_visible_to_student BOOLEAN DEFAULT false');
+      await client.query('ALTER TABLE tasks ADD COLUMN IF NOT EXISTS visibility_emails JSONB DEFAULT \'[]\'');
+      await client.query('ALTER TABLE tasks ADD COLUMN IF NOT EXISTS recurring_task_id INTEGER');
+
+      // Recurring Tasks Table
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS recurring_tasks (
+          id SERIAL PRIMARY KEY,
+          task_id TEXT UNIQUE,
+          lead_id INTEGER REFERENCES leads(id) ON DELETE CASCADE,
+          title TEXT NOT NULL,
+          description TEXT,
+          frequency_days INTEGER DEFAULT 2,
+          last_generated_at TIMESTAMP,
+          next_generation_at TIMESTAMP,
+          is_active BOOLEAN DEFAULT true,
+          visibility_emails JSONB DEFAULT '[]',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      await client.query('ALTER TABLE recurring_tasks ADD COLUMN IF NOT EXISTS task_id TEXT UNIQUE');
+
+      await client.query('ALTER TABLE recurring_tasks ADD COLUMN IF NOT EXISTS task_id TEXT');
+      await client.query('ALTER TABLE recurring_tasks ADD COLUMN IF NOT EXISTS contact_id INTEGER REFERENCES contacts(id) ON DELETE CASCADE');
+      try {
+        await client.query('ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_task_id_key');
+        await client.query('ALTER TABLE recurring_tasks DROP CONSTRAINT IF EXISTS recurring_tasks_task_id_key');
+      } catch (err) { /* ignore if not exist */ }
+
+      // Re-sequence manual tasks (TSK)
+      await client.query(`
+        WITH sequenced AS (
+          SELECT id, 
+                 'TSK-' || LPAD(ROW_NUMBER() OVER (ORDER BY created_at ASC, id ASC)::TEXT, 6, '0') as new_id
+          FROM tasks
+          WHERE recurring_task_id IS NULL
+        )
+        UPDATE tasks t
+        SET task_id = s.new_id
+        FROM sequenced s
+        WHERE t.id = s.id;
+      `);
+
+      // Re-sequence recurring definitions and instances (REQ)
+      await client.query(`
+        WITH combined AS (
+          SELECT id, created_at, 'definition' as source FROM recurring_tasks
+          UNION ALL
+          SELECT id, created_at, 'instance' as source FROM tasks WHERE recurring_task_id IS NOT NULL
+        ),
+        sequenced AS (
+          SELECT id, source, 
+                 'REQ-' || LPAD(ROW_NUMBER() OVER (ORDER BY created_at ASC, id ASC)::TEXT, 6, '0') as new_id
+          FROM combined
+        )
+        UPDATE recurring_tasks rt
+        SET task_id = s.new_id
+        FROM sequenced s
+        WHERE rt.id = s.id AND s.source = 'definition';
+      `);
+
+      await client.query(`
+        WITH combined AS (
+          SELECT id, created_at, 'definition' as source FROM recurring_tasks
+          UNION ALL
+          SELECT id, created_at, 'instance' as source FROM tasks WHERE recurring_task_id IS NOT NULL
+        ),
+        sequenced AS (
+          SELECT id, source, 
+                 'REQ-' || LPAD(ROW_NUMBER() OVER (ORDER BY created_at ASC, id ASC)::TEXT, 6, '0') as new_id
+          FROM combined
+        )
+        UPDATE tasks t
+        SET task_id = s.new_id
+        FROM sequenced s
+        WHERE t.id = s.id AND s.source = 'instance';
+      `);
+
+      // Add unique constraints back
+      await client.query('ALTER TABLE tasks ADD CONSTRAINT tasks_task_id_key UNIQUE (task_id)');
+      await client.query('ALTER TABLE recurring_tasks ADD CONSTRAINT recurring_tasks_task_id_key UNIQUE (task_id)');
 
       // Task Time Logs Table
       await client.query(`
@@ -308,7 +389,10 @@ export async function initDatabase() {
       }
 
     } catch (e) {
-      console.log('Columns might already exist');
+      console.log('❌ Error during manual column additions/updates:', e.message);
+      // If we fail here, we should probably continue if it's just "column exists",
+      // but Postgres transaction is now aborted. We MUST rollback.
+      throw e;
     }
 
     // Quotation Templates table

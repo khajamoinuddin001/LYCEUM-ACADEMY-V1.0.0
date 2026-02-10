@@ -85,6 +85,16 @@ const ContactDocumentsView: React.FC<ContactDocumentsViewProps> = ({ contact, on
     'Other'
   ];
 
+  const privateCategories = [
+    'Acceptance',
+    'I20',
+    'DS-160',
+    'SEVIS confirmation',
+    'Appointment Confirmation',
+    'University Affidavit Forms',
+    'Others'
+  ];
+
   const isStaffOrAdmin = user?.role === 'Admin' || user?.role === 'Staff';
 
   // Separate documents
@@ -93,13 +103,37 @@ const ContactDocumentsView: React.FC<ContactDocumentsViewProps> = ({ contact, on
 
   // Group common documents by category
   const groupedDocs = categories.reduce((acc, cat) => {
-    acc[cat] = commonDocs.filter(d => d.category === cat || (!d.category && cat === 'Other'));
+    if (cat === 'Other') {
+      acc[cat] = commonDocs.filter(d => d.category === 'Other' || !d.category || !categories.includes(d.category));
+    } else {
+      acc[cat] = commonDocs.filter(d => d.category === cat);
+    }
     return acc;
   }, {} as Record<string, Doc[]>);
+
+  // Group private documents by category
+  const groupedPrivateDocs = privateCategories.reduce((acc, cat) => {
+    if (cat === 'Others') {
+      acc[cat] = privateDocs.filter(d => d.category === 'Others' || !d.category || !privateCategories.includes(d.category));
+    } else {
+      acc[cat] = privateDocs.filter(d => d.category === cat);
+    }
+    return acc;
+  }, {} as Record<string, Doc[]>);
+
 
   useEffect(() => {
     loadDocuments();
   }, [contact.id]);
+
+  useEffect(() => {
+    // Switch default category when toggling private mode
+    if (isPrivate) {
+      setSelectedCategory(privateCategories[0]);
+    } else {
+      setSelectedCategory(categories[0]);
+    }
+  }, [isPrivate]);
 
   const loadDocuments = async () => {
     try {
@@ -119,7 +153,8 @@ const ContactDocumentsView: React.FC<ContactDocumentsViewProps> = ({ contact, on
 
     try {
       setUploading(true);
-      await api.uploadDocument(contact.id, file, isPrivate, isPrivate ? null : selectedCategory);
+      // Now passing selectedCategory even for private docs
+      await api.uploadDocument(contact.id, file, isPrivate, selectedCategory);
       await loadDocuments();
       setIsPrivate(false); // Reset
     } catch (error) {
@@ -190,17 +225,15 @@ const ContactDocumentsView: React.FC<ContactDocumentsViewProps> = ({ contact, on
             </label>
           )}
 
-          {!isPrivate && (
-            <select
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-              className="text-sm border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-md shadow-sm focus:border-lyceum-blue focus:ring-lyceum-blue h-10 px-3"
-            >
-              {categories.map(cat => (
-                <option key={cat} value={cat}>{cat}</option>
-              ))}
-            </select>
-          )}
+          <select
+            value={selectedCategory}
+            onChange={(e) => setSelectedCategory(e.target.value)}
+            className="text-sm border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-100 rounded-md shadow-sm focus:border-lyceum-blue focus:ring-lyceum-blue h-10 px-3"
+          >
+            {(isPrivate ? privateCategories : categories).map(cat => (
+              <option key={cat} value={cat}>{cat}</option>
+            ))}
+          </select>
 
           <input
             type="file"
@@ -235,7 +268,7 @@ const ContactDocumentsView: React.FC<ContactDocumentsViewProps> = ({ contact, on
                   <span>{category}</span>
                   <div className="h-px bg-gray-200 dark:bg-gray-700 flex-grow"></div>
                 </h4>
-                {groupedDocs[category].length > 0 ? (
+                {groupedDocs[category] && groupedDocs[category].length > 0 ? (
                   <ul className="divide-y divide-gray-200 dark:divide-gray-700 bg-gray-50 dark:bg-gray-700/30 rounded-lg px-4 border border-gray-100 dark:border-gray-800">
                     {groupedDocs[category].map((doc) => (
                       <DocumentItem
@@ -263,23 +296,32 @@ const ContactDocumentsView: React.FC<ContactDocumentsViewProps> = ({ contact, on
                 <div className="w-2 h-2 rounded-full bg-red-500"></div>
                 Internal / Staff Only Documents
               </h3>
-              {privateDocs.length > 0 ? (
-                <ul className="divide-y divide-gray-200 dark:divide-gray-700 bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/30 rounded-lg px-4">
-                  {privateDocs.map((doc) => (
-                    <DocumentItem
-                      key={doc.id}
-                      doc={doc}
-                      analyzingDocId={analyzingDocId}
-                      handleAnalyzeClick={handleAnalyzeClick}
-                      handleDownload={handleDownload}
-                      handleDelete={handleDelete}
-                      isStaffOrAdmin={isStaffOrAdmin}
-                    />
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-gray-500 italic text-sm p-4">No internal documents.</p>
-              )}
+
+              {privateCategories.map(category => (
+                <div key={category} className="space-y-3 mb-6">
+                  <h4 className="text-xs font-bold text-red-400 uppercase tracking-widest flex items-center gap-2">
+                    <span>{category}</span>
+                    <div className="h-px bg-red-100 dark:bg-red-900/30 flex-grow"></div>
+                  </h4>
+                  {groupedPrivateDocs[category] && groupedPrivateDocs[category].length > 0 ? (
+                    <ul className="divide-y divide-gray-200 dark:divide-gray-700 bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/30 rounded-lg px-4">
+                      {groupedPrivateDocs[category].map((doc) => (
+                        <DocumentItem
+                          key={doc.id}
+                          doc={doc}
+                          analyzingDocId={analyzingDocId}
+                          handleAnalyzeClick={handleAnalyzeClick}
+                          handleDownload={handleDownload}
+                          handleDelete={handleDelete}
+                          isStaffOrAdmin={isStaffOrAdmin}
+                        />
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-gray-400 italic text-xs pl-4 pb-2">No internal documents in this category.</p>
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </div>

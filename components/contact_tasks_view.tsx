@@ -3,6 +3,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { CheckCircle2, Clock, Calendar, Plus, ArrowLeft, AlertCircle } from 'lucide-react';
 import type { Contact, TodoTask, User } from '../types';
 import TaskModal from './task_modal';
+import TaskDetailModal from './task_detail_modal';
 import * as api from '../utils/api';
 
 interface ContactTasksViewProps {
@@ -18,6 +19,8 @@ const ContactTasksView: React.FC<ContactTasksViewProps> = ({ contact, user, onNa
     const [editingTask, setEditingTask] = useState<TodoTask | null>(null);
     const [contactTasks, setContactTasks] = useState<TodoTask[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+    const [selectedTaskForDetail, setSelectedTaskForDetail] = useState<TodoTask | null>(null);
 
     // Fetch ALL tasks for this contact (visible to all staff)
     const fetchContactTasks = React.useCallback(async () => {
@@ -49,6 +52,78 @@ const ContactTasksView: React.FC<ContactTasksViewProps> = ({ contact, user, onNa
         await fetchContactTasks();
         setIsTaskModalOpen(false);
         setEditingTask(null);
+    };
+
+    const handleTaskClick = (task: TodoTask) => {
+        setSelectedTaskForDetail(task);
+        setIsDetailModalOpen(true);
+    };
+
+    const handleEditFromDetail = (task: TodoTask) => {
+        setIsDetailModalOpen(false);
+        setEditingTask(task);
+        setIsTaskModalOpen(true);
+    };
+
+    const handleAddReply = async (taskId: number, message: string, attachments?: File[]) => {
+        // In a real app, process attachments properly. For now we use simpler logic or call api.
+        // Re-using logic from TasksView or similar if available, otherwise just use api.
+        try {
+            // Process attachments logic (simplified here)
+            const processedAttachments = attachments?.map(file => ({
+                name: file.name,
+                url: URL.createObjectURL(file), // Mock URL
+                size: file.size
+            })) || [];
+
+            const task = contactTasks.find(t => t.id === taskId);
+            if (!task) return;
+
+            const newReply = {
+                id: Date.now(),
+                taskId,
+                userId: user.id,
+                userName: user.name,
+                message,
+                timestamp: new Date().toISOString(),
+                attachments: processedAttachments.length > 0 ? processedAttachments : undefined
+            };
+
+            const updatedTask = {
+                ...task,
+                replies: [...(task.replies || []), newReply]
+            };
+
+            await onSaveTask(updatedTask);
+            await fetchContactTasks();
+
+            // Update selected task for detail modal to show new reply
+            const refreshedTask = (await api.getTasks({ contactId: contact.id })).find(t => t.id === taskId);
+            if (refreshedTask) setSelectedTaskForDetail(refreshedTask);
+
+        } catch (error) {
+            console.error('Failed to add reply:', error);
+        }
+    };
+
+    const handleStatusChange = async (task: TodoTask, newStatus: any) => {
+        try {
+            await onSaveTask({ ...task, status: newStatus });
+            await fetchContactTasks();
+            setIsDetailModalOpen(false);
+        } catch (error) {
+            console.error('Failed to change status:', error);
+        }
+    };
+
+    const handleForwardTask = async (task: TodoTask, newAssigneeId: number, newAssigneeName: string) => {
+        try {
+            await onSaveTask({ ...task, assignedTo: newAssigneeId, status: 'To Do' as any });
+            await fetchContactTasks();
+            setIsDetailModalOpen(false);
+        } catch (error) {
+            console.error('Failed to forward task:', error);
+        }
     };
 
     const getPriorityColor = (priority?: string) => {
@@ -116,7 +191,7 @@ const ContactTasksView: React.FC<ContactTasksViewProps> = ({ contact, user, onNa
                     contactTasks.map(task => (
                         <div
                             key={task.id}
-                            onClick={() => { setEditingTask(task); setIsTaskModalOpen(true); }}
+                            onClick={() => handleTaskClick(task)}
                             className="group flex items-center justify-between p-4 bg-white dark:bg-gray-700/50 border border-gray-200 dark:border-gray-700 rounded-lg hover:shadow-md transition-all cursor-pointer hover:border-lyceum-blue dark:hover:border-lyceum-blue"
                         >
                             <div className="flex items-start space-x-3">
@@ -203,6 +278,17 @@ const ContactTasksView: React.FC<ContactTasksViewProps> = ({ contact, user, onNa
                 editTask={editingTask}
                 currentUserId={user.id}
                 contacts={[contact]}
+            />
+
+            <TaskDetailModal
+                task={selectedTaskForDetail}
+                isOpen={isDetailModalOpen}
+                onClose={() => setIsDetailModalOpen(false)}
+                onAddReply={handleAddReply}
+                onStatusChange={handleStatusChange}
+                onForwardTask={handleForwardTask}
+                onEdit={handleEditFromDetail}
+                user={user}
             />
 
             <style>{`

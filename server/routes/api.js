@@ -1003,6 +1003,60 @@ router.delete('/users/:id', authenticateToken, async (req, res) => {
   }
 });
 
+// Sync recurring task for a lead
+const syncRecurringTaskForLead = async (leadId) => {
+  try {
+    const leadRes = await query('SELECT * FROM leads WHERE id = $1', [leadId]);
+    if (leadRes.rows.length === 0) return;
+    const lead = leadRes.rows[0];
+
+    const activeStages = ['New', 'Qualified', 'Proposal'];
+    const shouldBeActive = activeStages.includes(lead.stage);
+
+    const existingRes = await query('SELECT id, is_active FROM recurring_tasks WHERE lead_id = $1', [leadId]);
+
+    if (shouldBeActive) {
+      if (existingRes.rows.length === 0) {
+        // Create new
+        const taskId = await getNextTaskId('REQ');
+
+        // Fetch global assignee email if set
+        const settingsRes = await query('SELECT value FROM system_settings WHERE key = $1', ['RECURRING_TASK_ASSIGNEE']);
+        const globalAssigneeId = settingsRes.rows[0]?.value?.userId;
+        let emails = [];
+        if (globalAssigneeId) {
+          const userRes = await query('SELECT email FROM users WHERE id = $1', [globalAssigneeId]);
+          if (userRes.rows.length > 0) {
+            emails.push(userRes.rows[0].email);
+          }
+        }
+
+        await query(`
+          INSERT INTO recurring_tasks(task_id, lead_id, title, description, frequency_days, next_generation_at, visibility_emails)
+          VALUES($1, $2, $3, $4, $5, CURRENT_TIMESTAMP, $6)
+        `, [
+          taskId,
+          leadId,
+          `Follow up with ${lead.contact} (${lead.company})`,
+          `Automated follow up for ${lead.stage} lead. Phone: ${lead.phone || 'N/A'}. Email: ${lead.email || 'N/A'}`,
+          2,
+          JSON.stringify(emails)
+        ]);
+      } else if (!existingRes.rows[0].is_active) {
+        // Reactivate
+        await query('UPDATE recurring_tasks SET is_active = true WHERE id = $1', [existingRes.rows[0].id]);
+      }
+    } else {
+      // Should be inactive
+      if (existingRes.rows.length > 0 && existingRes.rows[0].is_active) {
+        await query('UPDATE recurring_tasks SET is_active = false WHERE id = $1', [existingRes.rows[0].id]);
+      }
+    }
+  } catch (err) {
+    console.error('Error syncing recurring task:', err);
+  }
+};
+
 router.get('/leads', authenticateToken, async (req, res) => {
   try {
     // If student, return only their leads
@@ -1087,27 +1141,8 @@ RETURNING *
 
     const newLead = leadResult.rows[0];
 
-    // Contacts are NOT automatically created from leads
-    // Users must manually create contacts separately
-
-    // 3. Send Notification
-    if (lead.assignedTo) {
-      // Find user ID by name (assignedTo is name string)
-      const assignedUserResult = await query('SELECT id FROM users WHERE name = $1', [lead.assignedTo]);
-      if (assignedUserResult.rows.length > 0) {
-        const userId = assignedUserResult.rows[0].id;
-        await query(`
-          INSERT INTO notifications(title, description, read, link_to, recipient_user_ids, timestamp)
-VALUES($1, $2, $3, $4, $5, NOW())
-        `, [
-          'New Lead Assigned',
-          `You have been assigned a new lead: ${lead.title} `,
-          false,
-          JSON.stringify({ type: 'lead', id: newLead.id }),
-          JSON.stringify([userId])
-        ]);
-      }
-    }
+    // Sync Recurring Task
+    await syncRecurringTaskForLead(newLead.id);
 
     res.json(transformLead(newLead));
   } catch (error) {
@@ -1141,6 +1176,9 @@ RETURNING *
     ]);
 
     const newLead = leadResult.rows[0];
+
+    // Sync recurring task for the new lead
+    await syncRecurringTaskForLead(newLead.id);
 
     // Contacts are NOT automatically created from enquiries
     // Admins must manually create contacts if needed
@@ -1186,7 +1224,12 @@ title = $1, company = $2, value = $3, contact = $4, stage = $5,
       req.params.id
     ]);
     const result = await query('SELECT * FROM leads WHERE id = $1', [req.params.id]);
-    res.json(transformLead(result.rows[0]));
+    const updatedLead = result.rows[0];
+
+    // Sync Recurring Task
+    await syncRecurringTaskForLead(updatedLead.id);
+
+    res.json(transformLead(updatedLead));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -1204,17 +1247,91 @@ router.delete('/leads/:id', authenticateToken, async (req, res) => {
   }
 });
 
+// Create a new quotation for a lead
+router.post('/leads/:id/quotations', authenticateToken, async (req, res) => {
+  try {
+    const leadId = req.params.id;
+    const quotationData = req.body;
+
+    // 1. Fetch Lead
+    const leadResult = await query('SELECT * FROM leads WHERE id = $1', [leadId]);
+    if (leadResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Lead not found' });
+    }
+    const lead = leadResult.rows[0];
+    let quotations = lead.quotations || [];
+    if (typeof quotations === 'string') quotations = JSON.parse(quotations); // Safety check
+
+    // 2. Generate Sequential ID
+    let sequence = 1;
+    // Find max QUO- ID across ALL leads
+    const maxIdResult = await query(`
+      SELECT q->>'id' as id 
+      FROM leads l, jsonb_array_elements(l.quotations) q 
+      WHERE q->>'id' LIKE 'QUO-%' 
+      ORDER BY q->>'id' DESC 
+      LIMIT 1
+    `);
+
+    if (maxIdResult.rows.length > 0) {
+      const lastId = maxIdResult.rows[0].id;
+      const parts = lastId.split('-');
+      if (parts.length > 1) {
+        const numPart = parseInt(parts[1], 10);
+        if (!isNaN(numPart)) sequence = numPart + 1;
+      }
+    }
+
+    let newId;
+    let isUnique = false;
+    while (!isUnique) {
+      newId = `QUO-${String(sequence).padStart(6, '0')}`;
+      // Collision check
+      const check = await query(`
+            SELECT 1 FROM leads l, jsonb_array_elements(l.quotations) q 
+            WHERE q->>'id' = $1
+        `, [newId]);
+      if (check.rows.length === 0) {
+        isUnique = true;
+      } else {
+        sequence++;
+      }
+    }
+
+    // 3. Create Quotation Object
+    const newQuotation = {
+      ...quotationData,
+      id: newId,
+      status: quotationData.status || 'In Review',
+      date: new Date().toISOString().split('T')[0]
+    };
+
+    // 4. Save
+    quotations.push(newQuotation);
+    await query('UPDATE leads SET quotations = $1 WHERE id = $2', [JSON.stringify(quotations), leadId]);
+
+    // Return updated lead
+    const updatedResult = await query('SELECT * FROM leads WHERE id = $1', [leadId]);
+    res.json(transformLead(updatedResult.rows[0]));
+
+  } catch (error) {
+    console.error('Error creating quotation:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Transactions routes
 router.get('/transactions', authenticateToken, async (req, res) => {
   try {
-    const result = await query('SELECT * FROM transactions ORDER BY date DESC, id DESC');
+    const result = await query('SELECT * FROM transactions ORDER BY date DESC, created_at DESC');
     const transactions = result.rows.map(t => ({
       ...t,
       contactId: t.contact_id,
       customerName: t.customer_name, // Map snake_case to camelCase
       paymentMethod: t.payment_method,
       dueDate: t.due_date,
-      additionalDiscount: t.additional_discount
+      additionalDiscount: t.additional_discount,
+      amount: Number(t.amount)
     }));
     res.json(transactions);
   } catch (error) {
@@ -1320,7 +1437,49 @@ router.post('/expense-payees', authenticateToken, async (req, res) => {
 router.post('/transactions', authenticateToken, async (req, res) => {
   try {
     const transaction = req.body;
-    const id = transaction.id || `${transaction.type === 'Bill' ? 'BILL' : 'INV'}-${String(Date.now()).slice(-6)}`;
+
+    // Generate Sequential ID
+    let id = transaction.id;
+    if (!id) {
+      const typePrefixMap = {
+        'Invoice': 'INV',
+        'Bill': 'BILL',
+        'Expense': 'EXP',
+        'Transfer': 'TRF',
+        'Purchase': 'PUR',
+        'Income': 'INC'
+      };
+      const prefix = typePrefixMap[transaction.type] || 'TXN';
+
+      // Find latest ID for this prefix to increment
+      const maxSeqResult = await query("SELECT id FROM transactions WHERE id LIKE $1 ORDER BY id DESC LIMIT 1", [`${prefix}-%`]);
+      let sequence = 1;
+
+      if (maxSeqResult.rows.length > 0) {
+        const lastId = maxSeqResult.rows[0].id; // e.g., INV-000005
+        const parts = lastId.split('-');
+        if (parts.length > 1) {
+          const numPart = parseInt(parts[1], 10);
+          if (!isNaN(numPart)) {
+            sequence = numPart + 1;
+          }
+        }
+      }
+
+      // Collision Check Loop
+      let isUnique = false;
+      while (!isUnique) {
+        const generatedId = `${prefix}-${String(sequence).padStart(6, '0')}`;
+        const check = await query("SELECT id FROM transactions WHERE id = $1", [generatedId]);
+        if (check.rows.length === 0) {
+          id = generatedId;
+          isUnique = true;
+        } else {
+          sequence++;
+        }
+      }
+    }
+
     const result = await query(`
       INSERT INTO transactions(id, contact_id, customer_name, date, description, type, status, amount, payment_method, due_date, additional_discount)
       VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
@@ -1414,7 +1573,15 @@ router.post('/transactions', authenticateToken, async (req, res) => {
       }
     }
 
-    res.json(newTransaction);
+    res.json({
+      ...newTransaction,
+      contactId: newTransaction.contact_id,
+      customerName: newTransaction.customer_name,
+      paymentMethod: newTransaction.payment_method,
+      dueDate: newTransaction.due_date,
+      additionalDiscount: newTransaction.additional_discount,
+      amount: Number(newTransaction.amount) // Ensure number
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -1452,7 +1619,8 @@ router.put('/transactions/:id', authenticateToken, async (req, res) => {
       customerName: updated.customer_name,
       paymentMethod: updated.payment_method,
       dueDate: updated.due_date,
-      additionalDiscount: updated.additional_discount
+      additionalDiscount: updated.additional_discount,
+      amount: Number(updated.amount)
     });
   } catch (error) {
     console.error('PUT /transactions/:id - Error:', error);
@@ -1556,20 +1724,19 @@ router.get('/tasks', authenticateToken, async (req, res) => {
       if (req.user.role === 'Student') {
         // Student view: Only show tasks linked to their contact AND marked visible
         if (contactId) {
-          q += ' WHERE tasks.contact_id = $1 AND tasks.is_visible_to_student = true';
+          q += ' WHERE (tasks.contact_id = $1 AND tasks.is_visible_to_student = true) OR (tasks.visibility_emails::jsonb @> $2::jsonb)';
           params.push(contactId);
+          params.push(JSON.stringify([req.user.email]));
         } else {
-          // No contact linked? No tasks.
-          q += ' WHERE 1=0';
+          q += ' WHERE tasks.visibility_emails::jsonb @> $1::jsonb';
+          params.push(JSON.stringify([req.user.email]));
         }
-      } else if (contactId) {
-        // Show: assigned to me, created by me, or linked to my contact
-        q += ' WHERE (tasks.assigned_to = $1 OR tasks.assigned_by = $1 OR tasks.contact_id = $2)';
-        params.push(req.user.id, contactId);
       } else {
-        // Show: assigned to me or created by me
-        q += ' WHERE (tasks.assigned_to = $1 OR tasks.assigned_by = $1)';
+        // Staff view: Show assigned to me, created by me, or visibility emails matches
+        q += ' WHERE tasks.assigned_to = $1 OR tasks.assigned_by = $2 OR tasks.visibility_emails::jsonb @> $3::jsonb';
         params.push(req.user.id);
+        params.push(req.user.id);
+        params.push(JSON.stringify([req.user.email]));
       }
     }
 
@@ -1605,23 +1772,44 @@ router.get('/tasks', authenticateToken, async (req, res) => {
   }
 });
 
+// Helper to get next sequential task ID
+const getNextTaskId = async (prefix = 'TSK') => {
+  // Check tasks table
+  const lastTaskResult = await query(`SELECT task_id FROM tasks WHERE task_id ~ '^${prefix}-[0-9]{6}$' ORDER BY task_id DESC LIMIT 1`);
+
+  // Check recurring_tasks table
+  const lastRTResult = await query(`SELECT task_id FROM recurring_tasks WHERE task_id ~ '^${prefix}-[0-9]{6}$' ORDER BY task_id DESC LIMIT 1`);
+
+  let maxNum = 0;
+  if (lastTaskResult.rows.length > 0) {
+    maxNum = Math.max(maxNum, parseInt(lastTaskResult.rows[0].task_id.split('-')[1], 10));
+  }
+  if (lastRTResult.rows.length > 0) {
+    maxNum = Math.max(maxNum, parseInt(lastRTResult.rows[0].task_id.split('-')[1], 10));
+  }
+
+  let nextNum = maxNum + 1;
+  let isUnique = false;
+  let taskId;
+  while (!isUnique) {
+    taskId = `${prefix}-${String(nextNum).padStart(6, '0')}`;
+    const existingTask = await query('SELECT id FROM tasks WHERE task_id = $1', [taskId]);
+    const existingRT = await query('SELECT id FROM recurring_tasks WHERE task_id = $1', [taskId]);
+    if (existingTask.rows.length === 0 && existingRT.rows.length === 0) {
+      isUnique = true;
+    } else {
+      nextNum++;
+    }
+  }
+  return taskId;
+};
+
 router.post('/tasks', authenticateToken, async (req, res) => {
   try {
     const task = req.body;
 
-    // Generate unique Task ID
-    let taskId;
-    let isUnique = false;
-    while (!isUnique) {
-      const randomNum = Math.floor(Math.random() * 90000) + 10000; // 5-digit number (10000-99999)
-      taskId = `TSK-${randomNum}`;
-
-      // Check if this ID already exists
-      const existing = await query('SELECT id FROM tasks WHERE task_id = $1', [taskId]);
-      if (existing.rows.length === 0) {
-        isUnique = true;
-      }
-    }
+    // Generate sequential 6-digit Task ID
+    const taskId = await getNextTaskId();
 
     const result = await query(`
       INSERT INTO tasks(
@@ -1670,7 +1858,160 @@ const transformTask = (task) => ({
   contactName: task.contact_name,
   activityType: task.activity_type,
   isVisibleToStudent: task.is_visible_to_student,
-  ticketId: task.ticket_id
+  ticketId: task.ticket_id,
+  visibilityEmails: task.visibility_emails,
+  recurringTaskId: task.recurring_task_id
+});
+
+// Helper for recurring tasks
+const transformRecurringTask = (rt) => ({
+  ...rt,
+  taskId: rt.task_id,
+  leadId: rt.lead_id,
+  contactId: rt.contact_id,
+  frequencyDays: rt.frequency_days,
+  lastGeneratedAt: rt.last_generated_at,
+  nextGenerationAt: rt.next_generation_at,
+  isActive: rt.is_active,
+  visibilityEmails: rt.visibility_emails,
+  createdAt: rt.created_at
+});
+
+// Generate task instances
+const generateTaskInstances = async () => {
+  try {
+    const now = new Date();
+    // Fetch global assignee from settings
+    const settingsRes = await query('SELECT value FROM system_settings WHERE key = $1', ['RECURRING_TASK_ASSIGNEE']);
+    const globalAssigneeId = settingsRes.rows[0]?.value?.userId || null;
+
+    const rtRes = await query(`
+      SELECT DISTINCT ON (rt.id) rt.*, 
+             COALESCE(l.contact, c.name) as contact_name, 
+             COALESCE(l.phone, c.phone) as phone, 
+             COALESCE(l.email, c.email) as email
+      FROM recurring_tasks rt
+      LEFT JOIN leads l ON rt.lead_id = l.id
+      LEFT JOIN contacts c ON rt.contact_id = c.id
+      WHERE rt.is_active = true 
+        AND (rt.lead_id IS NOT NULL OR rt.contact_id IS NOT NULL)
+        AND (rt.next_generation_at IS NULL OR rt.next_generation_at <= $1)
+    `, [now]);
+
+    for (const rt of rtRes.rows) {
+      const nextGen = new Date(now.getTime() + rt.frequency_days * 24 * 60 * 60 * 1000);
+
+      // Generate unique Task ID with TSK prefix for task instances
+      const taskId = await getNextTaskId('TSK');
+
+      await query(`
+        INSERT INTO tasks(
+          task_id, title, description, due_date, status, assigned_to, priority, visibility_emails, recurring_task_id, contact_id
+        ) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      `, [
+        taskId,
+        rt.title,
+        rt.description,
+        new Date().toISOString().split('T')[0],
+        'todo',
+        globalAssigneeId, // Use global assignee if set
+        'Medium',
+        JSON.stringify(rt.visibility_emails || []),
+        rt.id,
+        rt.contact_id || null // Link the task to the contact if applicable
+      ]);
+
+      await query(`
+        UPDATE recurring_tasks 
+        SET last_generated_at = $1, next_generation_at = $2
+        WHERE id = $3
+      `, [now, nextGen, rt.id]);
+
+      console.log(`🤖 Generated recurring task instance ${taskId} for LT-${rt.id}`);
+    }
+  } catch (err) {
+    console.error('Error generating recurring task instances:', err);
+  }
+};
+
+// Start scheduler (run every 10 minutes)
+setInterval(generateTaskInstances, 10 * 60 * 1000);
+// Run once on startup after a small delay
+setTimeout(generateTaskInstances, 5000);
+
+// Recurring task routes
+router.get('/recurring-tasks', authenticateToken, async (req, res) => {
+  try {
+    const result = await query(`
+      SELECT rt.*, 
+             COALESCE(l.contact, c.name) as contact_name, 
+             COALESCE(l.company, c.department) as company 
+      FROM recurring_tasks rt
+      LEFT JOIN leads l ON rt.lead_id = l.id
+      LEFT JOIN contacts c ON rt.contact_id = c.id
+      ORDER BY rt.created_at DESC
+    `);
+    res.json(result.rows.map(transformRecurringTask));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Create recurring task manually
+router.post('/recurring-tasks', authenticateToken, async (req, res) => {
+  try {
+    const { leadId, contactId, title, description, frequencyDays, visibilityEmails } = req.body;
+
+    // Generate task ID
+    const taskId = await getNextTaskId('REQ');
+
+    await query(`
+      INSERT INTO recurring_tasks(task_id, lead_id, contact_id, title, description, frequency_days, next_generation_at, visibility_emails, is_active)
+      VALUES($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, $7, true)
+    `, [
+      taskId,
+      leadId || null,
+      contactId || null,
+      title,
+      description,
+      frequencyDays || 2,
+      JSON.stringify(visibilityEmails || [])
+    ]);
+
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.put('/recurring-tasks/:id', authenticateToken, async (req, res) => {
+  try {
+    const { frequencyDays, visibilityEmails, isActive } = req.body;
+    await query(`
+      UPDATE recurring_tasks SET
+        frequency_days = $1, visibility_emails = $2, is_active = $3
+      WHERE id = $4
+    `, [frequencyDays, JSON.stringify(visibilityEmails || []), isActive !== false, req.params.id]);
+
+    // Also update visibility_emails for all future tasks generated by this recurring task
+    // We update existing tasks of this recurring task too for consistency
+    await query('UPDATE tasks SET visibility_emails = $1 WHERE recurring_task_id = $2', [JSON.stringify(visibilityEmails || []), req.params.id]);
+
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete recurring task
+router.delete('/recurring-tasks/:id', authenticateToken, async (req, res) => {
+  try {
+    // Delete the recurring task
+    await query('DELETE FROM recurring_tasks WHERE id = $1', [req.params.id]);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 
@@ -2562,7 +2903,32 @@ router.post('/lms-courses/:id/enroll', authenticateToken, async (req, res) => {
 
     // 4. Generate Invoice (if requested)
     if (generateInvoice) {
-      const transactionId = `txn - ${Date.now()} `;
+      // Generate Sequential Invoice ID
+      let transactionId;
+      let sequence = 1;
+
+      // Find latest Invoice ID
+      const maxSeqResult = await query("SELECT id FROM transactions WHERE id LIKE 'INV-%' ORDER BY id DESC LIMIT 1");
+      if (maxSeqResult.rows.length > 0) {
+        const lastId = maxSeqResult.rows[0].id;
+        const parts = lastId.split('-');
+        if (parts.length > 1) {
+          const numPart = parseInt(parts[1], 10);
+          if (!isNaN(numPart)) sequence = numPart + 1;
+        }
+      }
+
+      let isUnique = false;
+      while (!isUnique) {
+        transactionId = `INV-${String(sequence).padStart(6, '0')}`;
+        const check = await query("SELECT id FROM transactions WHERE id = $1", [transactionId]);
+        if (check.rows.length === 0) {
+          isUnique = true;
+        } else {
+          sequence++;
+        }
+      }
+
       const description = `Enrollment in ${course.title} `;
       const status = markAsPaid ? 'Paid' : 'Due';
       const type = 'Invoice';
@@ -3130,6 +3496,29 @@ router.post('/settings/payment-qr', authenticateToken, requireRole('Admin'), upl
     `, ['PAYMENT_QR_CODE', { qrCode: base64Data }]);
 
     res.json({ success: true, qrCode: base64Data });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/settings/:key', authenticateToken, async (req, res) => {
+  try {
+    const result = await query('SELECT value FROM system_settings WHERE key = $1', [req.params.key]);
+    res.json(result.rows[0]?.value || null);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/settings/:key', authenticateToken, requireRole('Admin'), async (req, res) => {
+  try {
+    const { value } = req.body;
+    await query(`
+      INSERT INTO system_settings(key, value)
+      VALUES($1, $2)
+      ON CONFLICT(key) DO UPDATE SET value = $2
+    `, [req.params.key, value]);
+    res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

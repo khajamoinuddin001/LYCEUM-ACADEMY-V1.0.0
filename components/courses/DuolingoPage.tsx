@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, CheckCircle, Clock, Award, Users, TrendingUp, Star, ChevronDown, Play, Shield, Zap, BookOpen, Target, Globe, MessageSquare, Video, FileText, Headphones, GraduationCap, Home, Package, UserCheck } from 'lucide-react';
+import { ArrowLeft, CheckCircle, Clock, Award, Users, TrendingUp, Star, ChevronDown, Play, Shield, Zap, BookOpen, Target, Globe, MessageSquare, Video, FileText, Headphones, GraduationCap, Home, Package, UserCheck, Phone, ArrowRight } from 'lucide-react';
 
 interface DuolingoPageProps {
     onBack: () => void;
@@ -12,6 +12,41 @@ const DuolingoPage: React.FC<DuolingoPageProps> = ({ onBack }) => {
 
     const [openFaq, setOpenFaq] = useState<number | null>(0);
     const [selectedPlan, setSelectedPlan] = useState<'basic' | 'pro' | 'premium'>('pro');
+
+    // Lead Form State
+    const [formData, setFormData] = useState({
+        name: '',
+        email: '',
+        phone: '',
+        message: ''
+    });
+    const [formStatus, setFormStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
+
+    const handleFormSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setFormStatus('submitting');
+        try {
+            const response = await fetch('http://localhost:5002/api/public/enquiries', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    ...formData,
+                    interest: 'Duolingo English Test',
+                    country: 'India' // Default or based on user selection if added
+                })
+            });
+
+            if (response.ok) {
+                setFormStatus('success');
+                setFormData({ name: '', email: '', phone: '', message: '' });
+                setTimeout(() => setFormStatus('idle'), 5000);
+            } else {
+                setFormStatus('error');
+            }
+        } catch (error) {
+            setFormStatus('error');
+        }
+    };
 
     return (
         <div className="min-h-screen bg-white dark:bg-gray-900 transition-colors duration-300">
@@ -381,6 +416,145 @@ const DuolingoPage: React.FC<DuolingoPageProps> = ({ onBack }) => {
                 </div>
             </section>
 
+            {/* Contact Info & Lead Form Section */}
+            <section className="py-20 bg-gray-50 dark:bg-gray-900 border-t border-gray-100 dark:border-gray-800 pb-32 md:pb-20">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <div className="bg-white dark:bg-gray-800 rounded-[2.5rem] shadow-2xl overflow-hidden border border-gray-100 dark:border-gray-700">
+                        <div className="grid lg:grid-cols-2">
+                            {/* Left Content */}
+                            <div className="p-8 md:p-12 bg-gradient-to-br from-green-500 to-emerald-600 text-white flex flex-col justify-center relative overflow-hidden">
+                                {/* Decor */}
+                                <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -mr-16 -mt-16"></div>
+                                <div className="absolute bottom-0 left-0 w-64 h-64 bg-black/10 rounded-full blur-3xl -ml-16 -mb-16"></div>
+
+                                <div className="relative z-10">
+                                    <h2 className="text-3xl md:text-4xl font-black mb-6">Get Free Expert Guidance</h2>
+                                    <p className="text-green-50 text-lg mb-8 leading-relaxed">
+                                        Not sure where to start? Fill out the form and our expert counselors will invoke a personalized plan for you.
+                                    </p>
+
+                                    <div className="space-y-6 mb-8">
+                                        {[
+                                            'Free Profile Evaluation',
+                                            'Customized Study Plan',
+                                            'Visa Support'
+                                        ].map((item, i) => (
+                                            <div key={i} className="flex items-center gap-3">
+                                                <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
+                                                    <CheckCircle size={18} className="text-white" />
+                                                </div>
+                                                <span className="font-bold text-lg">{item}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    {/* Contact Numbers directly in the left panel */}
+                                    <div className="mt-8 pt-8 border-t border-white/20">
+                                        <p className="text-green-100 font-bold uppercase tracking-widest text-sm mb-4">Or Call Us Directly</p>
+                                        <div className="flex flex-col gap-3">
+                                            <a href="tel:+917842078791" className="flex items-center gap-3 text-2xl font-black hover:text-green-200 transition-colors">
+                                                <Phone className="fill-current" /> 78420 78791
+                                            </a>
+                                            <a href="tel:+917075278791" className="flex items-center gap-3 text-2xl font-black hover:text-green-200 transition-colors">
+                                                <Phone className="fill-current" /> 70752 78791
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Right Form */}
+                            <div className="p-8 md:p-12 bg-white dark:bg-gray-800">
+                                {formStatus === 'success' ? (
+                                    <div className="h-full flex flex-col items-center justify-center text-center space-y-6 min-h-[400px]">
+                                        <div className="w-24 h-24 bg-green-100 dark:bg-green-900/30 text-green-500 rounded-full flex items-center justify-center animate-bounce">
+                                            <CheckCircle size={48} />
+                                        </div>
+                                        <div>
+                                            <h3 className="text-3xl font-black text-gray-900 dark:text-white mb-2">Thank You!</h3>
+                                            <p className="text-gray-500 dark:text-gray-400 text-lg">
+                                                We have received your enquiry. Our team will contact you shortly to schedule your free session.
+                                            </p>
+                                        </div>
+                                        <button
+                                            onClick={() => setFormStatus('idle')}
+                                            className="px-8 py-3 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-xl font-bold hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                                        >
+                                            Send Another Response
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <form onSubmit={handleFormSubmit} className="space-y-6">
+                                        <div>
+                                            <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Full Name</label>
+                                            <input
+                                                type="text"
+                                                required
+                                                className="w-full px-5 py-4 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition-all dark:text-white font-medium"
+                                                placeholder="John Doe"
+                                                value={formData.name}
+                                                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Phone Number</label>
+                                            <input
+                                                type="tel"
+                                                required
+                                                className="w-full px-5 py-4 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition-all dark:text-white font-medium"
+                                                placeholder="+91 98765 43210"
+                                                value={formData.phone}
+                                                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Email Address (Optional)</label>
+                                            <input
+                                                type="email"
+                                                className="w-full px-5 py-4 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition-all dark:text-white font-medium"
+                                                placeholder="john@example.com"
+                                                value={formData.email}
+                                                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Message (Optional)</label>
+                                            <textarea
+                                                rows={3}
+                                                className="w-full px-5 py-4 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition-all dark:text-white font-medium resize-none"
+                                                placeholder="I'm interested in..."
+                                                value={formData.message}
+                                                onChange={(e) => setFormData({ ...formData, message: e.target.value })}
+                                            ></textarea>
+                                        </div>
+
+                                        <button
+                                            type="submit"
+                                            disabled={formStatus === 'submitting'}
+                                            className="w-full py-4 bg-green-500 hover:bg-green-600 text-white rounded-xl font-black text-lg shadow-lg shadow-green-500/30 hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                        >
+                                            {formStatus === 'submitting' ? (
+                                                <>
+                                                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                                    Submitting...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    Get Free Consultation <ArrowRight size={20} />
+                                                </>
+                                            )}
+                                        </button>
+                                        <p className="text-center text-xs text-gray-400">
+                                            By submitting, you agree to our Terms & Conditions.
+                                        </p>
+                                    </form>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
             {/* Final CTA */}
             <section className="py-20 bg-gradient-to-br from-green-500 to-emerald-600 text-white relative overflow-hidden">
                 <div className="absolute inset-0 opacity-10">
@@ -405,10 +579,6 @@ const DuolingoPage: React.FC<DuolingoPageProps> = ({ onBack }) => {
                     <div className="flex items-center justify-center gap-6 text-sm opacity-90">
                         <div className="flex items-center gap-2">
                             <CheckCircle size={16} />
-                            <span>Cancel anytime</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <CheckCircle size={16} />
                             <span>T & C Applied </span>
                         </div>
                     </div>
@@ -421,7 +591,7 @@ const DuolingoPage: React.FC<DuolingoPageProps> = ({ onBack }) => {
                     Enroll Now - Limited Seats
                 </a>
             </div>
-        </div>
+        </div >
     );
 };
 

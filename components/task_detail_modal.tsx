@@ -10,6 +10,7 @@ interface TaskDetailModalProps {
     onAddReply: (taskId: number, message: string, attachments?: File[]) => Promise<void>;
     onStatusChange: (task: TodoTask, newStatus: 'To Do' | 'In Progress' | 'Done') => void;
     onForwardTask: (task: TodoTask, newAssigneeId: number, newAssigneeName: string) => void;
+    onEdit?: (task: TodoTask) => void;
     user: User;
 }
 
@@ -20,6 +21,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     onAddReply,
     onStatusChange,
     onForwardTask,
+    onEdit,
     user
 }) => {
     const [replyMessage, setReplyMessage] = useState('');
@@ -435,6 +437,15 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                                 <UserPlus size={16} />
                                 Forward Task
                             </button>
+                            {onEdit && (
+                                <button
+                                    onClick={() => onEdit(task)}
+                                    className="px-4 py-2 bg-lyceum-blue text-white rounded-lg font-semibold hover:bg-lyceum-blue-dark transition-colors flex items-center gap-2"
+                                >
+                                    <Edit size={16} />
+                                    Edit Task
+                                </button>
+                            )}
                         </div>
                         {canReply && (
                             <button

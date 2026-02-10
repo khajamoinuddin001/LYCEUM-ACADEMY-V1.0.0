@@ -1,8 +1,9 @@
 
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import type { CrmLead, CrmStage, User } from '../types';
-import { IndianRupee, Building2, User as UserIcon, GripVertical, Filter, Trash2, Search, X, ChevronDown, ChevronUp, FileText } from './icons';
+import { IndianRupee, Building2, User as UserIcon, GripVertical, Filter, Trash2, Search, X, ChevronDown, ChevronUp, FileText, UserPlus } from './icons';
+import { getUsers, getSystemSetting, saveSystemSetting } from '../utils/api';
 
 const STAGES: CrmStage[] = ['New', 'Qualified', 'Proposal', 'Won', 'Lost'];
 
@@ -153,6 +154,32 @@ const CrmView: React.FC<CrmViewProps> = ({ leads, onLeadSelect, onNewLeadClick, 
     const [searchQuery, setSearchQuery] = useState('');
     const [isWonCollapsed, setIsWonCollapsed] = useState(true);
     const [isLostCollapsed, setIsLostCollapsed] = useState(true);
+
+    const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
+    const [allUsers, setAllUsers] = useState<User[]>([]);
+    const [globalAssigneeId, setGlobalAssigneeId] = useState<number | null>(null);
+    const [isSavingAssignee, setIsSavingAssignee] = useState(false);
+
+    useEffect(() => {
+        if (user.role === 'Admin') {
+            getUsers().then(users => setAllUsers(users.filter(u => u.role === 'Admin' || u.role === 'Staff')));
+            getSystemSetting<{ userId: number }>('RECURRING_TASK_ASSIGNEE').then(setting => setGlobalAssigneeId(setting?.userId || null));
+        }
+    }, [user.role]);
+
+    const handleSaveAssignee = async (userId: number | null) => {
+        setIsSavingAssignee(true);
+        try {
+            await saveSystemSetting('RECURRING_TASK_ASSIGNEE', { userId });
+            setGlobalAssigneeId(userId);
+            setIsAssignModalOpen(false);
+        } catch (err) {
+            console.error('Failed to save assignee:', err);
+        } finally {
+            setIsSavingAssignee(false);
+        }
+    };
+
     const canUpdate = user.role === 'Admin' || !!user.permissions?.['CRM']?.update;
     const canDelete = user.role === 'Admin' || !!user.permissions?.['CRM']?.delete;
 
@@ -234,10 +261,20 @@ const CrmView: React.FC<CrmViewProps> = ({ leads, onLeadSelect, onNewLeadClick, 
                         </select>
                     </div>
 
+                    {user.role === 'Admin' && (
+                        <button
+                            onClick={() => setIsAssignModalOpen(true)}
+                            className="px-4 py-2 bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200 rounded-md shadow-sm hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-800 focus:ring-gray-500 transition-colors flex items-center whitespace-nowrap"
+                        >
+                            <UserPlus size={16} className="mr-2" />
+                            Assign Recurring
+                        </button>
+                    )}
+
                     {(user.role === 'Admin' || user.permissions?.['CRM']?.create) && (
                         <button
                             onClick={onNewLeadClick}
-                            className="px-4 py-2 bg-lyceum-blue text-white rounded-md shadow-sm hover:bg-lyceum-blue-dark focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-800 focus:ring-lyceum-blue transition-colors"
+                            className="px-4 py-2 bg-lyceum-blue text-white rounded-md shadow-sm hover:bg-lyceum-blue-dark focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-800 focus:ring-lyceum-blue transition-colors whitespace-nowrap"
                         >
                             New Lead
                         </button>
@@ -320,6 +357,55 @@ const CrmView: React.FC<CrmViewProps> = ({ leads, onLeadSelect, onNewLeadClick, 
                     );
                 })}
             </div>
+
+            {/* Assign Modal */}
+            {isAssignModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-[2px] animate-in fade-in duration-200">
+                    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 border border-gray-200 dark:border-gray-700">
+                        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50/50 dark:bg-gray-900/50">
+                            <h2 className="text-lg font-bold text-gray-800 dark:text-gray-100">Recurring Task Assignee</h2>
+                            <button onClick={() => setIsAssignModalOpen(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors">
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <div className="p-6">
+                            <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
+                                Select the staff member who will automatically be assigned to all newly generated recurring tasks.
+                            </p>
+                            <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                                <button
+                                    onClick={() => handleSaveAssignee(null)}
+                                    disabled={isSavingAssignee}
+                                    className={`w-full text-left px-4 py-3 rounded-lg border transition-all ${!globalAssigneeId ? 'border-lyceum-blue bg-lyceum-blue/5 ring-1 ring-lyceum-blue' : 'border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50'}`}
+                                >
+                                    <div className="font-medium text-gray-800 dark:text-gray-100">None (Unassigned)</div>
+                                    <div className="text-xs text-gray-500">Tasks will follow standard unassigned behavior.</div>
+                                </button>
+                                {allUsers.map(u => (
+                                    <button
+                                        key={u.id}
+                                        disabled={isSavingAssignee}
+                                        onClick={() => handleSaveAssignee(u.id)}
+                                        className={`w-full text-left px-4 py-3 rounded-lg border transition-all ${globalAssigneeId === u.id ? 'border-lyceum-blue bg-lyceum-blue/5 ring-1 ring-lyceum-blue' : 'border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50'}`}
+                                    >
+                                        <div className="font-medium text-gray-800 dark:text-gray-100">{u.name}</div>
+                                        <div className="text-xs text-gray-500">{u.email} • {u.role}</div>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="px-6 py-4 bg-gray-50/50 dark:bg-gray-900/50 border-t border-gray-200 dark:border-gray-700 flex justify-end">
+                            <button
+                                onClick={() => setIsAssignModalOpen(false)}
+                                className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 font-medium transition-colors"
+                            >
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <style>{`
                 @keyframes fade-in {
                 from { opacity: 0; transform: translateY(10px); }

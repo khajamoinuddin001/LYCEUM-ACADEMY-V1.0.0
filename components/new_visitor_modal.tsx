@@ -24,6 +24,8 @@ const NewVisitorModal: React.FC<NewVisitorModalProps> = ({ isOpen, onClose, onSa
   const [error, setError] = useState('');
   const [suggestions, setSuggestions] = useState<Contact[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [phoneSuggestions, setPhoneSuggestions] = useState<Contact[]>([]);
+  const [showPhoneSuggestions, setShowPhoneSuggestions] = useState(false);
 
   const isEditing = !!visitorToEdit;
   const canCreate = user.role === 'Admin' || user.permissions?.['Reception']?.create;
@@ -51,7 +53,10 @@ const NewVisitorModal: React.FC<NewVisitorModalProps> = ({ isOpen, onClose, onSa
       }
       setError('');
       setSuggestions([]);
+      setSuggestions([]);
       setShowSuggestions(false);
+      setPhoneSuggestions([]);
+      setShowPhoneSuggestions(false);
       setShowStaffDropdown(false);
     }
   }, [isOpen, staff, isEditing, visitorToEdit]);
@@ -78,16 +83,28 @@ const NewVisitorModal: React.FC<NewVisitorModalProps> = ({ isOpen, onClose, onSa
         setShowSuggestions(false);
       }
     }
+
+    if (name === 'company') {
+      if (value.length > 2) {
+        // Filter by phone number
+        const filtered = contacts.filter(c => c.phone && c.phone.includes(value)).slice(0, 5);
+        setPhoneSuggestions(filtered);
+        setShowPhoneSuggestions(true);
+      } else {
+        setPhoneSuggestions([]);
+        setShowPhoneSuggestions(false);
+      }
+    }
   };
 
   const handleSelectContact = (contact: Contact) => {
     setFormData(prev => ({
       ...prev,
       name: contact.name,
-      company: contact.phone || prev.company,
-      host: contact.department || 'N/A'
+      company: contact.phone || prev.company
     }));
     setShowSuggestions(false);
+    setShowPhoneSuggestions(false);
   };
 
   const handleSave = async () => {
@@ -140,7 +157,9 @@ const NewVisitorModal: React.FC<NewVisitorModalProps> = ({ isOpen, onClose, onSa
         className={`bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md transform transition-all duration-200 ease-in-out ${modalAnimationClass}`}
         onClick={(e) => {
           e.stopPropagation();
+          e.stopPropagation();
           setShowSuggestions(false);
+          setShowPhoneSuggestions(false);
         }}
       >
         <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
@@ -186,9 +205,36 @@ const NewVisitorModal: React.FC<NewVisitorModalProps> = ({ isOpen, onClose, onSa
                 </ul>
               )}
             </div>
-            <div>
+            <div className="relative">
               <label htmlFor="visitor-company" className={labelClasses}>Mobile Number (Optional)</label>
-              <input type="text" id="visitor-company" name="company" className={inputClasses} value={formData.company} onChange={handleChange} placeholder="e.g., +91 98765 43210" disabled={isDisabled} />
+              <input
+                type="text"
+                id="visitor-company"
+                name="company"
+                className={inputClasses}
+                value={formData.company}
+                onChange={handleChange}
+                placeholder="e.g., +91 98765 43210"
+                disabled={isDisabled}
+                autoComplete="off"
+              />
+              {showPhoneSuggestions && phoneSuggestions.length > 0 && (
+                <ul className="absolute z-10 w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto mt-1">
+                  {phoneSuggestions.map((contact) => (
+                    <li
+                      key={contact.id}
+                      className="px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer text-sm text-gray-700 dark:text-gray-200"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSelectContact(contact);
+                      }}
+                    >
+                      <div className="font-medium">{contact.phone}</div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">{contact.name} • {contact.department || 'No Dept'}</div>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
             <div className="relative">
               <label htmlFor="visitor-staff" className={labelClasses}>Staff Member (Optional)</label>

@@ -1,4 +1,4 @@
-import type { CalendarEvent, Contact, CrmLead, AccountingTransaction, CrmStage, Quotation, User, UserRole, AppPermissions, ActivityLog, DocumentAnalysisResult, Document as Doc, ChecklistItem, QuotationTemplate, Visitor, TodoTask, Ticket, PaymentActivityLog, LmsCourse, LmsLesson, LmsModule, Coupon, ContactActivity, ContactActivityAction, DiscussionPost, DiscussionThread, RecordedSession, Channel, Notification } from '../types';
+import type { CalendarEvent, Contact, CrmLead, AccountingTransaction, CrmStage, Quotation, User, UserRole, AppPermissions, ActivityLog, DocumentAnalysisResult, Document as Doc, ChecklistItem, QuotationTemplate, Visitor, TodoTask, Ticket, PaymentActivityLog, LmsCourse, LmsLesson, LmsModule, Coupon, ContactActivity, ContactActivityAction, DiscussionPost, DiscussionThread, RecordedSession, Channel, Notification, RecurringTask } from '../types';
 import { DEFAULT_PERMISSIONS, DEFAULT_CHECKLIST } from '../components/constants';
 
 export const API_BASE_URL = import.meta.env.VITE_API_URL;
@@ -329,23 +329,25 @@ export const updateLeadStage = async (leadId: number, newStage: CrmStage): Promi
 };
 
 export const saveQuotation = async (leadId: number, quotationData: Omit<Quotation, 'id' | 'status' | 'date'> | Quotation): Promise<CrmLead[]> => {
-  const lead = await apiRequest<CrmLead>(`/leads/${leadId}`, { method: 'GET' });
-  const isEditing = 'id' in quotationData;
-  const quotations = lead.quotations || [];
+  const isEditing = 'id' in quotationData && !!quotationData.id;
 
-  let updatedQuotations;
   if (isEditing) {
-    updatedQuotations = quotations.map(q => q.id === quotationData.id ? { ...q, ...quotationData } : q);
-  } else {
-    // Default to 'In Review' so it is visible to students immediately
-    const newQuotation: Quotation = { ...quotationData, id: Date.now(), status: 'In Review', date: new Date().toISOString().split('T')[0] };
-    updatedQuotations = [...quotations, newQuotation];
-  }
+    // Update existing quotation via Lead Update (keeping existing pattern for now)
+    const lead = await apiRequest<CrmLead>(`/leads/${leadId}`, { method: 'GET' });
+    const quotations = lead.quotations || [];
+    const updatedQuotations = quotations.map(q => q.id === quotationData.id ? { ...q, ...quotationData } : q);
 
-  await apiRequest(`/leads/${leadId}`, {
-    method: 'PUT',
-    body: JSON.stringify({ ...lead, quotations: updatedQuotations }),
-  });
+    await apiRequest(`/leads/${leadId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ ...lead, quotations: updatedQuotations }),
+    });
+  } else {
+    // Create NEW quotation via dedicated endpoint (Server generates ID)
+    await apiRequest(`/leads/${leadId}/quotations`, {
+      method: 'POST',
+      body: JSON.stringify(quotationData),
+    });
+  }
   return getLeads();
 };
 
@@ -729,6 +731,17 @@ export const getPaymentSettings = async () => {
   return await apiRequest<{ upiId: string; qrCode: string | null }>('/settings/payment', { method: 'GET' });
 };
 
+export const getSystemSetting = async <T>(key: string): Promise<T | null> => {
+  return apiRequest<T | null>(`/settings/${key}`);
+};
+
+export const saveSystemSetting = async (key: string, value: any): Promise<{ success: boolean }> => {
+  return apiRequest<{ success: boolean }>(`/settings/${key}`, {
+    method: 'POST',
+    body: JSON.stringify({ value })
+  });
+};
+
 export const savePaymentSettings = async (upiId: string) => {
   return await apiRequest<{ success: boolean }>('/settings/payment', {
     method: 'POST',
@@ -846,6 +859,32 @@ export const deleteTask = async (id: number): Promise<void> => {
 
 export const getTaskLogs = async (taskId: number): Promise<any> => {
   return apiRequest(`/tasks/${taskId}/logs`);
+};
+
+export const getRecurringTasks = async (): Promise<RecurringTask[]> => {
+  return apiRequest<RecurringTask[]>('/recurring-tasks');
+};
+
+
+
+export const createRecurringTask = async (data: { leadId?: number; contactId?: number; title: string; description: string; frequencyDays: number; visibilityEmails: string[] }): Promise<void> => {
+  await apiRequest('/recurring-tasks', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+};
+
+export const updateRecurringTask = async (id: number, updates: { frequencyDays?: number; visibilityEmails?: string[]; isActive?: boolean }): Promise<void> => {
+  await apiRequest(`/recurring-tasks/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(updates),
+  });
+};
+
+export const deleteRecurringTask = async (id: number): Promise<void> => {
+  await apiRequest(`/recurring-tasks/${id}`, {
+    method: 'DELETE',
+  });
 };
 
 // ===== TICKETS API =====

@@ -67,6 +67,8 @@ export interface TodoTask {
   contactId?: number;
   contactName?: string;
   ticketId?: number;
+  visibility_emails?: string[];
+  recurringTaskId?: number;
 }
 
 export interface TaskReply {
@@ -388,7 +390,7 @@ export type CrmStage = 'New' | 'Qualified' | 'Proposal' | 'Won' | 'Lost';
 export type QuotationStatus = 'Draft' | 'In Review' | 'Accepted by Student' | 'Agreed' | 'Rejected';
 
 export interface Quotation {
-  id: number;
+  id: number | string;
   quotationNumber?: string;
   title: string;
   description: string;
@@ -436,6 +438,21 @@ export interface CrmLead {
   createdAt?: string;
 }
 
+export interface RecurringTask {
+  id: number;
+  taskId?: string;
+  leadId?: number;
+  contactId?: number;
+  title: string;
+  description?: string;
+  frequencyDays: number;
+  lastGeneratedAt?: string;
+  nextGenerationAt?: string;
+  isActive: boolean;
+  visibilityEmails: string[];
+  createdAt: string;
+}
+
 export interface LeadDetailsModalProps {
   lead: CrmLead | null;
   onClose: () => void;
@@ -449,7 +466,7 @@ export type TransactionType = 'Income' | 'Purchase' | 'Expense' | 'Transfer' | '
 export type TransactionStatus = 'Paid' | 'Pending' | 'Overdue';
 
 export interface AccountingTransaction {
-  id: string;
+  id: string; // Already string, good
   contactId?: number;
   customerName: string;
   date: string;

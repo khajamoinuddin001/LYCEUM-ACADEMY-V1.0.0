@@ -32,7 +32,7 @@ const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
         paymentMethod: 'Cash' as 'Cash' | 'Online',
         status: 'Paid' as 'Paid' | 'Pending' | 'Overdue',
         notes: '',
-        additionalDiscount: '' as string | number
+        additionalDiscount: 0 as string | number
     });
 
     const [lineItems, setLineItems] = useState<LineItem[]>([
@@ -169,7 +169,8 @@ const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
                 date: new Date().toISOString().split('T')[0],
                 paymentMethod: 'Cash',
                 status: 'Pending',
-                notes: ''
+                notes: '',
+                additionalDiscount: 0
             });
             setRelatedContactId(undefined);
             setRelatedContactName('');

@@ -187,7 +187,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onRegister, onTerms,
     const handleEnquirySubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
-            const response = await fetch('/api/public/enquiries', {
+            const response = await fetch('http://localhost:5002/api/public/enquiries', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(enquiry)
@@ -736,10 +736,9 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onRegister, onTerms,
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email Address</label>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email Address (Optional)</label>
                                         <input
                                             name="email"
-                                            required
                                             value={enquiry.email}
                                             onChange={handleChange}
                                             type="email"
