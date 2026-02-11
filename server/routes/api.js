@@ -1747,19 +1747,26 @@ router.get('/tasks', authenticateToken, async (req, res) => {
       // This is crucial for the CRM view where we want to see the full history.
       // We overwrite the query to focus on contact_id.
       // Note: We might want to keep some access control here, but for now assuming authenticated staff can see contact tasks.
-
       q = `
         SELECT tasks.*, contacts.name as contact_name 
         FROM tasks 
         LEFT JOIN contacts ON tasks.contact_id = contacts.id
         WHERE tasks.contact_id = $1
       `;
-      // Reset params list to just have contactId
       while (params.length > 0) params.pop();
       params.push(req.query.contactId);
+    } else if (req.query.recurringTaskId) {
+      q = `
+        SELECT tasks.*, contacts.name as contact_name 
+        FROM tasks 
+        LEFT JOIN contacts ON tasks.contact_id = contacts.id
+        WHERE tasks.recurring_task_id = $1
+      `;
+      while (params.length > 0) params.pop();
+      params.push(req.query.recurringTaskId);
     }
 
-    // Only apply assigned_to filter if contactId is NOT provided (default behavior)
+    // Only apply assigned_to filter if contactId and recurringTaskId are NOT provided (default behavior)
     else {
       // Logic already built in 'q' initialization above (lines 1553-1573) is fine for default view
     }

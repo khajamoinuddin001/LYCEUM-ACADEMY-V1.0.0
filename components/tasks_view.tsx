@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import type { TodoTask, User, TaskPriority, TodoStatus } from '../types';
-import { Search, Filter, Plus, Edit, Trash2, Calendar, User as UserIcon, AlertCircle, CheckCircle2, Clock, MoreHorizontal, X } from './icons';
-import { getStaffMembers, getRecurringTasks, updateRecurringTask, deleteRecurringTask, createRecurringTask, getContacts } from '../utils/api';
+import { Search, Filter, Plus, Edit, Trash2, Calendar, User as UserIcon, AlertCircle, CheckCircle2, Clock, MoreHorizontal, X, Play, Pause } from './icons';
+import { getStaffMembers, getRecurringTasks, updateRecurringTask, deleteRecurringTask, createRecurringTask, getContacts, getTasks } from '../utils/api';
 import type { Contact } from '../types';
 import type { RecurringTask } from '../types';
 import TaskDetailModal from './task_detail_modal';
@@ -578,11 +578,15 @@ const TasksView: React.FC<TasksViewProps> = ({
                                                     <td className="px-6 py-4">
                                                         <span
                                                             className="text-xs font-mono font-bold text-lyceum-blue bg-lyceum-blue/5 px-2 py-1 rounded cursor-pointer hover:bg-lyceum-blue/10 transition-colors"
-                                                            onClick={() => {
+                                                            onClick={async () => {
                                                                 setViewingRTHistory(rt);
-                                                                // Filter tasks that were generated from this recurring task
-                                                                const generatedTasks = tasks.filter(t => t.recurringTaskId === rt.id);
-                                                                setRtGeneratedTasks(generatedTasks);
+                                                                setRtGeneratedTasks([]); // Clear existing
+                                                                try {
+                                                                    const history = await getTasks({ recurringTaskId: rt.id });
+                                                                    setRtGeneratedTasks(history);
+                                                                } catch (error) {
+                                                                    console.error('Error fetching RT history:', error);
+                                                                }
                                                             }}
                                                             title="Click to view generated tasks"
                                                         >
@@ -670,6 +674,27 @@ const TasksView: React.FC<TasksViewProps> = ({
                                                         </div>
                                                     </td>
                                                     <td className="px-6 py-4 text-right">
+                                                        <button
+                                                            onClick={() => setEditingRT(rt)}
+                                                            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg text-gray-400 hover:text-lyceum-blue transition-colors"
+                                                            title="Edit recurring task"
+                                                        >
+                                                            <Edit size={16} />
+                                                        </button>
+                                                        <button
+                                                            onClick={async () => {
+                                                                await updateRecurringTask(rt.id, {
+                                                                    frequencyDays: rt.frequencyDays,
+                                                                    visibilityEmails: rt.visibilityEmails,
+                                                                    isActive: !rt.isActive
+                                                                });
+                                                                fetchRecurringTasks();
+                                                            }}
+                                                            className={`p-2 rounded-lg transition-colors ${rt.isActive ? 'hover:bg-amber-50 dark:hover:bg-amber-900/20 text-gray-400 hover:text-amber-500' : 'hover:bg-green-50 dark:hover:bg-green-900/20 text-gray-400 hover:text-green-500'}`}
+                                                            title={rt.isActive ? 'Pause recurring task' : 'Resume recurring task'}
+                                                        >
+                                                            {rt.isActive ? <Pause size={16} /> : <Play size={16} />}
+                                                        </button>
                                                         <button
                                                             onClick={async () => {
                                                                 if (confirm(`Delete recurring task "${rt.title}"? This will not delete already generated tasks.`)) {
@@ -941,6 +966,33 @@ const TasksView: React.FC<TasksViewProps> = ({
                             </button>
                         </div>
                         <div className="p-6 overflow-y-auto flex-1">
+                            {/* Recurring Task Details Summary */}
+                            <div className="mb-6 p-4 bg-lyceum-blue/5 rounded-xl border border-lyceum-blue/10">
+                                <div className="flex items-start justify-between gap-4">
+                                    <div className="flex-1">
+                                        <div className="text-[10px] font-bold uppercase text-gray-400 mb-1">Recurring Definition</div>
+                                        <h4 className="text-sm font-bold text-gray-900 dark:text-white mb-2">{viewingRTHistory.title}</h4>
+                                        <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">{viewingRTHistory.description || 'No description provided.'}</p>
+                                    </div>
+                                    <div className="text-right shrink-0">
+                                        <div className="text-[10px] font-bold uppercase text-gray-400 mb-1">Frequency</div>
+                                        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
+                                            Every {viewingRTHistory.frequencyDays} days
+                                        </div>
+                                        <div className="mt-3 text-[10px] font-bold uppercase text-gray-400 mb-1">Status</div>
+                                        <div className={`inline-flex items-center gap-1 text-[10px] font-bold ${viewingRTHistory.isActive ? 'text-green-500' : 'text-gray-400'}`}>
+                                            <div className={`w-1.5 h-1.5 rounded-full ${viewingRTHistory.isActive ? 'bg-green-500' : 'bg-gray-400'}`} />
+                                            {viewingRTHistory.isActive ? 'Active' : 'Paused'}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 mb-4">
+                                <Clock size={16} className="text-gray-400" />
+                                <h4 className="text-sm font-bold text-gray-700 dark:text-gray-300">Generated Task History</h4>
+                            </div>
+
                             {rtGeneratedTasks.length === 0 ? (
                                 <div className="text-center py-12 text-gray-500">
                                     <Clock size={48} className="mx-auto mb-4 text-gray-300" />
@@ -961,8 +1013,9 @@ const TasksView: React.FC<TasksViewProps> = ({
                                                         <span className="text-xs font-mono font-bold text-lyceum-blue bg-lyceum-blue/5 px-2 py-1 rounded">
                                                             {task.taskId || `TSK-${task.id.toString().padStart(6, '0')}`}
                                                         </span>
-                                                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${statusColors[task.status]}`}>
-                                                            {task.status === 'todo' ? 'To Do' : task.status === 'inProgress' ? 'In Progress' : 'Done'}
+                                                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${statusColors[task.status] || statusColors[task.status?.toLowerCase() as TodoStatus] || 'bg-gray-100'}`}>
+                                                            {task.status?.toString().toLowerCase().includes('todo') ? 'To Do' :
+                                                                task.status?.toString().toLowerCase().includes('progress') ? 'In Progress' : 'Done'}
                                                         </span>
                                                         <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase ${priorityColors[task.priority || 'Medium']}`}>
                                                             {task.priority || 'Medium'}

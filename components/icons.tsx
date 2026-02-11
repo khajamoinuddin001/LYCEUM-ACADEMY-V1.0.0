@@ -94,5 +94,7 @@ export {
   Monitor,
   Receipt,
   Link,
-  HardDrive
+  HardDrive,
+  Play,
+  Pause
 } from 'lucide-react';

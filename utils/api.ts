@@ -827,11 +827,12 @@ export const deleteEvent = async (eventId: number): Promise<CalendarEvent[]> => 
 };
 
 // Tasks
-export const getTasks = async (filters?: { userId?: number; all?: boolean; contactId?: number }): Promise<TodoTask[]> => {
+export const getTasks = async (filters?: { userId?: number; all?: boolean; contactId?: number; recurringTaskId?: number }): Promise<TodoTask[]> => {
   const params = new URLSearchParams();
   if (filters?.userId) params.append('userId', filters.userId.toString());
   if (filters?.all) params.append('all', 'true');
   if (filters?.contactId) params.append('contactId', filters.contactId.toString());
+  if (filters?.recurringTaskId) params.append('recurringTaskId', filters.recurringTaskId.toString());
 
   const queryString = params.toString();
   return apiRequest<TodoTask[]>(`/tasks${queryString ? `?${queryString}` : ''}`);
