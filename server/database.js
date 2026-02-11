@@ -290,6 +290,7 @@ export async function initDatabase() {
 
       await client.query('ALTER TABLE recurring_tasks ADD COLUMN IF NOT EXISTS task_id TEXT');
       await client.query('ALTER TABLE recurring_tasks ADD COLUMN IF NOT EXISTS contact_id INTEGER REFERENCES contacts(id) ON DELETE CASCADE');
+      await client.query('ALTER TABLE recurring_tasks ADD COLUMN IF NOT EXISTS assigned_to INTEGER REFERENCES profiles(id) ON DELETE SET NULL');
       try {
         await client.query('ALTER TABLE tasks DROP CONSTRAINT IF EXISTS tasks_task_id_key');
         await client.query('ALTER TABLE recurring_tasks DROP CONSTRAINT IF EXISTS recurring_tasks_task_id_key');
