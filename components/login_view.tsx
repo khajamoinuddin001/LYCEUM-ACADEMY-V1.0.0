@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import type { User, UserRole } from '../types';
-import { Mail, Lock, UserPlus, ArrowLeft } from './icons';
+import { Mail, Lock, UserPlus, ArrowLeft, Eye, EyeOff } from './icons';
 import { GoogleLogin } from '@react-oauth/google';
 import * as api from '../utils/api';
 
@@ -38,6 +38,8 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, users, onRegister, onFor
     const [isRegisterView, setIsRegisterView] = useState(initialIsRegister || false);
     const [rememberMe, setRememberMe] = useState(false);
     const [registerAsAdmin, setRegisterAsAdmin] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
+    const [showAdminKey, setShowAdminKey] = useState(false);
     const [adminKey, setAdminKey] = useState('');
 
     // Verification UI State
@@ -197,9 +199,16 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, users, onRegister, onFor
                                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                                     <Lock className="h-5 w-5 text-gray-400" />
                                 </div>
-                                <input id="password-register" name="password" type="password" autoComplete="new-password" required
-                                    className="appearance-none block w-full px-3 py-2 pl-10 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-lyceum-blue focus:border-lyceum-blue sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                <input id="password-register" name="password" type={showPassword ? "text" : "password"} autoComplete="new-password" required
+                                    className="appearance-none block w-full px-3 py-2 pl-10 pr-10 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-lyceum-blue focus:border-lyceum-blue sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                                     placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPassword(!showPassword)}
+                                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                                >
+                                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                                </button>
                             </div>
                         </div>
                         <div className="flex items-center">
@@ -212,9 +221,18 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, users, onRegister, onFor
                         {registerAsAdmin && (
                             <div>
                                 <label htmlFor="admin-key" className="sr-only">Admin Key</label>
-                                <input id="admin-key" name="admin-key" type="password" required
-                                    className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-lyceum-blue focus:border-lyceum-blue sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                                    placeholder="Admin Registration Key" value={adminKey} onChange={(e) => setAdminKey(e.target.value)} />
+                                <div className="relative">
+                                    <input id="admin-key" name="admin-key" type={showAdminKey ? "text" : "password"} required
+                                        className="appearance-none block w-full px-3 py-2 pr-10 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-lyceum-blue focus:border-lyceum-blue sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                        placeholder="Admin Registration Key" value={adminKey} onChange={(e) => setAdminKey(e.target.value)} />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowAdminKey(!showAdminKey)}
+                                        className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                                    >
+                                        {showAdminKey ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                                    </button>
+                                </div>
                             </div>
                         )}
                         {error && <p className="text-sm text-center text-red-500">{error}</p>}
@@ -286,9 +304,16 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, users, onRegister, onFor
                                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                                     <Lock className="h-5 w-5 text-gray-400" />
                                 </div>
-                                <input id="password" name="password" type="password" autoComplete="current-password" required
-                                    className="appearance-none block w-full px-3 py-2 pl-10 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-lyceum-blue focus:border-lyceum-blue sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                <input id="password" name="password" type={showPassword ? "text" : "password"} autoComplete="current-password" required
+                                    className="appearance-none block w-full px-3 py-2 pl-10 pr-10 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-lyceum-blue focus:border-lyceum-blue sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                                     placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPassword(!showPassword)}
+                                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                                >
+                                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                                </button>
                             </div>
                         </div>
 

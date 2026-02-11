@@ -750,7 +750,7 @@ const TasksView: React.FC<TasksViewProps> = ({
                         {/* Visibility Modal */}
                         {editingRT && (
                             <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-                                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md border border-gray-100 dark:border-gray-700 overflow-hidden">
+                                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md border border-gray-100 dark:border-gray-700 overflow-hidden max-h-[85vh] flex flex-col">
                                     <div className="p-6 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50/50 dark:bg-gray-700/50">
                                         <div>
                                             <h3 className="text-xl font-bold text-gray-900 dark:text-white">Edit Recurring Task</h3>
@@ -760,7 +760,7 @@ const TasksView: React.FC<TasksViewProps> = ({
                                             <X size={20} />
                                         </button>
                                     </div>
-                                    <div className="p-6 space-y-4">
+                                    <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
                                         <div className="space-y-3">
                                             <div className="relative">
                                                 <label className="text-sm font-bold text-gray-700 dark:text-gray-300 block mb-2">Linked Contact</label>
@@ -907,7 +907,7 @@ const TasksView: React.FC<TasksViewProps> = ({
                         {/* Create Recurring Task Modal */}
                         {isCreatingRT && (
                             <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-                                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md border border-gray-100 dark:border-gray-700 overflow-hidden">
+                                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md border border-gray-100 dark:border-gray-700 overflow-hidden max-h-[85vh] flex flex-col">
                                     <div className="p-6 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50/50 dark:bg-gray-700/50">
                                         <div>
                                             <h3 className="text-xl font-bold text-gray-900 dark:text-white">Create Recurring Task</h3>
@@ -917,7 +917,7 @@ const TasksView: React.FC<TasksViewProps> = ({
                                             <X size={20} />
                                         </button>
                                     </div>
-                                    <div className="p-6 space-y-4">
+                                    <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
                                         <div className="relative">
                                             <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Select Contact *</label>
                                             <div className="relative">

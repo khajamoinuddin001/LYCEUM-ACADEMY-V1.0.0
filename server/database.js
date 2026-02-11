@@ -295,6 +295,11 @@ export async function initDatabase() {
         await client.query('ALTER TABLE recurring_tasks DROP CONSTRAINT IF EXISTS recurring_tasks_task_id_key');
       } catch (err) { /* ignore if not exist */ }
 
+      // REMOVED: Re-sequencing migrations that were running on every server restart
+      // These migrations were causing duplicate task IDs and should only run once during initial setup
+      // If you need to re-sequence task IDs, run a one-time migration script instead
+
+      /*
       // Re-sequence manual tasks (TSK)
       await client.query(`
         WITH sequenced AS (
@@ -309,7 +314,7 @@ export async function initDatabase() {
         WHERE t.id = s.id;
       `);
 
-      // Re-sequence recurring definitions and instances (REQ)
+      // Re-sequence recurring definitions (REQ)
       await client.query(`
         WITH combined AS (
           SELECT id, created_at, 'definition' as source FROM recurring_tasks
@@ -326,23 +331,11 @@ export async function initDatabase() {
         FROM sequenced s
         WHERE rt.id = s.id AND s.source = 'definition';
       `);
+      */
 
-      await client.query(`
-        WITH combined AS (
-          SELECT id, created_at, 'definition' as source FROM recurring_tasks
-          UNION ALL
-          SELECT id, created_at, 'instance' as source FROM tasks WHERE recurring_task_id IS NOT NULL
-        ),
-        sequenced AS (
-          SELECT id, source, 
-                 'REQ-' || LPAD(ROW_NUMBER() OVER (ORDER BY created_at ASC, id ASC)::TEXT, 6, '0') as new_id
-          FROM combined
-        )
-        UPDATE tasks t
-        SET task_id = s.new_id
-        FROM sequenced s
-        WHERE t.id = s.id AND s.source = 'instance';
-      `);
+      // Task instances should use TSK- prefix, not REQ-
+      // The application code in api.js correctly generates TSK- IDs for task instances
+      // This migration was incorrectly overriding those IDs
 
       // Add unique constraints back
       await client.query('ALTER TABLE tasks ADD CONSTRAINT tasks_task_id_key UNIQUE (task_id)');

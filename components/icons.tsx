@@ -59,6 +59,7 @@ export {
   LogOut,
   KeyRound,
   Eye,
+  EyeOff,
   Lock,
   MailPlus,
   UserPlus,
