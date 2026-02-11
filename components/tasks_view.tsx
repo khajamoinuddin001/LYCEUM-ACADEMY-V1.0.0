@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import type { TodoTask, User, TaskPriority, TodoStatus } from '../types';
-import { Search, Filter, Plus, Edit, Trash2, Calendar, User as UserIcon, AlertCircle, CheckCircle2, Clock, MoreHorizontal, X, Play, Pause } from './icons';
+import { Search, Filter, Plus, Edit, Trash2, Calendar, User as UserIcon, AlertCircle, CheckCircle2, Clock, MoreHorizontal, X, Play, Pause, Square } from './icons';
 import { getStaffMembers, getRecurringTasks, updateRecurringTask, deleteRecurringTask, createRecurringTask, getContacts, getTasks } from '../utils/api';
 import type { Contact } from '../types';
 import type { RecurringTask } from '../types';
@@ -475,6 +475,12 @@ const TasksView: React.FC<TasksViewProps> = ({
                                                                 {task.description && (
                                                                     <span className="text-xs text-gray-500 line-clamp-1">{task.description}</span>
                                                                 )}
+                                                                {task.contactName && (
+                                                                    <div className="flex items-center gap-1 mt-1 text-lyceum-blue bg-lyceum-blue/5 px-2 py-0.5 rounded-full w-fit">
+                                                                        <UserIcon size={10} />
+                                                                        <span className="text-[10px] font-bold">{task.contactName}</span>
+                                                                    </div>
+                                                                )}
                                                             </div>
                                                         </td>
                                                         <td className="px-6 py-4 whitespace-nowrap">
@@ -595,7 +601,13 @@ const TasksView: React.FC<TasksViewProps> = ({
                                                     </td>
                                                     <td className="px-6 py-4">
                                                         <div className="font-bold text-gray-800 dark:text-gray-100">{rt.title}</div>
-                                                        <div className="text-xs text-gray-500 mt-1 line-clamp-1">{rt.description}</div>
+                                                        {rt.contactName && (
+                                                            <div className="text-xs text-lyceum-blue mt-1 flex items-center gap-1">
+                                                                <UserIcon size={10} />
+                                                                Linked to: {rt.contactName}
+                                                            </div>
+                                                        )}
+                                                        {rt.description && <div className="text-xs text-gray-500 line-clamp-1 mt-0.5">{rt.description}</div>}
                                                     </td>
                                                     <td className="px-6 py-4">
                                                         {editingFrequencyId === rt.id ? (
@@ -675,26 +687,43 @@ const TasksView: React.FC<TasksViewProps> = ({
                                                     </td>
                                                     <td className="px-6 py-4 text-right">
                                                         <button
-                                                            onClick={() => setEditingRT(rt)}
+                                                            onClick={() => {
+                                                                setEditingRT(rt);
+                                                                // Initialize search with current contact name if exists
+                                                                const contact = contacts.find(c => c.id === rt.contactId);
+                                                                setContactSearch(contact ? contact.name : '');
+                                                            }}
                                                             className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg text-gray-400 hover:text-lyceum-blue transition-colors"
                                                             title="Edit recurring task"
                                                         >
                                                             <Edit size={16} />
                                                         </button>
-                                                        <button
-                                                            onClick={async () => {
-                                                                await updateRecurringTask(rt.id, {
-                                                                    frequencyDays: rt.frequencyDays,
-                                                                    visibilityEmails: rt.visibilityEmails,
-                                                                    isActive: !rt.isActive
-                                                                });
-                                                                fetchRecurringTasks();
-                                                            }}
-                                                            className={`p-2 rounded-lg transition-colors ${rt.isActive ? 'hover:bg-amber-50 dark:hover:bg-amber-900/20 text-gray-400 hover:text-amber-500' : 'hover:bg-green-50 dark:hover:bg-green-900/20 text-gray-400 hover:text-green-500'}`}
-                                                            title={rt.isActive ? 'Pause recurring task' : 'Resume recurring task'}
-                                                        >
-                                                            {rt.isActive ? <Pause size={16} /> : <Play size={16} />}
-                                                        </button>
+                                                        {rt.isActive ? (
+                                                            <button
+                                                                onClick={async () => {
+                                                                    if (confirm('Are you sure you want to stop this recurring task? It cannot be reactivated.')) {
+                                                                        await updateRecurringTask(rt.id, {
+                                                                            frequencyDays: rt.frequencyDays,
+                                                                            visibilityEmails: rt.visibilityEmails,
+                                                                            isActive: false,
+                                                                            title: rt.title,
+                                                                            description: rt.description,
+                                                                            assignedTo: rt.assignedTo,
+                                                                            contactId: rt.contactId
+                                                                        });
+                                                                        fetchRecurringTasks();
+                                                                    }
+                                                                }}
+                                                                className="p-2 rounded-lg transition-colors hover:bg-amber-50 dark:hover:bg-amber-900/20 text-gray-400 hover:text-amber-500"
+                                                                title="Stop recurring task permanently"
+                                                            >
+                                                                <Square size={16} fill="currentColor" />
+                                                            </button>
+                                                        ) : (
+                                                            <div className="p-2 text-gray-300 dark:text-gray-600 cursor-not-allowed" title="Task is stopped">
+                                                                <Square size={16} />
+                                                            </div>
+                                                        )}
                                                         <button
                                                             onClick={async () => {
                                                                 if (confirm(`Delete recurring task "${rt.title}"? This will not delete already generated tasks.`)) {
@@ -733,6 +762,81 @@ const TasksView: React.FC<TasksViewProps> = ({
                                     </div>
                                     <div className="p-6 space-y-4">
                                         <div className="space-y-3">
+                                            <div className="relative">
+                                                <label className="text-sm font-bold text-gray-700 dark:text-gray-300 block mb-2">Linked Contact</label>
+                                                <div className="relative">
+                                                    <input
+                                                        type="text"
+                                                        value={contactSearch}
+                                                        onChange={(e) => {
+                                                            setContactSearch(e.target.value);
+                                                            if (editingRT.contactId) {
+                                                                // If clearing contact, update state
+                                                                setEditingRT({ ...editingRT, contactId: 0 });
+                                                            }
+                                                            setIsContactDropdownOpen(true);
+                                                        }}
+                                                        onFocus={() => setIsContactDropdownOpen(true)}
+                                                        placeholder="Search to link a contact..."
+                                                        className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-lyceum-blue outline-none dark:text-white"
+                                                    />
+                                                    {editingRT.contactId ? (
+                                                        <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-green-500">
+                                                            <CheckCircle2 size={16} />
+                                                        </div>
+                                                    ) : null}
+                                                </div>
+                                                {isContactDropdownOpen && (
+                                                    <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                                                        {contacts.length === 0 ? (
+                                                            <div className="p-3 text-gray-500 text-sm text-center">Loading contacts...</div>
+                                                        ) : (
+                                                            <>
+                                                                {contacts
+                                                                    .filter(c =>
+                                                                        !contactSearch ||
+                                                                        c.name.toLowerCase().includes(contactSearch.toLowerCase()) ||
+                                                                        (c.email && c.email.toLowerCase().includes(contactSearch.toLowerCase()))
+                                                                    )
+                                                                    .map(contact => (
+                                                                        <button
+                                                                            key={contact.id}
+                                                                            onClick={() => {
+                                                                                setEditingRT({ ...editingRT, contactId: contact.id });
+                                                                                setContactSearch(contact.name);
+                                                                                setIsContactDropdownOpen(false);
+                                                                            }}
+                                                                            className="w-full text-left px-4 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 border-b border-gray-100 dark:border-gray-700 last:border-0 transition-colors"
+                                                                        >
+                                                                            <div className="font-bold text-sm text-gray-800 dark:text-gray-200">{contact.name}</div>
+                                                                            <div className="text-xs text-gray-500">{contact.email}</div>
+                                                                        </button>
+                                                                    ))}
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div>
+                                                <label className="text-sm font-bold text-gray-700 dark:text-gray-300 block mb-2">Title</label>
+                                                <input
+                                                    type="text"
+                                                    value={editingRT.title}
+                                                    onChange={(e) => setEditingRT({ ...editingRT, title: e.target.value })}
+                                                    className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-lyceum-blue outline-none dark:text-white"
+                                                    placeholder="Task Title"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="text-sm font-bold text-gray-700 dark:text-gray-300 block mb-2">Description</label>
+                                                <textarea
+                                                    value={editingRT.description || ''}
+                                                    onChange={(e) => setEditingRT({ ...editingRT, description: e.target.value })}
+                                                    className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-lyceum-blue outline-none dark:text-white"
+                                                    placeholder="Task Description"
+                                                    rows={3}
+                                                />
+                                            </div>
                                             <div>
                                                 <label className="text-sm font-bold text-gray-700 dark:text-gray-300 block mb-2">Frequency (Days)</label>
                                                 <input
@@ -754,16 +858,21 @@ const TasksView: React.FC<TasksViewProps> = ({
                                         </div>
                                         <div>
                                             <select
-                                                value={editingRT.visibilityEmails?.[0] || ''}
+                                                value={editingRT.assignedTo || ''}
                                                 onChange={(e) => {
-                                                    const newVisibility = e.target.value ? [e.target.value] : [];
-                                                    setEditingRT({ ...editingRT, visibilityEmails: newVisibility });
+                                                    const staffId = parseInt(e.target.value);
+                                                    const staffMember = staff.find(s => s.id === staffId);
+                                                    setEditingRT({
+                                                        ...editingRT,
+                                                        assignedTo: staffId,
+                                                        visibilityEmails: staffMember ? [staffMember.email] : []
+                                                    });
                                                 }}
                                                 className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-lyceum-blue outline-none dark:text-white"
                                             >
                                                 <option value="">Select a staff member...</option>
                                                 {staff.map(s => (
-                                                    <option key={s.id} value={s.email}>
+                                                    <option key={s.id} value={s.id}>
                                                         {s.name} ({s.email})
                                                     </option>
                                                 ))}
@@ -776,7 +885,11 @@ const TasksView: React.FC<TasksViewProps> = ({
                                                     await updateRecurringTask(editingRT.id, {
                                                         visibilityEmails: editingRT.visibilityEmails,
                                                         frequencyDays: editingRT.frequencyDays,
-                                                        isActive: editingRT.isActive
+                                                        isActive: editingRT.isActive,
+                                                        assignedTo: editingRT.assignedTo,
+                                                        title: editingRT.title,
+                                                        description: editingRT.description,
+                                                        contactId: editingRT.contactId || undefined // Send undefined if 0 to clear or strict null check in API
                                                     });
                                                     setEditingRT(null);
                                                     fetchRecurringTasks();
@@ -800,7 +913,7 @@ const TasksView: React.FC<TasksViewProps> = ({
                                             <h3 className="text-xl font-bold text-gray-900 dark:text-white">Create Recurring Task</h3>
                                             <p className="text-xs text-gray-500 mt-1">Set up automatic task generation</p>
                                         </div>
-                                        <button onClick={() => { setIsCreatingRT(false); setNewRT({ contactId: 0, title: '', description: '', frequencyDays: 2, visibilityEmails: [] }); setContactSearch(''); }} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-full transition-colors text-gray-500">
+                                        <button onClick={() => { setIsCreatingRT(false); setNewRT({ contactId: 0, title: '', description: '', frequencyDays: 2, visibilityEmails: [], assignedTo: undefined }); setContactSearch(''); }} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-full transition-colors text-gray-500">
                                             <X size={20} />
                                         </button>
                                     </div>
@@ -897,15 +1010,21 @@ const TasksView: React.FC<TasksViewProps> = ({
                                         <div>
                                             <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Assign to Staff</label>
                                             <select
-                                                value={newRT.visibilityEmails[0] || ''}
+                                                value={newRT.assignedTo || ''}
                                                 onChange={(e) => {
-                                                    setNewRT({ ...newRT, visibilityEmails: e.target.value ? [e.target.value] : [] });
+                                                    const staffId = parseInt(e.target.value);
+                                                    const staffMember = staff.find(s => s.id === staffId);
+                                                    setNewRT({
+                                                        ...newRT,
+                                                        assignedTo: staffId,
+                                                        visibilityEmails: staffMember ? [staffMember.email] : []
+                                                    });
                                                 }}
                                                 className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-800 dark:text-white"
                                             >
                                                 <option value="">Select a staff member...</option>
                                                 {staff.map(s => (
-                                                    <option key={s.id} value={s.email}>
+                                                    <option key={s.id} value={s.id}>
                                                         {s.name} ({s.email})
                                                     </option>
                                                 ))}
@@ -921,7 +1040,7 @@ const TasksView: React.FC<TasksViewProps> = ({
                                                     }
                                                     await createRecurringTask(newRT);
                                                     setIsCreatingRT(false);
-                                                    setNewRT({ contactId: 0, title: '', description: '', frequencyDays: 2, visibilityEmails: [] });
+                                                    setNewRT({ contactId: 0, title: '', description: '', frequencyDays: 2, visibilityEmails: [], assignedTo: undefined });
                                                     setContactSearch('');
                                                     fetchRecurringTasks();
                                                 }}
@@ -1040,6 +1159,12 @@ const TasksView: React.FC<TasksViewProps> = ({
                                                             <div className="flex items-center gap-1">
                                                                 <UserIcon size={12} />
                                                                 {staff.find(s => s.id === task.assignedTo)?.name || 'Assigned'}
+                                                            </div>
+                                                        )}
+                                                        {task.contactName && (
+                                                            <div className="flex items-center gap-1 text-lyceum-blue bg-lyceum-blue/5 px-2 py-0.5 rounded-full">
+                                                                <UserIcon size={10} />
+                                                                {task.contactName}
                                                             </div>
                                                         )}
                                                     </div>

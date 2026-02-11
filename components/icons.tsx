@@ -96,5 +96,6 @@ export {
   Link,
   HardDrive,
   Play,
-  Pause
+  Pause,
+  Square
 } from 'lucide-react';

@@ -449,6 +449,8 @@ export interface RecurringTask {
   lastGeneratedAt?: string;
   nextGenerationAt?: string;
   isActive: boolean;
+  assignedTo?: number;
+  contactName?: string;
   visibilityEmails: string[];
   createdAt: string;
 }

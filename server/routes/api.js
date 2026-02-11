@@ -916,6 +916,18 @@ router.post('/contacts/:id/merge', authenticateToken, async (req, res) => {
       [mergedData.name, target.name, target.email, target.phone]);
     recordsUpdated.leads = leadsResult.rows.length;
 
+    // Update tasks (Fix for foreign key constraint)
+    const tasksResult = await query('UPDATE tasks SET contact_id = $1 WHERE contact_id = $2 RETURNING id', [primaryId, targetContactId]);
+    recordsUpdated.tasks = tasksResult.rows.length;
+
+    // Update recurring tasks (Fix for foreign key constraint)
+    const recurringTasksResult = await query('UPDATE recurring_tasks SET contact_id = $1 WHERE contact_id = $2 RETURNING task_id', [primaryId, targetContactId]);
+    recordsUpdated.recurringTasks = recurringTasksResult.rows.length;
+
+    // Update tickets (Fix for missing data)
+    const ticketsResult = await query('UPDATE tickets SET contact_id = $1 WHERE contact_id = $2 RETURNING ticket_id', [primaryId, targetContactId]);
+    recordsUpdated.tickets = ticketsResult.rows.length;
+
     // If target had a user link, update user to point to primary contact
     if (target.user_id && !primary.user_id) {
       await query('UPDATE users SET name = $1 WHERE id = $2', [mergedData.name, target.user_id]);
@@ -925,7 +937,7 @@ router.post('/contacts/:id/merge', authenticateToken, async (req, res) => {
     // Delete target contact
     await query('DELETE FROM contacts WHERE id = $1', [targetContactId]);
 
-    console.log(`✅ Merge complete: ${recordsUpdated.visitors} visitors, ${recordsUpdated.transactions} transactions, ${recordsUpdated.leads} leads updated`);
+    console.log(`✅ Merge complete: ${recordsUpdated.visitors} visitors, ${recordsUpdated.transactions} transactions, ${recordsUpdated.leads} leads, ${recordsUpdated.tasks} tasks, ${recordsUpdated.recurringTasks} recurring tasks, ${recordsUpdated.tickets} tickets updated`);
 
     // Fetch and return merged contact
     const finalResult = await query('SELECT * FROM contacts WHERE id = $1', [primaryId]);
@@ -1732,8 +1744,8 @@ router.get('/tasks', authenticateToken, async (req, res) => {
           params.push(JSON.stringify([req.user.email]));
         }
       } else {
-        // Staff view: Show assigned to me, created by me, or visibility emails matches
-        q += ' WHERE tasks.assigned_to = $1 OR tasks.assigned_by = $2 OR tasks.visibility_emails::jsonb @> $3::jsonb';
+        // Staff view: Show assigned to me, created by me (for 30 mins), or visibility emails matches
+        q += ' WHERE tasks.assigned_to = $1 OR (tasks.assigned_by = $2 AND tasks.created_at >= NOW() - INTERVAL \'30 minutes\') OR tasks.visibility_emails::jsonb @> $3::jsonb';
         params.push(req.user.id);
         params.push(req.user.id);
         params.push(JSON.stringify([req.user.email]));
@@ -1880,8 +1892,10 @@ const transformRecurringTask = (rt) => ({
   lastGeneratedAt: rt.last_generated_at,
   nextGenerationAt: rt.next_generation_at,
   isActive: rt.is_active,
+  assignedTo: rt.assigned_to,
   visibilityEmails: rt.visibility_emails,
-  createdAt: rt.created_at
+  createdAt: rt.created_at,
+  contactName: rt.contact_name
 });
 
 // Generate task instances
@@ -1921,7 +1935,7 @@ const generateTaskInstances = async () => {
         rt.description,
         new Date().toISOString().split('T')[0],
         'todo',
-        globalAssigneeId, // Use global assignee if set
+        rt.assigned_to || globalAssigneeId, // Use RT assignee, fallback to global
         'Medium',
         JSON.stringify(rt.visibility_emails || []),
         rt.id,
@@ -1967,14 +1981,14 @@ router.get('/recurring-tasks', authenticateToken, async (req, res) => {
 // Create recurring task manually
 router.post('/recurring-tasks', authenticateToken, async (req, res) => {
   try {
-    const { leadId, contactId, title, description, frequencyDays, visibilityEmails } = req.body;
+    const { leadId, contactId, title, description, frequencyDays, visibilityEmails, assignedTo } = req.body;
 
     // Generate task ID
     const taskId = await getNextTaskId('REQ');
 
     await query(`
-      INSERT INTO recurring_tasks(task_id, lead_id, contact_id, title, description, frequency_days, next_generation_at, visibility_emails, is_active)
-      VALUES($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, $7, true)
+      INSERT INTO recurring_tasks(task_id, lead_id, contact_id, title, description, frequency_days, next_generation_at, visibility_emails, assigned_to, is_active)
+      VALUES($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, $7, $8, true)
     `, [
       taskId,
       leadId || null,
@@ -1982,7 +1996,8 @@ router.post('/recurring-tasks', authenticateToken, async (req, res) => {
       title,
       description,
       frequencyDays || 2,
-      JSON.stringify(visibilityEmails || [])
+      JSON.stringify(visibilityEmails || []),
+      assignedTo || null
     ]);
 
     res.json({ success: true });
@@ -1993,16 +2008,15 @@ router.post('/recurring-tasks', authenticateToken, async (req, res) => {
 
 router.put('/recurring-tasks/:id', authenticateToken, async (req, res) => {
   try {
-    const { frequencyDays, visibilityEmails, isActive } = req.body;
-    await query(`
-      UPDATE recurring_tasks SET
-        frequency_days = $1, visibility_emails = $2, is_active = $3
-      WHERE id = $4
-    `, [frequencyDays, JSON.stringify(visibilityEmails || []), isActive !== false, req.params.id]);
+    const { frequencyDays, visibilityEmails, isActive, assignedTo, title, description, contactId } = req.body;
+    await query(
+      'UPDATE recurring_tasks SET frequency_days = $1, visibility_emails = $2, is_active = $3, assigned_to = $4, title = $5, description = $6, contact_id = $7 WHERE id = $8',
+      [frequencyDays, JSON.stringify(visibilityEmails), isActive, assignedTo || null, title, description, contactId || null, req.params.id]
+    );
 
-    // Also update visibility_emails for all future tasks generated by this recurring task
+    // Also update visibility_emails and contact_id for all future tasks generated by this recurring task
     // We update existing tasks of this recurring task too for consistency
-    await query('UPDATE tasks SET visibility_emails = $1 WHERE recurring_task_id = $2', [JSON.stringify(visibilityEmails || []), req.params.id]);
+    await query('UPDATE tasks SET visibility_emails = $1, contact_id = $2 WHERE recurring_task_id = $3', [JSON.stringify(visibilityEmails || []), contactId || null, req.params.id]);
 
     res.json({ success: true });
   } catch (error) {
@@ -2072,6 +2086,11 @@ router.put('/tasks/:id', authenticateToken, async (req, res) => {
     if (task.replies !== undefined) {
       updateFields.push(`replies = $${updateParams.length + 1}`);
       updateParams.push(JSON.stringify(task.replies));
+    }
+
+    if (task.visibility_emails !== undefined) {
+      updateFields.push(`visibility_emails = $${updateParams.length + 1}`);
+      updateParams.push(JSON.stringify(task.visibility_emails));
     }
 
     if (task.contactId) {

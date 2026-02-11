@@ -868,14 +868,14 @@ export const getRecurringTasks = async (): Promise<RecurringTask[]> => {
 
 
 
-export const createRecurringTask = async (data: { leadId?: number; contactId?: number; title: string; description: string; frequencyDays: number; visibilityEmails: string[] }): Promise<void> => {
+export const createRecurringTask = async (data: { leadId?: number; contactId?: number; title: string; description: string; frequencyDays: number; visibilityEmails: string[]; assignedTo?: number }): Promise<void> => {
   await apiRequest('/recurring-tasks', {
     method: 'POST',
     body: JSON.stringify(data),
   });
 };
 
-export const updateRecurringTask = async (id: number, updates: { frequencyDays?: number; visibilityEmails?: string[]; isActive?: boolean }): Promise<void> => {
+export const updateRecurringTask = async (id: number, updates: { frequencyDays?: number; visibilityEmails?: string[]; isActive?: boolean; assignedTo?: number; title?: string; description?: string; contactId?: number }): Promise<void> => {
   await apiRequest(`/recurring-tasks/${id}`, {
     method: 'PUT',
     body: JSON.stringify(updates),
