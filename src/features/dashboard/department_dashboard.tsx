@@ -121,7 +121,7 @@ const DepartmentDashboard: React.FC<DepartmentDashboardProps> = ({ user, tickets
 
             const hasNewVal = waiting.some(v => !prevIds.has(v.id));
 
-            if (hasNewVal && prevIds.size > 0) {
+            if (hasNewVal) {
                 console.log("New visitor detected, playing sound!");
                 playNotificationSound();
             }
