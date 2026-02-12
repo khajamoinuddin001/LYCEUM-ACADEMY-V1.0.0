@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { DESTINATIONS_DATA } from '@/features/university/destinations/destinations_data';
 import { trackVisit } from '@/utils/visitor_tracking';
+import { API_BASE_URL } from '@/utils/api';
 
 interface LandingPageProps {
     onLogin: () => void;
@@ -191,7 +192,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onRegister, onTerms,
     const handleEnquirySubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
-            const response = await fetch('http://localhost:5002/api/public/enquiries', {
+            const response = await fetch(`${API_BASE_URL}/public/enquiries`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(enquiry)
