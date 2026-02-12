@@ -831,7 +831,24 @@ router.delete('/contacts/:id', authenticateToken, async (req, res) => {
     }
     const contact = check.rows[0];
 
-    // Delete contact first
+    // --- Clean up dependent records to satisfy foreign key constraints ---
+
+    // 1. Visitors: Set contact_id to NULL so we don't lose visitor history
+    await query('UPDATE visitors SET contact_id = NULL WHERE contact_id = $1', [contactId]);
+
+    // 2. Tickets: Delete associated tickets (or set to NULL if preferred, but usually tickets are contact-specific)
+    await query('DELETE FROM tickets WHERE contact_id = $1', [contactId]);
+
+    // 3. Transactions: Set contact_id to NULL to preserve financial records for the business
+    await query('UPDATE transactions SET contact_id = NULL WHERE contact_id = $1', [contactId]);
+
+    // 4. Tasks: Set contact_id to NULL
+    await query('UPDATE tasks SET contact_id = NULL WHERE contact_id = $1', [contactId]);
+
+    // 5. Recurring Tasks: Delete if they were specific to this contact
+    await query('DELETE FROM recurring_tasks WHERE contact_id = $1', [contactId]);
+
+    // Finally, delete the contact
     await query('DELETE FROM contacts WHERE id = $1', [contactId]);
 
     // If contact has a linked user, delete the user account as well
@@ -840,7 +857,7 @@ router.delete('/contacts/:id', authenticateToken, async (req, res) => {
       console.log(`Associated user account (ID: ${contact.user_id}) deleted for contact ${contactId}`);
     }
 
-    res.json({ success: true, message: 'Contact and associated user account deleted successfully' });
+    res.json({ success: true, message: 'Contact and associated records processed successfully' });
   } catch (error) {
     console.error('Delete contact error:', error);
     res.status(500).json({ error: error.message });
@@ -1373,37 +1390,82 @@ router.post('/public/enquiries', async (req, res) => {
   try {
     const enquiry = req.body;
 
-    // 1. Create Lead from Enquiry
+    // 1. Check for existing contact by email or name
+    let contactName = enquiry.name;
+    const existingContact = await query(
+      'SELECT id, name FROM contacts WHERE (email IS NOT NULL AND LOWER(email) = LOWER($1)) OR LOWER(name) = LOWER($2) LIMIT 1',
+      [enquiry.email, enquiry.name]
+    );
+
+    if (existingContact.rows.length === 0) {
+      // 2. Create NEW contact if not found
+      console.log(`📝 Auto-creating contact for enquiry: ${enquiry.name}`);
+
+      const now = new Date();
+      const yy = now.getFullYear().toString().slice(-2);
+      const mm = String(now.getMonth() + 1).padStart(2, '0');
+      const dd = String(now.getDate()).padStart(2, '0');
+      const datePrefix = `LA${yy}${mm}${dd} `;
+
+      const todayContacts = await query(
+        "SELECT contact_id FROM contacts WHERE contact_id LIKE $1 ORDER BY contact_id DESC LIMIT 1",
+        [`${datePrefix}%`]
+      );
+
+      let sequence = 0;
+      if (todayContacts.rows.length > 0) {
+        const lastId = todayContacts.rows[0].contact_id;
+        const lastSeq = parseInt(lastId.trim().slice(-3));
+        if (!isNaN(lastSeq)) sequence = lastSeq + 1;
+      }
+
+      const generatedContactId = `${datePrefix}${String(sequence).padStart(3, '0')}`;
+
+      await query(`
+        INSERT INTO contacts (name, email, phone, contact_id, source, department, notes, checklist, activity_log, recorded_sessions)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      `, [
+        enquiry.name,
+        enquiry.email,
+        enquiry.phone,
+        generatedContactId,
+        enquiry.source || 'Website',
+        'Unassigned',
+        `Interest: ${enquiry.interest}. Country: ${enquiry.country}. Message: ${enquiry.message}`,
+        JSON.stringify(DEFAULT_CHECKLIST_ITEMS.map(item => ({ ...item, id: Date.now() + Math.random() }))),
+        JSON.stringify([{ date: new Date().toISOString(), action: 'Enquiry Received', details: 'Contact created automatically from web enquiry.' }]),
+        '[]'
+      ]);
+    } else {
+      contactName = existingContact.rows[0].name;
+      console.log(`🔗 Linking enquiry to existing contact: ${contactName}`);
+    }
+
+    // 3. Create Lead from Enquiry
     const leadResult = await query(`
       INSERT INTO leads(title, company, value, contact, stage, email, phone, source, assigned_to, notes, quotations)
-VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-RETURNING *
-  `, [
-      `Website Enquiry: ${enquiry.name} `,  // Title
-      'Individual',                        // Company
-      0,                                   // Value
-      enquiry.name,                        // Contact Name
-      'New',                               // Stage
-      enquiry.email,                       // Email
-      enquiry.phone,                       // Phone
-      'Website',                           // Source
-      null,                                // Assigned To
-      `Interest: ${enquiry.interest}.Country: ${enquiry.country}.Message: ${enquiry.message} `, // Notes
-      JSON.stringify([])                   // Quotations
+      VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      RETURNING *
+    `, [
+      `${enquiry.source || 'Website'} Enquiry: ${enquiry.name}`, // Title
+      'Individual',                                             // Company
+      0,                                                        // Value
+      contactName,                                              // Contact Name
+      'New',                                                    // Stage
+      enquiry.email,                                            // Email
+      enquiry.phone,                                            // Phone
+      enquiry.source || 'Website',                             // Source
+      null,                                                     // Assigned To
+      `Interest: ${enquiry.interest}. Country: ${enquiry.country}. Message: ${enquiry.message}`, // Notes
+      JSON.stringify([])                                        // Quotations
     ]);
 
     const newLead = leadResult.rows[0];
 
-    // Sync recurring task for the new lead
+    // 4. Sync recurring task for the new lead
     await syncRecurringTaskForLead(newLead.id);
 
-    // Contacts are NOT automatically created from enquiries
-    // Admins must manually create contacts if needed
-
-    // 3. Notify Admins (Optional - typically leads are unassigned initially)
-    // You could query all admins and notify them here if desired.
-
-    res.json({ success: true, message: 'Enquiry received successfully' });
+    res.json({ success: true, message: 'Enquiry received and contact processed successfully' });
   } catch (error) {
     console.error('Enquiry Error:', error);
     res.status(500).json({ error: 'Failed to process enquiry' });
