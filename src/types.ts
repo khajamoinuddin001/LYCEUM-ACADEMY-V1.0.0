@@ -387,7 +387,7 @@ export interface CalendarEvent {
 
 export type CrmStage = 'New' | 'Qualified' | 'Proposal' | 'Won' | 'Lost';
 
-export type QuotationStatus = 'Draft' | 'In Review' | 'Accepted by Student' | 'Agreed' | 'Rejected';
+export type QuotationStatus = 'Draft' | 'Sent' | 'In Review' | 'Accepted by Student' | 'Agreed' | 'Rejected';
 
 export interface Quotation {
   id: number | string;

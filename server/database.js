@@ -639,6 +639,20 @@ export async function initDatabase() {
       )
     `);
 
+    // WEBSITE VISITS
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS website_visits (
+        id SERIAL PRIMARY KEY,
+        visitor_id TEXT NOT NULL,
+        user_id INTEGER REFERENCES users(id),
+        path TEXT NOT NULL,
+        user_agent TEXT,
+        referrer TEXT,
+        is_new_visitor BOOLEAN,
+        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     console.log("✅ Database initialized successfully");
   } catch (err) {
     if (client) await client.query("ROLLBACK");

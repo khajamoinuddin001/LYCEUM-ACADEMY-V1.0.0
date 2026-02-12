@@ -27,7 +27,9 @@ import {
   Receipt,
   Paperclip,
   UserCircle,
-  GraduationCap
+  GraduationCap,
+  Target,
+  TrendingUp
 } from '@/components/common/icons';
 
 export const ODOO_APPS: OdooApp[] = [
@@ -76,8 +78,8 @@ export const ODOO_APPS: OdooApp[] = [
   },
 
   {
-    name: 'Marketing',
-    icon: <Share2 size={36} />,
+    name: 'Analytics',
+    icon: <TrendingUp size={36} />,
     bgColor: 'bg-pink-100',
     iconColor: 'text-pink-600',
   },
@@ -148,7 +150,7 @@ const adminPermissions = ODOO_APPS.reduce((acc, app) => {
   return acc;
 }, {} as { [appName: string]: AppPermissions });
 
-const employeeFullAccessApps = new Set(['Contacts', 'CRM', 'Calendar', 'Discuss', 'Tasks', 'Tickets', 'Reception', 'Sales', 'Marketing', 'LMS', 'Visitor Display', 'Department Dashboard', 'Attendance', 'University Application']);
+const employeeFullAccessApps = new Set(['Contacts', 'CRM', 'Calendar', 'Discuss', 'Tasks', 'Tickets', 'Reception', 'Sales', 'Analytics', 'LMS', 'Visitor Display', 'Department Dashboard', 'Attendance', 'University Application']);
 const employeeReadOnlyApps = new Set(['dashboard', 'Accounts']);
 const employeePermissions: { [appName: string]: AppPermissions } = ODOO_APPS.reduce((acc, app) => {
   if (employeeFullAccessApps.has(app.name)) {

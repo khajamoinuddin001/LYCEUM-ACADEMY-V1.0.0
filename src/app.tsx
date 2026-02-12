@@ -71,6 +71,7 @@ import DepartmentDashboard from '@/features/dashboard/department_dashboard';
 import AttendanceView from '@/features/hr/attendance_view';
 import { TermsView, PrivacyView, LandingDocumentsView } from '@/features/shared/legal_views';
 import StudentDocumentsView from '@/features/students/student_documents_view';
+import MarketingView from '@/features/marketing/marketing_view';
 
 
 type ContactViewMode = 'details' | 'documents' | 'visaFiling' | 'checklist' | 'visits' | 'crm' | 'tasks';
@@ -1796,6 +1797,7 @@ const DashboardLayout: React.FC = () => {
       case 'Visitor Display': return <VisitorDisplay />;
       case 'Department Dashboard': return <DepartmentDashboard user={currentUser} tickets={tickets} onViewVisits={handleViewContactVisits} onTicketSelect={(ticketId) => { setSelectedTicketId(ticketId); setActiveApp('Tickets'); }} />;
       case 'Attendance': return <AttendanceView user={currentUser} users={users} onUpdateUser={handleUpdateUser} />;
+      case 'Analytics': return <MarketingView />;
       default: return <AppView appName={activeApp} onNavigateBack={() => handleAppSelect('Apps')} />;
     }
   }

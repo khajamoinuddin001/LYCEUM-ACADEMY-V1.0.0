@@ -32,6 +32,7 @@ import {
     Download
 } from 'lucide-react';
 import { DESTINATIONS_DATA } from '@/features/university/destinations/destinations_data';
+import { trackVisit } from '@/utils/visitor_tracking';
 
 interface LandingPageProps {
     onLogin: () => void;
@@ -100,6 +101,9 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onRegister, onTerms,
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
     useEffect(() => {
+        // Track visit on mount
+        trackVisit(window.location.pathname);
+
         const handleScroll = () => {
             setScrolled(window.scrollY > 50);
         };

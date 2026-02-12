@@ -52,7 +52,7 @@ const StudentQuotationsView: React.FC<StudentQuotationsViewProps> = ({ student, 
         setIsAccepting(true);
         try {
             // Call API to accept quotation
-            await api.acceptQuotation(quotation.id);
+            await api.acceptQuotation(Number(quotation.id));
 
             // Refresh page or update state
             window.location.reload();

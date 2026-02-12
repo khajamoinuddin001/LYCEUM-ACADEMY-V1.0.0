@@ -4,6 +4,211 @@ import { authenticateToken, requireRole } from '../auth.js';
 
 const router = express.Router();
 
+// Public Visitor Tracking Endpoint
+router.post('/public/track-visit', async (req, res) => {
+  try {
+    const { visitorId, path, referrer, userAgent, userId } = req.body;
+
+    if (!visitorId) {
+      return res.status(400).json({ error: 'Visitor ID is required' });
+    }
+
+    // Check if this is a new visitor
+    const checkRes = await query(
+      'SELECT id FROM website_visits WHERE visitor_id = $1 LIMIT 1',
+      [visitorId]
+    );
+    const isNewVisitor = checkRes.rows.length === 0;
+
+    await query(
+      `INSERT INTO website_visits (visitor_id, path, referrer, user_agent, user_id, is_new_visitor)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [visitorId, path || '/', referrer, userAgent, userId || null, isNewVisitor]
+    );
+
+    res.json({ success: true, isNewVisitor });
+  } catch (error) {
+    console.error('Track visit error:', error);
+    res.status(500).json({ error: 'Failed to track visit' });
+  }
+});
+
+// Helper to parse User Agent strings
+const parseUA = (ua) => {
+  if (!ua) return { browser: 'Unknown', platform: 'Unknown' };
+
+  let browser = 'Other';
+  if (ua.includes('Chrome')) browser = 'Chrome';
+  else if (ua.includes('Firefox')) browser = 'Firefox';
+  else if (ua.includes('Safari')) browser = 'Safari';
+  else if (ua.includes('Edge')) browser = 'Edge';
+
+  let platform = 'Other';
+  if (ua.includes('Windows')) platform = 'Windows';
+  else if (ua.includes('Macintosh')) platform = 'Mac';
+  else if (ua.includes('Linux')) platform = 'Linux';
+  else if (ua.includes('Android')) platform = 'Android';
+  else if (ua.includes('iPhone') || ua.includes('iPad')) platform = 'iOS';
+
+  return { browser, platform };
+};
+
+// Marketing Visitor Stats Endpoint
+router.get('/marketing/visitor-stats', authenticateToken, requireRole('Admin', 'Staff'), async (req, res) => {
+  try {
+    const range = parseInt(req.query.range) || 7;
+    const currentInterval = `${range} days`;
+    const prevIntervalStart = `${range * 2} days`;
+    const prevIntervalEnd = `${range} days`;
+
+    // Current Range Stats
+    const totalVisits = await query(`SELECT COUNT(*)::int as count FROM website_visits WHERE timestamp > CURRENT_DATE - INTERVAL '${currentInterval}'`);
+    const uniqueVisitors = await query(`SELECT COUNT(DISTINCT visitor_id)::int as count FROM website_visits WHERE timestamp > CURRENT_DATE - INTERVAL '${currentInterval}'`);
+    const newVisitors = await query(`SELECT COUNT(DISTINCT visitor_id)::int as count FROM website_visits WHERE is_new_visitor = true AND timestamp > CURRENT_DATE - INTERVAL '${currentInterval}'`);
+    const totalLeads = await query(`SELECT COUNT(*)::int as count FROM leads WHERE created_at > CURRENT_DATE - INTERVAL '${currentInterval}'`);
+
+    // Previous Range Stats (for growth calculation)
+    const prevVisits = await query(`SELECT COUNT(*)::int as count FROM website_visits WHERE timestamp BETWEEN CURRENT_DATE - INTERVAL '${prevIntervalStart}' AND CURRENT_DATE - INTERVAL '${prevIntervalEnd}'`);
+    const prevUnique = await query(`SELECT COUNT(DISTINCT visitor_id)::int as count FROM website_visits WHERE timestamp BETWEEN CURRENT_DATE - INTERVAL '${prevIntervalStart}' AND CURRENT_DATE - INTERVAL '${prevIntervalEnd}'`);
+    const prevLeads = await query(`SELECT COUNT(*)::int as count FROM leads WHERE created_at BETWEEN CURRENT_DATE - INTERVAL '${prevIntervalStart}' AND CURRENT_DATE - INTERVAL '${prevIntervalEnd}'`);
+
+    const calculateGrowth = (current, prev) => {
+      if (!prev || prev === 0) return current > 0 ? 100 : 0;
+      return Math.round(((current - prev) / prev) * 100);
+    };
+
+    // Top Pages
+    const topPages = await query(`
+      SELECT path, COUNT(*)::int as count 
+      FROM website_visits 
+      WHERE timestamp > CURRENT_DATE - INTERVAL '${currentInterval}'
+      GROUP BY path 
+      ORDER BY count DESC 
+      LIMIT 10
+    `);
+
+    // Top Referrers
+    const topReferrers = await query(`
+      SELECT COALESCE(referrer, 'Direct') as referrer, COUNT(*)::int as count 
+      FROM website_visits 
+      WHERE timestamp > CURRENT_DATE - INTERVAL '${currentInterval}'
+      GROUP BY referrer 
+      ORDER BY count DESC 
+      LIMIT 10
+    `);
+
+    // Categorized Referrers
+    const categorizeReferrer = (ref) => {
+      if (!ref || ref === 'Direct') return 'Direct';
+      const url = ref.toLowerCase();
+      if (url.includes('google') || url.includes('bing') || url.includes('yahoo')) return 'Search';
+      if (url.includes('facebook') || url.includes('instagram') || url.includes('twitter') || url.includes('linkedin') || url.includes('t.co')) return 'Social';
+      return 'Other';
+    };
+
+    const referrerCategories = { Direct: 0, Social: 0, Search: 0, Other: 0 };
+    const socialBreakdown = { Instagram: 0, Facebook: 0, YouTube: 0, Twitter: 0, LinkedIn: 0, Other: 0 };
+
+    topReferrers.rows.forEach(r => {
+      const cat = categorizeReferrer(r.referrer);
+      referrerCategories[cat] += r.count;
+
+      if (cat === 'Social') {
+        const ref = r.referrer.toLowerCase();
+        if (ref.includes('instagram')) socialBreakdown.Instagram += r.count;
+        else if (ref.includes('facebook') || ref.includes('fb.com')) socialBreakdown.Facebook += r.count;
+        else if (ref.includes('youtube') || ref.includes('youtu.be')) socialBreakdown.YouTube += r.count;
+        else if (ref.includes('twitter') || ref.includes('t.co')) socialBreakdown.Twitter += r.count;
+        else if (ref.includes('linkedin')) socialBreakdown.LinkedIn += r.count;
+        else socialBreakdown.Other += r.count;
+      }
+    });
+
+    // Trends
+    const trends = await query(`
+      SELECT 
+        DATE(timestamp) as date, 
+        COUNT(*)::int as visits,
+        COUNT(DISTINCT visitor_id)::int as unique_visitors
+      FROM website_visits
+      WHERE timestamp > CURRENT_DATE - INTERVAL '${currentInterval}'
+      GROUP BY DATE(timestamp)
+      ORDER BY DATE(timestamp) ASC
+    `);
+
+    // Peak Hours
+    const peakHoursRes = await query(`
+      SELECT 
+        EXTRACT(HOUR FROM timestamp)::int as hour, 
+        COUNT(*)::int as count
+      FROM website_visits
+      WHERE timestamp > CURRENT_DATE - INTERVAL '${currentInterval}'
+      GROUP BY hour
+      ORDER BY hour ASC
+    `);
+
+    // Average Session Depth
+    const sessionDepthRes = await query(`
+      WITH visitor_depths AS (
+        SELECT visitor_id, COUNT(DISTINCT path) as depth
+        FROM website_visits
+        WHERE timestamp > CURRENT_DATE - INTERVAL '${currentInterval}'
+        GROUP BY visitor_id
+      )
+      SELECT AVG(depth)::float as avg_depth FROM visitor_depths
+    `);
+
+    // Recent visits
+    const recentRes = await query(`
+      SELECT * FROM website_visits 
+      ORDER BY timestamp DESC 
+      LIMIT 100
+    `);
+
+    // Browser & Platform Aggregations
+    const uaRes = await query(`SELECT user_agent FROM website_visits WHERE timestamp > CURRENT_DATE - INTERVAL '${currentInterval}' ORDER BY timestamp DESC LIMIT 2000`);
+    const browsers = {};
+    const platforms = {};
+
+    uaRes.rows.forEach(row => {
+      const { browser, platform } = parseUA(row.user_agent);
+      browsers[browser] = (browsers[browser] || 0) + 1;
+      platforms[platform] = (platforms[platform] || 0) + 1;
+    });
+
+    res.json({
+      summary: {
+        totalVisits: totalVisits.rows[0].count,
+        uniqueVisitors: uniqueVisitors.rows[0].count,
+        newVisitors: newVisitors.rows[0].count,
+        returningVisitors: uniqueVisitors.rows[0].count - newVisitors.rows[0].count,
+        totalLeads: totalLeads.rows[0].count,
+        avgDepth: Math.round((parseFloat(sessionDepthRes.rows[0].avg_depth) || 0) * 10) / 10,
+        growth: {
+          visits: calculateGrowth(totalVisits.rows[0].count, prevVisits.rows[0].count),
+          unique: calculateGrowth(uniqueVisitors.rows[0].count, prevUnique.rows[0].count),
+          leads: calculateGrowth(totalLeads.rows[0].count, prevLeads.rows[0].count)
+        }
+      },
+      trends: trends.rows,
+      topPages: topPages.rows,
+      topReferrers: topReferrers.rows,
+      referrerCategories,
+      socialBreakdown,
+      peakHours: peakHoursRes.rows,
+      browsers,
+      platforms,
+      recent: recentRes.rows.slice(0, 20).map(v => ({
+        ...v,
+        ...parseUA(v.user_agent)
+      }))
+    });
+  } catch (error) {
+    console.error('Visitor stats error:', error);
+    res.status(500).json({ error: 'Failed to fetch visitor stats' });
+  }
+});
+
 // Routes are protected individually with authenticateToken middleware
 
 // Configure multer for memory storage

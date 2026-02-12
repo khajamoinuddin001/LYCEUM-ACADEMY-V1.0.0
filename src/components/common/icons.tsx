@@ -98,5 +98,16 @@ export {
   HardDrive,
   Play,
   Pause,
-  Square
+  Square,
+  Target,
+  Globe,
+  MousePointer2,
+  ArrowUpRight,
+  ArrowDownRight,
+  Layout,
+  Smartphone,
+  Chrome,
+  Compass,
+  Navigation,
+  History
 } from 'lucide-react';

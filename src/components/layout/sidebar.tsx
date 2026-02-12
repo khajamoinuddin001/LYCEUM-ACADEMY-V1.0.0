@@ -15,7 +15,8 @@ import {
   ConciergeBell,
   BookOpen,
   UserCheck,
-  Trash2
+  Trash2,
+  TrendingUp
 } from '@/components/common/icons';
 import type { User, OdooApp } from '@/types';
 import { ODOO_APPS as ALL_ODOO_APPS } from '@/lib/constants';
@@ -57,6 +58,7 @@ const NavItem: React.FC<NavItemProps & { draggable?: boolean; onDragStart?: (e: 
 const DEFAULT_STAFF_NAV = [
   { name: 'Apps', icon: <LayoutGrid size={20} /> },
   { name: 'dashboard', icon: <BarChart3 size={20} /> },
+  { name: 'Analytics', icon: <TrendingUp size={20} /> },
   { name: 'Discuss', icon: <MessagesSquare size={20} /> },
   { name: 'Calendar', icon: <Calendar size={20} /> },
   { name: 'Contacts', icon: <Contact size={20} /> },
