@@ -38,8 +38,36 @@ const DepartmentDashboard: React.FC<DepartmentDashboardProps> = ({ user, tickets
         return () => clearInterval(intervalId);
     }, []);
 
+    // Helper for notification sound
+    const playNotificationSound = () => {
+        try {
+            const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+            if (!AudioContext) return;
+
+            const ctx = new AudioContext();
+            const oscillator = ctx.createOscillator();
+            const gainNode = ctx.createGain();
+
+            oscillator.connect(gainNode);
+            gainNode.connect(ctx.destination);
+
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(500, ctx.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(1000, ctx.currentTime + 0.1);
+
+            gainNode.gain.setValueAtTime(0.1, ctx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+
+            oscillator.start();
+            oscillator.stop(ctx.currentTime + 0.5);
+        } catch (e) {
+            console.error('Audio play failed', e);
+        }
+    };
+
     const fetchData = async () => {
-        setIsLoading(true);
+        // Don't set loading on poll to avoid flicker
+        // setIsLoading(true); 
         try {
             const [allVisitors, tasks] = await Promise.all([
                 api.getVisitors(),
@@ -47,15 +75,31 @@ const DepartmentDashboard: React.FC<DepartmentDashboardProps> = ({ user, tickets
             ]);
 
             // Filter visitors waiting or recently called for THIS department
-            console.log(`[Dashboard] Filtering ${allVisitors.length} visitors for user ${user.name} (${user.role})`);
+            // console.log(`[Dashboard] Filtering ${allVisitors.length} visitors for user ${user.name} (${user.role})`);
 
             const waiting = allVisitors.filter(v => {
                 // Never show checked-out visitors in this dashboard
                 if (v.status === 'Checked-out') return false;
 
+                // 2. Decide visibility based on User Role and View Mode
+                if (user.role === 'Admin') {
+                    return true;
+                }
+
                 // 1. Determine if this visitor belongs to the current user ("My Visitors")
                 let isForMe = false;
 
+                // PRIORITY 1: Specific Staff Assignment
+                // If a staff email is assigned, ONLY that staff member should see it
+                if (v.staffEmail) {
+                    if (v.staffEmail.toLowerCase() === user.email.toLowerCase()) {
+                        return true; // Explicitly assigned to me
+                    } else {
+                        return false; // Explicitly assigned to someone else
+                    }
+                }
+
+                // PRIORITY 2: Department Matching (fallback if no specific staff)
                 // Check by host ID (most accurate)
                 if (v.host && String(v.host) === String(user.id)) isForMe = true;
 
@@ -74,6 +118,8 @@ const DepartmentDashboard: React.FC<DepartmentDashboardProps> = ({ user, tickets
                     const lastSegment = v.visitSegments[v.visitSegments.length - 1];
                     if (lastSegment && lastSegment.department) {
                         const segDept = String(lastSegment.department).toLowerCase().trim();
+                        // If segment has specific staff email (future proofing), check it
+                        // But for now check department text
                         if (segDept.includes(userNameNormalized) ||
                             (userDeptNormalized && segDept.includes(userDeptNormalized))) {
                             isForMe = true;
@@ -81,14 +127,6 @@ const DepartmentDashboard: React.FC<DepartmentDashboardProps> = ({ user, tickets
                     }
                 }
 
-                // 2. Decide visibility based on User Role and View Mode
-                if (user.role === 'Admin') {
-                    // Admins see everything that isn't checked out
-                    return true;
-                }
-
-                // Staff see their own scope or everything if specifically in "All" mode (though toggle is hidden for them currently)
-                if (viewMode === 'All') return true;
                 return isForMe;
             }).sort((a, b) => {
                 const timeA = new Date(a.checkIn || a.scheduledCheckIn || 0).getTime();
@@ -96,8 +134,16 @@ const DepartmentDashboard: React.FC<DepartmentDashboardProps> = ({ user, tickets
                 return timeA - timeB;
             });
 
-            console.log(`[Dashboard] Found ${waiting.length} visitors matching scope`);
-            setVisitors(waiting);
+            // Check for new visitors to play sound
+            setVisitors(prev => {
+                const prevIds = new Set(prev.map(v => v.id));
+                const hasNew = waiting.some(v => !prevIds.has(v.id));
+                if (hasNew && prev.length > 0) { // Don't play on initial load
+                    playNotificationSound();
+                }
+                return waiting;
+            });
+
             setMyTasks(tasks.filter(t => t.status !== 'Done'));
         } catch (error) {
             console.error("Fetch error", error);
