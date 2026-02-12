@@ -1405,6 +1405,16 @@ router.post('/products', authenticateToken, async (req, res) => {
   }
 });
 
+router.delete('/products/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    await query('DELETE FROM products WHERE id = $1', [id]);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // EXPENSE PAYEES ROUTES
 router.get('/expense-payees', authenticateToken, async (req, res) => {
   try {
