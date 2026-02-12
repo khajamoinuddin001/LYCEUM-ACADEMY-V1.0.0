@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import type { TodoTask, User, TaskPriority, TodoStatus } from '@/types';
 import { Search, Filter, Plus, Edit, Trash2, Calendar, User as UserIcon, AlertCircle, CheckCircle2, Clock, MoreHorizontal, X, Play, Pause, Square } from '@/components/common/icons';
-import { getStaffMembers, getRecurringTasks, updateRecurringTask, deleteRecurringTask, createRecurringTask, getContacts, getTasks } from '@/utils/api';
+import { getStaffMembers, getRecurringTasks, updateRecurringTask, deleteRecurringTask, createRecurringTask, getContacts, getTasks, uploadTaskAttachment, API_BASE_URL } from '@/utils/api';
 import type { Contact } from '@/types';
 import type { RecurringTask } from '@/types';
 import TaskDetailModal from './task_detail_modal';
@@ -174,12 +174,28 @@ const TasksView: React.FC<TasksViewProps> = ({
         const task = tasks.find(t => t.id === taskId);
         if (!task) return;
 
-        // Process attachments (in real app, upload to server)
-        const processedAttachments = attachments?.map(file => ({
-            name: file.name,
-            url: URL.createObjectURL(file), // In production, this would be the uploaded file URL
-            size: file.size
-        })) || [];
+        console.log('Uploading attachments...', attachments);
+
+        // Process attachments (Upload to server)
+        let processedAttachments: { name: string; url: string; size: number }[] = [];
+
+        if (attachments && attachments.length > 0) {
+            try {
+                // Upload files in parallel
+                const uploadPromises = attachments.map(file => uploadTaskAttachment(file, taskId));
+                const uploadedFiles = await Promise.all(uploadPromises);
+
+                processedAttachments = uploadedFiles.map(file => ({
+                    name: file.name,
+                    url: `${API_BASE_URL || ''}${file.url}`, // Full URL including API base
+                    size: file.size
+                }));
+            } catch (error) {
+                console.error('Error uploading attachments:', error);
+                alert('Failed to upload some attachments. Please try again.');
+                return;
+            }
+        }
 
         const newReply = {
             id: Date.now(),

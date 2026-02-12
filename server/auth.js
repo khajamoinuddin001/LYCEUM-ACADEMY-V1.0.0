@@ -43,11 +43,12 @@ export async function comparePassword(password, hash) {
 
 export async function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
+  let token = authHeader && authHeader.split(' ')[1];
 
-  // console.log('authenticateToken - Path:', req.path);
-  // console.log('authenticateToken - Auth header present:', !!authHeader);
-  // console.log('authenticateToken - Token present:', !!token);
+  if (!token && req.query.token) {
+    token = req.query.token;
+  }
+
 
   if (!token) {
     console.log('authenticateToken - No token, returning 401');

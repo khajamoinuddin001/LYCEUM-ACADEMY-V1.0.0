@@ -653,6 +653,19 @@ export async function initDatabase() {
       )
     `);
 
+    // TASK ATTACHMENTS
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS task_attachments (
+        id SERIAL PRIMARY KEY,
+        filename TEXT NOT NULL,
+        content_type TEXT,
+        file_data BYTEA,
+        file_size INTEGER,
+        task_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     console.log("✅ Database initialized successfully");
   } catch (err) {
     if (client) await client.query("ROLLBACK");

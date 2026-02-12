@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import type { TodoTask, User, TaskReply } from '@/types';
 import { X, MessageSquare, Send, Clock, Paperclip, FileText, UserPlus, MoreHorizontal, Eye, Edit, Trash2, Download } from '@/components/common/icons';
-import { getStaffMembers } from '@/utils/api';
+import { getStaffMembers, getToken } from '@/utils/api';
 
 interface TaskDetailModalProps {
     task: TodoTask | null;
@@ -158,6 +158,18 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
 
     const isAssignedToCurrentUser = task.assignedTo === user.id || task.assignedTo === user.name;
     const canReply = isAssignedToCurrentUser && task.status !== 'Done';
+
+    const getAuthenticatedUrl = (url: string) => {
+        if (!url) return '';
+        // If it's a blob url (local preview before upload), return as is
+        if (url.startsWith('blob:')) return url;
+
+        const token = getToken();
+        if (!token) return url;
+
+        const separator = url.includes('?') ? '&' : '?';
+        return `${url}${separator}token=${token}`;
+    };
 
     return (
         <>
@@ -512,7 +524,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                             <h3 className="text-lg font-bold text-gray-900 dark:text-white truncate pr-4">{previewAttachment.name}</h3>
                             <div className="flex items-center gap-2">
                                 <a
-                                    href={previewAttachment.url}
+                                    href={getAuthenticatedUrl(previewAttachment.url)}
                                     download={previewAttachment.name}
                                     className="inline-flex items-center gap-2 px-4 py-2 bg-lyceum-blue text-white rounded-lg hover:bg-lyceum-blue-dark transition-colors"
                                     onClick={(e) => e.stopPropagation()}
@@ -535,7 +547,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                                     return (
                                         <div className="flex items-center justify-center min-h-[400px]">
                                             <img
-                                                src={previewAttachment.url}
+                                                src={getAuthenticatedUrl(previewAttachment.url)}
                                                 alt={previewAttachment.name}
                                                 className="max-w-full max-h-[70vh] object-contain rounded-lg"
                                                 onError={(e) => {
@@ -560,7 +572,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                                 } else if (isPDF) {
                                     return (
                                         <iframe
-                                            src={previewAttachment.url}
+                                            src={getAuthenticatedUrl(previewAttachment.url)}
                                             className="w-full h-[70vh] rounded-lg border border-gray-200 dark:border-gray-700"
                                             title={previewAttachment.name}
                                         />
@@ -574,7 +586,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                                                 {fileName.match(/\.(\w+)$/)?.[1]?.toUpperCase() || 'Unknown'} files cannot be previewed in the browser
                                             </p>
                                             <a
-                                                href={previewAttachment.url}
+                                                href={getAuthenticatedUrl(previewAttachment.url)}
                                                 download={previewAttachment.name}
                                                 className="inline-flex items-center gap-2 px-6 py-3 bg-lyceum-blue text-white rounded-lg hover:bg-lyceum-blue-dark transition-colors"
                                             >

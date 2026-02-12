@@ -1461,6 +1461,35 @@ export const deleteSessionVideo = async (contactId: number, sessionId: number): 
   });
 };
 
+export const uploadTaskAttachment = async (file: File, taskId?: number): Promise<{ id: number; name: string; url: string; size: number }> => {
+  const formData = new FormData();
+  formData.append('file', file);
+  if (taskId) formData.append('taskId', taskId.toString());
+
+  const token = getToken();
+  const headers: HeadersInit = {
+    ...(token && { 'Authorization': `Bearer ${token}` }),
+  };
+
+  const response = await fetch(`${API_BASE_URL}/tasks/attachments`, {
+    method: 'POST',
+    headers,
+    body: formData,
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      removeToken();
+      window.location.href = '/';
+      throw new Error('Access token required');
+    }
+    const error = await response.json().catch(() => ({ error: 'Failed to upload task attachment' }));
+    throw new Error(error.error || `HTTP ${response.status}`);
+  }
+
+  return response.json();
+};
+
 export const linkTaskToTicket = async (ticketId: number, taskId: string): Promise<{ success: boolean; message: string }> => {
   return apiRequest<{ success: boolean; message: string }>(`/tickets/${ticketId}/link-task`, {
     method: 'POST',

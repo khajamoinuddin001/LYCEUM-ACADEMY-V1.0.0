@@ -66,15 +66,29 @@ const ContactTasksView: React.FC<ContactTasksViewProps> = ({ contact, user, onNa
     };
 
     const handleAddReply = async (taskId: number, message: string, attachments?: File[]) => {
-        // In a real app, process attachments properly. For now we use simpler logic or call api.
-        // Re-using logic from TasksView or similar if available, otherwise just use api.
         try {
-            // Process attachments logic (simplified here)
-            const processedAttachments = attachments?.map(file => ({
-                name: file.name,
-                url: URL.createObjectURL(file), // Mock URL
-                size: file.size
-            })) || [];
+            console.log('Uploading attachments for contact task...', attachments);
+
+            // Process attachments (Upload to server)
+            let processedAttachments: { name: string; url: string; size: number }[] = [];
+
+            if (attachments && attachments.length > 0) {
+                try {
+                    // Upload files in parallel
+                    const uploadPromises = attachments.map(file => api.uploadTaskAttachment(file, taskId));
+                    const uploadedFiles = await Promise.all(uploadPromises);
+
+                    processedAttachments = uploadedFiles.map(file => ({
+                        name: file.name,
+                        url: `${api.API_BASE_URL || ''}${file.url}`, // Full URL including API base
+                        size: file.size
+                    }));
+                } catch (error) {
+                    console.error('Error uploading attachments:', error);
+                    alert('Failed to upload some attachments. Please try again.');
+                    return;
+                }
+            }
 
             const task = contactTasks.find(t => t.id === taskId);
             if (!task) return;

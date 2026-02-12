@@ -2625,6 +2625,63 @@ router.delete('/tasks/:id', authenticateToken, async (req, res) => {
   }
 });
 
+// ===== TASK ATTACHMENTS ROUTES =====
+
+// Upload task attachment
+router.post('/tasks/attachments', authenticateToken, upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const { taskId } = req.body; // Optional: link to task immediately if provided
+
+    const result = await query(`
+      INSERT INTO task_attachments(filename, content_type, file_data, file_size, task_id)
+      VALUES($1, $2, $3, $4, $5)
+      RETURNING id, filename, content_type, file_size
+    `, [req.file.originalname, req.file.mimetype, req.file.buffer, req.file.size, taskId || null]);
+
+    const attachment = result.rows[0];
+    res.json({
+      id: attachment.id,
+      name: attachment.filename,
+      contentType: attachment.content_type,
+      size: attachment.file_size,
+      url: `/tasks/attachments/${attachment.id}`,
+      taskId: taskId
+    });
+  } catch (error) {
+    console.error('Error uploading task attachment:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Serve task attachment
+router.get('/tasks/attachments/:id', authenticateToken, async (req, res) => {
+  try {
+    const result = await query('SELECT filename, content_type, file_data FROM task_attachments WHERE id = $1', [req.params.id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Attachment not found' });
+    }
+
+    const { filename, content_type, file_data } = result.rows[0];
+    const isPreview = req.query.preview === 'true';
+
+    // Set headers
+    res.setHeader('Content-Type', content_type);
+    res.setHeader('Content-Disposition', `${isPreview ? 'inline' : 'attachment'}; filename="${filename}"`);
+
+    // Send binary data
+    res.send(file_data);
+  } catch (error) {
+    console.error('Error serving task attachment:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
 // ===== TICKETS ROUTES =====
 
 // Helper function to transform ticket from DB
