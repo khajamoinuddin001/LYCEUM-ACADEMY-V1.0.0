@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import type { Visitor, User, TodoTask, Ticket } from '@/types';
 import * as api from '@/utils/api';
 import { Users, CheckCircle, Clock, Volume2, ArrowRight, AlertCircle } from '@/components/common/icons';
@@ -12,7 +12,8 @@ interface DepartmentDashboardProps {
 
 const DepartmentDashboard: React.FC<DepartmentDashboardProps> = ({ user, tickets, onViewVisits, onTicketSelect }) => {
     const [visitors, setVisitors] = useState<Visitor[]>([]);
-    const [audioContext, setAudioContext] = useState<AudioContext | null>(null);
+    const audioContextRef = useRef<AudioContext | null>(null);
+    const previousVisitorIdsRef = useRef<Set<number>>(new Set());
     const [myTasks, setMyTasks] = useState<TodoTask[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [followUpVisitor, setFollowUpVisitor] = useState<Visitor | null>(null);
@@ -21,6 +22,121 @@ const DepartmentDashboard: React.FC<DepartmentDashboardProps> = ({ user, tickets
     const [viewMode, setViewMode] = useState<'Mine' | 'All'>(user.role === 'Admin' ? 'All' : 'Mine');
 
     const userDepartment = user.role === 'Admin' ? 'All' : (user.permissions?.department || 'Unassigned');
+
+    const playNotificationSound = () => {
+        const ctx = audioContextRef.current;
+        if (!ctx) return;
+
+        try {
+            // Resume if suspended (sometimes browsers suspend it automatically)
+            if (ctx.state === 'suspended') {
+                ctx.resume();
+            }
+
+            const oscillator = ctx.createOscillator();
+            const gainNode = ctx.createGain();
+
+            oscillator.connect(gainNode);
+            gainNode.connect(ctx.destination);
+
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(500, ctx.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(1000, ctx.currentTime + 0.1);
+
+            gainNode.gain.setValueAtTime(0.1, ctx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+
+            oscillator.start();
+            oscillator.stop(ctx.currentTime + 0.5);
+            console.log("Sound played");
+        } catch (e) {
+            console.error('Audio play failed', e);
+        }
+    };
+
+    const fetchData = async () => {
+        // Don't set loading on poll to avoid flicker
+        try {
+            const [allVisitors, tasks] = await Promise.all([
+                api.getVisitors(),
+                api.getTasks()
+            ]);
+
+            const waiting = allVisitors.filter(v => {
+                if (v.status === 'Checked-out') return false;
+
+                // 1. Determine if this visitor belongs to the current user ("My Visitors")
+                let isForMe = false;
+
+                // PRIORITY 1: Specific Staff Assignment
+                if (v.staffEmail) {
+                    if (v.staffEmail.toLowerCase() === user.email.toLowerCase()) {
+                        isForMe = true;
+                    } else {
+                        // If assigned to someone else, I shouldn't see it (unless I'm admin, handled later)
+                        if (user.role !== 'Admin') return false;
+                    }
+                }
+                // PRIORITY 2: Department Matching (fallback if no specific staff)
+                else {
+                    // Check by host ID (most accurate)
+                    if (v.host && String(v.host) === String(user.id)) isForMe = true;
+
+                    // Check by name or department string
+                    const targetDeptName = String((v as any).host_name || v.host || '').toLowerCase().trim();
+                    const userNameNormalized = String(user.name || '').toLowerCase().trim();
+                    const userDeptNormalized = (user.permissions?.department || '').toLowerCase().trim();
+
+                    if (targetDeptName.includes(userNameNormalized) ||
+                        (userDeptNormalized && targetDeptName.includes(userDeptNormalized))) {
+                        isForMe = true;
+                    }
+
+                    // Also check visit segments
+                    if (!isForMe && v.visitSegments && v.visitSegments.length > 0) {
+                        const lastSegment = v.visitSegments[v.visitSegments.length - 1];
+                        if (lastSegment && lastSegment.department) {
+                            const segDept = String(lastSegment.department).toLowerCase().trim();
+                            if (segDept.includes(userNameNormalized) ||
+                                (userDeptNormalized && segDept.includes(userDeptNormalized))) {
+                                isForMe = true;
+                            }
+                        }
+                    }
+                }
+
+                // 2. Decide visibility based on User Role and View Mode
+                if (user.role === 'Admin') return true;
+
+                return isForMe;
+            }).sort((a, b) => {
+                const timeA = new Date(a.checkIn || a.scheduledCheckIn || 0).getTime();
+                const timeB = new Date(b.checkIn || b.scheduledCheckIn || 0).getTime();
+                return timeA - timeB;
+            });
+
+            // Check for new visitors to play sound using REF to avoid staleness
+            const currentIds = new Set(waiting.map(v => v.id));
+            const prevIds = previousVisitorIdsRef.current;
+
+            const hasNewVal = waiting.some(v => !prevIds.has(v.id));
+
+            if (hasNewVal && prevIds.size > 0) {
+                console.log("New visitor detected, playing sound!");
+                playNotificationSound();
+            }
+
+            // Update ref
+            previousVisitorIdsRef.current = currentIds;
+
+            setVisitors(waiting);
+            setMyTasks(tasks.filter(t => t.status !== 'Done'));
+        } catch (error) {
+            console.error("Fetch error", error);
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
     useEffect(() => {
         const fetchStaff = async () => {
@@ -39,19 +155,18 @@ const DepartmentDashboard: React.FC<DepartmentDashboardProps> = ({ user, tickets
 
         // Audio Context Initialization
         const initAudio = () => {
-            if (!audioContext) {
+            if (!audioContextRef.current) {
                 const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
                 if (AudioContext) {
-                    const ctx = new AudioContext();
-                    setAudioContext(ctx);
+                    audioContextRef.current = new AudioContext();
                 }
             }
         };
 
         const handleInteraction = () => {
             initAudio();
-            if (audioContext && audioContext.state === 'suspended') {
-                audioContext.resume();
+            if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
+                audioContextRef.current.resume();
             }
         };
 
@@ -63,125 +178,7 @@ const DepartmentDashboard: React.FC<DepartmentDashboardProps> = ({ user, tickets
             window.removeEventListener('click', handleInteraction);
             window.removeEventListener('keydown', handleInteraction);
         };
-    }, [audioContext]);
-
-    // Helper for notification sound
-    const playNotificationSound = () => {
-        if (!audioContext) return;
-
-        try {
-            // Resume if suspended (sometimes browsers suspend it automatically)
-            if (audioContext.state === 'suspended') {
-                audioContext.resume();
-            }
-
-            const oscillator = audioContext.createOscillator();
-            const gainNode = audioContext.createGain();
-
-            oscillator.connect(gainNode);
-            gainNode.connect(audioContext.destination);
-
-            oscillator.type = 'sine';
-            oscillator.frequency.setValueAtTime(500, audioContext.currentTime);
-            oscillator.frequency.exponentialRampToValueAtTime(1000, audioContext.currentTime + 0.1);
-
-            gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
-
-            oscillator.start();
-            oscillator.stop(audioContext.currentTime + 0.5);
-        } catch (e) {
-            // console.error('Audio play failed', e);
-        }
-    };
-
-
-    const fetchData = async () => {
-        // Don't set loading on poll to avoid flicker
-        // setIsLoading(true); 
-        try {
-            const [allVisitors, tasks] = await Promise.all([
-                api.getVisitors(),
-                api.getTasks() // Assuming this returns tasks for current user
-            ]);
-
-            // Filter visitors waiting or recently called for THIS department
-            // console.log(`[Dashboard] Filtering ${allVisitors.length} visitors for user ${user.name} (${user.role})`);
-
-            const waiting = allVisitors.filter(v => {
-                // Never show checked-out visitors in this dashboard
-                if (v.status === 'Checked-out') return false;
-
-                // 2. Decide visibility based on User Role and View Mode
-                if (user.role === 'Admin') {
-                    return true;
-                }
-
-                // 1. Determine if this visitor belongs to the current user ("My Visitors")
-                let isForMe = false;
-
-                // PRIORITY 1: Specific Staff Assignment
-                // If a staff email is assigned, ONLY that staff member should see it
-                if (v.staffEmail) {
-                    if (v.staffEmail.toLowerCase() === user.email.toLowerCase()) {
-                        return true; // Explicitly assigned to me
-                    } else {
-                        return false; // Explicitly assigned to someone else
-                    }
-                }
-
-                // PRIORITY 2: Department Matching (fallback if no specific staff)
-                // Check by host ID (most accurate)
-                if (v.host && String(v.host) === String(user.id)) isForMe = true;
-
-                // Check by name or department string
-                const targetDeptName = String((v as any).host_name || v.host || '').toLowerCase().trim();
-                const userNameNormalized = String(user.name || '').toLowerCase().trim();
-                const userDeptNormalized = (user.permissions?.department || '').toLowerCase().trim();
-
-                if (targetDeptName.includes(userNameNormalized) ||
-                    (userDeptNormalized && targetDeptName.includes(userDeptNormalized))) {
-                    isForMe = true;
-                }
-
-                // Also check visit segments for department/name match
-                if (!isForMe && v.visitSegments && v.visitSegments.length > 0) {
-                    const lastSegment = v.visitSegments[v.visitSegments.length - 1];
-                    if (lastSegment && lastSegment.department) {
-                        const segDept = String(lastSegment.department).toLowerCase().trim();
-                        // If segment has specific staff email (future proofing), check it
-                        // But for now check department text
-                        if (segDept.includes(userNameNormalized) ||
-                            (userDeptNormalized && segDept.includes(userDeptNormalized))) {
-                            isForMe = true;
-                        }
-                    }
-                }
-
-                return isForMe;
-            }).sort((a, b) => {
-                const timeA = new Date(a.checkIn || a.scheduledCheckIn || 0).getTime();
-                const timeB = new Date(b.checkIn || b.scheduledCheckIn || 0).getTime();
-                return timeA - timeB;
-            });
-
-            // Check for new visitors to play sound
-            setVisitors(prev => {
-                const prevIds = new Set(prev.map(v => v.id));
-                const hasNew = waiting.some(v => !prevIds.has(v.id));
-                if (hasNew && prev.length > 0) { // Don't play on initial load
-                    playNotificationSound();
-                }
-                return waiting;
-            });
-
-            setMyTasks(tasks.filter(t => t.status !== 'Done'));
-        } catch (error) {
-            console.error("Fetch error", error);
-        } finally {
-            setIsLoading(false);
-        }
-    };
+    }, []);
 
     const handleCallVisitor = async (visitor: Visitor) => {
         try {
@@ -278,6 +275,9 @@ const DepartmentDashboard: React.FC<DepartmentDashboardProps> = ({ user, tickets
                     <p className="text-gray-500">{user.name} - {userDepartment}</p>
                 </div>
                 <div className="flex gap-4 items-center">
+                    <button onClick={playNotificationSound} className="text-xs bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 px-2 py-1 rounded text-gray-700 dark:text-gray-300">
+                        Test Sound
+                    </button>
                     {/* Toggle hidden at user request, defaults to All for Admin */}
                     <div className="text-right">
                         <div className="text-sm text-gray-500">Waiting</div>
