@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import type { CrmLead, CrmStage, User } from '@/types';
-import { IndianRupee, Building2, User as UserIcon, GripVertical, Filter, Trash2, Search, X, ChevronDown, ChevronUp, FileText, UserPlus } from '@/components/common/icons';
+import { IndianRupee, Building2, User as UserIcon, GripVertical, Filter, Trash2, Search, X, ChevronDown, ChevronUp, FileText, UserPlus, Phone } from '@/components/common/icons';
 import { getUsers, getSystemSetting, saveSystemSetting } from '@/utils/api';
 
 const STAGES: CrmStage[] = ['New', 'Qualified', 'Proposal', 'Won', 'Lost'];
@@ -88,10 +88,6 @@ const LeadCard: React.FC<{ lead: CrmLead; onSelect: (lead: CrmLead) => void; onD
                 </h3>
                 <div className="space-y-1 text-sm text-gray-600 dark:text-gray-300">
                     <div className="flex items-center">
-                        <Building2 size={14} className="mr-2 text-gray-400" />
-                        <span>{lead.company}</span>
-                    </div>
-                    <div className="flex items-center">
                         <UserIcon size={14} className="mr-2 text-gray-400" />
                         <span
                             className="cursor-pointer hover:underline hover:text-lyceum-blue"
@@ -103,6 +99,12 @@ const LeadCard: React.FC<{ lead: CrmLead; onSelect: (lead: CrmLead) => void; onD
                             {lead.contact}
                         </span>
                     </div>
+                    {lead.phone && (
+                        <div className="flex items-center">
+                            <Phone size={14} className="mr-2 text-gray-400" />
+                            <span className="text-gray-600 dark:text-gray-400 font-mono text-xs">{lead.phone}</span>
+                        </div>
+                    )}
                 </div>
             </div>
             {/* Quotations Badge */}

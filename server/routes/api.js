@@ -1342,16 +1342,73 @@ router.post('/leads', authenticateToken, async (req, res) => {
   try {
     const lead = req.body;
 
-    // Validate that contact exists in the database
-    const contactCheck = await query(
-      'SELECT id FROM contacts WHERE LOWER(name) = LOWER($1)',
-      [lead.contact]
+    // 1. Strict Check or Create Contact (Merge only if Name AND Phone match)
+    let contactName = lead.contact;
+    const existingContact = await query(
+      'SELECT id, name, phone, activity_log FROM contacts WHERE LOWER(name) = LOWER($1) AND phone = $2 LIMIT 1',
+      [lead.contact, lead.phone]
     );
 
-    if (contactCheck.rows.length === 0) {
-      return res.status(400).json({
-        error: 'Contact does not exist. Please create the contact first in the Contacts section.'
-      });
+    if (existingContact.rows.length === 0) {
+      // Create NEW contact if no safe match found
+      console.log(`📝 Auto-creating contact for manual lead: ${lead.contact}`);
+
+      const now = new Date();
+      const yy = now.getFullYear().toString().slice(-2);
+      const mm = String(now.getMonth() + 1).padStart(2, '0');
+      const dd = String(now.getDate()).padStart(2, '0');
+      const datePrefix = `LA${yy}${mm}${dd} `;
+
+      const todayContacts = await query(
+        "SELECT contact_id FROM contacts WHERE contact_id LIKE $1 ORDER BY contact_id DESC LIMIT 1",
+        [`${datePrefix}%`]
+      );
+
+      let sequence = 0;
+      if (todayContacts.rows.length > 0) {
+        const lastId = todayContacts.rows[0].contact_id;
+        const lastSeq = parseInt(lastId.trim().slice(-3));
+        if (!isNaN(lastSeq)) sequence = lastSeq + 1;
+      }
+
+      const generatedContactId = `${datePrefix}${String(sequence).padStart(3, '0')}`;
+
+      await query(`
+        INSERT INTO contacts (name, email, phone, contact_id, source, department, notes, checklist, activity_log, recorded_sessions)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      `, [
+        lead.contact,
+        lead.email,
+        lead.phone,
+        generatedContactId,
+        lead.source || 'Manual Entry',
+        'Unassigned',
+        lead.notes || 'Manually created lead.',
+        JSON.stringify(DEFAULT_CHECKLIST_ITEMS.map(item => ({ ...item, id: Date.now() + Math.random() }))),
+        JSON.stringify([{ date: new Date().toISOString(), action: 'Lead Created', details: 'Contact created automatically during manual lead entry.' }]),
+        '[]'
+      ]);
+    } else {
+      // Safe Merge: Update history and fill in missing phone if applicable
+      const matched = existingContact.rows[0];
+      contactName = matched.name; // Use the canonical name from the contact record
+
+      // Update phone if the existing record was missing it
+      if (!matched.phone && lead.phone) {
+        await query('UPDATE contacts SET phone = $1 WHERE id = $2', [lead.phone, matched.id]);
+      }
+
+      const currentLog = Array.isArray(matched.activity_log) ? matched.activity_log : (typeof matched.activity_log === 'string' ? JSON.parse(matched.activity_log) : []);
+      const updatedLog = [
+        ...currentLog,
+        {
+          date: new Date().toISOString(),
+          action: 'Manual Lead Created',
+          details: `Connected to new lead: ${lead.title}`
+        }
+      ];
+
+      await query('UPDATE contacts SET activity_log = $1 WHERE id = $2', [JSON.stringify(updatedLog), matched.id]);
     }
 
     // 1. Create the Lead
@@ -1390,16 +1447,16 @@ router.post('/public/enquiries', async (req, res) => {
   try {
     const enquiry = req.body;
 
-    // 1. Check for existing contact by email or name
+    // 1. Strict Check for existing contact (Merge only if Name AND Phone match)
     let contactName = enquiry.name;
     const existingContact = await query(
-      'SELECT id, name FROM contacts WHERE (email IS NOT NULL AND LOWER(email) = LOWER($1)) OR LOWER(name) = LOWER($2) LIMIT 1',
-      [enquiry.email, enquiry.name]
+      'SELECT id, name, phone, activity_log FROM contacts WHERE LOWER(name) = LOWER($1) AND phone = $2 LIMIT 1',
+      [enquiry.name, enquiry.phone]
     );
 
     if (existingContact.rows.length === 0) {
-      // 2. Create NEW contact if not found
-      console.log(`📝 Auto-creating contact for enquiry: ${enquiry.name}`);
+      // 2. Create NEW contact if no safe match found
+      console.log(`📝 Auto-creating individual contact: ${enquiry.name} (${enquiry.phone})`);
 
       const now = new Date();
       const yy = now.getFullYear().toString().slice(-2);
@@ -1433,15 +1490,34 @@ router.post('/public/enquiries', async (req, res) => {
         'Unassigned',
         `Interest: ${enquiry.interest}. Country: ${enquiry.country}. Message: ${enquiry.message}`,
         JSON.stringify(DEFAULT_CHECKLIST_ITEMS.map(item => ({ ...item, id: Date.now() + Math.random() }))),
-        JSON.stringify([{ date: new Date().toISOString(), action: 'Enquiry Received', details: 'Contact created automatically from web enquiry.' }]),
+        JSON.stringify([{ date: new Date().toISOString(), action: 'Enquiry Received', details: `Initial enquiry from ${enquiry.source || 'Website'}.` }]),
         '[]'
       ]);
     } else {
-      contactName = existingContact.rows[0].name;
-      console.log(`🔗 Linking enquiry to existing contact: ${contactName}`);
+      // 2b. Safe Merge: Update history and fill in missing phone if applicable
+      const matched = existingContact.rows[0];
+      contactName = matched.name;
+      console.log(`🔗 Safe Merging enquiry to: ${contactName} (ID: ${matched.id})`);
+
+      // Update phone if the existing record was missing it
+      if (!matched.phone && enquiry.phone) {
+        await query('UPDATE contacts SET phone = $1 WHERE id = $2', [enquiry.phone, matched.id]);
+      }
+
+      const currentLog = Array.isArray(matched.activity_log) ? matched.activity_log : (typeof matched.activity_log === 'string' ? JSON.parse(matched.activity_log) : []);
+      const updatedLog = [
+        ...currentLog,
+        {
+          date: new Date().toISOString(),
+          action: 'Secondary Enquiry',
+          details: `New enquiry from ${enquiry.source || 'Website'}. Interest: ${enquiry.interest}.`
+        }
+      ];
+
+      await query('UPDATE contacts SET activity_log = $1 WHERE id = $2', [JSON.stringify(updatedLog), matched.id]);
     }
 
-    // 3. Create Lead from Enquiry
+    // 3. Create Lead from Enquiry (Always create a new lead)
     const leadResult = await query(`
       INSERT INTO leads(title, company, value, contact, stage, email, phone, source, assigned_to, notes, quotations)
       VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
