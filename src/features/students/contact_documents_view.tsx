@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { Contact, Document as Doc, User } from '@/types';
-import { Paperclip, Upload, Download, ArrowLeft, Sparkles, Trash2, Eye } from '@/components/common/icons';
+import { Paperclip, Upload, Download, ArrowLeft, Sparkles, Trash2, Eye, X } from '@/components/common/icons';
 import * as api from '@/utils/api';
 
 interface ContactDocumentsViewProps {
@@ -10,7 +10,70 @@ interface ContactDocumentsViewProps {
   user?: User | null;
 }
 
-const DocumentItem = ({ doc, analyzingDocId, handleAnalyzeClick, handleDownload, handleDelete, isStaffOrAdmin }: any) => (
+const PreviewModal = ({ url, filename, type, onClose }: { url: string; filename: string; type: string; onClose: () => void }) => {
+  return (
+    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[9999] p-4 sm:p-8 animate-fade-in">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-5xl h-full flex flex-col shadow-2xl overflow-hidden relative">
+        <div className="bg-gray-50 dark:bg-gray-900 px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-lyceum-blue/10 rounded-lg text-lyceum-blue">
+              <Eye size={20} />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 leading-tight truncate max-w-[200px] sm:max-w-md">
+                {filename}
+              </h3>
+              <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">Document Preview</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <a
+              href={url}
+              download={filename}
+              className="p-2 text-gray-500 hover:text-lyceum-blue hover:bg-lyceum-blue/10 rounded-xl transition-all"
+              title="Download"
+            >
+              <Download size={24} />
+            </a>
+            <button
+              onClick={onClose}
+              className="p-2 text-gray-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-all"
+              title="Close"
+            >
+              <X size={24} />
+            </button>
+          </div>
+        </div>
+
+        <div className="flex-grow bg-gray-100 dark:bg-gray-900/50 overflow-hidden flex items-center justify-center relative">
+          {type.includes('image') ? (
+            <img src={url} alt={filename} className="max-w-full max-h-full object-contain shadow-lg" />
+          ) : type.includes('pdf') ? (
+            <iframe src={url} className="w-full h-full border-none" title={filename} />
+          ) : (
+            <div className="text-center p-8 bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700">
+              <div className="w-16 h-16 bg-lyceum-blue/10 text-lyceum-blue rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <Paperclip size={32} />
+              </div>
+              <p className="text-gray-900 dark:text-gray-100 font-bold text-lg mb-2">Preview Not Available</p>
+              <p className="text-gray-500 dark:text-gray-400 mb-6">This file type cannot be previewed directly.</p>
+              <a
+                href={url}
+                download={filename}
+                className="inline-flex items-center px-6 py-3 bg-lyceum-blue text-white rounded-xl font-bold hover:bg-lyceum-blue-dark transition-all shadow-lg shadow-lyceum-blue/20"
+              >
+                <Download size={18} className="mr-2" />
+                Download to View
+              </a>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const DocumentItem = ({ doc, analyzingDocId, handleAnalyzeClick, handlePreview, handleDownload, handleDelete, isStaffOrAdmin }: any) => (
   <li className="py-4 flex items-center justify-between">
     <div className="flex items-center">
       <Paperclip className="w-6 h-6 text-gray-400 mr-4" />
@@ -32,18 +95,9 @@ const DocumentItem = ({ doc, analyzingDocId, handleAnalyzeClick, handleDownload,
         {analyzingDocId === doc.id ? 'Analyzing...' : 'Analyze with AI'}
       </button>
       <button
-        onClick={() => {
-          const tokenStr = api.getToken() || '';
-          fetch(`${import.meta.env.VITE_API_URL}/documents/${doc.id}?preview=true`, {
-            headers: { 'Authorization': `Bearer ${tokenStr}` }
-          })
-            .then(res => res.blob())
-            .then(blob => {
-              const url = URL.createObjectURL(blob);
-              window.open(url, '_blank');
-            });
-        }}
-        className="inline-flex items-center px-3 py-1.5 text-xs font-semibold text-lyceum-blue bg-lyceum-blue/10 rounded-md hover:bg-lyceum-blue/20 mr-2"
+        onClick={() => handlePreview(doc)}
+        disabled={analyzingDocId === doc.id}
+        className="inline-flex items-center px-3 py-1.5 text-xs font-semibold text-lyceum-blue bg-lyceum-blue/10 rounded-md hover:bg-lyceum-blue/20 disabled:opacity-50 disabled:cursor-wait"
       >
         <Eye size={14} className="mr-1.5" />
         Preview
@@ -75,6 +129,7 @@ const ContactDocumentsView: React.FC<ContactDocumentsViewProps> = ({ contact, on
   const [analyzingDocId, setAnalyzingDocId] = useState<number | null>(null);
   const [isPrivate, setIsPrivate] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('Passport');
+  const [previewData, setPreviewData] = useState<{ url: string; filename: string; type: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const categories = [
@@ -183,6 +238,29 @@ const ContactDocumentsView: React.FC<ContactDocumentsViewProps> = ({ contact, on
     setAnalyzingDocId(null);
   };
 
+  const handlePreview = (doc: Doc) => {
+    const tokenStr = api.getToken() || '';
+    fetch(`${import.meta.env.VITE_API_URL}/documents/${doc.id}?preview=true`, {
+      headers: { 'Authorization': `Bearer ${tokenStr}` }
+    })
+      .then(res => res.blob())
+      .then(blob => {
+        const url = URL.createObjectURL(blob);
+        setPreviewData({ url, filename: doc.name, type: blob.type });
+      })
+      .catch(err => {
+        console.error('Preview error:', err);
+        alert('Failed to load preview.');
+      });
+  };
+
+  const closePreview = () => {
+    if (previewData?.url) {
+      URL.revokeObjectURL(previewData.url);
+    }
+    setPreviewData(null);
+  };
+
   const handleDelete = async (doc: Doc) => {
     if (!confirm(`Are you sure you want to delete "${doc.name}"? This action cannot be undone.`)) {
       return;
@@ -276,6 +354,7 @@ const ContactDocumentsView: React.FC<ContactDocumentsViewProps> = ({ contact, on
                         doc={doc}
                         analyzingDocId={analyzingDocId}
                         handleAnalyzeClick={handleAnalyzeClick}
+                        handlePreview={handlePreview}
                         handleDownload={handleDownload}
                         handleDelete={handleDelete}
                         isStaffOrAdmin={isStaffOrAdmin}
@@ -311,6 +390,7 @@ const ContactDocumentsView: React.FC<ContactDocumentsViewProps> = ({ contact, on
                           doc={doc}
                           analyzingDocId={analyzingDocId}
                           handleAnalyzeClick={handleAnalyzeClick}
+                          handlePreview={handlePreview}
                           handleDownload={handleDownload}
                           handleDelete={handleDelete}
                           isStaffOrAdmin={isStaffOrAdmin}
@@ -325,6 +405,15 @@ const ContactDocumentsView: React.FC<ContactDocumentsViewProps> = ({ contact, on
             </div>
           )}
         </div>
+      )}
+
+      {previewData && (
+        <PreviewModal
+          url={previewData.url}
+          filename={previewData.filename}
+          type={previewData.type}
+          onClose={closePreview}
+        />
       )}
 
       <style>{`

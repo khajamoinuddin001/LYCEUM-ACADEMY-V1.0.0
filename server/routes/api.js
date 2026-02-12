@@ -1686,6 +1686,7 @@ router.get('/transactions', authenticateToken, async (req, res) => {
       paymentMethod: t.payment_method,
       dueDate: t.due_date,
       additionalDiscount: t.additional_discount,
+      metadata: typeof t.metadata === 'string' ? JSON.parse(t.metadata) : (t.metadata || {}),
       amount: Number(t.amount)
     }));
     res.json(transactions);
@@ -1846,8 +1847,8 @@ router.post('/transactions', authenticateToken, async (req, res) => {
     }
 
     const result = await query(`
-      INSERT INTO transactions(id, contact_id, customer_name, date, description, type, status, amount, payment_method, due_date, additional_discount)
-      VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      INSERT INTO transactions(id, contact_id, customer_name, date, description, type, status, amount, payment_method, due_date, additional_discount, metadata)
+      VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
       RETURNING *
     `, [
       id,
@@ -1860,7 +1861,8 @@ router.post('/transactions', authenticateToken, async (req, res) => {
       transaction.amount,
       transaction.paymentMethod || null,
       transaction.dueDate || null,
-      transaction.additionalDiscount || 0
+      transaction.additionalDiscount || 0,
+      JSON.stringify(transaction.metadata || {})
     ]);
     const newTransaction = result.rows[0];
 
@@ -1923,12 +1925,31 @@ router.post('/transactions', authenticateToken, async (req, res) => {
               entry.paidAt = new Date().toISOString();
               amountToDeduct -= deduction;
             }
+            entry._lastDeduction = (entry._lastDeduction || 0) + deduction;
             arUpdated = true;
             return entry;
           });
 
           if (arUpdated) {
             await query('UPDATE contacts SET metadata = $1 WHERE id = $2', [JSON.stringify(metadata), contactId]);
+
+            // Track deductions in transaction metadata for future reversion
+            const arDeductions = metadata.accountsReceivable
+              .filter(e => e._lastDeduction > 0)
+              .map(e => ({ id: e.id, amount: e._lastDeduction }));
+
+            if (arDeductions.length > 0) {
+              const currentTxMetadata = newTransaction.metadata || {};
+              await query('UPDATE transactions SET metadata = $1 WHERE id = $2', [
+                JSON.stringify({ ...currentTxMetadata, arDeductions }),
+                newTransaction.id
+              ]);
+            }
+
+            // Cleanup temporary tracking field
+            metadata.accountsReceivable.forEach(e => delete e._lastDeduction);
+            await query('UPDATE contacts SET metadata = $1 WHERE id = $2', [JSON.stringify(metadata), contactId]);
+
             console.log(`✅ Updated AR for Contact ${contactId} based on Invoice ${newTransaction.id}`);
           }
         }
@@ -1961,8 +1982,8 @@ router.put('/transactions/:id', authenticateToken, async (req, res) => {
     const transaction = req.body;
     await query(`
       UPDATE transactions SET
-      contact_id = $1, customer_name = $2, date = $3, description = $4, type = $5, status = $6, amount = $7, payment_method = $8, due_date = $9, additional_discount = $10
-      WHERE id = $11
+      contact_id = $1, customer_name = $2, date = $3, description = $4, type = $5, status = $6, amount = $7, payment_method = $8, due_date = $9, additional_discount = $10, metadata = $11
+      WHERE id = $12
     `, [
       transaction.contactId || null,
       transaction.customerName,
@@ -1974,6 +1995,7 @@ router.put('/transactions/:id', authenticateToken, async (req, res) => {
       transaction.paymentMethod,
       transaction.dueDate || null,
       transaction.additionalDiscount || 0,
+      JSON.stringify(transaction.metadata || {}),
       req.params.id
     ]);
     const result = await query('SELECT * FROM transactions WHERE id = $1', [req.params.id]);
@@ -1985,6 +2007,7 @@ router.put('/transactions/:id', authenticateToken, async (req, res) => {
       paymentMethod: updated.payment_method,
       dueDate: updated.due_date,
       additionalDiscount: updated.additional_discount,
+      metadata: typeof updated.metadata === 'string' ? JSON.parse(updated.metadata) : (updated.metadata || {}),
       amount: Number(updated.amount)
     });
   } catch (error) {
@@ -1995,7 +2018,58 @@ router.put('/transactions/:id', authenticateToken, async (req, res) => {
 
 router.delete('/transactions/:id', authenticateToken, async (req, res) => {
   try {
-    await query('DELETE FROM transactions WHERE id = $1', [req.params.id]);
+    const transactionId = req.params.id;
+
+    // 1. Fetch transaction to check for AR deductions
+    const txRes = await query('SELECT * FROM transactions WHERE id = $1', [transactionId]);
+    if (txRes.rows.length === 0) return res.status(404).json({ error: 'Transaction not found' });
+
+    const transaction = txRes.rows[0];
+    const metadata = typeof transaction.metadata === 'string' ? JSON.parse(transaction.metadata) : (transaction.metadata || {});
+    const arDeductions = metadata.arDeductions || [];
+    const contactId = transaction.contact_id;
+
+    // 2. Revert AR if deductions were tracked
+    if (arDeductions.length > 0 && contactId) {
+      try {
+        const contactRes = await query('SELECT metadata FROM contacts WHERE id = $1', [contactId]);
+        if (contactRes.rows.length > 0) {
+          const contact = contactRes.rows[0];
+          let contactMetadata = contact.metadata || {};
+          if (typeof contactMetadata === 'string') {
+            try { contactMetadata = JSON.parse(contactMetadata); } catch (e) { contactMetadata = {}; }
+          }
+
+          if (contactMetadata.accountsReceivable) {
+            let contactUpdated = false;
+            arDeductions.forEach(deduction => {
+              const entry = contactMetadata.accountsReceivable.find(e => e.id === deduction.id);
+              if (entry) {
+                entry.remainingAmount = parseFloat(entry.remainingAmount) + parseFloat(deduction.amount);
+                entry.paidAmount = Math.max(0, parseFloat(entry.paidAmount) - parseFloat(deduction.amount));
+
+                // Revert status if it was 'Paid'
+                if (entry.remainingAmount > 0) {
+                  entry.status = entry.paidAmount > 0 ? 'Partial' : 'Outstanding';
+                  delete entry.paidAt;
+                }
+                contactUpdated = true;
+              }
+            });
+
+            if (contactUpdated) {
+              await query('UPDATE contacts SET metadata = $1 WHERE id = $2', [JSON.stringify(contactMetadata), contactId]);
+              console.log(`♻️ Reverted AR deductions for Contact ${contactId} after deleting Transaction ${transactionId}`);
+            }
+          }
+        }
+      } catch (revertError) {
+        console.error('Failed to revert AR deductions:', revertError);
+        // We continue with deletion even if reversion fails to avoid blocking the user
+      }
+    }
+
+    await query('DELETE FROM transactions WHERE id = $1', [transactionId]);
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });

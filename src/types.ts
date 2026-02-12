@@ -481,6 +481,7 @@ export interface AccountingTransaction {
   contact?: string;
   dueDate?: string;
   additionalDiscount?: number;
+  metadata?: any;
 }
 export type UserRole = 'Admin' | 'Staff' | 'Student';
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { Contact, Document as Doc, User } from '@/types';
-import { Paperclip, Upload, Download, ArrowLeft, Trash2, Eye, FileText, Clock, HardDrive, GraduationCap, Banknote, CalendarClock, MoreHorizontal, Plus } from '@/components/common/icons';
+import { Paperclip, Upload, Download, ArrowLeft, Trash2, Eye, FileText, Clock, HardDrive, GraduationCap, Banknote, CalendarClock, MoreHorizontal, Plus, X } from '@/components/common/icons';
 import * as api from '@/utils/api';
 
 interface StudentDocumentsViewProps {
@@ -8,6 +8,69 @@ interface StudentDocumentsViewProps {
     onNavigateBack: () => void;
     user: User;
 }
+
+const PreviewModal = ({ url, filename, type, onClose }: { url: string; filename: string; type: string; onClose: () => void }) => {
+    return (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[9999] p-4 sm:p-8 animate-fade-in">
+            <div className="bg-white dark:bg-gray-800 rounded-3xl w-full max-w-5xl h-full flex flex-col shadow-2xl overflow-hidden relative">
+                <div className="bg-gray-50 dark:bg-gray-900 px-8 py-6 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between shrink-0">
+                    <div className="flex items-center gap-4">
+                        <div className="p-3 bg-lyceum-blue/10 rounded-2xl text-lyceum-blue">
+                            <Eye size={24} />
+                        </div>
+                        <div>
+                            <h3 className="text-xl font-black text-gray-900 dark:text-gray-100 leading-tight truncate max-w-[200px] sm:max-w-md">
+                                {filename}
+                            </h3>
+                            <p className="text-sm font-bold text-gray-400 uppercase tracking-widest mt-0.5">Document Preview</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <a
+                            href={url}
+                            download={filename}
+                            className="p-3 text-gray-400 hover:text-lyceum-blue hover:bg-lyceum-blue/10 rounded-2xl transition-all"
+                            title="Download"
+                        >
+                            <Download size={28} />
+                        </a>
+                        <button
+                            onClick={onClose}
+                            className="p-3 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-2xl transition-all"
+                            title="Close"
+                        >
+                            <X size={28} />
+                        </button>
+                    </div>
+                </div>
+
+                <div className="flex-grow bg-gray-50 dark:bg-gray-900/30 overflow-hidden flex items-center justify-center relative">
+                    {type.includes('image') ? (
+                        <img src={url} alt={filename} className="max-w-full max-h-full object-contain shadow-2xl rounded-lg" />
+                    ) : type.includes('pdf') ? (
+                        <iframe src={url} className="w-full h-full border-none" title={filename} />
+                    ) : (
+                        <div className="text-center p-12 bg-white dark:bg-gray-800 rounded-3xl shadow-xl border border-gray-100 dark:border-gray-700 max-w-sm">
+                            <div className="w-24 h-24 bg-lyceum-blue/10 text-lyceum-blue rounded-3xl flex items-center justify-center mx-auto mb-6">
+                                <FileText size={48} />
+                            </div>
+                            <h4 className="text-gray-900 dark:text-gray-100 font-black text-2xl mb-3">Preview Not Available</h4>
+                            <p className="text-gray-500 dark:text-gray-400 font-medium mb-8">This file type cannot be previewed directly in the browser.</p>
+                            <a
+                                href={url}
+                                download={filename}
+                                className="w-full inline-flex items-center justify-center px-8 py-4 bg-lyceum-blue text-white rounded-2xl font-black hover:bg-lyceum-blue-dark transition-all shadow-xl shadow-lyceum-blue/30"
+                            >
+                                <Download size={20} className="mr-3" />
+                                Download to View
+                            </a>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
 
 const DocumentItem = ({ doc, handleDownload, handlePreview, isManualDeleteAllowed }: any) => (
     <div className="group bg-white dark:bg-gray-800 p-4 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-lyceum-blue dark:hover:border-lyceum-blue hover:shadow-md transition-all duration-300">
@@ -58,6 +121,7 @@ const StudentDocumentsView: React.FC<StudentDocumentsViewProps> = ({ student, on
     const [loading, setLoading] = useState(true);
     const [uploading, setUploading] = useState(false);
     const [selectedCategory, setSelectedCategory] = useState<string>('Passport');
+    const [previewData, setPreviewData] = useState<{ url: string; filename: string; type: string } | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const categories = [
@@ -126,8 +190,19 @@ const StudentDocumentsView: React.FC<StudentDocumentsViewProps> = ({ student, on
             .then(res => res.blob())
             .then(blob => {
                 const url = URL.createObjectURL(blob);
-                window.open(url, '_blank');
+                setPreviewData({ url, filename: doc.name, type: blob.type });
+            })
+            .catch(err => {
+                console.error('Preview error:', err);
+                alert('Failed to load preview.');
             });
+    };
+
+    const closePreview = () => {
+        if (previewData?.url) {
+            URL.revokeObjectURL(previewData.url);
+        }
+        setPreviewData(null);
     };
 
     return (
@@ -290,6 +365,15 @@ const StudentDocumentsView: React.FC<StudentDocumentsViewProps> = ({ student, on
                         Upload My First Document
                     </button>
                 </div>
+            )}
+
+            {previewData && (
+                <PreviewModal
+                    url={previewData.url}
+                    filename={previewData.filename}
+                    type={previewData.type}
+                    onClose={closePreview}
+                />
             )}
 
             <style>{`
