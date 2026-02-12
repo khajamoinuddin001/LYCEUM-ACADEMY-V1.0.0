@@ -141,19 +141,7 @@ const NewLeadModal: React.FC<NewLeadModalProps> = ({ isOpen, onClose, onSave, le
 
     setIsSubmitting(true);
     try {
-      // Validate that contact exists
-      const existingContact = contacts.find(c =>
-        c.name.toLowerCase() === formData.contact.trim().toLowerCase()
-      );
-
-      if (!existingContact && !selectedContactId) {
-        setError('Contact must exist before creating a lead. Please create the contact first in the Contacts section.');
-        setIsSubmitting(false);
-        return;
-      }
-
-      // Leads do not automatically create contacts
-      // User must manually create contacts separately
+      // Backend will now automatically create or merge contacts based on Name + Phone
 
       const leadToSave = {
         contact: formData.contact.trim(),
