@@ -12,6 +12,7 @@ interface DepartmentDashboardProps {
 
 const DepartmentDashboard: React.FC<DepartmentDashboardProps> = ({ user, tickets, onViewVisits, onTicketSelect }) => {
     const [visitors, setVisitors] = useState<Visitor[]>([]);
+    const [audioContext, setAudioContext] = useState<AudioContext | null>(null);
     const [myTasks, setMyTasks] = useState<TodoTask[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [followUpVisitor, setFollowUpVisitor] = useState<Visitor | null>(null);
@@ -35,35 +36,65 @@ const DepartmentDashboard: React.FC<DepartmentDashboardProps> = ({ user, tickets
 
         const intervalId = setInterval(fetchData, 5000); // Auto-refresh every 5s
         fetchData();
-        return () => clearInterval(intervalId);
-    }, []);
+
+        // Audio Context Initialization
+        const initAudio = () => {
+            if (!audioContext) {
+                const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+                if (AudioContext) {
+                    const ctx = new AudioContext();
+                    setAudioContext(ctx);
+                }
+            }
+        };
+
+        const handleInteraction = () => {
+            initAudio();
+            if (audioContext && audioContext.state === 'suspended') {
+                audioContext.resume();
+            }
+        };
+
+        window.addEventListener('click', handleInteraction);
+        window.addEventListener('keydown', handleInteraction);
+
+        return () => {
+            clearInterval(intervalId);
+            window.removeEventListener('click', handleInteraction);
+            window.removeEventListener('keydown', handleInteraction);
+        };
+    }, [audioContext]);
 
     // Helper for notification sound
     const playNotificationSound = () => {
-        try {
-            const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-            if (!AudioContext) return;
+        if (!audioContext) return;
 
-            const ctx = new AudioContext();
-            const oscillator = ctx.createOscillator();
-            const gainNode = ctx.createGain();
+        try {
+            // Resume if suspended (sometimes browsers suspend it automatically)
+            if (audioContext.state === 'suspended') {
+                audioContext.resume();
+            }
+
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
 
             oscillator.connect(gainNode);
-            gainNode.connect(ctx.destination);
+            gainNode.connect(audioContext.destination);
 
             oscillator.type = 'sine';
-            oscillator.frequency.setValueAtTime(500, ctx.currentTime);
-            oscillator.frequency.exponentialRampToValueAtTime(1000, ctx.currentTime + 0.1);
+            oscillator.frequency.setValueAtTime(500, audioContext.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(1000, audioContext.currentTime + 0.1);
 
-            gainNode.gain.setValueAtTime(0.1, ctx.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+            gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
 
             oscillator.start();
-            oscillator.stop(ctx.currentTime + 0.5);
+            oscillator.stop(audioContext.currentTime + 0.5);
         } catch (e) {
-            console.error('Audio play failed', e);
+            // console.error('Audio play failed', e);
         }
     };
+
 
     const fetchData = async () => {
         // Don't set loading on poll to avoid flicker
