@@ -148,13 +148,13 @@ const NewInvoiceModal: React.FC<NewInvoiceModalProps> = ({
     setActiveDropdownIndex(null);
   };
 
-  const handleAddProductToInventory = async (index: number, name: string) => {
+  const handleAddProductToInventory = async (index: number, name: string, price: number) => {
     if (!name.trim()) return;
     setAddingProduct(true);
     try {
       const newProduct = await api.saveProduct({
         name: name,
-        price: 0,
+        price: price || 0,
         type: 'Service'
       });
       // Add to local state so it shows up in products immediately
@@ -407,7 +407,7 @@ const NewInvoiceModal: React.FC<NewInvoiceModalProps> = ({
                           {item.description.trim() && !products.find(p => p.name.toLowerCase() === item.description.toLowerCase()) && (
                             <button
                               type="button"
-                              onClick={() => handleAddProductToInventory(index, item.description)}
+                              onClick={() => handleAddProductToInventory(index, item.description, item.rate)}
                               disabled={addingProduct}
                               className="w-full text-left px-4 py-3 bg-blue-50 dark:bg-blue-900/20 border-t border-blue-100 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/40 text-blue-700 dark:text-blue-300 transition-colors"
                             >
@@ -415,7 +415,7 @@ const NewInvoiceModal: React.FC<NewInvoiceModalProps> = ({
                                 <Plus size={16} />
                                 {addingProduct ? 'Adding...' : `Add "${item.description}" to Inventory`}
                               </div>
-                              <p className="text-[10px] opacity-75 mt-0.5 ml-6">Saves name with ₹0 base price</p>
+                              <p className="text-[10px] opacity-75 mt-0.5 ml-6">Saves with ₹{item.rate} base price</p>
                             </button>
                           )}
 

@@ -47,6 +47,8 @@ const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
     const [vendorSearch, setVendorSearch] = useState('');
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [activeDropdownIndex, setActiveDropdownIndex] = useState<number | null>(null);
+    const [addingProduct, setAddingProduct] = useState(false);
 
     useEffect(() => {
         if (isOpen) {
@@ -79,16 +81,53 @@ const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
         });
     };
 
-    const handleProductSelect = (index: number, productName: string) => {
-        const product = products.find(p => p.name === productName);
+    const handleProductSelect = (index: number, product: api.Product) => {
         const updated = [...lineItems];
         updated[index] = {
             ...updated[index],
-            description: productName,
-            rate: product ? product.price : updated[index].rate,
-            amount: updated[index].quantity * (product ? product.price : updated[index].rate)
+            description: product.name,
+            rate: product.price,
+            quantity: 1,
+            amount: product.price
         };
         setLineItems(updated);
+        setActiveDropdownIndex(null);
+    };
+
+    const handleAddProductToInventory = async (index: number, name: string, price: number) => {
+        if (!name.trim()) return;
+        setAddingProduct(true);
+        try {
+            const newProduct = await api.saveProduct({
+                name: name,
+                price: price || 0,
+                type: 'Goods'
+            });
+            // Add to local state so it shows up in products immediately
+            setProducts(prev => [...prev, newProduct]);
+
+            // Select the newly added product
+            handleProductSelect(index, newProduct);
+        } catch (error) {
+            console.error('Failed to add product to inventory:', error);
+            alert('Failed to add item to inventory.');
+        } finally {
+            setAddingProduct(false);
+        }
+    };
+
+    const handleDeleteProductFromInventory = async (e: React.MouseEvent, productId: number) => {
+        e.stopPropagation();
+        if (!window.confirm('Are you sure you want to delete this item from inventory?')) return;
+
+        try {
+            await api.deleteProduct(productId);
+            // Remove from local state
+            setProducts(prev => prev.filter(p => p.id !== productId));
+        } catch (error) {
+            console.error('Failed to delete product from inventory:', error);
+            alert('Failed to delete item from inventory.');
+        }
     };
 
     const updateLineItem = (index: number, field: keyof LineItem, value: any) => {
@@ -127,19 +166,7 @@ const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
 
         setSaving(true);
         try {
-            // Auto-save new products if they don't exist
-            for (const item of lineItems) {
-                if (item.description && !products.find(p => p.name === item.description)) {
-                    // Optimistically save new product to inventory
-                    await api.saveProduct({
-                        name: item.description,
-                        price: item.rate,
-                        type: 'Goods'
-                    });
-                }
-            }
-
-            // Note: We use customerName to store Vendor Name for the Transaction record
+            // Transaction model relies on customerName
             // We can optionally store vendorId in metadata if needed, but the transaction model relies on customerName
             const purchase = {
                 customerName: formData.vendorName,
@@ -310,21 +337,79 @@ const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
                             </div>
 
                             <div className="space-y-2">
-                                <datalist id="products-list">
-                                    {products.map(p => (
-                                        <option key={p.id} value={p.name} />
-                                    ))}
-                                </datalist>
                                 {lineItems.map((item, index) => (
                                     <div key={index} className="flex gap-2 items-start">
-                                        <input
-                                            type="text"
-                                            list="products-list"
-                                            placeholder="Item Name (Auto-saves to Inventory)"
-                                            value={item.description}
-                                            onChange={(e) => handleProductSelect(index, e.target.value)}
-                                            className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
-                                        />
+                                        <div className="flex-1 relative">
+                                            <input
+                                                type="text"
+                                                placeholder="Item Name"
+                                                value={item.description}
+                                                onChange={(e) => updateLineItem(index, 'description', e.target.value)}
+                                                onFocus={() => setActiveDropdownIndex(index)}
+                                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                                                autoComplete="off"
+                                            />
+                                            {activeDropdownIndex === index && (
+                                                <div className="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl z-[60] max-h-60 overflow-y-auto">
+                                                    {/* Search Results */}
+                                                    {products
+                                                        .filter(p => p.name.toLowerCase().includes(item.description.toLowerCase()))
+                                                        .map(product => (
+                                                            <div
+                                                                key={product.id}
+                                                                onClick={() => handleProductSelect(index, product)}
+                                                                className="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 flex justify-between items-center group cursor-pointer"
+                                                            >
+                                                                <div className="flex-1">
+                                                                    <div className="font-medium text-gray-900 dark:text-white">{product.name}</div>
+                                                                    <div className="text-xs text-gray-500">Inventory Item</div>
+                                                                </div>
+                                                                <div className="flex items-center gap-3">
+                                                                    <div className="text-sm font-semibold text-lyceum-blue">₹{product.price}</div>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={(e) => handleDeleteProductFromInventory(e, product.id)}
+                                                                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors opacity-0 group-hover:opacity-100"
+                                                                        title="Delete from inventory"
+                                                                    >
+                                                                        <Trash2 size={14} />
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+
+                                                    {/* Add to Inventory Option */}
+                                                    {item.description.trim() && !products.find(p => p.name.toLowerCase() === item.description.toLowerCase()) && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleAddProductToInventory(index, item.description, item.rate)}
+                                                            disabled={addingProduct}
+                                                            className="w-full text-left px-4 py-3 bg-blue-50 dark:bg-blue-900/20 border-t border-blue-100 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/40 text-blue-700 dark:text-blue-300 transition-colors"
+                                                        >
+                                                            <div className="flex items-center gap-2 font-bold text-sm">
+                                                                <Plus size={16} />
+                                                                {addingProduct ? 'Adding...' : `Add "${item.description}" to Inventory`}
+                                                            </div>
+                                                            <p className="text-[10px] opacity-75 mt-0.5 ml-6">Saves with ₹{item.rate} base price</p>
+                                                        </button>
+                                                    )}
+
+                                                    {/* No Results */}
+                                                    {item.description.trim() && products.filter(p => p.name.toLowerCase().includes(item.description.toLowerCase())).length === 0 && !addingProduct && (
+                                                        <div className="p-4 text-center text-sm text-gray-500 italic border-t border-gray-100 dark:border-gray-700">
+                                                            No matching inventory items
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+                                            {/* Click away detection overlay */}
+                                            {activeDropdownIndex === index && (
+                                                <div
+                                                    className="fixed inset-0 z-[55]"
+                                                    onClick={() => setActiveDropdownIndex(null)}
+                                                />
+                                            )}
+                                        </div>
                                         <input
                                             type="number"
                                             placeholder="Qty"
