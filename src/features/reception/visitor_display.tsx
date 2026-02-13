@@ -16,7 +16,7 @@ const VisitorDisplay: React.FC = () => {
 
     useEffect(() => {
         // Initialize audio
-        audioRef.current = new Audio('/notification-beep.mp3');
+        audioRef.current = new Audio('/sounds/bell.mp3');
     }, []);
 
     useEffect(() => {
