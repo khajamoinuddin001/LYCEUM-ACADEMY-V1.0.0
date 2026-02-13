@@ -12,7 +12,7 @@ interface DepartmentDashboardProps {
 
 const DepartmentDashboard: React.FC<DepartmentDashboardProps> = ({ user, tickets, onViewVisits, onTicketSelect }) => {
     const [visitors, setVisitors] = useState<Visitor[]>([]);
-    const audioContextRef = useRef<AudioContext | null>(null);
+
     const previousVisitorIdsRef = useRef<Set<number>>(new Set());
     const [myTasks, setMyTasks] = useState<TodoTask[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -24,33 +24,12 @@ const DepartmentDashboard: React.FC<DepartmentDashboardProps> = ({ user, tickets
     const userDepartment = user.role === 'Admin' ? 'All' : (user.permissions?.department || 'Unassigned');
 
     const playNotificationSound = () => {
-        const ctx = audioContextRef.current;
-        if (!ctx) return;
-
         try {
-            // Resume if suspended (sometimes browsers suspend it automatically)
-            if (ctx.state === 'suspended') {
-                ctx.resume();
-            }
-
-            const oscillator = ctx.createOscillator();
-            const gainNode = ctx.createGain();
-
-            oscillator.connect(gainNode);
-            gainNode.connect(ctx.destination);
-
-            oscillator.type = 'sine';
-            oscillator.frequency.setValueAtTime(500, ctx.currentTime);
-            oscillator.frequency.exponentialRampToValueAtTime(1000, ctx.currentTime + 0.1);
-
-            gainNode.gain.setValueAtTime(0.1, ctx.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
-
-            oscillator.start();
-            oscillator.stop(ctx.currentTime + 0.5);
+            const audio = new Audio('/sounds/staff_notification.mp3');
+            audio.play().catch(e => console.error("Audio play failed", e));
             console.log("Sound played");
         } catch (e) {
-            console.error('Audio play failed', e);
+            console.error('Audio setup failed', e);
         }
     };
 
@@ -153,31 +132,7 @@ const DepartmentDashboard: React.FC<DepartmentDashboardProps> = ({ user, tickets
         const intervalId = setInterval(fetchData, 5000); // Auto-refresh every 5s
         fetchData();
 
-        // Audio Context Initialization
-        const initAudio = () => {
-            if (!audioContextRef.current) {
-                const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-                if (AudioContext) {
-                    audioContextRef.current = new AudioContext();
-                }
-            }
-        };
-
-        const handleInteraction = () => {
-            initAudio();
-            if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
-                audioContextRef.current.resume();
-            }
-        };
-
-        window.addEventListener('click', handleInteraction);
-        window.addEventListener('keydown', handleInteraction);
-
-        return () => {
-            clearInterval(intervalId);
-            window.removeEventListener('click', handleInteraction);
-            window.removeEventListener('keydown', handleInteraction);
-        };
+        return () => clearInterval(intervalId);
     }, []);
 
     const handleCallVisitor = async (visitor: Visitor) => {
