@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import type { Contact, LmsCourse, CalendarEvent, Visitor, User, AccountingTransaction } from '@/types';
+import type { Contact, LmsCourse, CalendarEvent, Visitor, User, AccountingTransaction, VisaOperation } from '@/types';
 import { GraduationCap, BookOpen, CalendarClock, Paperclip, CheckCircle2, Circle, Trophy, Calendar, Upload, Download, User as UserIcon, ArrowLeft, DollarSign, Receipt, AlertCircle, X, Copy, CreditCard } from '@/components/common/icons';
 import * as api from '@/utils/api';
 import StudentAppointmentModal from './student_appointment_modal';
@@ -214,27 +214,21 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, courses, e
         }
     });
 
-    // Add VAC Date from visa information
-    if (student.visaInformation?.visaInterview?.vacDate) {
+    // Fallback to legacy visa information ONLY if not already in events
+    const hasVacInEvents = allDeadlines.some(d => d.type === 'event' && d.title.includes('(VAC)'));
+    const hasViInEvents = allDeadlines.some(d => d.type === 'event' && d.title.includes('(VI)'));
+
+    if (!hasVacInEvents && student.visaInformation?.visaInterview?.vacDate) {
         const vacDate = new Date(student.visaInformation.visaInterview.vacDate);
         if (vacDate >= today) {
-            allDeadlines.push({
-                title: 'VAC Appointment',
-                start: vacDate,
-                type: 'vac'
-            });
+            allDeadlines.push({ title: 'VAC Appointment (Legacy)', start: vacDate, type: 'vac' });
         }
     }
 
-    // Add VI Date from visa information
-    if (student.visaInformation?.visaInterview?.viDate) {
+    if (!hasViInEvents && student.visaInformation?.visaInterview?.viDate) {
         const viDate = new Date(student.visaInformation.visaInterview.viDate);
         if (viDate >= today) {
-            allDeadlines.push({
-                title: 'Visa Interview',
-                start: viDate,
-                type: 'vi'
-            });
+            allDeadlines.push({ title: 'Visa Interview (Legacy)', start: viDate, type: 'vi' });
         }
     }
 

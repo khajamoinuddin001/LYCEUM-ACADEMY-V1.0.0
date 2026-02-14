@@ -65,6 +65,13 @@ const StudentAppsView: React.FC<StudentAppsViewProps> = ({ onAppSelect }) => {
             iconColor: 'text-orange-600 dark:text-orange-400',
         },
         {
+            name: 'Visa Application',
+            icon: <FileText size={48} />,
+            description: 'Track your visa process, CGI credentials, and status',
+            bgColor: 'bg-orange-100 dark:bg-orange-900/20',
+            iconColor: 'text-orange-600 dark:text-orange-400',
+        },
+        {
             name: 'Discuss',
             icon: <MessagesSquare size={48} />,
             description: 'Chat with staff, admins, and fellow students',

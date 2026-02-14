@@ -578,3 +578,43 @@ export interface Coupon {
   isActive: boolean;
   applicableCourseIds?: string[];
 }
+
+export interface VisaOperation {
+  id: number;
+  vopNumber: string;
+  contactId: number;
+  name: string;
+  phone: string;
+  country: string;
+  status: string;
+  userId: number;
+  createdAt: string;
+  cgiData?: {
+    username?: string;
+    password?: string;
+    securityQuestion1?: string;
+    securityAnswer1?: string;
+    securityQuestion2?: string;
+    securityAnswer2?: string;
+    securityQuestion3?: string;
+    securityAnswer3?: string;
+  };
+  slotBookingData?: {
+    vacConsulate?: string;
+    viConsulate?: string;
+    vacDate?: string;
+    vacTime?: string;
+    viDate?: string;
+    viTime?: string;
+    bookedOn?: string;
+    bookedBy?: string;
+    vacPreferred?: string[];
+    viPreferred?: string[];
+    preferencesLocked?: boolean;
+  };
+  visaInterviewData?: {
+    visaOutcome?: string;
+    remarks?: string;
+  };
+  showCgiOnPortal?: boolean;
+}

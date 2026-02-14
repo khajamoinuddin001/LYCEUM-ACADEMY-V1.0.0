@@ -36,6 +36,8 @@ import StudentDashboard from '@/features/dashboard/student_dashboard';
 import AccessControlView from '@/features/settings/access_control_view';
 import { DEFAULT_PERMISSIONS, DEFAULT_CHECKLIST } from '@/lib/constants';
 import NewStaffModal from '@/features/hr/new_staff_modal';
+
+
 import ImpersonationBanner from '@/components/common/impersonation_banner';
 import DocumentAnalysisModal from '@/features/shared/document_analysis_modal';
 import { analyzeDocument, draftEmail } from './utils/gemini';
@@ -104,6 +106,9 @@ import PrivacyPage from '@/features/marketing/footer/PrivacyPage';
 import UniversityApplicationView from '@/features/university/university_application_view';
 import DestinationPage from '@/features/university/destinations/DestinationPage';
 import AllDestinationsPage from '@/features/university/destinations/AllDestinationsPage';
+import { VisaOperationsView } from '@/features/visa/visa_operations_view';
+import { StudentVisaView } from '@/features/students/student_visa_view';
+import type { VisaOperation } from '@/types';
 
 // ... (keep existing types)
 
@@ -174,63 +179,85 @@ const DashboardLayout: React.FC = () => {
   const [viewingCertificateForCourse, setViewingCertificateForCourse] = useState<LmsCourse | null>(null);
   const [courseToPurchase, setCourseToPurchase] = useState<LmsCourse | null>(null);
 
+
+
   const [gridApps, setGridApps] = useState<OdooApp[]>([]);
   const APPS_STORAGE_KEY = 'lyceum_apps_order';
   const SIDEBAR_STORAGE_KEY_PREFIX = 'sidebar_order_';
 
 
+  const [visaOperations, setVisaOperations] = useState<VisaOperation[]>([]);
   const events = useMemo(() => {
     const calendarEvents = rawEvents.map(e => ({ ...e, start: new Date(e.start), end: new Date(e.end) }));
-
-    // Add Visa Dates from Contacts
     const visaEvents: CalendarEvent[] = [];
-    contacts.forEach(contact => {
-      const visa = contact.visaInformation?.visaInterview;
-      if (visa) {
-        if (visa.vacDate) {
-          const start = new Date(visa.vacDate);
-          if (visa.vacTime) {
-            const [hours, minutes] = visa.vacTime.split(':').map(Number);
+
+    // Add Visa Dates from Visa Operations (New System)
+    visaOperations.forEach(op => {
+      const slot = op.slotBookingData;
+      if (slot) {
+        if (slot.vacDate) {
+          const start = new Date(slot.vacDate);
+          if (slot.vacTime) {
+            const [hours, minutes] = slot.vacTime.split(':').map(Number);
             start.setHours(hours, minutes);
           } else {
-            start.setHours(9, 0); // Default to 9 AM
+            start.setHours(9, 0);
           }
-          const end = new Date(start.getTime() + 60 * 60 * 1000); // 1 hour duration
+          const end = new Date(start.getTime() + 60 * 60 * 1000);
           visaEvents.push({
-            id: -(contact.id * 10 + 1), // Semi-unique negative ID
-            title: `${contact.name} (VAC)`,
+            id: -(op.id * 100 + 1),
+            title: `${op.name} (VAC)`,
             start,
             end,
             color: 'purple',
-            description: `VAC Interview for ${contact.name}`
+            description: `VAC Appointment for ${op.name} (${op.vopNumber})`
           });
         }
-
-        if (visa.viDate) {
-          const start = new Date(visa.viDate);
-          if (visa.viTime) {
-            const [hours, minutes] = visa.viTime.split(':').map(Number);
+        if (slot.viDate) {
+          const start = new Date(slot.viDate);
+          if (slot.viTime) {
+            const [hours, minutes] = slot.viTime.split(':').map(Number);
             start.setHours(hours, minutes);
           } else {
-            start.setHours(10, 0); // Default to 10 AM
+            start.setHours(10, 0);
           }
-          const end = new Date(start.getTime() + 60 * 60 * 1000); // 1 hour duration
+          const end = new Date(start.getTime() + 60 * 60 * 1000);
           visaEvents.push({
-            id: -(contact.id * 10 + 2), // Semi-unique negative ID
-            title: `${contact.name} (VI)`,
+            id: -(op.id * 100 + 2),
+            title: `${op.name} (VI)`,
             start,
             end,
             color: 'red',
-            description: `Visa Interview for ${contact.name}`
+            description: `Visa Interview for ${op.name} (${op.vopNumber})`
           });
         }
       }
     });
 
     return [...calendarEvents, ...visaEvents];
-  }, [rawEvents, contacts]);
-  const setEvents = (newEvents: CalendarEvent[]) => api.saveEvents(newEvents).then(setRawEvents);
+  }, [rawEvents, contacts, visaOperations]);
   const currentUser = impersonatingUser || storedCurrentUser;
+  const setEvents = (newEvents: CalendarEvent[]) => api.saveEvents(newEvents).then(setRawEvents);
+
+
+
+  useEffect(() => {
+    const loadOps = async () => {
+      try {
+        const ops = await api.getVisaOperations();
+        setVisaOperations(ops);
+      } catch (e) {
+        console.error('Failed to load visa operations:', e);
+      }
+    };
+    if (currentUser) {
+      loadOps();
+    }
+  }, [currentUser]);
+
+  const handleOperationCreated = (newOp: VisaOperation) => {
+    setVisaOperations(prev => [newOp, ...prev]);
+  };
 
   useEffect(() => {
     if (currentUser) {
@@ -426,7 +453,9 @@ const DashboardLayout: React.FC = () => {
       }
     }, 30000); // 5 seconds
 
-    return () => clearInterval(pollInterval);
+    return () => {
+      clearInterval(pollInterval);
+    };
   }, [currentUser?.id]); // Run once on mount (setup both initial load and interval)
 
   useEffect(() => {
@@ -636,7 +665,6 @@ const DashboardLayout: React.FC = () => {
         body: JSON.stringify({ token, newPassword }),
       });
       const data = await response.json();
-
       if (!response.ok) {
         return { success: false, message: data.error || 'Failed to reset password' };
       }
@@ -1776,6 +1804,13 @@ const DashboardLayout: React.FC = () => {
         />
       );
       case 'University Application': return <UniversityApplicationView user={currentUser} />;
+      case 'Visa Operations': return (
+        <VisaOperationsView
+          contacts={contacts}
+          onOperationCreated={handleOperationCreated}
+          existingOperations={visaOperations}
+        />
+      );
       case 'Tickets': return (
         <TicketsView
           tickets={tickets}
@@ -2093,6 +2128,11 @@ const DashboardLayout: React.FC = () => {
                       onNavigateBack={() => handleAppSelect('Apps')}
                     />
                   ) : <div>Loading...</div>;
+                }
+
+                // Student Visa Application Page
+                if (activeApp === 'Visa Application') {
+                  return <StudentVisaView operation={visaOperations[0] || null} />;
                 }
 
                 // Student Dashboard (default)

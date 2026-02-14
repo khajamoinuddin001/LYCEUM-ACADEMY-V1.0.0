@@ -1326,6 +1326,213 @@ router.get('/leads', authenticateToken, async (req, res) => {
   }
 });
 
+// Visa Operations Routes
+router.get('/visa-operations', authenticateToken, async (req, res) => {
+  try {
+    let sql = `
+      SELECT vo.*, 
+             c.name as c_name, 
+             c.phone as c_phone, 
+             c.country as c_country,
+             c.country_of_application as c_app_country
+      FROM visa_operations vo
+      LEFT JOIN contacts c ON vo.contact_id = c.id
+    `;
+    let params = [];
+
+    if (req.user.role === 'Student') {
+      sql += ' WHERE c.user_id = $1';
+      params.push(req.user.id);
+    }
+
+    sql += ' ORDER BY vo.created_at DESC';
+
+    const result = await query(sql, params);
+    res.json(result.rows.map(row => {
+      const isStudent = req.user.role === 'Student';
+      const showCgi = row.show_cgi_on_portal || !isStudent;
+
+      let cgiData = row.cgi_data;
+      if (isStudent && !showCgi && cgiData) {
+        // Mask sensitive data for students if not permitted
+        cgiData = {
+          ...cgiData,
+          username: '••••••••',
+          password: '••••••••',
+          securityAnswer1: '••••••••',
+          securityAnswer2: '••••••••',
+          securityAnswer3: '••••••••'
+        };
+      }
+
+      return {
+        ...row,
+        name: row.c_name || row.name,
+        phone: row.c_phone || row.phone,
+        country: row.c_app_country || row.c_country || row.country,
+        cgiData,
+        slotBookingData: row.slot_booking_data,
+        visaInterviewData: row.visa_interview_data,
+        showCgiOnPortal: row.show_cgi_on_portal,
+        vopNumber: row.vop_number,
+        contactId: row.contact_id,
+        userId: row.user_id,
+        createdAt: row.created_at
+      };
+    }));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.put('/visa-operations/:id/cgi', authenticateToken, async (req, res) => {
+  try {
+    const { cgiData, showCgiOnPortal } = req.body;
+    const result = await query(`
+      UPDATE visa_operations
+      SET cgi_data = $1, show_cgi_on_portal = $2
+      WHERE id = $3
+      RETURNING *
+    `, [JSON.stringify(cgiData), showCgiOnPortal, req.params.id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Operation not found' });
+    }
+
+    const op = result.rows[0];
+    res.json({
+      ...op,
+      cgiData: op.cgi_data,
+      slotBookingData: op.slot_booking_data,
+      visaInterviewData: op.visa_interview_data,
+      showCgiOnPortal: op.show_cgi_on_portal,
+      vopNumber: op.vop_number,
+      contactId: op.contact_id,
+      userId: op.user_id,
+      createdAt: op.created_at
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.put('/visa-operations/:id/slot-booking', authenticateToken, async (req, res) => {
+  try {
+    const { slotBookingData, visaInterviewData, status } = req.body;
+    const isStudent = req.user.role === 'Student';
+
+    // Get current data first to avoid overwriting staff-entered data and check lock status
+    const currentOp = await query('SELECT slot_booking_data FROM visa_operations WHERE id = $1', [req.params.id]);
+    if (currentOp.rows.length === 0) return res.status(404).json({ error: 'Operation not found' });
+    const currentSlotData = currentOp.rows[0].slot_booking_data || {};
+
+    // If student, check if preferences are locked and filter updates
+    let finalSlotBookingData = slotBookingData;
+    if (isStudent && slotBookingData) {
+      if (currentSlotData.preferencesLocked) {
+        return res.status(403).json({ error: 'Preferences are locked and cannot be changed.' });
+      }
+
+      finalSlotBookingData = {
+        ...currentSlotData,
+        vacPreferred: slotBookingData.vacPreferred,
+        viPreferred: slotBookingData.viPreferred,
+        preferencesLocked: slotBookingData.preferencesLocked || false
+      };
+    }
+
+    const updates = [];
+    const values = [];
+    let pCount = 1;
+
+    if (finalSlotBookingData !== undefined) {
+      updates.push(`slot_booking_data = $${pCount++}`);
+      values.push(JSON.stringify(finalSlotBookingData));
+    }
+
+    // Students cannot update interview outcome or status
+    if (!isStudent) {
+      if (visaInterviewData !== undefined) {
+        updates.push(`visa_interview_data = $${pCount++}`);
+        values.push(JSON.stringify(visaInterviewData));
+      }
+      if (status !== undefined) {
+        updates.push(`status = $${pCount++}`);
+        values.push(status);
+      }
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No fields provided for update' });
+    }
+
+    values.push(req.params.id);
+    const result = await query(`
+      UPDATE visa_operations
+      SET ${updates.join(', ')}
+      WHERE id = $${pCount}
+      RETURNING *
+    `, values);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Operation not found' });
+    }
+
+    const op = result.rows[0];
+    res.json({
+      ...op,
+      cgiData: op.cgi_data,
+      slotBookingData: op.slot_booking_data,
+      visaInterviewData: op.visa_interview_data,
+      showCgiOnPortal: op.show_cgi_on_portal,
+      vopNumber: op.vop_number,
+      contactId: op.contact_id,
+      userId: op.user_id,
+      createdAt: op.created_at
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/visa-operations', authenticateToken, async (req, res) => {
+  try {
+    const { contactId, name, phone, country } = req.body;
+
+    // Generate VOP-XXXXX number
+    const lastOpResult = await query(
+      "SELECT vop_number FROM visa_operations WHERE vop_number LIKE 'VOP-%' ORDER BY id DESC LIMIT 1"
+    );
+
+    let nextNumber = 1;
+    if (lastOpResult.rows.length > 0) {
+      const lastVop = lastOpResult.rows[0].vop_number;
+      const lastNum = parseInt(lastVop.split('-')[1]);
+      if (!isNaN(lastNum)) nextNumber = lastNum + 1;
+    }
+
+    const vopNumber = `VOP-${String(nextNumber).padStart(5, '0')}`;
+
+    const result = await query(`
+      INSERT INTO visa_operations (vop_number, contact_id, name, phone, country, user_id)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      RETURNING *
+    `, [vopNumber, contactId, name, phone, country, req.user.id]);
+
+    const newOp = result.rows[0];
+    res.json({
+      ...newOp,
+      vopNumber: newOp.vop_number,
+      contactId: newOp.contact_id,
+      userId: newOp.user_id,
+      createdAt: newOp.created_at
+    });
+  } catch (error) {
+    console.error('Error creating visa operation:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.get('/leads/:id', authenticateToken, async (req, res) => {
   try {
     const result = await query('SELECT * FROM leads WHERE id = $1', [req.params.id]);

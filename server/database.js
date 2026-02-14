@@ -666,6 +666,51 @@ export async function initDatabase() {
       )
     `);
 
+    // VISA OPERATIONS
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS visa_operations (
+        id SERIAL PRIMARY KEY,
+        vop_number TEXT UNIQUE NOT NULL,
+        contact_id INTEGER REFERENCES contacts(id),
+        name TEXT NOT NULL,
+        phone TEXT,
+        country TEXT,
+        cgi_data JSONB DEFAULT '{}',
+        show_cgi_on_portal BOOLEAN DEFAULT false,
+        status TEXT DEFAULT 'form_completed',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        user_id INTEGER REFERENCES users(id)
+      )
+    `);
+    await migrateColumn('visa_operations', 'vopNumber', 'vop_number');
+    await migrateColumn('visa_operations', 'contactId', 'contact_id');
+    await migrateColumn('visa_operations', 'userId', 'user_id');
+    await migrateColumn('visa_operations', 'createdAt', 'created_at');
+
+    // Add cgi_data if it doesn't exist
+    const cgiDataExists = await client.query(`
+      SELECT column_name FROM information_schema.columns 
+      WHERE table_name = 'visa_operations' AND column_name = 'cgi_data'
+    `);
+    if (cgiDataExists.rows.length === 0) {
+      await client.query('ALTER TABLE visa_operations ADD COLUMN IF NOT EXISTS cgi_data JSONB DEFAULT \'{}\'');
+    }
+
+    // Add show_cgi_on_portal if it doesn't exist
+    const showCgiExists = await client.query(`
+      SELECT column_name FROM information_schema.columns 
+      WHERE table_name = 'visa_operations' AND column_name = 'show_cgi_on_portal'
+    `);
+    if (showCgiExists.rows.length === 0) {
+      await client.query('ALTER TABLE visa_operations ADD COLUMN IF NOT EXISTS show_cgi_on_portal BOOLEAN DEFAULT false');
+    }
+
+    // Add slot_booking_data if it doesn't exist
+    await client.query('ALTER TABLE visa_operations ADD COLUMN IF NOT EXISTS slot_booking_data JSONB DEFAULT \'{}\'');
+
+    // Add visa_interview_data if it doesn't exist
+    await client.query('ALTER TABLE visa_operations ADD COLUMN IF NOT EXISTS visa_interview_data JSONB DEFAULT \'{}\'');
+
     console.log("✅ Database initialized successfully");
   } catch (err) {
     if (client) await client.query("ROLLBACK");

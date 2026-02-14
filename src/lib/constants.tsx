@@ -137,7 +137,12 @@ export const ODOO_APPS: OdooApp[] = [
     bgColor: 'bg-violet-100',
     iconColor: 'text-violet-600',
   },
-
+  {
+    name: 'Visa Operations',
+    icon: <FileText size={36} />,
+    bgColor: 'bg-orange-100',
+    iconColor: 'text-orange-600',
+  },
 ];
 
 export const STAFF_ROLES: UserRole[] = ['Admin', 'Staff'];
@@ -167,6 +172,7 @@ export const DEFAULT_PERMISSIONS: Record<UserRole, { [appName: string]: AppPermi
   'Student': {
     'LMS': readOnly,
     'Discuss': fullAccess,
+    'Visa Application': fullAccess,
   },
 };
 

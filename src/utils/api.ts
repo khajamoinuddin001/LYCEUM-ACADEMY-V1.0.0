@@ -1,4 +1,4 @@
-import type { CalendarEvent, Contact, CrmLead, AccountingTransaction, CrmStage, Quotation, User, UserRole, AppPermissions, ActivityLog, DocumentAnalysisResult, Document as Doc, ChecklistItem, QuotationTemplate, Visitor, TodoTask, Ticket, PaymentActivityLog, LmsCourse, LmsLesson, LmsModule, Coupon, ContactActivity, ContactActivityAction, DiscussionPost, DiscussionThread, RecordedSession, Channel, Notification, RecurringTask } from '../types';
+import type { CalendarEvent, Contact, CrmLead, AccountingTransaction, CrmStage, Quotation, User, UserRole, AppPermissions, ActivityLog, DocumentAnalysisResult, Document as Doc, ChecklistItem, QuotationTemplate, Visitor, TodoTask, Ticket, PaymentActivityLog, LmsCourse, LmsLesson, LmsModule, Coupon, ContactActivity, ContactActivityAction, DiscussionPost, DiscussionThread, RecordedSession, Channel, Notification, RecurringTask, VisaOperation } from '../types';
 import { DEFAULT_PERMISSIONS, DEFAULT_CHECKLIST } from '@/lib/constants';
 
 export const API_BASE_URL = import.meta.env.VITE_API_URL;
@@ -810,6 +810,35 @@ export const saveEvents = async (events: CalendarEvent[]): Promise<CalendarEvent
     }
   }
   return getEvents();
+};
+
+// Visa Operations
+export const getVisaOperations = async (): Promise<VisaOperation[]> => {
+  return apiRequest<VisaOperation[]>('/visa-operations');
+};
+
+export const createVisaOperation = async (data: { contactId: number; name: string; phone: string; country: string }): Promise<VisaOperation> => {
+  return apiRequest<VisaOperation>('/visa-operations', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+};
+
+export const updateVisaOperationCgi = async (id: number, cgiData: any, showCgiOnPortal: boolean): Promise<VisaOperation> => {
+  return apiRequest<VisaOperation>(`/visa-operations/${id}/cgi`, {
+    method: 'PUT',
+    body: JSON.stringify({ cgiData, showCgiOnPortal }),
+  });
+};
+
+export const updateVisaOperationSlotBooking = async (
+  id: number,
+  data: { slotBookingData?: any; visaInterviewData?: any; status?: string }
+): Promise<VisaOperation> => {
+  return apiRequest<VisaOperation>(`/visa-operations/${id}/slot-booking`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
 };
 
 export const saveEvent = async (eventData: Omit<CalendarEvent, 'id'> & { id?: number }): Promise<CalendarEvent[]> => {
