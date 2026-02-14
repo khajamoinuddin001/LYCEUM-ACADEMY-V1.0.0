@@ -1036,7 +1036,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onRegister, onTerms,
                                 </li>
                                 <li className="flex items-start gap-3">
                                     <MapPin size={16} className="text-lyceum-blue mt-1" />
-                                    <span> 19-4-2/3/13, First Floor, Below Gladiator Gym, opposite HP Petrol Pump, Falaknuma, Hyderabad, Telangana 500053<br />India - 500001</span>
+                                    <span> 19-4-2/3/13, First Floor, Below Gladiator Gym, opposite HP Petrol Pump, Falaknuma, Hyderabad, Telangana 500053 </span>
                                 </li>
                             </ul>
                         </div>

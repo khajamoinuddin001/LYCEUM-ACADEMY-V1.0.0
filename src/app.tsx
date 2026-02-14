@@ -30,7 +30,7 @@ import NewQuotationPage from '@/features/finance/new_quotation_modal';
 import { saveVideo, deleteVideo } from './utils/db';
 import useLocalStorage from '@/hooks/use_local_storage';
 import * as api from './utils/api';
-import type { CalendarEvent, Contact, CrmLead, AccountingTransaction, TransactionType, TransactionStatus, CrmStage, Quotation, User, UserRole, AppPermissions, ActivityLog, DocumentAnalysisResult, Document as Doc, ChecklistItem, QuotationTemplate, Visitor, TodoTask, Ticket, PaymentActivityLog, LmsCourse, LmsLesson, LmsModule, Coupon, ContactActivity, ContactActivityAction, DiscussionPost, DiscussionThread, RecordedSession, Channel, Notification } from './types';
+import type { CalendarEvent, Contact, CrmLead, AccountingTransaction, TransactionType, TransactionStatus, CrmStage, Quotation, User, UserRole, AppPermissions, ActivityLog, DocumentAnalysisResult, Document as Doc, ChecklistItem, QuotationTemplate, Visitor, TodoTask, Ticket, PaymentActivityLog, LmsCourse, LmsLesson, LmsModule, Coupon, ContactActivity, ContactActivityAction, DiscussionPost, DiscussionThread, RecordedSession, Channel, Notification, OdooApp } from './types';
 import LoginView from '@/features/auth/login_view';
 import StudentDashboard from '@/features/dashboard/student_dashboard';
 import AccessControlView from '@/features/settings/access_control_view';
@@ -72,6 +72,22 @@ import AttendanceView from '@/features/hr/attendance_view';
 import { TermsView, PrivacyView, LandingDocumentsView } from '@/features/shared/legal_views';
 import StudentDocumentsView from '@/features/students/student_documents_view';
 import MarketingView from '@/features/marketing/marketing_view';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  sortableKeyboardCoordinates,
+} from '@dnd-kit/sortable';
+import { restrictToWindowEdges } from '@dnd-kit/modifiers';
+import { ODOO_APPS } from '@/lib/constants';
+
 
 
 type ContactViewMode = 'details' | 'documents' | 'visaFiling' | 'checklist' | 'visits' | 'crm' | 'tasks';
@@ -158,6 +174,11 @@ const DashboardLayout: React.FC = () => {
   const [viewingCertificateForCourse, setViewingCertificateForCourse] = useState<LmsCourse | null>(null);
   const [courseToPurchase, setCourseToPurchase] = useState<LmsCourse | null>(null);
 
+  const [gridApps, setGridApps] = useState<OdooApp[]>([]);
+  const APPS_STORAGE_KEY = 'lyceum_apps_order';
+  const SIDEBAR_STORAGE_KEY_PREFIX = 'sidebar_order_';
+
+
   const events = useMemo(() => {
     const calendarEvents = rawEvents.map(e => ({ ...e, start: new Date(e.start), end: new Date(e.end) }));
 
@@ -210,6 +231,78 @@ const DashboardLayout: React.FC = () => {
   }, [rawEvents, contacts]);
   const setEvents = (newEvents: CalendarEvent[]) => api.saveEvents(newEvents).then(setRawEvents);
   const currentUser = impersonatingUser || storedCurrentUser;
+
+  useEffect(() => {
+    if (currentUser) {
+      const availableApps = ODOO_APPS.filter(app => currentUser.role === 'Admin' || app.name in (currentUser.permissions || {}));
+
+      const savedOrder = localStorage.getItem(APPS_STORAGE_KEY);
+      if (savedOrder) {
+        try {
+          const orderNames = JSON.parse(savedOrder) as string[];
+          const orderedApps = orderNames
+            .map(name => availableApps.find(app => app.name === name))
+            .filter((app): app is OdooApp => !!app);
+
+          const newApps = availableApps.filter(app => !orderNames.includes(app.name));
+          setGridApps([...orderedApps, ...newApps]);
+        } catch (e) {
+          setGridApps(availableApps);
+        }
+      } else {
+        setGridApps(availableApps);
+      }
+    }
+  }, [currentUser]);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleGlobalDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over) return;
+
+    // 1. Handle Grid Sorting
+    if (over.id !== 'sidebar-droppable' && active.id !== over.id) {
+      setGridApps((items) => {
+        const oldIndex = items.findIndex((item) => item.name === String(active.id));
+        const newIndex = items.findIndex((item) => item.name === String(over.id));
+
+        if (oldIndex !== -1 && newIndex !== -1) {
+          const newOrder = arrayMove(items, oldIndex, newIndex);
+          localStorage.setItem(APPS_STORAGE_KEY, JSON.stringify(newOrder.map((app: OdooApp) => app.name)));
+          return newOrder;
+        }
+        return items;
+      });
+    }
+
+    // 2. Handle Drop to Sidebar
+    if (over.id === 'sidebar-droppable' && currentUser) {
+      const appName = String(active.id);
+      const storageKey = `${SIDEBAR_STORAGE_KEY_PREFIX}${currentUser.id}`;
+      const savedOrder = localStorage.getItem(storageKey);
+      let currentNav: string[] = [];
+
+      try {
+        if (savedOrder) currentNav = JSON.parse(savedOrder);
+      } catch (e) { }
+
+      if (!currentNav.includes(appName)) {
+        // Dispatch custom event for Sidebar to pick up
+        window.dispatchEvent(new CustomEvent('lyceum:pin-app', { detail: { name: appName } }));
+      }
+    }
+  };
+
 
   const handleGlobalThemeToggle = () => {
     setDarkMode(!darkMode);
@@ -1665,7 +1758,7 @@ const DashboardLayout: React.FC = () => {
     }
 
     switch (activeApp) {
-      case 'Apps': return <AppsGridView onAppSelect={handleAppSelect} user={currentUser} />;
+      case 'Apps': return <AppsGridView onAppSelect={handleAppSelect} user={currentUser} apps={gridApps} />;
       case 'dashboard': return <Dashboard onNavigateBack={() => handleAppSelect('Apps')} transactions={transactions} user={currentUser} tasks={tasks} onAppSelect={handleAppSelect} paymentActivityLog={paymentActivityLog} contacts={contacts} leads={leads} />;
       case 'Discuss': return <DiscussView user={currentUser} users={users} isMobile={isMobile} channels={channels} setChannels={(value) => api.saveChannels(typeof value === 'function' ? value(channels) : value).then(setChannels)} onCreateGroup={handleCreateGroupChannel} />;
       case 'Tasks': return (
@@ -1879,194 +1972,202 @@ const DashboardLayout: React.FC = () => {
   }
 
   return (
-    <div className="flex h-screen bg-lyceum-light dark:bg-gray-900 font-sans overflow-hidden">
-      {impersonatingUser && <ImpersonationBanner userName={impersonatingUser.name} onStop={handleStopImpersonation} />}
-      <Sidebar isOpen={sidebarOpen} setIsOpen={setSidebarOpen} activeApp={activeApp} onAppSelect={handleAppSelect} isMobile={isMobile} user={currentUser} onLogout={handleLogout} />
-      <div className={`flex-1 flex flex-col overflow-hidden ${impersonatingUser ? 'pt-10' : ''}`}>
-        <Header sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} activeApp={activeApp} onAppSelect={handleAppSelect} onSearchClick={() => setIsSearchOpen(true)} onQuickCreateClick={() => setIsQuickCreateOpen(true)} user={currentUser} onLogout={handleLogout} notifications={filteredNotifications} onMarkAllNotificationsAsRead={markAllAsRead} onNotificationClick={handleSearchResultSelect} notificationsOpen={notificationsOpen} setNotificationsOpen={setNotificationsOpen} darkMode={darkMode} setDarkMode={handleGlobalThemeToggle} />
-        <main className="flex-1 overflow-x-hidden overflow-y-auto bg-lyceum-light dark:bg-gray-800 p-3 md:p-6">
-          {currentUser.role === 'Student' ? (
-            (() => { // Use an IIFE to allow if/return inside JSX
-              // Student Apps Page
-              if (activeApp === 'Apps') {
-                return <StudentAppsView onAppSelect={handleAppSelect} />;
-              }
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragEnd={handleGlobalDragEnd}
+      modifiers={[restrictToWindowEdges]}
+    >
+      <div className="flex h-screen bg-lyceum-light dark:bg-gray-900 font-sans overflow-hidden">
 
-              // Student Tickets Page
-              if (activeApp === 'Tickets') {
-                const studentContact = contacts.find(c =>
-                  c.userId === currentUser.id ||
-                  (c.email && currentUser.email && c.email.toLowerCase() === currentUser.email.toLowerCase())
-                );
-                return studentContact ? (
-                  <StudentTicketsView
-                    student={studentContact}
-                    tickets={tickets}
-                    onNavigateToTask={(taskId) => {
-                      setSelectedTaskId(taskId);
-                      setActiveApp('Tasks');
-                    }}
-                  />
-                ) : <div>Loading...</div>;
-              }
-
-              // Student Accounts Page
-              if (activeApp === 'Accounts') {
-                const studentContact = contacts.find(c =>
-                  c.userId === currentUser.id ||
-                  (c.email && currentUser.email && c.email.toLowerCase() === currentUser.email.toLowerCase())
-                );
-                return studentContact ? (
-                  <StudentAccountsView
-                    student={studentContact}
-                    quotations={leads
-                      .filter(l =>
-                        (l.email && currentUser.email && l.email.toLowerCase() === currentUser.email.toLowerCase()) ||
-                        (l.contact && studentContact.name && l.contact.toLowerCase() === studentContact.name.toLowerCase())
-                      )
-                      .flatMap(l => l.quotations || [])
-                    }
-                  />
-                ) : <div>Loading...</div>;
-              }
-
-              // Student Quotations Page
-              if (activeApp === 'Quotations') {
-                const studentContact = contacts.find(c =>
-                  c.userId === currentUser.id ||
-                  (c.email && currentUser.email && c.email.toLowerCase() === currentUser.email.toLowerCase())
-                );
-                return studentContact ? (
-                  <StudentQuotationsView
-                    student={studentContact}
-                    quotations={leads
-                      .filter(l =>
-                        (l.email && currentUser.email && l.email.toLowerCase() === currentUser.email.toLowerCase()) ||
-                        (l.contact && studentContact.name && l.contact.toLowerCase() === studentContact.name.toLowerCase())
-                      )
-                      .flatMap(l => l.quotations || [])
-                    }
-                  />
-                ) : <div>Loading...</div>;
-              }
-
-              // Student Profile Page
-              if (activeApp === 'My Profile') {
-                const studentContact = contacts.find(c =>
-                  c.userId === currentUser.id ||
-                  (c.email && currentUser.email && c.email.toLowerCase() === currentUser.email.toLowerCase())
-                );
-                return studentContact ? (
-                  <StudentProfileView
-                    student={studentContact}
-                    onNavigateBack={() => handleAppSelect('Apps')}
-                    user={currentUser}
-                  />
-                ) : <div>Loading...</div>;
-              }
-
-              // Student Tasks Page
-              if (activeApp === 'Tasks') {
-                const studentContact = contacts.find(c =>
-                  c.userId === currentUser.id ||
-                  (c.email && currentUser.email && c.email.toLowerCase() === currentUser.email.toLowerCase())
-                );
-                return studentContact ? (
-                  <StudentTasksView
-                    student={studentContact}
-                    tasks={tasks}
-                    onNavigateBack={() => handleAppSelect('Apps')}
-                  />
-                ) : <div>Loading...</div>;
-              }
-
-              // Student Documents Page
-              if (activeApp === 'Documents') {
-                const studentContact = contacts.find(c =>
-                  c.userId === currentUser.id ||
-                  (c.email && currentUser.email && c.email.toLowerCase() === currentUser.email.toLowerCase())
-                );
-                return studentContact ? (
-                  <StudentDocumentsView
-                    student={studentContact}
-                    user={currentUser}
-                    onNavigateBack={() => handleAppSelect('Apps')}
-                  />
-                ) : <div>Loading...</div>;
-              }
-
-              // Student Dashboard (default)
-              if (activeApp === 'student_dashboard' || activeApp === 'dashboard') {
-                // Robustly find the student contact
-                console.log('🔍 [Student Dashboard] Looking for contact...');
-                console.log('Current User ID:', currentUser.id);
-                console.log('Current User Email:', currentUser.email);
-                console.log('Total Contacts:', contacts.length);
-
-                const studentContact = contacts.find(c =>
-                  c.userId === currentUser.id ||
-                  (c.email && currentUser.email && c.email.toLowerCase() === currentUser.email.toLowerCase())
-                );
-
-                console.log('Found Student Contact:', studentContact ? `Yes (ID: ${studentContact.id})` : 'No');
-                if (!studentContact) {
-                  console.log('Available contact user IDs:', contacts.map(c => ({ id: c.id, userId: c.userId, email: c.email })));
+        {impersonatingUser && <ImpersonationBanner userName={impersonatingUser.name} onStop={handleStopImpersonation} />}
+        <Sidebar isOpen={sidebarOpen} setIsOpen={setSidebarOpen} activeApp={activeApp} onAppSelect={handleAppSelect} isMobile={isMobile} user={currentUser} onLogout={handleLogout} />
+        <div className={`flex-1 flex flex-col overflow-hidden ${impersonatingUser ? 'pt-10' : ''}`}>
+          <Header sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} activeApp={activeApp} onAppSelect={handleAppSelect} onSearchClick={() => setIsSearchOpen(true)} onQuickCreateClick={() => setIsQuickCreateOpen(true)} user={currentUser} onLogout={handleLogout} notifications={filteredNotifications} onMarkAllNotificationsAsRead={markAllAsRead} onNotificationClick={handleSearchResultSelect} notificationsOpen={notificationsOpen} setNotificationsOpen={setNotificationsOpen} darkMode={darkMode} setDarkMode={handleGlobalThemeToggle} />
+          <main className="flex-1 overflow-x-hidden overflow-y-auto bg-lyceum-light dark:bg-gray-800 p-3 md:p-6">
+            {currentUser.role === 'Student' ? (
+              (() => { // Use an IIFE to allow if/return inside JSX
+                // Student Apps Page
+                if (activeApp === 'Apps') {
+                  return <StudentAppsView onAppSelect={handleAppSelect} />;
                 }
 
-                return <StudentDashboard student={studentContact} courses={lmsCourses} events={events} onAppSelect={handleAppSelect} />;
-              }
-              return renderAppContent();
-            })()
-          ) : (
-            renderAppContent()
-          )}
-        </main>
-      </div>
+                // Student Tickets Page
+                if (activeApp === 'Tickets') {
+                  const studentContact = contacts.find(c =>
+                    c.userId === currentUser.id ||
+                    (c.email && currentUser.email && c.email.toLowerCase() === currentUser.email.toLowerCase())
+                  );
+                  return studentContact ? (
+                    <StudentTicketsView
+                      student={studentContact}
+                      tickets={tickets}
+                      onNavigateToTask={(taskId) => {
+                        setSelectedTaskId(taskId);
+                        setActiveApp('Tasks');
+                      }}
+                    />
+                  ) : <div>Loading...</div>;
+                }
 
-      <TaskModal
-        isOpen={isTaskModalOpen}
-        onClose={() => setIsTaskModalOpen(false)}
-        onSave={handleSaveTask}
-        editTask={editingTask}
-        currentUserId={currentUser.id}
-        contacts={contacts}
-      />
+                // Student Accounts Page
+                if (activeApp === 'Accounts') {
+                  const studentContact = contacts.find(c =>
+                    c.userId === currentUser.id ||
+                    (c.email && currentUser.email && c.email.toLowerCase() === currentUser.email.toLowerCase())
+                  );
+                  return studentContact ? (
+                    <StudentAccountsView
+                      student={studentContact}
+                      quotations={leads
+                        .filter(l =>
+                          (l.email && currentUser.email && l.email.toLowerCase() === currentUser.email.toLowerCase()) ||
+                          (l.contact && studentContact.name && l.contact.toLowerCase() === studentContact.name.toLowerCase())
+                        )
+                        .flatMap(l => l.quotations || [])
+                      }
+                    />
+                  ) : <div>Loading...</div>;
+                }
 
-      <SearchModal
-        isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} contacts={contacts} leads={leads} onResultSelect={handleSearchResultSelect} />
-      <QuickCreateModal isOpen={isQuickCreateOpen} onClose={() => setIsQuickCreateOpen(false)} onSave={handleQuickCreateSave} />
+                // Student Quotations Page
+                if (activeApp === 'Quotations') {
+                  const studentContact = contacts.find(c =>
+                    c.userId === currentUser.id ||
+                    (c.email && currentUser.email && c.email.toLowerCase() === currentUser.email.toLowerCase())
+                  );
+                  return studentContact ? (
+                    <StudentQuotationsView
+                      student={studentContact}
+                      quotations={leads
+                        .filter(l =>
+                          (l.email && currentUser.email && l.email.toLowerCase() === currentUser.email.toLowerCase()) ||
+                          (l.contact && studentContact.name && l.contact.toLowerCase() === studentContact.name.toLowerCase())
+                        )
+                        .flatMap(l => l.quotations || [])
+                      }
+                    />
+                  ) : <div>Loading...</div>;
+                }
 
-      {currentUser.role !== 'Student' && (
-        <>
-          <TransactionModal
-            isOpen={isTransactionModalOpen}
-            onClose={() => { setIsTransactionModalOpen(false); setEditingTransaction(null); }}
-            onSave={handleSaveTransaction}
-            contacts={contacts}
-            user={currentUser}
-            editTransaction={editingTransaction}
-            initialType={transactionTypeForModal}
-          />
-          {printingTransaction && (
-            <PrintTransaction
-              transaction={printingTransaction}
-              contact={contacts.find(c => c.id === printingTransaction.contactId)}
-              onClose={() => setPrintingTransaction(null)}
+                // Student Profile Page
+                if (activeApp === 'My Profile') {
+                  const studentContact = contacts.find(c =>
+                    c.userId === currentUser.id ||
+                    (c.email && currentUser.email && c.email.toLowerCase() === currentUser.email.toLowerCase())
+                  );
+                  return studentContact ? (
+                    <StudentProfileView
+                      student={studentContact}
+                      onNavigateBack={() => handleAppSelect('Apps')}
+                      user={currentUser}
+                    />
+                  ) : <div>Loading...</div>;
+                }
+
+                // Student Tasks Page
+                if (activeApp === 'Tasks') {
+                  const studentContact = contacts.find(c =>
+                    c.userId === currentUser.id ||
+                    (c.email && currentUser.email && c.email.toLowerCase() === currentUser.email.toLowerCase())
+                  );
+                  return studentContact ? (
+                    <StudentTasksView
+                      student={studentContact}
+                      tasks={tasks}
+                      onNavigateBack={() => handleAppSelect('Apps')}
+                    />
+                  ) : <div>Loading...</div>;
+                }
+
+                // Student Documents Page
+                if (activeApp === 'Documents') {
+                  const studentContact = contacts.find(c =>
+                    c.userId === currentUser.id ||
+                    (c.email && currentUser.email && c.email.toLowerCase() === currentUser.email.toLowerCase())
+                  );
+                  return studentContact ? (
+                    <StudentDocumentsView
+                      student={studentContact}
+                      user={currentUser}
+                      onNavigateBack={() => handleAppSelect('Apps')}
+                    />
+                  ) : <div>Loading...</div>;
+                }
+
+                // Student Dashboard (default)
+                if (activeApp === 'student_dashboard' || activeApp === 'dashboard') {
+                  // Robustly find the student contact
+                  console.log('🔍 [Student Dashboard] Looking for contact...');
+                  console.log('Current User ID:', currentUser.id);
+                  console.log('Current User Email:', currentUser.email);
+                  console.log('Total Contacts:', contacts.length);
+
+                  const studentContact = contacts.find(c =>
+                    c.userId === currentUser.id ||
+                    (c.email && currentUser.email && c.email.toLowerCase() === currentUser.email.toLowerCase())
+                  );
+
+                  console.log('Found Student Contact:', studentContact ? `Yes (ID: ${studentContact.id})` : 'No');
+                  if (!studentContact) {
+                    console.log('Available contact user IDs:', contacts.map(c => ({ id: c.id, userId: c.userId, email: c.email })));
+                  }
+
+                  return <StudentDashboard student={studentContact} courses={lmsCourses} events={events} onAppSelect={handleAppSelect} />;
+                }
+                return renderAppContent();
+              })()
+            ) : (
+              renderAppContent()
+            )}
+          </main>
+        </div>
+
+        <TaskModal
+          isOpen={isTaskModalOpen}
+          onClose={() => setIsTaskModalOpen(false)}
+          onSave={handleSaveTask}
+          editTask={editingTask}
+          currentUserId={currentUser.id}
+          contacts={contacts}
+        />
+
+        <SearchModal
+          isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} contacts={contacts} leads={leads} onResultSelect={handleSearchResultSelect} />
+        <QuickCreateModal isOpen={isQuickCreateOpen} onClose={() => setIsQuickCreateOpen(false)} onSave={handleQuickCreateSave} />
+
+        {currentUser.role !== 'Student' && (
+          <>
+            <TransactionModal
+              isOpen={isTransactionModalOpen}
+              onClose={() => { setIsTransactionModalOpen(false); setEditingTransaction(null); }}
+              onSave={handleSaveTransaction}
+              contacts={contacts}
+              user={currentUser}
+              editTransaction={editingTransaction}
+              initialType={transactionTypeForModal}
             />
-          )}
-          <NewLeadModal isOpen={isNewLeadModalOpen} onClose={() => { setIsNewLeadModalOpen(false); setEditingLead(null); }} onSave={handleSaveLead} lead={editingLead === 'new' ? undefined : editingLead} agents={users.filter(u => u.role !== 'Student').map(u => u.name)} user={currentUser} />
-          <LeadDetailsModal lead={selectedLead} onClose={handleCloseLeadDetails} onEdit={handleEditLeadClick} onNewQuotation={handleNewQuotationClick} onEditQuotation={handleEditQuotationClick} user={currentUser} />
-          <NewStaffModal isOpen={isNewStaffModalOpen} onClose={() => setIsNewStaffModalOpen(false)} onSave={handleAddNewUser} user={currentUser} />
-          <NewVisitorModal isOpen={isNewVisitorModalOpen} onClose={() => { setIsNewVisitorModalOpen(false); setEditingVisitor(null); }} onSave={handleSaveVisitor} visitorToEdit={editingVisitor} staff={users.filter(u => u.role === 'Admin' || u.role === 'Staff')} user={currentUser} contacts={contacts} />
-          <NewAppointmentModal isOpen={isNewAppointmentModalOpen} onClose={() => setIsNewAppointmentModalOpen(false)} onSave={handleScheduleVisitor} staff={users.filter(u => u.role === 'Admin' || u.role === 'Staff')} user={currentUser} />
-          <DocumentAnalysisModal isOpen={isAnalysisModalOpen} onClose={() => setIsAnalysisModalOpen(false)} onApply={handleApplyAnalysis} result={analysisResult} documentName={analyzedDocument?.name || ''} />
-          <AIEmailComposerModal isOpen={isEmailComposerOpen} onClose={() => { setIsEmailComposerOpen(false); setEmailDraft(''); setEmailTargetContact(null); }} onGenerate={(prompt) => emailTargetContact && handleGenerateEmailDraft(prompt, emailTargetContact)} draft={emailDraft} contactName={emailTargetContact?.name || ''} />
-          {isEventModalOpen && (<EventModal isOpen={isEventModalOpen} onClose={handleCloseEventModal} onSave={handleSaveEvent} onDelete={handleDeleteEvent} eventInfo={selectedEventInfo} user={currentUser} />)}
-          {editingCourse && (<CourseEditModal course={editingCourse === 'new' ? null : editingCourse} onClose={() => setEditingCourse(null)} onSave={handleLmsCourseSave} />)}
-          {editingLessonInfo && (<LessonEditModal lesson={editingLessonInfo.lesson === 'new' ? null : editingLessonInfo.lesson} onClose={() => setEditingLessonInfo(null)} onSave={handleLmsLessonSave} />)}
-        </>
-      )}
-    </div>
+            {printingTransaction && (
+              <PrintTransaction
+                transaction={printingTransaction}
+                contact={contacts.find(c => c.id === printingTransaction.contactId)}
+                onClose={() => setPrintingTransaction(null)}
+              />
+            )}
+            <NewLeadModal isOpen={isNewLeadModalOpen} onClose={() => { setIsNewLeadModalOpen(false); setEditingLead(null); }} onSave={handleSaveLead} lead={editingLead === 'new' ? undefined : editingLead} agents={users.filter(u => u.role !== 'Student').map(u => u.name)} user={currentUser} />
+            <LeadDetailsModal lead={selectedLead} onClose={handleCloseLeadDetails} onEdit={handleEditLeadClick} onNewQuotation={handleNewQuotationClick} onEditQuotation={handleEditQuotationClick} user={currentUser} />
+            <NewStaffModal isOpen={isNewStaffModalOpen} onClose={() => setIsNewStaffModalOpen(false)} onSave={handleAddNewUser} user={currentUser} />
+            <NewVisitorModal isOpen={isNewVisitorModalOpen} onClose={() => { setIsNewVisitorModalOpen(false); setEditingVisitor(null); }} onSave={handleSaveVisitor} visitorToEdit={editingVisitor} staff={users.filter(u => u.role === 'Admin' || u.role === 'Staff')} user={currentUser} contacts={contacts} />
+            <NewAppointmentModal isOpen={isNewAppointmentModalOpen} onClose={() => setIsNewAppointmentModalOpen(false)} onSave={handleScheduleVisitor} staff={users.filter(u => u.role === 'Admin' || u.role === 'Staff')} user={currentUser} />
+            <DocumentAnalysisModal isOpen={isAnalysisModalOpen} onClose={() => setIsAnalysisModalOpen(false)} onApply={handleApplyAnalysis} result={analysisResult} documentName={analyzedDocument?.name || ''} />
+            <AIEmailComposerModal isOpen={isEmailComposerOpen} onClose={() => { setIsEmailComposerOpen(false); setEmailDraft(''); setEmailTargetContact(null); }} onGenerate={(prompt) => emailTargetContact && handleGenerateEmailDraft(prompt, emailTargetContact)} draft={emailDraft} contactName={emailTargetContact?.name || ''} />
+            {isEventModalOpen && (<EventModal isOpen={isEventModalOpen} onClose={handleCloseEventModal} onSave={handleSaveEvent} onDelete={handleDeleteEvent} eventInfo={selectedEventInfo} user={currentUser} />)}
+            {editingCourse && (<CourseEditModal course={editingCourse === 'new' ? null : editingCourse} onClose={() => setEditingCourse(null)} onSave={handleLmsCourseSave} />)}
+            {editingLessonInfo && (<LessonEditModal lesson={editingLessonInfo.lesson === 'new' ? null : editingLessonInfo.lesson} onClose={() => setEditingLessonInfo(null)} onSave={handleLmsLessonSave} />)}
+          </>
+        )}
+      </div>
+    </DndContext>
   );
 };
 

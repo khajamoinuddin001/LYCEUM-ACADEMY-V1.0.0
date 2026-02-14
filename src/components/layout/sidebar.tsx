@@ -20,6 +20,7 @@ import {
 } from '@/components/common/icons';
 import type { User, OdooApp } from '@/types';
 import { ODOO_APPS as ALL_ODOO_APPS } from '@/lib/constants';
+import { useDroppable } from '@dnd-kit/core';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -85,7 +86,9 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, activeApp, onAppSe
   const [draggedItem, setDraggedItem] = useState<number | null>(null);
   const [isDraggingAny, setIsDraggingAny] = useState(false);
   const [isOverTrash, setIsOverTrash] = useState(false);
-  const [isOverSidebar, setIsOverSidebar] = useState(false);
+  const { setNodeRef, isOver: isDndOver } = useDroppable({
+    id: 'sidebar-droppable',
+  });
 
   // Apps that cannot be removed from sidebar
   const PROTECTED_APPS = [
@@ -131,6 +134,30 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, activeApp, onAppSe
     }
   }, [user.id, user.role]);
 
+  useEffect(() => {
+    const handlePinAppEvent = (e: any) => {
+      const appName = e.detail.name;
+      setNavItems(prev => {
+        if (prev.find(item => (item.name || item.label) === appName)) return prev;
+
+        const meta = getAppMetadata(appName);
+        if (meta) {
+          const newItem = {
+            name: meta.name,
+            icon: React.cloneElement(meta.icon as React.ReactElement, { size: 20 })
+          };
+          const updatedItems = [...prev, newItem];
+          saveOrder(updatedItems);
+          return updatedItems;
+        }
+        return prev;
+      });
+    };
+
+    window.addEventListener('lyceum:pin-app', handlePinAppEvent);
+    return () => window.removeEventListener('lyceum:pin-app', handlePinAppEvent);
+  }, [user.id]);
+
   const saveOrder = (items: any[]) => {
     const storageKey = `sidebar_order_${user.id}`;
     const orderNames = items.map(item => item.name || item.label);
@@ -144,7 +171,6 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, activeApp, onAppSe
 
   const handleDragOver = (e: React.DragEvent, index?: number) => {
     e.preventDefault();
-    setIsOverSidebar(true);
     if (draggedItem === null || index === undefined || draggedItem === index) return;
 
     const items = [...navItems];
@@ -160,37 +186,9 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, activeApp, onAppSe
     setDraggedItem(null);
     setIsDraggingAny(false);
     setIsOverTrash(false);
-    setIsOverSidebar(false);
     saveOrder(navItems);
   };
 
-  const handleSidebarDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsOverSidebar(false);
-    const dataStr = e.dataTransfer.getData('application/json');
-    if (!dataStr) return;
-
-    try {
-      const { name, type } = JSON.parse(dataStr);
-      if (type === 'APP_GRID_ITEM') {
-        // Check if already in sidebar
-        if (navItems.find(item => (item.name || item.label) === name)) return;
-
-        const meta = getAppMetadata(name);
-        if (meta) {
-          const newItem = {
-            name: meta.name,
-            icon: React.cloneElement(meta.icon as React.ReactElement, { size: 20 })
-          };
-          const updatedItems = [...navItems, newItem];
-          setNavItems(updatedItems);
-          saveOrder(updatedItems);
-        }
-      }
-    } catch (err) {
-      console.error('Failed to handle drop:', err);
-    }
-  };
 
   const handleTrashDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -217,7 +215,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, activeApp, onAppSe
       ? `fixed inset-y-0 left-0 transform ${isOpen ? 'translate-x-0 w-64' : '-translate-x-full w-64'}`
       : `relative flex-shrink-0 min-w-0 ${isOpen ? 'w-64' : 'w-0'}`
     }
-    ${isOverSidebar ? 'ring-2 ring-inset ring-lyceum-blue/30' : ''}
+    ${isDndOver ? 'ring-2 ring-inset ring-lyceum-blue/30' : ''}
   `;
   console.log('[Sidebar] isOpen:', isOpen, 'isMobile:', isMobile, 'classes:', isOpen ? 'w-64' : 'w-0');
 
@@ -268,11 +266,9 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, activeApp, onAppSe
         ></div>
       )}
       <div
+        ref={setNodeRef}
         className={sidebarClasses}
         role="navigation"
-        onDragOver={(e) => { e.preventDefault(); setIsOverSidebar(true); }}
-        onDragLeave={() => setIsOverSidebar(false)}
-        onDrop={handleSidebarDrop}
         style={{ overflow: isOpen ? 'visible' : 'hidden' }}
       >
         <div className="flex flex-col h-full">
