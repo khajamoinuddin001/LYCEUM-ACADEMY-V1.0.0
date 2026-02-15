@@ -1809,6 +1809,7 @@ const DashboardLayout: React.FC = () => {
           contacts={contacts}
           onOperationCreated={handleOperationCreated}
           existingOperations={visaOperations}
+          user={currentUser || undefined}
         />
       );
       case 'Tickets': return (

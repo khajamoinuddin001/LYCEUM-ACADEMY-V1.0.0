@@ -616,5 +616,22 @@ export interface VisaOperation {
     visaOutcome?: string;
     remarks?: string;
   };
+  dsData?: {
+    confirmationNumber?: string;
+    securityQuestion?: string;
+    securityAnswer?: string;
+    startDate?: string;
+    expiryDate?: string;
+    basicDsBox?: string;
+    documentId?: number;
+    documentName?: string;
+    fillingDocumentId?: number;
+    fillingDocumentName?: string;
+    fillingDocuments?: { id: number; name: string }[];
+    studentStatus?: 'pending' | 'accepted' | 'rejected';
+    adminStatus?: 'pending' | 'accepted' | 'rejected';
+    rejectionReason?: string;
+    adminName?: string;
+  };
   showCgiOnPortal?: boolean;
 }

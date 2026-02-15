@@ -5,24 +5,46 @@ import {
     ChevronLeft,
     ChevronRight,
     ShieldCheck,
-    MapPin
+    MapPin,
+    CheckCircle,
+    AlertCircle,
+    Upload,
+    Download,
+    Eye,
+    FileText,
+    Play,
+    ArrowRight,
+    User as UserIcon,
+    UserCheck,
+    Phone,
+    Globe,
+    Plus,
+    ArrowLeft,
+    Clock,
+    Search,
+    X,
+    Lock,
+    EyeOff,
+    KeyRound,
+    Trash2
 } from 'lucide-react';
-import { FileText, Play, ArrowRight, User as UserIcon, Phone, Globe, Plus, ArrowLeft, Clock, Search, X, Lock, Eye, EyeOff, KeyRound } from '@/components/common/icons';
-import { createVisaOperation, updateVisaOperationCgi, updateVisaOperationSlotBooking } from '@/utils/api';
-import type { Contact, VisaOperation } from '@/types';
+import { createVisaOperation, updateVisaOperationCgi, updateVisaOperationSlotBooking, updateVisaOperationDs160, uploadDs160Document, deleteDs160Document, updateDs160Status, downloadDocument, downloadVisaOperationItem, getToken, API_BASE_URL } from '@/utils/api';
+import type { Contact, VisaOperation, User } from '@/types';
 
 interface VisaOperationsViewProps {
     contacts: Contact[];
     onOperationCreated?: (op: VisaOperation) => void;
     existingOperations?: VisaOperation[];
+    user?: User;
 }
 
 export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
     contacts,
     onOperationCreated,
-    existingOperations = []
+    existingOperations = [],
+    user
 }) => {
-    const [step, setStep] = useState<'list' | 'form' | 'detail' | 'cgi' | 'slot'>('list');
+    const [step, setStep] = useState<'list' | 'form' | 'detail' | 'cgi' | 'slot' | 'ds'>('list');
     const [selectedContactId, setSelectedContactId] = useState<number | ''>('');
     const [formData, setFormData] = useState({
         name: '',
@@ -56,6 +78,21 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
     const [interviewFormData, setInterviewFormData] = useState({
         visaOutcome: '',
         remarks: ''
+    });
+    const [dsFormData, setDsFormData] = useState({
+        confirmationNumber: '',
+        securityQuestion: '',
+        securityAnswer: '',
+        startDate: new Date().toISOString().split('T')[0],
+        expiryDate: '',
+        basicDsBox: '',
+        documentId: undefined as number | undefined,
+        documentName: '',
+        fillingDocuments: [] as { id: number; name: string }[],
+        studentStatus: 'pending' as 'pending' | 'accepted' | 'rejected',
+        adminStatus: 'pending' as 'pending' | 'accepted' | 'rejected',
+        rejectionReason: '',
+        adminName: ''
     });
     const [showPassword, setShowPassword] = useState(false);
     const [activeOp, setActiveOp] = useState<VisaOperation | null>(null);
@@ -161,6 +198,125 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
             alert('Failed to save slot data. Please try again.');
         } finally {
             setIsSubmitting(false);
+        }
+    };
+
+    const handleSaveDs = async () => {
+        if (!activeOp) return;
+        setIsSubmitting(true);
+        try {
+            const updatedOp = await updateVisaOperationDs160(activeOp.id, dsFormData);
+            setActiveOp(updatedOp);
+            setStep('detail');
+            alert('DS-160 data saved successfully!');
+        } catch (error) {
+            console.error('Failed to save DS-160 data:', error);
+            alert('Failed to save DS-160 data. Please try again.');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleDsFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'internal' | 'filling' = 'internal') => {
+        const file = e.target.files?.[0];
+        if (!file || !activeOp) return;
+
+        setIsSubmitting(true);
+        try {
+            const updatedOp = await uploadDs160Document(activeOp.id, file, type);
+            setActiveOp(updatedOp);
+            setDsFormData(prev => ({
+                ...prev,
+                documentId: updatedOp.dsData?.documentId,
+                documentName: updatedOp.dsData?.documentName,
+                fillingDocuments: updatedOp.dsData?.fillingDocuments || [],
+                studentStatus: updatedOp.dsData?.studentStatus || 'pending',
+                adminStatus: updatedOp.dsData?.adminStatus || 'pending'
+            }));
+            alert(`${type === 'filling' ? 'Filling' : 'Internal'} document uploaded successfully!`);
+        } catch (error) {
+            console.error('Failed to upload DS-160 document:', error);
+            alert('Failed to upload document. Please try again.');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleDsFileDelete = async (itemId: number) => {
+        if (!activeOp || !confirm('Are you sure you want to delete this document?')) return;
+
+        setIsSubmitting(true);
+        try {
+            const updatedOp = await deleteDs160Document(activeOp.id, itemId);
+            setActiveOp(updatedOp);
+            setDsFormData(prev => ({
+                ...prev,
+                documentId: updatedOp.dsData?.documentId,
+                documentName: updatedOp.dsData?.documentName,
+                fillingDocuments: updatedOp.dsData?.fillingDocuments || [],
+                studentStatus: updatedOp.dsData?.studentStatus || 'pending',
+                adminStatus: updatedOp.dsData?.adminStatus || 'pending'
+            }));
+            alert('Document deleted successfully!');
+        } catch (error) {
+            console.error('Failed to delete DS-160 document:', error);
+            alert('Failed to delete document. Please try again.');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const calculateExpiry = (startDate: string) => {
+        if (!startDate) return '';
+        const date = new Date(startDate);
+        date.setDate(date.getDate() + 20);
+        return date.toISOString().split('T')[0];
+    };
+
+    const handleDsStatusUpdate = async (data: { studentStatus?: string, adminStatus?: string, rejectionReason?: string }) => {
+        if (!activeOp) return;
+        setIsSubmitting(true);
+        try {
+            const updatedOp = await updateDs160Status(activeOp.id, data);
+            setActiveOp(updatedOp);
+            setDsFormData(prev => ({
+                ...prev,
+                ...data,
+                ...(data.adminStatus === 'accepted' ? { adminName: user?.name } : {})
+            }));
+            alert('DS-160 status updated successfully!');
+        } catch (error) {
+            console.error('Failed to update DS-160 status:', error);
+            alert('Failed to update status. Please try again.');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handlePreviewFile = async (documentId: number) => {
+        try {
+            const token = getToken();
+            const response = await fetch(`${API_BASE_URL}/visa-operations/items/${documentId}?preview=true`, {
+                headers: {
+                    ...(token && { 'Authorization': `Bearer ${token}` }),
+                },
+            });
+            if (!response.ok) throw new Error('Failed to fetch document');
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            window.open(url, '_blank');
+        } catch (error) {
+            console.error('Preview failed:', error);
+            alert('Could not preview document.');
+        }
+    };
+
+    const handleDownloadFile = async (documentId: number, filename: string) => {
+        try {
+            await downloadVisaOperationItem(documentId, filename);
+        } catch (error) {
+            console.error('Download failed:', error);
+            alert('Could not download document.');
         }
     };
 
@@ -280,14 +436,44 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                                             </td>
                                             <td className="px-6 py-4 text-right">
                                                 <div className="flex items-center justify-end gap-2">
+                                                    {op.dsData?.documentId ? (
+                                                        <div className="flex items-center gap-1.5 px-2 py-1 bg-emerald-50 border border-emerald-200 rounded-md">
+                                                            <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></div>
+                                                            <span className="text-[9px] font-black text-emerald-700 uppercase tracking-tighter">Process Completed</span>
+                                                        </div>
+                                                    ) : op.dsData?.adminStatus === 'accepted' ? (
+                                                        <div className="flex items-center gap-1.5 px-2 py-1 bg-lyceum-blue/5 border border-lyceum-blue/10 rounded-md">
+                                                            <div className="w-1.5 h-1.5 bg-lyceum-blue rounded-full"></div>
+                                                            <span className="text-[9px] font-black text-lyceum-blue uppercase tracking-tighter">Waiting for DS-160 Submission</span>
+                                                        </div>
+                                                    ) : op.dsData?.studentStatus === 'accepted' && op.dsData?.adminStatus === 'pending' && (
+                                                        <div className="flex items-center gap-1.5 px-2 py-1 bg-amber-50 border border-amber-200 rounded-md animate-pulse">
+                                                            <div className="w-1.5 h-1.5 bg-amber-500 rounded-full"></div>
+                                                            <span className="text-[9px] font-black text-amber-700 uppercase tracking-tighter">Waiting for Admin Approval</span>
+                                                        </div>
+                                                    )}
                                                     <button
                                                         onClick={(e) => {
                                                             e.stopPropagation();
-                                                            alert(`Starting DS process for ${op.vopNumber}...`);
+                                                            setActiveOp(op);
+                                                            setStep('ds');
                                                         }}
-                                                        className="px-3 py-1.5 bg-lyceum-blue/5 text-lyceum-blue hover:bg-lyceum-blue hover:text-white rounded-lg text-xs font-bold transition-all border border-lyceum-blue/10 flex items-center gap-1.5"
+                                                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 border ${op.dsData
+                                                            ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border-emerald-100'
+                                                            : 'bg-lyceum-blue/5 text-lyceum-blue hover:bg-lyceum-blue hover:text-white border-lyceum-blue/10'
+                                                            }`}
                                                     >
-                                                        Start DS
+                                                        {op.dsData ? (
+                                                            <>
+                                                                <Eye size={12} />
+                                                                View DS-160
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <Play size={12} />
+                                                                Start DS
+                                                            </>
+                                                        )}
                                                     </button>
                                                     <button
                                                         onClick={(e) => {
@@ -805,7 +991,398 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
         );
     }
 
-    // Detail View
+    if (step === 'ds') {
+        return (
+            <div className="max-w-4xl mx-auto py-8">
+                <button
+                    onClick={() => setStep('detail')}
+                    className="flex items-center gap-1.5 text-slate-500 hover:text-slate-800 font-bold mb-6 transition-colors"
+                >
+                    <ArrowLeft size={18} />
+                    Back to Detail
+                </button>
+
+                <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
+                    <div className="bg-blue-50 px-8 py-6 border-b border-blue-100 flex justify-between items-center">
+                        <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+                            <FileText className="text-blue-600" size={24} />
+                            DS-160 Workflow
+                        </h2>
+                        {dsFormData.studentStatus === 'accepted' && dsFormData.adminStatus === 'accepted' && (
+                            <div className="flex items-center gap-2 text-emerald-600 bg-emerald-50 px-4 py-2 rounded-full border border-emerald-100">
+                                <CheckCircle size={18} />
+                                <span className="text-sm font-bold">Accepted by client and {dsFormData.adminName || 'Admin'}</span>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="p-8 space-y-8">
+                        {/* Status Message for "Accepted by client and Admin" */}
+                        {dsFormData.studentStatus === 'accepted' && dsFormData.adminStatus === 'accepted' && (
+                            <div className="bg-emerald-50 border border-emerald-200 p-6 rounded-2xl space-y-4">
+                                <div className="flex items-center gap-3 text-emerald-800">
+                                    <ShieldCheck size={24} />
+                                    <div>
+                                        <h4 className="font-bold text-lg">Proceed to Submit</h4>
+                                        <p className="text-sm text-emerald-600">The DS-160 has been approved by both student and admin. You can now proceed with the submission and upload the final confirmation document below.</p>
+                                    </div>
+                                </div>
+
+                                <div className="pt-4 border-t border-emerald-100">
+                                    <label className="block text-sm font-bold text-emerald-800 mb-2">Upload Confirmation Document</label>
+                                    <div className="flex items-center gap-4">
+                                        <input
+                                            type="file"
+                                            id="ds-document-upload"
+                                            className="hidden"
+                                            onChange={handleDsFileUpload}
+                                        />
+                                        <label
+                                            htmlFor="ds-document-upload"
+                                            className="flex items-center gap-2 bg-emerald-600 text-white px-6 py-2.5 rounded-lg font-bold hover:bg-emerald-700 transition-all cursor-pointer shadow-lg shadow-emerald-600/20"
+                                        >
+                                            <Upload size={20} />
+                                            {dsFormData.documentName ? 'Replace Document' : 'Upload Document'}
+                                        </label>
+                                        {dsFormData.documentName && (
+                                            <div className="flex items-center gap-3">
+                                                <span className="text-sm text-emerald-600 font-medium truncate max-w-xs">{dsFormData.documentName}</span>
+                                                <div className="flex items-center gap-2">
+                                                    <button
+                                                        onClick={() => handlePreviewFile(dsFormData.documentId!)}
+                                                        className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 hover:text-emerald-800 transition-colors bg-emerald-50 px-2 py-1 rounded-md border border-emerald-100"
+                                                    >
+                                                        <Eye size={12} />
+                                                        Preview
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleDownloadFile(dsFormData.documentId!, dsFormData.documentName)}
+                                                        className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 hover:text-emerald-800 transition-colors bg-emerald-50 px-2 py-1 rounded-md border border-emerald-100"
+                                                    >
+                                                        <Download size={12} />
+                                                        Download
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            {/* Left Column: Form Fields */}
+                            <div className="space-y-6">
+                                <h3 className="text-lg font-bold text-slate-800 border-b border-slate-100 pb-2">DS-160 Details</h3>
+
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Confirmation Number</label>
+                                        <input
+                                            type="text"
+                                            value={dsFormData.confirmationNumber}
+                                            onChange={(e) => setDsFormData(prev => ({ ...prev, confirmationNumber: e.target.value }))}
+                                            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:border-blue-500 outline-none transition-all font-mono font-bold text-slate-700"
+                                            placeholder="AA00XXXXXX"
+                                        />
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Start Date</label>
+                                            <input
+                                                type="date"
+                                                value={dsFormData.startDate}
+                                                onChange={(e) => {
+                                                    const newStart = e.target.value;
+                                                    setDsFormData(prev => ({
+                                                        ...prev,
+                                                        startDate: newStart,
+                                                        expiryDate: calculateExpiry(newStart)
+                                                    }));
+                                                }}
+                                                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:border-blue-500 outline-none transition-all font-medium"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Expiry Date (Auto)</label>
+                                            <input
+                                                type="date"
+                                                readOnly
+                                                value={dsFormData.expiryDate}
+                                                className="w-full px-4 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-slate-500 font-medium cursor-not-allowed"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Security Question</label>
+                                            <input
+                                                type="text"
+                                                value={dsFormData.securityQuestion}
+                                                onChange={(e) => setDsFormData(prev => ({ ...prev, securityQuestion: e.target.value }))}
+                                                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:border-blue-500 outline-none transition-all text-sm font-medium"
+                                                placeholder="Mother's Maiden Name, etc."
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Security Answer</label>
+                                            <input
+                                                type="text"
+                                                value={dsFormData.securityAnswer}
+                                                onChange={(e) => setDsFormData(prev => ({ ...prev, securityAnswer: e.target.value }))}
+                                                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:border-blue-500 outline-none transition-all text-sm font-medium"
+                                                placeholder="Answer..."
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="pt-4 border-t border-slate-100">
+                                        <h4 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
+                                            <FileText size={16} className="text-blue-600" />
+                                            Basic DS (Internal Use)
+                                        </h4>
+                                        <textarea
+                                            rows={4}
+                                            value={dsFormData.basicDsBox}
+                                            onChange={(e) => setDsFormData(prev => ({ ...prev, basicDsBox: e.target.value }))}
+                                            className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:border-blue-500 outline-none transition-all text-sm font-medium resize-none mb-4 shadow-sm"
+                                            placeholder="Enter basic DS-160 information or instructions (Staff Internal Use)..."
+                                        />
+
+                                        <div className="space-y-3">
+                                            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Internal Attachment</label>
+                                            <div className="flex flex-wrap items-center gap-3">
+                                                <input
+                                                    type="file"
+                                                    id="ds-document-main-upload"
+                                                    className="hidden"
+                                                    onChange={(e) => handleDsFileUpload(e, 'internal')}
+                                                />
+                                                <label
+                                                    htmlFor="ds-document-main-upload"
+                                                    className="flex items-center gap-2 bg-slate-100 text-slate-600 px-5 py-2.5 rounded-lg text-sm font-bold hover:bg-slate-200 transition-all cursor-pointer border border-slate-200"
+                                                >
+                                                    <Upload size={18} />
+                                                    {dsFormData.documentName ? 'Replace Internal' : 'Upload Internal'}
+                                                </label>
+
+                                                {dsFormData.documentId && (
+                                                    <div className="flex items-center gap-3 bg-slate-50 px-4 py-2 rounded-xl border border-slate-100">
+                                                        <FileText size={16} className="text-slate-400" />
+                                                        <div className="flex flex-col">
+                                                            <span className="text-xs font-bold text-slate-700 max-w-[150px] truncate">{dsFormData.documentName}</span>
+                                                            <div className="flex items-center gap-3 mt-1">
+                                                                <button
+                                                                    onClick={() => handlePreviewFile(dsFormData.documentId!)}
+                                                                    className="flex items-center gap-1 text-[10px] font-bold text-slate-600 hover:text-slate-800 transition-colors"
+                                                                >
+                                                                    <Eye size={12} />
+                                                                    Preview
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => handleDownloadFile(dsFormData.documentId!, dsFormData.documentName || 'ds-160-internal.pdf')}
+                                                                    className="flex items-center gap-1 text-[10px] font-bold text-slate-600 hover:text-slate-800 transition-colors"
+                                                                >
+                                                                    <Download size={12} />
+                                                                    Download
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Right Column: Filling and Approvals */}
+                            <div className="space-y-6">
+                                {/* DS-160 Filling Section */}
+                                <div className="bg-blue-50/30 p-6 rounded-3xl border border-blue-100/50">
+                                    <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                                        <div className="p-1.5 bg-blue-100 rounded-lg">
+                                            <FileText size={18} className="text-blue-600" />
+                                        </div>
+                                        DS-160 Filling
+                                    </h3>
+
+                                    <div className="space-y-4">
+                                        <p className="text-xs text-slate-500 font-medium">Upload the final DS-160 form for student review and approval. This document will be visible to the student.</p>
+
+                                        <div className="flex flex-col gap-3">
+                                            <input
+                                                type="file"
+                                                id="ds-document-filling-upload"
+                                                className="hidden"
+                                                onChange={(e) => handleDsFileUpload(e, 'filling')}
+                                            />
+                                            <label
+                                                htmlFor="ds-document-filling-upload"
+                                                className="flex items-center justify-center gap-2 bg-blue-600 text-white px-5 py-3 rounded-xl text-sm font-bold hover:bg-blue-700 transition-all cursor-pointer shadow-md active:scale-95"
+                                            >
+                                                <Upload size={18} />
+                                                Upload Filling Document
+                                            </label>
+
+                                            <div className="space-y-3 mt-2">
+                                                {dsFormData.fillingDocuments && dsFormData.fillingDocuments.length > 0 ? (
+                                                    dsFormData.fillingDocuments.map((doc, index) => (
+                                                        <div key={doc.id} className="flex items-center gap-3 bg-white px-4 py-3 rounded-2xl border border-blue-100 shadow-sm transition-all hover:border-blue-200">
+                                                            <div className="flex items-center justify-center w-8 h-8 bg-blue-50 text-blue-600 rounded-lg font-bold text-xs shrink-0">
+                                                                {index + 1}
+                                                            </div>
+                                                            <div className="flex-1 min-w-0">
+                                                                <div className="text-xs font-bold text-slate-700 truncate">{doc.name}</div>
+                                                                <div className="flex items-center gap-3 mt-1.5 pt-1.5 border-t border-slate-50">
+                                                                    <button
+                                                                        onClick={() => handlePreviewFile(doc.id)}
+                                                                        className="flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:text-blue-800 transition-colors"
+                                                                    >
+                                                                        <Eye size={12} />
+                                                                        Preview
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => handleDownloadFile(doc.id, doc.name)}
+                                                                        className="flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:text-blue-800 transition-colors"
+                                                                    >
+                                                                        <Download size={12} />
+                                                                        Download
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => handleDsFileDelete(doc.id)}
+                                                                        className="flex items-center gap-1 text-[10px] font-bold text-rose-600 hover:text-rose-800 transition-colors ml-auto"
+                                                                    >
+                                                                        <Trash2 size={12} />
+                                                                        Delete
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    ))
+                                                ) : (
+                                                    <div className="text-center py-6 border-2 border-dashed border-slate-100 rounded-2xl">
+                                                        <FileText size={24} className="mx-auto text-slate-200 mb-2" />
+                                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">No documents uploaded</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <h3 className="text-lg font-bold text-slate-800 border-b border-slate-100 pb-2">Status & Approvals</h3>
+
+                                <div className="space-y-4">
+                                    {/* Student Response */}
+                                    <div className={`p-4 rounded-2xl border ${dsFormData.studentStatus === 'accepted' ? 'bg-emerald-50 border-emerald-100' : dsFormData.studentStatus === 'rejected' ? 'bg-rose-50 border-rose-100' : 'bg-slate-50 border-slate-100'}`}>
+                                        <div className="flex justify-between items-center mb-2">
+                                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Student Response</span>
+                                            <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${dsFormData.studentStatus === 'accepted' ? 'bg-emerald-100 text-emerald-600' : dsFormData.studentStatus === 'rejected' ? 'bg-rose-100 text-rose-600' : 'bg-slate-200 text-slate-600'}`}>
+                                                {dsFormData.studentStatus}
+                                            </span>
+                                        </div>
+                                        {dsFormData.studentStatus === 'accepted' ? (
+                                            <div className="flex gap-2 items-start mt-2 p-2 bg-white/50 rounded-lg border border-emerald-100">
+                                                <CheckCircle size={14} className="text-emerald-500 mt-0.5 shrink-0" />
+                                                <p className="text-xs text-emerald-600 font-bold">Student has approved the DS-160 Filling documents.</p>
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-2">
+                                                {dsFormData.studentStatus === 'rejected' && dsFormData.rejectionReason && (
+                                                    <div className="flex gap-2 items-start mt-2 p-2 bg-white/50 rounded-lg border border-rose-100">
+                                                        <AlertCircle size={14} className="text-rose-500 mt-0.5 shrink-0" />
+                                                        <p className="text-xs text-rose-600 italic">"Student Rejected: {dsFormData.rejectionReason}"</p>
+                                                    </div>
+                                                )}
+                                                {(user?.role === 'Admin' || user?.role === 'Staff') && (
+                                                    <button
+                                                        onClick={() => {
+                                                            if (window.confirm('Are you sure you want to approve this on behalf of the student?')) {
+                                                                handleDsStatusUpdate({ studentStatus: 'accepted' });
+                                                            }
+                                                        }}
+                                                        className="w-full mt-2 flex items-center justify-center gap-2 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 hover:text-slate-800 rounded-lg text-xs font-bold transition-all"
+                                                    >
+                                                        <UserCheck size={14} />
+                                                        Approve on behalf of Student
+                                                    </button>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Admin Status */}
+                                    <div className={`p-4 rounded-2xl border ${dsFormData.adminStatus === 'accepted' ? 'bg-emerald-50 border-emerald-100' : dsFormData.adminStatus === 'rejected' ? 'bg-rose-50 border-rose-100' : 'bg-slate-50 border-slate-100'}`}>
+                                        <div className="flex justify-between items-center mb-4">
+                                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Admin Status</span>
+                                            <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${dsFormData.adminStatus === 'accepted' ? 'bg-emerald-100 text-emerald-600' : dsFormData.adminStatus === 'rejected' ? 'bg-rose-100 text-rose-600' : 'bg-slate-200 text-slate-600'}`}>
+                                                {dsFormData.adminStatus}
+                                            </span>
+                                        </div>
+
+                                        {user?.role === 'Admin' && dsFormData.adminStatus === 'pending' && (
+                                            <div className="space-y-3">
+                                                <input
+                                                    type="text"
+                                                    placeholder="Reason for rejection (if applicable)"
+                                                    value={dsFormData.rejectionReason}
+                                                    onChange={(e) => setDsFormData(prev => ({ ...prev, rejectionReason: e.target.value }))}
+                                                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:border-blue-500"
+                                                />
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        onClick={() => handleDsStatusUpdate({ adminStatus: 'accepted' })}
+                                                        className="flex-1 bg-emerald-600 text-white py-2 rounded-lg font-bold text-xs hover:bg-emerald-700 transition-colors"
+                                                    >
+                                                        Accept
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            if (!dsFormData.rejectionReason) return alert('Please provide a rejection reason');
+                                                            handleDsStatusUpdate({ adminStatus: 'rejected', rejectionReason: dsFormData.rejectionReason });
+                                                        }}
+                                                        className="flex-1 bg-rose-600 text-white py-2 rounded-lg font-bold text-xs hover:bg-rose-700 transition-colors"
+                                                    >
+                                                        Reject
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {dsFormData.adminStatus === 'accepted' && (
+                                            <div className="flex items-center gap-2 text-xs text-emerald-600 font-bold">
+                                                <CheckCircle size={14} />
+                                                Approved by {dsFormData.adminName || 'Admin'}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="pt-4 flex justify-end gap-4 border-t border-slate-100">
+                            <button
+                                onClick={() => setStep('detail')}
+                                className="px-6 py-2.5 text-slate-500 font-bold hover:bg-slate-50 rounded-lg transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleSaveDs}
+                                disabled={isSubmitting}
+                                className="bg-blue-600 text-white px-10 py-2.5 rounded-lg font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 disabled:opacity-50"
+                            >
+                                {isSubmitting ? 'Saving...' : 'Save DS-160 Details'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
     return (
         <div className="space-y-6">
             <button
@@ -841,8 +1418,28 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                 </div>
 
                 <div className="flex gap-4 w-full md:w-auto">
-                    <button className="flex-1 md:flex-none px-8 py-3 bg-lyceum-blue text-white rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-lyceum-blue/20 flex items-center justify-center gap-2">
-                        Start DS
+                    <button
+                        onClick={() => {
+                            setDsFormData({
+                                confirmationNumber: activeOp?.dsData?.confirmationNumber || '',
+                                securityQuestion: activeOp?.dsData?.securityQuestion || '',
+                                securityAnswer: activeOp?.dsData?.securityAnswer || '',
+                                startDate: activeOp?.dsData?.startDate || new Date().toISOString().split('T')[0],
+                                expiryDate: activeOp?.dsData?.expiryDate || calculateExpiry(activeOp?.dsData?.startDate || new Date().toISOString().split('T')[0]),
+                                basicDsBox: activeOp?.dsData?.basicDsBox || '',
+                                documentId: activeOp?.dsData?.documentId,
+                                documentName: activeOp?.dsData?.documentName || '',
+                                fillingDocuments: activeOp?.dsData?.fillingDocuments || (activeOp?.dsData?.fillingDocumentId ? [{ id: activeOp.dsData.fillingDocumentId, name: activeOp.dsData.fillingDocumentName || 'document.pdf' }] : []),
+                                studentStatus: activeOp?.dsData?.studentStatus || 'pending',
+                                adminStatus: activeOp?.dsData?.adminStatus || 'pending',
+                                rejectionReason: activeOp?.dsData?.rejectionReason || '',
+                                adminName: activeOp?.dsData?.adminName || ''
+                            });
+                            setStep('ds');
+                        }}
+                        className="flex-1 md:flex-none px-8 py-3 bg-lyceum-blue text-white rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-lyceum-blue/20 flex items-center justify-center gap-2"
+                    >
+                        {activeOp?.dsData?.confirmationNumber ? 'View DS-160' : 'Start DS'}
                     </button>
                     <button
                         onClick={() => {
@@ -900,17 +1497,83 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="md:col-span-2 space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 border-dashed flex flex-col items-center justify-center min-h-[200px] text-center">
-                            <div className="bg-white p-4 rounded-full shadow-sm mb-4">
-                                <FileText className="text-slate-400" size={32} />
+                        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6 col-span-1 md:col-span-2">
+                            <div className="flex justify-between items-center border-b border-slate-100 pb-4">
+                                <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                                    <FileText className="text-lyceum-blue" size={20} />
+                                    DS-160 Status
+                                </h3>
+                                <button
+                                    onClick={() => {
+                                        setDsFormData({
+                                            confirmationNumber: activeOp?.dsData?.confirmationNumber || '',
+                                            securityQuestion: activeOp?.dsData?.securityQuestion || '',
+                                            securityAnswer: activeOp?.dsData?.securityAnswer || '',
+                                            startDate: activeOp?.dsData?.startDate || new Date().toISOString().split('T')[0],
+                                            expiryDate: activeOp?.dsData?.expiryDate || calculateExpiry(activeOp?.dsData?.startDate || new Date().toISOString().split('T')[0]),
+                                            basicDsBox: activeOp?.dsData?.basicDsBox || '',
+                                            documentId: activeOp?.dsData?.documentId,
+                                            documentName: activeOp?.dsData?.documentName || '',
+                                            fillingDocuments: activeOp?.dsData?.fillingDocuments || (activeOp?.dsData?.fillingDocumentId ? [{ id: activeOp.dsData.fillingDocumentId, name: activeOp.dsData.fillingDocumentName || 'document.pdf' }] : []),
+                                            studentStatus: activeOp?.dsData?.studentStatus || 'pending',
+                                            adminStatus: activeOp?.dsData?.adminStatus || 'pending',
+                                            rejectionReason: activeOp?.dsData?.rejectionReason || '',
+                                            adminName: activeOp?.dsData?.adminName || ''
+                                        });
+                                        setStep('ds');
+                                    }}
+                                    className="text-xs font-bold text-lyceum-blue hover:text-blue-700 flex items-center gap-1 bg-lyceum-blue/5 px-3 py-1.5 rounded-lg transition-colors"
+                                >
+                                    Manage Workflow <ArrowRight size={12} />
+                                </button>
                             </div>
-                            <p className="text-slate-500 font-medium">Document Tracking coming soon</p>
-                        </div>
-                        <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 border-dashed flex flex-col items-center justify-center min-h-[200px] text-center">
-                            <div className="bg-white p-4 rounded-full shadow-sm mb-4">
-                                <Clock className="text-slate-400" size={32} />
+
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                {/* Student Status */}
+                                <div className={`p-4 rounded-xl border ${activeOp?.dsData?.studentStatus === 'accepted' ? 'bg-emerald-50 border-emerald-100' : activeOp?.dsData?.studentStatus === 'rejected' ? 'bg-rose-50 border-rose-100' : 'bg-slate-50 border-slate-100'}`}>
+                                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Student Review</span>
+                                    <div className="flex items-center gap-2 mt-2">
+                                        {activeOp?.dsData?.studentStatus === 'accepted' ? (
+                                            <CheckCircle size={18} className="text-emerald-500" />
+                                        ) : activeOp?.dsData?.studentStatus === 'rejected' ? (
+                                            <AlertCircle size={18} className="text-rose-500" />
+                                        ) : (
+                                            <Clock size={18} className="text-slate-400" />
+                                        )}
+                                        <span className={`text-sm font-bold ${activeOp?.dsData?.studentStatus === 'accepted' ? 'text-emerald-700' : activeOp?.dsData?.studentStatus === 'rejected' ? 'text-rose-700' : 'text-slate-600'}`}>
+                                            {activeOp?.dsData?.studentStatus === 'accepted' ? 'Approved' : activeOp?.dsData?.studentStatus === 'rejected' ? 'Rejected' : 'Pending'}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                {/* Admin Status */}
+                                <div className={`p-4 rounded-xl border ${activeOp?.dsData?.adminStatus === 'accepted' ? 'bg-emerald-50 border-emerald-100' : activeOp?.dsData?.adminStatus === 'rejected' ? 'bg-rose-50 border-rose-100' : 'bg-slate-50 border-slate-100'}`}>
+                                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Admin Approval</span>
+                                    <div className="flex items-center gap-2 mt-2">
+                                        {activeOp?.dsData?.adminStatus === 'accepted' ? (
+                                            <CheckCircle size={18} className="text-emerald-500" />
+                                        ) : activeOp?.dsData?.adminStatus === 'rejected' ? (
+                                            <AlertCircle size={18} className="text-rose-500" />
+                                        ) : (
+                                            <Clock size={18} className="text-slate-400" />
+                                        )}
+                                        <span className={`text-sm font-bold ${activeOp?.dsData?.adminStatus === 'accepted' ? 'text-emerald-700' : activeOp?.dsData?.adminStatus === 'rejected' ? 'text-rose-700' : 'text-slate-600'}`}>
+                                            {activeOp?.dsData?.adminStatus === 'accepted' ? 'Approved' : activeOp?.dsData?.adminStatus === 'rejected' ? 'Rejected' : 'Pending'}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                {/* Confirmation Details */}
+                                <div className="p-4 rounded-xl border bg-slate-50 border-slate-100">
+                                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Confirmation No.</span>
+                                    <div className="flex items-center gap-2 mt-2">
+                                        <FileText size={18} className="text-slate-400" />
+                                        <p className="font-mono font-bold text-slate-700 text-sm">
+                                            {activeOp?.dsData?.confirmationNumber || 'Not Generated'}
+                                        </p>
+                                    </div>
+                                </div>
                             </div>
-                            <p className="text-slate-500 font-medium">Timeline features coming soon</p>
                         </div>
                     </div>
 

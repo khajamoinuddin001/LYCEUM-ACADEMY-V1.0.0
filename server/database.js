@@ -263,10 +263,11 @@ export async function initDatabase() {
         scheduled_check_in TIMESTAMP,
         check_in TIMESTAMP,
         check_out TIMESTAMP,
-        check_out TIMESTAMP,
         status TEXT NOT NULL CHECK(status IN ('Scheduled', 'Checked-in', 'Checked-out', 'Called')),
         card_number TEXT,
         daily_sequence_number INTEGER,
+        staff_email TEXT,
+        staff_name TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -283,8 +284,9 @@ export async function initDatabase() {
       await client.query('ALTER TABLE visitors ADD COLUMN IF NOT EXISTS daily_sequence_number INTEGER');
       await client.query('ALTER TABLE visitors ADD COLUMN IF NOT EXISTS visit_segments JSONB DEFAULT \'[]\'');
       await client.query('ALTER TABLE visitors ADD COLUMN IF NOT EXISTS called_at TIMESTAMP');
+      await client.query('ALTER TABLE visitors ADD COLUMN IF NOT EXISTS staff_email TEXT');
+      await client.query('ALTER TABLE visitors ADD COLUMN IF NOT EXISTS staff_name TEXT');
       await client.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS contact_id INTEGER REFERENCES contacts(id)');
-      await client.query('ALTER TABLE tasks ADD COLUMN IF NOT EXISTS assigned_by INTEGER REFERENCES users(id)');
       await client.query('ALTER TABLE tasks ADD COLUMN IF NOT EXISTS assigned_by INTEGER REFERENCES users(id)');
       await client.query('ALTER TABLE tasks ADD COLUMN IF NOT EXISTS priority TEXT DEFAULT \'Medium\'');
       await client.query('ALTER TABLE tasks ADD COLUMN IF NOT EXISTS completed_by INTEGER REFERENCES users(id)');
@@ -711,6 +713,20 @@ export async function initDatabase() {
         user_id INTEGER REFERENCES users(id)
       )
     `);
+
+    // Visa Operation Items table (Dedicated storage for documents and text)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS visa_operation_items (
+        id SERIAL PRIMARY KEY,
+        operation_id INTEGER REFERENCES visa_operations(id) ON DELETE CASCADE,
+        item_type TEXT NOT NULL, -- 'document', 'note'
+        name TEXT, -- filename or label
+        content_type TEXT,
+        file_data BYTEA,
+        text_content TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
     await migrateColumn('visa_operations', 'vopNumber', 'vop_number');
     await migrateColumn('visa_operations', 'contactId', 'contact_id');
     await migrateColumn('visa_operations', 'userId', 'user_id');
@@ -739,6 +755,9 @@ export async function initDatabase() {
 
     // Add visa_interview_data if it doesn't exist
     await client.query('ALTER TABLE visa_operations ADD COLUMN IF NOT EXISTS visa_interview_data JSONB DEFAULT \'{}\'');
+
+    // Add ds_data if it doesn't exist
+    await client.query('ALTER TABLE visa_operations ADD COLUMN IF NOT EXISTS ds_data JSONB DEFAULT \'{}\'');
 
     console.log("✅ Database initialized successfully");
   } catch (err) {

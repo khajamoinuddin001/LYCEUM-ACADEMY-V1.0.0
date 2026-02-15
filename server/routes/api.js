@@ -1329,6 +1329,45 @@ router.get('/leads', authenticateToken, async (req, res) => {
 });
 
 // Visa Operations Routes
+router.get('/visa-operations/items/:id', authenticateToken, async (req, res) => {
+  try {
+    const result = await query(`
+      SELECT item.*, op.user_id as op_creator_id, c.user_id as student_user_id
+      FROM visa_operation_items item
+      JOIN visa_operations op ON item.operation_id = op.id
+      JOIN contacts c ON op.contact_id = c.id
+      WHERE item.id = $1
+    `, [req.params.id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Item not found' });
+    }
+
+    const item = result.rows[0];
+
+    // Access control: Admin, Creator (Staff), or the Student the operation belongs to
+    const isStudentOwner = req.user.role === 'Student' && String(req.user.id) === String(item.student_user_id);
+    const isCreator = String(req.user.id) === String(item.op_creator_id);
+    const isAdmin = req.user.role === 'Admin';
+    const isStaff = req.user.role === 'Staff';
+
+    if (!isAdmin && !isStudentOwner && !isCreator && !isStaff) {
+      return res.status(403).json({ error: 'Unauthorized access to visa operation items' });
+    }
+
+    if (item.item_type === 'document') {
+      const isPreview = req.query.preview === 'true';
+      res.setHeader('Content-Type', item.content_type || 'application/octet-stream');
+      res.setHeader('Content-Disposition', `${isPreview ? 'inline' : 'attachment'}; filename="${item.name || 'document'}"`);
+      return res.send(item.file_data);
+    } else {
+      return res.json({ text: item.text_content });
+    }
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.get('/visa-operations', authenticateToken, async (req, res) => {
   try {
     let sql = `
@@ -1375,6 +1414,7 @@ router.get('/visa-operations', authenticateToken, async (req, res) => {
         cgiData,
         slotBookingData: row.slot_booking_data,
         visaInterviewData: row.visa_interview_data,
+        dsData: row.ds_data,
         showCgiOnPortal: row.show_cgi_on_portal,
         vopNumber: row.vop_number,
         contactId: row.contact_id,
@@ -1401,18 +1441,20 @@ router.put('/visa-operations/:id/cgi', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Operation not found' });
     }
 
-    const op = result.rows[0];
-    res.json({
-      ...op,
-      cgiData: op.cgi_data,
-      slotBookingData: op.slot_booking_data,
-      visaInterviewData: op.visa_interview_data,
-      showCgiOnPortal: op.show_cgi_on_portal,
-      vopNumber: op.vop_number,
-      contactId: op.contact_id,
-      userId: op.user_id,
-      createdAt: op.created_at
-    });
+    const opRows = result.rows[0];
+    const cgiOutput = {
+      ...opRows,
+      cgiData: opRows.cgi_data,
+      slotBookingData: opRows.slot_booking_data,
+      visaInterviewData: opRows.visa_interview_data,
+      dsData: opRows.ds_data,
+      showCgiOnPortal: opRows.show_cgi_on_portal,
+      vopNumber: opRows.vop_number,
+      contactId: opRows.contact_id,
+      userId: opRows.user_id,
+      createdAt: opRows.created_at
+    };
+    res.json(cgiOutput);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -1480,12 +1522,242 @@ router.put('/visa-operations/:id/slot-booking', authenticateToken, async (req, r
       return res.status(404).json({ error: 'Operation not found' });
     }
 
+    const opData = result.rows[0];
+    const slotResponse = {
+      ...opData,
+      cgiData: opData.cgi_data,
+      slotBookingData: opData.slot_booking_data,
+      visaInterviewData: opData.visa_interview_data,
+      dsData: opData.ds_data,
+      showCgiOnPortal: opData.show_cgi_on_portal,
+      vopNumber: opData.vop_number,
+      contactId: opData.contact_id,
+      userId: opData.user_id,
+      createdAt: opData.created_at
+    };
+    res.json(slotResponse);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.put('/visa-operations/:id/ds-160', authenticateToken, async (req, res) => {
+  try {
+    const { dsData } = req.body;
+    const result = await query(`
+      UPDATE visa_operations
+      SET ds_data = $1
+      WHERE id = $2
+      RETURNING *
+    `, [JSON.stringify(dsData), req.params.id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Operation not found' });
+    }
+
     const op = result.rows[0];
     res.json({
       ...op,
       cgiData: op.cgi_data,
       slotBookingData: op.slot_booking_data,
       visaInterviewData: op.visa_interview_data,
+      dsData: op.ds_data,
+      showCgiOnPortal: op.show_cgi_on_portal,
+      vopNumber: op.vop_number,
+      contactId: op.contact_id,
+      userId: op.user_id,
+      createdAt: op.created_at
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/visa-operations/:id/ds-160/document', authenticateToken, upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const opResult = await query('SELECT contact_id, ds_data FROM visa_operations WHERE id = $1', [req.params.id]);
+    if (opResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Operation not found' });
+    }
+
+    const { ds_data } = opResult.rows[0];
+    const uploadType = req.query.type || 'internal'; // 'internal' or 'filling'
+
+    // Create entry in visa_operation_items
+    const itemResult = await query(`
+      INSERT INTO visa_operation_items (operation_id, item_type, name, content_type, file_data)
+      VALUES ($1, 'document', $2, $3, $4)
+      RETURNING id
+    `, [req.params.id, req.file.originalname, req.file.mimetype, req.file.buffer]);
+
+    const itemId = itemResult.rows[0].id;
+
+    // Update ds_data in visa_operations based on type
+    const updatedDsData = { ...ds_data };
+
+    if (uploadType === 'filling') {
+      // Initialize fillingDocuments if it doesn't exist
+      if (!updatedDsData.fillingDocuments) {
+        updatedDsData.fillingDocuments = [];
+        // Optional: migrate old single value if it exists
+        if (updatedDsData.fillingDocumentId) {
+          updatedDsData.fillingDocuments.push({
+            id: updatedDsData.fillingDocumentId,
+            name: updatedDsData.fillingDocumentName
+          });
+          delete updatedDsData.fillingDocumentId;
+          delete updatedDsData.fillingDocumentName;
+        }
+      }
+
+      updatedDsData.fillingDocuments.push({
+        id: itemId,
+        name: req.file.originalname
+      });
+
+      updatedDsData.studentStatus = 'pending';
+      updatedDsData.adminStatus = 'pending';
+    } else {
+      updatedDsData.documentId = itemId;
+      updatedDsData.documentName = req.file.originalname;
+    }
+
+    const result = await query(`
+      UPDATE visa_operations
+      SET ds_data = $1
+      WHERE id = $2
+      RETURNING *
+    `, [JSON.stringify(updatedDsData), req.params.id]);
+
+    const op = result.rows[0];
+    res.json({
+      ...op,
+      cgiData: op.cgi_data,
+      slotBookingData: op.slot_booking_data,
+      visaInterviewData: op.visa_interview_data,
+      dsData: op.ds_data,
+      showCgiOnPortal: op.show_cgi_on_portal,
+      vopNumber: op.vop_number,
+      contactId: op.contact_id,
+      userId: op.user_id,
+      createdAt: op.created_at
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete('/visa-operations/:id/ds-160/document/:itemId', authenticateToken, async (req, res) => {
+  try {
+    const opResult = await query('SELECT ds_data FROM visa_operations WHERE id = $1', [req.params.id]);
+    if (opResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Operation not found' });
+    }
+
+    const { ds_data } = opResult.rows[0];
+    const itemId = parseInt(req.params.itemId);
+    const updatedDsData = { ...ds_data };
+
+    // Handle single document (internal)
+    if (updatedDsData.documentId === itemId) {
+      delete updatedDsData.documentId;
+      delete updatedDsData.documentName;
+    }
+
+    // Handle fillingDocuments array
+    if (updatedDsData.fillingDocuments) {
+      updatedDsData.fillingDocuments = updatedDsData.fillingDocuments.filter(doc => doc.id !== itemId);
+    }
+
+    // Also check the old single filling document fields for backward compatibility
+    if (updatedDsData.fillingDocumentId === itemId) {
+      delete updatedDsData.fillingDocumentId;
+      delete updatedDsData.fillingDocumentName;
+    }
+
+    const result = await query(`
+      UPDATE visa_operations
+      SET ds_data = $1
+      WHERE id = $2
+      RETURNING *
+    `, [JSON.stringify(updatedDsData), req.params.id]);
+
+    const op = result.rows[0];
+    res.json({
+      ...op,
+      cgiData: op.cgi_data,
+      slotBookingData: op.slot_booking_data,
+      visaInterviewData: op.visa_interview_data,
+      dsData: op.ds_data,
+      showCgiOnPortal: op.show_cgi_on_portal,
+      vopNumber: op.vop_number,
+      contactId: op.contact_id,
+      userId: op.user_id,
+      createdAt: op.created_at
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.put('/visa-operations/:id/ds-160/status', authenticateToken, async (req, res) => {
+  try {
+    const { studentStatus, adminStatus, rejectionReason } = req.body;
+    const opResult = await query('SELECT ds_data FROM visa_operations WHERE id = $1', [req.params.id]);
+    if (opResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Operation not found' });
+    }
+
+    const currentDsData = opResult.rows[0].ds_data || {};
+    const updatedDsData = {
+      ...currentDsData,
+      ...(studentStatus && { studentStatus }),
+      ...(adminStatus && { adminStatus }),
+      ...(rejectionReason && { rejectionReason }),
+      ...(adminStatus === 'accepted' && { adminName: req.user.name })
+    };
+
+    const result = await query(`
+      UPDATE visa_operations
+      SET ds_data = $1
+      WHERE id = $2
+      RETURNING *
+    `, [JSON.stringify(updatedDsData), req.params.id]);
+
+    const op = result.rows[0];
+
+    // Notification Logic: If student approves, notify Admin
+    if (studentStatus === 'accepted') {
+      try {
+        const contactResult = await query('SELECT name FROM contacts WHERE id = $1', [op.contact_id]);
+        const clientName = contactResult.rows.length > 0 ? contactResult.rows[0].name : 'Unknown Client';
+
+        await query(`
+          INSERT INTO notifications(title, description, read, link_to, recipient_roles)
+          VALUES ($1, $2, $3, $4, $5)
+        `, [
+          'DS-160 Approved by Student',
+          `A client ${clientName} has approved the DS-160, waiting for admin to approve.`,
+          0,
+          JSON.stringify({ type: 'visa_operation', id: req.params.id }),
+          JSON.stringify(['Admin'])
+        ]);
+      } catch (notifyError) {
+        console.error('Failed to create notification:', notifyError);
+        // Don't fail the primary request if notification fails
+      }
+    }
+
+    res.json({
+      ...op,
+      cgiData: op.cgi_data,
+      slotBookingData: op.slot_booking_data,
+      visaInterviewData: op.visa_interview_data,
+      dsData: op.ds_data,
       showCgiOnPortal: op.show_cgi_on_portal,
       vopNumber: op.vop_number,
       contactId: op.contact_id,
@@ -2752,22 +3024,22 @@ router.put('/tasks/:id', authenticateToken, async (req, res) => {
     updateParams.push(req.params.id);
 
     // Fetch existing task to check for assignment/status changes
+    // Fetch existing task to check for assignment/status changes
     const beforeUpdate = await query('SELECT assigned_to, status FROM tasks WHERE id = $1', [req.params.id]);
     const previousAssignee = beforeUpdate.rows[0]?.assigned_to;
     const previousStatus = beforeUpdate.rows[0]?.status;
 
     const updated = await query(q, updateParams);
+    const newStatus = task.status;
+    const newAssignee = Number(task.assignedTo);
 
     // Task Time Logging Logic
-    const newAssignee = Number(task.assignedTo);
-    const newStatus = task.status;
-
     // 1. If assigned_to changed
     if (previousAssignee !== newAssignee) {
       // Close previous log
       await query(`
-        UPDATE task_time_logs 
-        SET end_time = CURRENT_TIMESTAMP 
+        UPDATE task_time_logs
+        SET end_time = CURRENT_TIMESTAMP
         WHERE task_id = $1 AND assigned_to = $2 AND end_time IS NULL
       `, [req.params.id, previousAssignee]);
 
@@ -2777,17 +3049,15 @@ router.put('/tasks/:id', authenticateToken, async (req, res) => {
         VALUES ($1, $2)
       `, [req.params.id, newAssignee]);
     }
-
     // 2. If status changed to 'done' (and wasn't before)
     else if (newStatus === 'done' && previousStatus !== 'done') {
       // Close the active log
       await query(`
-        UPDATE task_time_logs 
-        SET end_time = CURRENT_TIMESTAMP 
+        UPDATE task_time_logs
+        SET end_time = CURRENT_TIMESTAMP
         WHERE task_id = $1 AND end_time IS NULL
       `, [req.params.id]);
     }
-
     // 3. If status changed *from* 'done' (reopened)
     else if (previousStatus === 'done' && newStatus !== 'done') {
       // Start a new log for current assignee

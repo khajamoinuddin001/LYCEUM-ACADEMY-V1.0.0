@@ -234,6 +234,31 @@ export const downloadDocument = async (documentId: number, filename: string): Pr
   document.body.removeChild(a);
 };
 
+export const downloadVisaOperationItem = async (itemId: number, filename: string): Promise<void> => {
+  const token = getToken();
+  const headers: HeadersInit = {
+    ...(token && { 'Authorization': `Bearer ${token}` }),
+  };
+
+  const response = await fetch(`${API_BASE_URL}/visa-operations/items/${itemId}`, {
+    headers,
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Failed to download item' }));
+    throw new Error(error.error || `HTTP ${response.status}`);
+  }
+
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+};
+
 export const deleteDocument = async (documentId: number): Promise<void> => {
   return apiRequest(`/documents/${documentId}`, {
     method: 'DELETE',
@@ -836,6 +861,52 @@ export const updateVisaOperationSlotBooking = async (
   data: { slotBookingData?: any; visaInterviewData?: any; status?: string }
 ): Promise<VisaOperation> => {
   return apiRequest<VisaOperation>(`/visa-operations/${id}/slot-booking`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+};
+
+export const updateVisaOperationDs160 = async (id: number, dsData: any): Promise<VisaOperation> => {
+  return apiRequest<VisaOperation>(`/visa-operations/${id}/ds-160`, {
+    method: 'PUT',
+    body: JSON.stringify({ dsData }),
+  });
+};
+
+export const uploadDs160Document = async (id: number, file: File, type: 'internal' | 'filling' = 'internal'): Promise<any> => {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const token = getToken();
+  const headers: HeadersInit = {
+    ...(token && { 'Authorization': `Bearer ${token}` }),
+  };
+
+  const response = await fetch(`${API_BASE_URL}/visa-operations/${id}/ds-160/document?type=${type}`, {
+    method: 'POST',
+    headers,
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Upload failed' }));
+    throw new Error(error.error || `HTTP ${response.status}`);
+  }
+
+  return response.json();
+};
+
+export const deleteDs160Document = async (id: number, itemId: number): Promise<any> => {
+  return apiRequest<VisaOperation>(`/visa-operations/${id}/ds-160/document/${itemId}`, {
+    method: 'DELETE',
+  });
+};
+
+export const updateDs160Status = async (
+  id: number,
+  data: { studentStatus?: string; adminStatus?: string; rejectionReason?: string }
+): Promise<VisaOperation> => {
+  return apiRequest<VisaOperation>(`/visa-operations/${id}/ds-160/status`, {
     method: 'PUT',
     body: JSON.stringify(data),
   });
