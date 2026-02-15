@@ -1089,8 +1089,10 @@ router.post('/contacts/:id/merge', authenticateToken, async (req, res) => {
       stream: primary.stream || target.stream,
       intake: primary.intake || target.intake,
       counselor_assigned: primary.counselor_assigned || target.counselor_assigned,
+      counselor_assigned_2: primary.counselor_assigned_2 || target.counselor_assigned_2,
       application_email: primary.application_email || target.application_email,
       application_password: primary.application_password || target.application_password,
+      avatar_url: primary.avatar_url || target.avatar_url,
       gpa: primary.gpa || target.gpa,
       advisor: primary.advisor || target.advisor,
 
@@ -1107,9 +1109,9 @@ router.post('/contacts/:id/merge', authenticateToken, async (req, res) => {
         lms_notes = $15, gpa = $16, advisor = $17, courses = $18, street1 = $19, street2 = $20,
         city = $21, state = $22, zip = $23, country = $24, gstin = $25, pan = $26, tags = $27,
         visa_type = $28, country_of_application = $29, source = $30, contact_type = $31,
-        stream = $32, intake = $33, counselor_assigned = $34, application_email = $35,
-        application_password = $36, user_id = $37
-      WHERE id = $38
+        stream = $32, intake = $33, counselor_assigned = $34, counselor_assigned_2 = $35, application_email = $36,
+        application_password = $37, avatar_url = $38, user_id = $39
+      WHERE id = $40
     `, [
       mergedData.name, mergedData.email, mergedData.phone, mergedData.department, mergedData.major, mergedData.notes,
       mergedData.file_status, mergedData.agent_assigned, JSON.stringify(mergedData.checklist), JSON.stringify(mergedData.activity_log),
@@ -1118,8 +1120,8 @@ router.post('/contacts/:id/merge', authenticateToken, async (req, res) => {
       JSON.stringify(mergedData.courses), mergedData.street1, mergedData.street2, mergedData.city, mergedData.state,
       mergedData.zip, mergedData.country, mergedData.gstin, mergedData.pan, mergedData.tags, mergedData.visa_type,
       mergedData.country_of_application, mergedData.source, mergedData.contact_type, mergedData.stream, mergedData.intake,
-      mergedData.counselor_assigned, mergedData.application_email, mergedData.application_password, mergedData.user_id,
-      primaryId
+      mergedData.counselor_assigned, mergedData.counselor_assigned_2, mergedData.application_email, mergedData.application_password,
+      mergedData.avatar_url, mergedData.user_id, primaryId
     ].map(val => val === undefined ? null : val));
 
     // Update all related records to point to primary contact

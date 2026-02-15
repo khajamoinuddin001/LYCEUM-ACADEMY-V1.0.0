@@ -104,8 +104,10 @@ export async function initDatabase() {
         stream TEXT,
         intake TEXT,
         counselor_assigned TEXT,
+        counselor_assigned_2 TEXT,
         application_email TEXT,
         application_password TEXT,
+        avatar_url TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -128,6 +130,8 @@ export async function initDatabase() {
     await migrateColumn('contacts', 'createdAt', 'created_at');
     // Ensure metadata column exists
     await client.query('ALTER TABLE contacts ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT \'{}\'');
+    await client.query('ALTER TABLE contacts ADD COLUMN IF NOT EXISTS counselor_assigned_2 TEXT');
+    await client.query('ALTER TABLE contacts ADD COLUMN IF NOT EXISTS avatar_url TEXT');
 
     // LEADS
     await client.query(`
@@ -181,6 +185,30 @@ export async function initDatabase() {
         resolution_notes TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Ticket Attachments table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS ticket_attachments (
+        id SERIAL PRIMARY KEY,
+        ticket_id INTEGER REFERENCES tickets(id) ON DELETE CASCADE,
+        filename TEXT NOT NULL,
+        content_type TEXT,
+        file_data BYTEA,
+        file_size INTEGER,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Ticket Messages table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS ticket_messages (
+        id SERIAL PRIMARY KEY,
+        ticket_id INTEGER REFERENCES tickets(id) ON DELETE CASCADE,
+        sender_id INTEGER REFERENCES users(id),
+        message TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
     await migrateColumn('transactions', 'customerName', 'customer_name');
@@ -269,6 +297,7 @@ export async function initDatabase() {
       await client.query('ALTER TABLE tasks ADD COLUMN IF NOT EXISTS is_visible_to_student BOOLEAN DEFAULT false');
       await client.query('ALTER TABLE tasks ADD COLUMN IF NOT EXISTS visibility_emails JSONB DEFAULT \'[]\'');
       await client.query('ALTER TABLE tasks ADD COLUMN IF NOT EXISTS recurring_task_id INTEGER');
+      await client.query('ALTER TABLE tasks ADD COLUMN IF NOT EXISTS ticket_id INTEGER REFERENCES tickets(id) ON DELETE SET NULL');
 
       // Recurring Tasks Table
       await client.query(`
