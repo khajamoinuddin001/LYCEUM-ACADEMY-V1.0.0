@@ -287,6 +287,9 @@ export async function initDatabase() {
       await client.query('ALTER TABLE visitors ADD COLUMN IF NOT EXISTS staff_email TEXT');
       await client.query('ALTER TABLE visitors ADD COLUMN IF NOT EXISTS staff_name TEXT');
       await client.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS contact_id INTEGER REFERENCES contacts(id)');
+      await client.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS additional_discount REAL DEFAULT 0');
+      await client.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS due_date TEXT');
+      await client.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT \'{}\'');
       await client.query('ALTER TABLE tasks ADD COLUMN IF NOT EXISTS assigned_by INTEGER REFERENCES users(id)');
       await client.query('ALTER TABLE tasks ADD COLUMN IF NOT EXISTS priority TEXT DEFAULT \'Medium\'');
       await client.query('ALTER TABLE tasks ADD COLUMN IF NOT EXISTS completed_by INTEGER REFERENCES users(id)');

@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import type { Contact, LmsCourse, CalendarEvent, Visitor, User, AccountingTransaction, VisaOperation } from '@/types';
-import { GraduationCap, BookOpen, CalendarClock, Paperclip, CheckCircle2, Circle, Trophy, Calendar, Upload, Download, User as UserIcon, ArrowLeft, DollarSign, Receipt, AlertCircle, X, Copy, CreditCard } from '@/components/common/icons';
+import { GraduationCap, BookOpen, CalendarClock, Paperclip, CheckCircle2, Circle, Trophy, Calendar, Upload, Download, User as UserIcon, ArrowLeft, DollarSign, Receipt, AlertCircle, X, Copy, CreditCard, Clock } from '@/components/common/icons';
 import * as api from '@/utils/api';
 import StudentAppointmentModal from './student_appointment_modal';
 
@@ -710,14 +710,29 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, courses, e
                                                 }
 
                                                 return (
-                                                    <div className="flex items-center gap-2 mt-0.5">
-                                                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${isAvailable ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                                                            {isAvailable ? 'Available' : 'Unavailable'}
-                                                        </span>
-                                                        <span className="text-sm font-medium text-gray-600 dark:text-gray-300 tracking-wide">{counselor.details.phone}</span>
+                                                    <div className="flex flex-col gap-1 mt-1">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${isAvailable ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-red-100 text-red-700 border border-red-200'}`}>
+                                                                {isAvailable ? 'Available Now' : 'Currently Unavailable'}
+                                                            </span>
+                                                            <span className="text-sm font-medium text-gray-600 dark:text-gray-300 tracking-wide">{counselor.details.phone}</span>
+                                                        </div>
+                                                        {(details.shiftStart && details.shiftEnd) && (
+                                                            <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+                                                                <Clock size={12} />
+                                                                <span>
+                                                                    Batch: {new Date(`2000-01-01T${details.shiftStart}`).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {new Date(`2000-01-01T${details.shiftEnd}`).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                                </span>
+                                                                {details.workingDays && (
+                                                                    <span className="text-gray-400">| {Array.isArray(details.workingDays) ? details.workingDays.slice(0, 3).join(', ') + (details.workingDays.length > 3 ? '...' : '') : 'Mon-Fri'}</span>
+                                                                )}
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 );
-                                            })() : null}
+                                            })() : (
+                                                <p className="text-xs text-gray-500 italic mt-1">Contact details unavailable</p>
+                                            )}
                                         </div>
                                     </div>
                                     <div className="flex flex-col gap-2 w-full sm:w-auto">

@@ -129,12 +129,24 @@ const StudentDocumentsView: React.FC<StudentDocumentsViewProps> = ({ student, on
         { name: 'Educational Documents', icon: <GraduationCap size={18} /> },
         { name: "Financial Document & Affidavit of Support / CA Report & ITR's", icon: <Banknote size={18} />, shortName: 'Financial' },
         { name: 'Gap Justification', icon: <CalendarClock size={18} /> },
+        { name: 'Acceptance', icon: <FileText size={18} /> },
+        { name: 'I20', icon: <FileText size={18} /> },
+        { name: 'DS-160', icon: <FileText size={18} /> },
+        { name: 'SEVIS confirmation', icon: <FileText size={18} /> },
+        { name: 'Appointment Confirmation', icon: <FileText size={18} /> },
+        { name: 'University Affidavit Forms', icon: <FileText size={18} /> },
         { name: 'Other', icon: <MoreHorizontal size={18} /> }
     ];
 
     // Group documents by category
     const groupedDocs = categories.reduce((acc, cat) => {
-        acc[cat.name] = documents.filter(d => d.category === cat.name || (!d.category && cat.name === 'Other'));
+        if (cat.name === 'Other') {
+            // "Other" catches docs with no category OR category not in the list
+            const otherCategoryNames = categories.filter(c => c.name !== 'Other').map(c => c.name);
+            acc[cat.name] = documents.filter(d => !d.category || !otherCategoryNames.includes(d.category));
+        } else {
+            acc[cat.name] = documents.filter(d => d.category === cat.name);
+        }
         return acc;
     }, {} as Record<string, Doc[]>);
 
@@ -284,65 +296,68 @@ const StudentDocumentsView: React.FC<StudentDocumentsViewProps> = ({ student, on
                 </div>
             ) : documents.length > 0 ? (
                 <div className="space-y-16">
-                    {categories.map(cat => (
-                        <div key={cat.name} className="space-y-6">
-                            <div className="flex items-center gap-6">
-                                <div className={`p-4 rounded-2xl shadow-sm border ${groupedDocs[cat.name].length > 0
-                                    ? 'bg-lyceum-blue text-white border-lyceum-blue/20 shadow-lyceum-blue/10'
-                                    : 'bg-white dark:bg-gray-800 text-gray-400 border-gray-100 dark:border-gray-700'
-                                    }`}>
-                                    {cat.icon}
-                                </div>
-                                <div className="flex-1">
-                                    <div className="flex items-center gap-4">
-                                        <h2 className="text-2xl font-black text-gray-900 dark:text-gray-100">
-                                            {cat.name}
-                                        </h2>
-                                        <span className={`px-3 py-1 rounded-full text-xs font-black uppercase tracking-widest ${groupedDocs[cat.name].length > 0
-                                            ? 'bg-lyceum-blue/10 text-lyceum-blue'
-                                            : 'bg-gray-100 dark:bg-gray-800 text-gray-400'
-                                            }`}>
-                                            {groupedDocs[cat.name].length} Files
-                                        </span>
-                                    </div>
-                                    <div className="h-1 bg-gray-100 dark:bg-gray-800 rounded-full mt-3 overflow-hidden">
-                                        {groupedDocs[cat.name].length > 0 && (
-                                            <div className="h-full bg-lyceum-blue w-24"></div>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-
-                            {groupedDocs[cat.name].length > 0 ? (
-                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-                                    {groupedDocs[cat.name].map((doc) => (
-                                        <DocumentItem
-                                            key={doc.id}
-                                            doc={doc}
-                                            handleDownload={handleDownload}
-                                            handlePreview={handlePreview}
-                                        />
-                                    ))}
-                                </div>
-                            ) : (
-                                <div className="p-12 bg-gray-50/50 dark:bg-gray-900/20 rounded-3xl border-2 border-dashed border-gray-200 dark:border-gray-800 flex flex-col items-center justify-center text-center">
-                                    <div className="w-16 h-16 bg-white dark:bg-gray-800 rounded-2xl flex items-center justify-center text-gray-200 dark:text-gray-700 mb-4 shadow-sm">
+                    {categories.map(cat => {
+                        if (groupedDocs[cat.name].length === 0) return null;
+                        return (
+                            <div key={cat.name} className="space-y-6">
+                                <div className="flex items-center gap-6">
+                                    <div className={`p-4 rounded-2xl shadow-sm border ${groupedDocs[cat.name].length > 0
+                                        ? 'bg-lyceum-blue text-white border-lyceum-blue/20 shadow-lyceum-blue/10'
+                                        : 'bg-white dark:bg-gray-800 text-gray-400 border-gray-100 dark:border-gray-700'
+                                        }`}>
                                         {cat.icon}
                                     </div>
-                                    <p className="text-gray-400 font-bold">No documents in this category yet</p>
-                                    <button
-                                        onClick={() => {
-                                            setSelectedCategory(cat.name);
-                                            fileInputRef.current?.click();
-                                        }}
-                                        className="mt-4 text-sm font-black text-lyceum-blue hover:underline p-2"
-                                    >
-                                        Click to upload
-                                    </button>
+                                    <div className="flex-1">
+                                        <div className="flex items-center gap-4">
+                                            <h2 className="text-2xl font-black text-gray-900 dark:text-gray-100">
+                                                {cat.name}
+                                            </h2>
+                                            <span className={`px-3 py-1 rounded-full text-xs font-black uppercase tracking-widest ${groupedDocs[cat.name].length > 0
+                                                ? 'bg-lyceum-blue/10 text-lyceum-blue'
+                                                : 'bg-gray-100 dark:bg-gray-800 text-gray-400'
+                                                }`}>
+                                                {groupedDocs[cat.name].length} Files
+                                            </span>
+                                        </div>
+                                        <div className="h-1 bg-gray-100 dark:bg-gray-800 rounded-full mt-3 overflow-hidden">
+                                            {groupedDocs[cat.name].length > 0 && (
+                                                <div className="h-full bg-lyceum-blue w-24"></div>
+                                            )}
+                                        </div>
+                                    </div>
                                 </div>
-                            )}
-                        </div>
-                    ))}
+
+                                {groupedDocs[cat.name].length > 0 ? (
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+                                        {groupedDocs[cat.name].map((doc) => (
+                                            <DocumentItem
+                                                key={doc.id}
+                                                doc={doc}
+                                                handleDownload={handleDownload}
+                                                handlePreview={handlePreview}
+                                            />
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="p-12 bg-gray-50/50 dark:bg-gray-900/20 rounded-3xl border-2 border-dashed border-gray-200 dark:border-gray-800 flex flex-col items-center justify-center text-center">
+                                        <div className="w-16 h-16 bg-white dark:bg-gray-800 rounded-2xl flex items-center justify-center text-gray-200 dark:text-gray-700 mb-4 shadow-sm">
+                                            {cat.icon}
+                                        </div>
+                                        <p className="text-gray-400 font-bold">No documents in this category yet</p>
+                                        <button
+                                            onClick={() => {
+                                                setSelectedCategory(cat.name);
+                                                fileInputRef.current?.click();
+                                            }}
+                                            className="mt-4 text-sm font-black text-lyceum-blue hover:underline p-2"
+                                        >
+                                            Click to upload
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
                 </div>
             ) : (
                 <div className="min-h-[500px] flex flex-col items-center justify-center bg-white dark:bg-gray-800 rounded-3xl border-2 border-dashed border-gray-200 dark:border-gray-700 p-16 text-center shadow-sm">
