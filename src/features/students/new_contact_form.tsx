@@ -5,7 +5,8 @@ import { summarizeText } from '@/utils/gemini';
 import VideoRecordingModal from '@/features/shared/video_recording_modal';
 import CameraModal from '@/features/shared/camera_modal';
 import { uploadContactPhoto } from '@/utils/api';
-import ContactCrmView from './contact_crm_view';
+import { VisaOperationsView } from '../visa/visa_operations_view';
+import { VisaOperation } from '@/types';
 
 interface NewContactFormProps {
     contact?: Contact;
@@ -28,6 +29,8 @@ interface NewContactFormProps {
     tasks?: TodoTask[];
     onSaveTask?: (task: Partial<TodoTask>) => Promise<void>;
     onDeleteContact?: (id: number) => void;
+    visaOperations?: VisaOperation[];
+    onOperationCreated?: (op: any) => void;
 }
 
 const SessionPlayer: React.FC<{
@@ -209,9 +212,11 @@ const NewContactForm: React.FC<NewContactFormProps> = ({
     transactions = [],
     tasks = [],
     onSaveTask,
-    onDeleteContact
+    onDeleteContact,
+    visaOperations,
+    onOperationCreated
 }) => {
-    const [currentTab, setCurrentTab] = useState<'details' | 'finance' | 'crm'>('details');
+    const [currentTab, setCurrentTab] = useState<'details' | 'finance' | 'visa'>('details');
     const [formData, setFormData] = useState(initialFormState);
     const [isSummarizing, setIsSummarizing] = useState(false);
     const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
@@ -521,6 +526,13 @@ const NewContactForm: React.FC<NewContactFormProps> = ({
                 <button onClick={onNavigateToCRM} disabled={!contact} className="ml-4 px-1 py-3 font-medium text-gray-500 dark:text-gray-400 hover:text-lyceum-blue disabled:opacity-50 disabled:cursor-not-allowed">CRM</button>
                 <button onClick={onNavigateToTasks} disabled={!contact} className="ml-4 px-1 py-3 font-medium text-gray-500 dark:text-gray-400 hover:text-lyceum-blue disabled:opacity-50 disabled:cursor-not-allowed">Tasks</button>
                 <button onClick={onNavigateToCourses} disabled={!contact} className="ml-4 px-1 py-3 font-medium text-gray-500 dark:text-gray-400 hover:text-lyceum-blue disabled:opacity-50 disabled:cursor-not-allowed">Courses</button>
+                <button
+                    onClick={() => setCurrentTab('visa')}
+                    disabled={!contact}
+                    className={`ml-4 px-1 py-3 font-semibold transition-colors disabled:opacity-50 ${currentTab === 'visa' ? 'text-lyceum-blue border-b-2 border-lyceum-blue' : 'text-gray-500 dark:text-gray-400 hover:text-lyceum-blue'}`}
+                >
+                    Visa Operations
+                </button>
             </div>
 
             {currentTab === 'details' ? (
@@ -661,6 +673,15 @@ const NewContactForm: React.FC<NewContactFormProps> = ({
                             </tbody>
                         </table>
                     </div>
+                </div>
+            ) : currentTab === 'visa' ? (
+                <div className="p-6">
+                    <VisaOperationsView
+                        user={user}
+                        contacts={contacts}
+                        existingOperations={visaOperations?.filter(op => op.contactId === contact?.id)}
+                        onOperationCreated={onOperationCreated}
+                    />
                 </div>
             ) : null}
 

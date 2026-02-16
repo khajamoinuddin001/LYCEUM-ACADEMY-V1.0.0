@@ -873,7 +873,7 @@ export const updateVisaOperationDs160 = async (id: number, dsData: any): Promise
   });
 };
 
-export const uploadDs160Document = async (id: number, file: File, type: 'internal' | 'filling' = 'internal'): Promise<any> => {
+export const uploadDs160Document = async (id: number, file: File, type: 'internal' | 'filling' | 'confirmation' = 'internal'): Promise<any> => {
   const formData = new FormData();
   formData.append('file', file);
 

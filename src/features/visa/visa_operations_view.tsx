@@ -97,6 +97,13 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
     const [showPassword, setShowPassword] = useState(false);
     const [activeOp, setActiveOp] = useState<VisaOperation | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [operations, setOperations] = useState<VisaOperation[]>(existingOperations);
+
+    // Sync state with props
+    React.useEffect(() => {
+        setOperations(existingOperations);
+    }, [existingOperations]);
+
     const [searchTerm, setSearchTerm] = useState('');
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
@@ -106,7 +113,7 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
     const [endDate, setEndDate] = useState('');
 
     const filteredOperations = useMemo(() => {
-        return existingOperations.filter(op => {
+        return operations.filter(op => {
             const matchesSearch =
                 op.name.toLowerCase().includes(listSearchQuery.toLowerCase()) ||
                 op.vopNumber.toLowerCase().includes(listSearchQuery.toLowerCase()) ||
@@ -154,6 +161,7 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                 ...formData
             });
             setActiveOp(newOp);
+            setOperations(prev => [newOp, ...prev]);
             setStep('detail');
             onOperationCreated?.(newOp);
         } catch (error) {
@@ -171,6 +179,7 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
             const { showCgiOnPortal, ...cgiData } = cgiFormData;
             const updatedOp = await updateVisaOperationCgi(activeOp.id, cgiData, showCgiOnPortal);
             setActiveOp(updatedOp);
+            setOperations(prev => prev.map(op => op.id === updatedOp.id ? updatedOp : op));
             setStep('detail');
             alert('CGI data saved successfully!');
         } catch (error) {
@@ -191,6 +200,7 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                 status: interviewFormData.visaOutcome ? `Visa ${interviewFormData.visaOutcome}` : activeOp.status
             });
             setActiveOp(updatedOp);
+            setOperations(prev => prev.map(op => op.id === updatedOp.id ? updatedOp : op));
             setStep('detail');
             alert('Slot booking details saved successfully!');
         } catch (error) {
@@ -207,6 +217,7 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
         try {
             const updatedOp = await updateVisaOperationDs160(activeOp.id, dsFormData);
             setActiveOp(updatedOp);
+            setOperations(prev => prev.map(op => op.id === updatedOp.id ? updatedOp : op));
             setStep('detail');
             alert('DS-160 data saved successfully!');
         } catch (error) {
@@ -217,7 +228,7 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
         }
     };
 
-    const handleDsFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'internal' | 'filling' = 'internal') => {
+    const handleDsFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'internal' | 'filling' | 'confirmation' = 'internal') => {
         const file = e.target.files?.[0];
         if (!file || !activeOp) return;
 
@@ -225,15 +236,18 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
         try {
             const updatedOp = await uploadDs160Document(activeOp.id, file, type);
             setActiveOp(updatedOp);
+            setOperations(prev => prev.map(op => op.id === updatedOp.id ? updatedOp : op));
             setDsFormData(prev => ({
                 ...prev,
                 documentId: updatedOp.dsData?.documentId,
                 documentName: updatedOp.dsData?.documentName,
+                confirmationDocumentId: updatedOp.dsData?.confirmationDocumentId,
+                confirmationDocumentName: updatedOp.dsData?.confirmationDocumentName,
                 fillingDocuments: updatedOp.dsData?.fillingDocuments || [],
                 studentStatus: updatedOp.dsData?.studentStatus || 'pending',
                 adminStatus: updatedOp.dsData?.adminStatus || 'pending'
             }));
-            alert(`${type === 'filling' ? 'Filling' : 'Internal'} document uploaded successfully!`);
+            alert(`${type === 'filling' ? 'Filling' : type === 'confirmation' ? 'Confirmation' : 'Internal'} document uploaded successfully!`);
         } catch (error) {
             console.error('Failed to upload DS-160 document:', error);
             alert('Failed to upload document. Please try again.');
@@ -242,6 +256,8 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
         }
     };
 
+    // ... inside render ...
+
     const handleDsFileDelete = async (itemId: number) => {
         if (!activeOp || !confirm('Are you sure you want to delete this document?')) return;
 
@@ -249,10 +265,13 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
         try {
             const updatedOp = await deleteDs160Document(activeOp.id, itemId);
             setActiveOp(updatedOp);
+            setOperations(prev => prev.map(op => op.id === updatedOp.id ? updatedOp : op));
             setDsFormData(prev => ({
                 ...prev,
                 documentId: updatedOp.dsData?.documentId,
                 documentName: updatedOp.dsData?.documentName,
+                confirmationDocumentId: updatedOp.dsData?.confirmationDocumentId,
+                confirmationDocumentName: updatedOp.dsData?.confirmationDocumentName,
                 fillingDocuments: updatedOp.dsData?.fillingDocuments || [],
                 studentStatus: updatedOp.dsData?.studentStatus || 'pending',
                 adminStatus: updatedOp.dsData?.adminStatus || 'pending'
@@ -279,6 +298,7 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
         try {
             const updatedOp = await updateDs160Status(activeOp.id, data);
             setActiveOp(updatedOp);
+            setOperations(prev => prev.map(op => op.id === updatedOp.id ? updatedOp : op));
             setDsFormData(prev => ({
                 ...prev,
                 ...data,
@@ -436,20 +456,20 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                                             </td>
                                             <td className="px-6 py-4 text-right">
                                                 <div className="flex items-center justify-end gap-2">
-                                                    {op.dsData?.documentId ? (
+                                                    {op.dsData?.studentStatus === 'accepted' && op.dsData?.adminStatus === 'pending' ? (
+                                                        <div className="flex items-center gap-1.5 px-2 py-1 bg-purple-50 border border-purple-200 rounded-md animate-pulse">
+                                                            <div className="w-1.5 h-1.5 bg-purple-500 rounded-full"></div>
+                                                            <span className="text-[9px] font-black text-purple-700 uppercase tracking-tighter">Waiting for Admin Approval</span>
+                                                        </div>
+                                                    ) : op.dsData?.confirmationDocumentId ? (
                                                         <div className="flex items-center gap-1.5 px-2 py-1 bg-emerald-50 border border-emerald-200 rounded-md">
-                                                            <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></div>
+                                                            <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div>
                                                             <span className="text-[9px] font-black text-emerald-700 uppercase tracking-tighter">Process Completed</span>
                                                         </div>
-                                                    ) : op.dsData?.adminStatus === 'accepted' ? (
+                                                    ) : op.dsData?.adminStatus === 'accepted' && (
                                                         <div className="flex items-center gap-1.5 px-2 py-1 bg-lyceum-blue/5 border border-lyceum-blue/10 rounded-md">
-                                                            <div className="w-1.5 h-1.5 bg-lyceum-blue rounded-full"></div>
+                                                            <div className="w-1.5 h-1.5 bg-lyceum-blue rounded-full animate-pulse"></div>
                                                             <span className="text-[9px] font-black text-lyceum-blue uppercase tracking-tighter">Waiting for DS-160 Submission</span>
-                                                        </div>
-                                                    ) : op.dsData?.studentStatus === 'accepted' && op.dsData?.adminStatus === 'pending' && (
-                                                        <div className="flex items-center gap-1.5 px-2 py-1 bg-amber-50 border border-amber-200 rounded-md animate-pulse">
-                                                            <div className="w-1.5 h-1.5 bg-amber-500 rounded-full"></div>
-                                                            <span className="text-[9px] font-black text-amber-700 uppercase tracking-tighter">Waiting for Admin Approval</span>
                                                         </div>
                                                     )}
                                                     <button
@@ -1035,34 +1055,42 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                                             type="file"
                                             id="ds-document-upload"
                                             className="hidden"
-                                            onChange={handleDsFileUpload}
+                                            onChange={(e) => handleDsFileUpload(e, 'confirmation')}
                                         />
                                         <label
                                             htmlFor="ds-document-upload"
                                             className="flex items-center gap-2 bg-emerald-600 text-white px-6 py-2.5 rounded-lg font-bold hover:bg-emerald-700 transition-all cursor-pointer shadow-lg shadow-emerald-600/20"
                                         >
                                             <Upload size={20} />
-                                            {dsFormData.documentName ? 'Replace Document' : 'Upload Document'}
+                                            {dsFormData.confirmationDocumentName ? 'Replace Document' : 'Upload Document'}
                                         </label>
-                                        {dsFormData.documentName && (
+                                        {dsFormData.confirmationDocumentName && (
                                             <div className="flex items-center gap-3">
-                                                <span className="text-sm text-emerald-600 font-medium truncate max-w-xs">{dsFormData.documentName}</span>
+                                                <span className="text-sm text-emerald-600 font-medium truncate max-w-xs">{dsFormData.confirmationDocumentName}</span>
                                                 <div className="flex items-center gap-2">
                                                     <button
-                                                        onClick={() => handlePreviewFile(dsFormData.documentId!)}
+                                                        onClick={() => handlePreviewFile(dsFormData.confirmationDocumentId!)}
                                                         className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 hover:text-emerald-800 transition-colors bg-emerald-50 px-2 py-1 rounded-md border border-emerald-100"
                                                     >
                                                         <Eye size={12} />
                                                         Preview
                                                     </button>
                                                     <button
-                                                        onClick={() => handleDownloadFile(dsFormData.documentId!, dsFormData.documentName)}
+                                                        onClick={() => handleDownloadFile(dsFormData.confirmationDocumentId!, dsFormData.confirmationDocumentName!)}
                                                         className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 hover:text-emerald-800 transition-colors bg-emerald-50 px-2 py-1 rounded-md border border-emerald-100"
                                                     >
                                                         <Download size={12} />
                                                         Download
                                                     </button>
+                                                    <button
+                                                        onClick={() => handleDsFileDelete(dsFormData.confirmationDocumentId!)}
+                                                        className="flex items-center gap-1 text-[10px] font-bold text-rose-600 hover:text-rose-800 transition-colors bg-rose-50 px-2 py-1 rounded-md border border-rose-100"
+                                                    >
+                                                        <Trash2 size={12} />
+                                                        Delete
+                                                    </button>
                                                 </div>
+
                                             </div>
                                         )}
                                     </div>
@@ -1429,6 +1457,8 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                                 basicDsBox: activeOp?.dsData?.basicDsBox || '',
                                 documentId: activeOp?.dsData?.documentId,
                                 documentName: activeOp?.dsData?.documentName || '',
+                                confirmationDocumentId: activeOp?.dsData?.confirmationDocumentId,
+                                confirmationDocumentName: activeOp?.dsData?.confirmationDocumentName || '',
                                 fillingDocuments: activeOp?.dsData?.fillingDocuments || (activeOp?.dsData?.fillingDocumentId ? [{ id: activeOp.dsData.fillingDocumentId, name: activeOp.dsData.fillingDocumentName || 'document.pdf' }] : []),
                                 studentStatus: activeOp?.dsData?.studentStatus || 'pending',
                                 adminStatus: activeOp?.dsData?.adminStatus || 'pending',
@@ -1514,6 +1544,8 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                                             basicDsBox: activeOp?.dsData?.basicDsBox || '',
                                             documentId: activeOp?.dsData?.documentId,
                                             documentName: activeOp?.dsData?.documentName || '',
+                                            confirmationDocumentId: activeOp?.dsData?.confirmationDocumentId,
+                                            confirmationDocumentName: activeOp?.dsData?.confirmationDocumentName,
                                             fillingDocuments: activeOp?.dsData?.fillingDocuments || (activeOp?.dsData?.fillingDocumentId ? [{ id: activeOp.dsData.fillingDocumentId, name: activeOp.dsData.fillingDocumentName || 'document.pdf' }] : []),
                                             studentStatus: activeOp?.dsData?.studentStatus || 'pending',
                                             adminStatus: activeOp?.dsData?.adminStatus || 'pending',
@@ -1733,6 +1765,47 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                             </div>
                         )}
                     </div>
+
+                    {/* Visa History & Other Attempts */}
+                    {(() => {
+                        const historyOps = existingOperations
+                            .filter(op => op.contactId === activeOp?.contactId && op.id !== activeOp?.id)
+                            .sort((a, b) => b.id - a.id);
+
+                        if (historyOps.length > 0) {
+                            return (
+                                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm mt-6">
+                                    <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 mb-4">
+                                        <Clock className="text-slate-400" size={20} />
+                                        Visa History
+                                    </h3>
+                                    <div className="space-y-3">
+                                        {historyOps.map(op => (
+                                            <div
+                                                key={op.id}
+                                                onClick={() => setActiveOp(op)}
+                                                className="p-3 bg-slate-50 border border-slate-100 rounded-xl hover:bg-slate-100 cursor-pointer transition-colors group"
+                                            >
+                                                <div className="flex justify-between items-start mb-1">
+                                                    <span className="font-mono text-xs font-bold text-slate-500 bg-white px-1.5 py-0.5 rounded border border-slate-200 group-hover:border-lyceum-blue/30 group-hover:text-lyceum-blue transition-colors">
+                                                        {op.vopNumber}
+                                                    </span>
+                                                    <span className="text-[10px] text-slate-400 font-medium">
+                                                        {new Date(op.createdAt).toLocaleDateString()}
+                                                    </span>
+                                                </div>
+                                                <div className="flex justify-between items-end">
+                                                    <span className="text-sm font-bold text-slate-700">{op.country}</span>
+                                                    <ArrowRight size={14} className="text-slate-300 group-hover:text-lyceum-blue transform group-hover:translate-x-1 transition-all" />
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            );
+                        }
+                        return null;
+                    })()}
                 </div>
             </div>
         </div>

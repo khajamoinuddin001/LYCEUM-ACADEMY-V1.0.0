@@ -1849,7 +1849,7 @@ const DashboardLayout: React.FC = () => {
 
           // Render form if we have data OR if we are creating a new contact
           if (contactData || editingContact === 'new') {
-            return <NewContactForm user={currentUser} users={users} contact={contactData} contacts={contacts} onNavigateBack={handleBackToContacts} onNavigateToDocuments={() => setContactViewMode('documents')} onNavigateToVisa={() => setContactViewMode('visaFiling')} onNavigateToChecklist={() => setContactViewMode('checklist')} onNavigateToVisits={() => setContactViewMode('visits')} onNavigateToCRM={() => setContactViewMode('crm')} onNavigateToTasks={() => setContactViewMode('tasks')} onNavigateToCourses={() => setContactViewMode('courses')} onSave={handleSaveContact} onComposeAIEmail={handleGenerateEmailDraft} onAddSessionVideo={api.addSessionVideo} onDeleteSessionVideo={api.deleteSessionVideo} transactions={transactions} tasks={tasks} onSaveTask={handleSaveTask} onDeleteContact={handleDeleteContact} />;
+            return <NewContactForm user={currentUser} users={users} contact={contactData} contacts={contacts} onNavigateBack={handleBackToContacts} onNavigateToDocuments={() => setContactViewMode('documents')} onNavigateToVisa={() => setContactViewMode('visaFiling')} onNavigateToChecklist={() => setContactViewMode('checklist')} onNavigateToVisits={() => setContactViewMode('visits')} onNavigateToCRM={() => setContactViewMode('crm')} onNavigateToTasks={() => setContactViewMode('tasks')} onNavigateToCourses={() => setContactViewMode('courses')} onSave={handleSaveContact} onComposeAIEmail={handleGenerateEmailDraft} onAddSessionVideo={api.addSessionVideo} onDeleteSessionVideo={api.deleteSessionVideo} transactions={transactions} tasks={tasks} onSaveTask={handleSaveTask} onDeleteContact={handleDeleteContact} visaOperations={visaOperations} onOperationCreated={handleOperationCreated} />;
           }
         }
         return <ContactsView contacts={contacts} onContactSelect={handleContactSelect} onNewContactClick={handleNewContactClick} user={currentUser} />;
@@ -2133,7 +2133,7 @@ const DashboardLayout: React.FC = () => {
 
                 // Student Visa Application Page
                 if (activeApp === 'Visa Application') {
-                  return <StudentVisaView operation={visaOperations[0] || null} />;
+                  return <StudentVisaView operations={visaOperations} />;
                 }
 
                 // Student Dashboard (default)

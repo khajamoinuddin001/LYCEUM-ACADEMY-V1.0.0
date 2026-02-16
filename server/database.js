@@ -759,6 +759,15 @@ export async function initDatabase() {
     // Add ds_data if it doesn't exist
     await client.query('ALTER TABLE visa_operations ADD COLUMN IF NOT EXISTS ds_data JSONB DEFAULT \'{}\'');
 
+    // Move DS-160 fields to proper columns for persistence
+    await client.query('ALTER TABLE visa_operations ADD COLUMN IF NOT EXISTS confirmation_document_id INTEGER REFERENCES visa_operation_items(id) ON DELETE SET NULL');
+    await client.query('ALTER TABLE visa_operations ADD COLUMN IF NOT EXISTS confirmation_document_name TEXT');
+    await client.query('ALTER TABLE visa_operations ADD COLUMN IF NOT EXISTS filling_documents JSONB DEFAULT \'[]\'');
+    await client.query('ALTER TABLE visa_operations ADD COLUMN IF NOT EXISTS student_status TEXT DEFAULT \'pending\'');
+    await client.query('ALTER TABLE visa_operations ADD COLUMN IF NOT EXISTS admin_status TEXT DEFAULT \'pending\'');
+    await client.query('ALTER TABLE visa_operations ADD COLUMN IF NOT EXISTS rejection_reason TEXT');
+    await client.query('ALTER TABLE visa_operations ADD COLUMN IF NOT EXISTS admin_name TEXT');
+
     console.log("✅ Database initialized successfully");
   } catch (err) {
     if (client) await client.query("ROLLBACK");

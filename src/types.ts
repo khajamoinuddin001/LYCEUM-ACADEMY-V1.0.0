@@ -618,6 +618,8 @@ export interface VisaOperation {
   };
   dsData?: {
     confirmationNumber?: string;
+    confirmationDocumentId?: number;
+    confirmationDocumentName?: string;
     securityQuestion?: string;
     securityAnswer?: string;
     startDate?: string;

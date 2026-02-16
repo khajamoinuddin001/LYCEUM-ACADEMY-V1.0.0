@@ -336,6 +336,30 @@ router.get('/documents/:id', authenticateToken, async (req, res) => {
 
 
 
+router.put('/documents/:id/toggle-privacy', authenticateToken, async (req, res) => {
+  try {
+    // Only Staff/Admin can toggle privacy
+    if (req.user.role !== 'Admin' && req.user.role !== 'Staff') {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+
+    const result = await query(`
+      UPDATE documents 
+      SET is_private = NOT is_private 
+      WHERE id = $1 
+      RETURNING *
+    `, [req.params.id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.get('/contacts/:id/documents', authenticateToken, async (req, res) => {
   try {
     // Students can list only their own contact's documents
@@ -1414,7 +1438,18 @@ router.get('/visa-operations', authenticateToken, async (req, res) => {
         cgiData,
         slotBookingData: row.slot_booking_data,
         visaInterviewData: row.visa_interview_data,
-        dsData: row.ds_data,
+        visaInterviewData: row.visa_interview_data,
+        dsData: {
+          ...row.ds_data,
+          confirmationDocumentId: row.confirmation_document_id || row.ds_data?.confirmationDocumentId,
+          confirmationDocumentName: row.confirmation_document_name || row.ds_data?.confirmationDocumentName,
+          fillingDocuments: row.filling_documents?.length ? row.filling_documents : (row.ds_data?.fillingDocuments || []),
+          studentStatus: row.student_status || row.ds_data?.studentStatus || 'pending',
+          adminStatus: row.admin_status || row.ds_data?.adminStatus || 'pending',
+          rejectionReason: row.rejection_reason || row.ds_data?.rejectionReason,
+          adminName: row.admin_name || row.ds_data?.adminName
+        },
+        showCgiOnPortal: row.show_cgi_on_portal,
         showCgiOnPortal: row.show_cgi_on_portal,
         vopNumber: row.vop_number,
         contactId: row.contact_id,
@@ -1544,12 +1579,35 @@ router.put('/visa-operations/:id/slot-booking', authenticateToken, async (req, r
 router.put('/visa-operations/:id/ds-160', authenticateToken, async (req, res) => {
   try {
     const { dsData } = req.body;
+
+    // Fetch existing data first to merge
+    const currentOp = await query('SELECT ds_data FROM visa_operations WHERE id = $1', [req.params.id]);
+
+    if (currentOp.rows.length === 0) {
+      return res.status(404).json({ error: 'Operation not found' });
+    }
+
+    const existingDsData = currentOp.rows[0].ds_data || {};
+    const mergedDsData = { ...existingDsData, ...dsData };
+
+    // Update both JSON and dedicated columns
     const result = await query(`
       UPDATE visa_operations
-      SET ds_data = $1
+      SET ds_data = $1,
+          student_status = COALESCE($3, student_status),
+          admin_status = COALESCE($4, admin_status),
+          rejection_reason = COALESCE($5, rejection_reason),
+          admin_name = COALESCE($6, admin_name)
       WHERE id = $2
       RETURNING *
-    `, [JSON.stringify(dsData), req.params.id]);
+    `, [
+      JSON.stringify(mergedDsData),
+      req.params.id,
+      dsData.studentStatus,
+      dsData.adminStatus,
+      dsData.rejectionReason,
+      dsData.adminName
+    ]);
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Operation not found' });
@@ -1585,7 +1643,8 @@ router.post('/visa-operations/:id/ds-160/document', authenticateToken, upload.si
     }
 
     const { ds_data } = opResult.rows[0];
-    const uploadType = req.query.type || 'internal'; // 'internal' or 'filling'
+    const uploadType = req.query.type || 'internal'; // 'internal', 'filling', or 'confirmation'
+    const isPrivate = uploadType === 'internal'; // Only internal is private, filling/confirmation are shared
 
     // Create entry in visa_operation_items
     const itemResult = await query(`
@@ -1593,6 +1652,15 @@ router.post('/visa-operations/:id/ds-160/document', authenticateToken, upload.si
       VALUES ($1, 'document', $2, $3, $4)
       RETURNING id
     `, [req.params.id, req.file.originalname, req.file.mimetype, req.file.buffer]);
+
+    // Also insert into documents table for "Internal / Staff Only > DS-160"
+    const contactId = opResult.rows[0].contact_id;
+    if (contactId) {
+      await query(`
+        INSERT INTO documents (contact_id, name, type, size, content, is_private, category)
+        VALUES ($1, $2, $3, $4, $5, $6, 'DS-160')
+      `, [contactId, req.file.originalname, req.file.mimetype, req.file.size, req.file.buffer, isPrivate]);
+    }
 
     const itemId = itemResult.rows[0].id;
 
@@ -1621,7 +1689,29 @@ router.post('/visa-operations/:id/ds-160/document', authenticateToken, upload.si
 
       updatedDsData.studentStatus = 'pending';
       updatedDsData.adminStatus = 'pending';
+
+      // Reset dedicated status columns
+      await query(`
+        UPDATE visa_operations 
+        SET filling_documents = $1,
+            student_status = 'pending',
+            admin_status = 'pending'
+        WHERE id = $2
+      `, [JSON.stringify(updatedDsData.fillingDocuments), req.params.id]);
+    } else if (uploadType === 'confirmation') {
+      updatedDsData.confirmationDocumentId = itemId;
+      updatedDsData.confirmationDocumentName = req.file.originalname;
+
+      // Update dedicated columns
+      await query(`
+        UPDATE visa_operations 
+        SET confirmation_document_id = $1,
+            confirmation_document_name = $2
+        WHERE id = $3
+      `, [itemId, req.file.originalname, req.params.id]);
+
     } else {
+      // Internal (default) - updates the main document slot (legacy/internal)
       updatedDsData.documentId = itemId;
       updatedDsData.documentName = req.file.originalname;
     }
@@ -1679,6 +1769,20 @@ router.delete('/visa-operations/:id/ds-160/document/:itemId', authenticateToken,
       delete updatedDsData.fillingDocumentName;
     }
 
+    // Handle confirmation document
+    if (updatedDsData.confirmationDocumentId === itemId) {
+      delete updatedDsData.confirmationDocumentId;
+      delete updatedDsData.confirmationDocumentName;
+
+      // Clear dedicated columns
+      await query(`
+        UPDATE visa_operations 
+        SET confirmation_document_id = NULL,
+            confirmation_document_name = NULL
+        WHERE id = $1
+      `, [req.params.id]);
+    }
+
     const result = await query(`
       UPDATE visa_operations
       SET ds_data = $1
@@ -1723,10 +1827,21 @@ router.put('/visa-operations/:id/ds-160/status', authenticateToken, async (req, 
 
     const result = await query(`
       UPDATE visa_operations
-      SET ds_data = $1
+      SET ds_data = $1,
+          student_status = COALESCE($3, student_status),
+          admin_status = COALESCE($4, admin_status),
+          rejection_reason = COALESCE($5, rejection_reason),
+          admin_name = COALESCE($6, admin_name)
       WHERE id = $2
       RETURNING *
-    `, [JSON.stringify(updatedDsData), req.params.id]);
+    `, [
+      JSON.stringify(updatedDsData),
+      req.params.id,
+      studentStatus,
+      adminStatus,
+      rejectionReason,
+      adminStatus === 'accepted' ? req.user.name : null
+    ]);
 
     const op = result.rows[0];
 

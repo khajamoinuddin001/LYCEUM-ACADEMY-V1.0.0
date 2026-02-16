@@ -73,19 +73,38 @@ const PreviewModal = ({ url, filename, type, onClose }: { url: string; filename:
   );
 };
 
-const DocumentItem = ({ doc, analyzingDocId, handleAnalyzeClick, handlePreview, handleDownload, handleDelete, isStaffOrAdmin }: any) => (
+const DocumentItem = ({ doc, analyzingDocId, handleAnalyzeClick, handlePreview, handleDownload, handleDelete, isStaffOrAdmin, handleTogglePrivacy }: any) => (
   <li className="py-4 flex items-center justify-between">
     <div className="flex items-center">
       <Paperclip className="w-6 h-6 text-gray-400 mr-4" />
       <div>
-        <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{doc.name}</p>
+        <p className="text-sm font-medium text-gray-900 dark:text-gray-100 flex items-center gap-2">
+          {doc.name}
+          {doc.is_private && <span className="text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded border border-red-200">Private</span>}
+        </p>
         <p className="text-sm text-gray-500 dark:text-gray-400">
           {(doc.size / 1024).toFixed(1)} KB - Uploaded on {new Date(doc.uploaded_at).toLocaleDateString()}
-          {doc.is_private && <span className="ml-2 text-xs text-red-500 font-bold border border-red-200 px-1 rounded">Private</span>}
         </p>
       </div>
     </div>
     <div className="flex items-center space-x-2">
+      {isStaffOrAdmin && (
+        <label className="flex items-center cursor-pointer mr-2" title={doc.is_private ? "Make Public" : "Make Private"}>
+          <div className="relative">
+            <input
+              type="checkbox"
+              className="sr-only"
+              checked={!doc.is_private}
+              onChange={() => handleTogglePrivacy(doc)}
+            />
+            <div className={`block w-10 h-6 rounded-full transition-colors ${!doc.is_private ? 'bg-lyceum-blue' : 'bg-gray-300 dark:bg-gray-600'}`}></div>
+            <div className={`dot absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${!doc.is_private ? 'transform translate-x-4' : ''}`}></div>
+          </div>
+          <span className="ml-2 text-xs font-medium text-gray-600 dark:text-gray-400">
+            {doc.is_private ? 'Private' : 'Shared'}
+          </span>
+        </label>
+      )}
       <button
         onClick={() => handleAnalyzeClick(doc)}
         disabled={analyzingDocId === doc.id}
@@ -104,7 +123,7 @@ const DocumentItem = ({ doc, analyzingDocId, handleAnalyzeClick, handlePreview, 
       </button>
       <button
         onClick={() => handleDownload(doc)}
-        className="inline-flex items-center px-3 py-1.5 text-xs font-semibold text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600"
+        className="inline-flex items-center px-3 py-1.5 text-gray-700 dark:text-gray-200 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600"
       >
         <Download size={14} className="mr-1.5" />
         Download
@@ -137,6 +156,12 @@ const ContactDocumentsView: React.FC<ContactDocumentsViewProps> = ({ contact, on
     'Educational Documents',
     "Financial Document & Affidavit of Support / CA Report & ITR's",
     'Gap Justification',
+    'Acceptance',
+    'I20',
+    'DS-160',
+    'SEVIS confirmation',
+    'Appointment Confirmation',
+    'University Affidavit Forms',
     'Other'
   ];
 
@@ -275,6 +300,34 @@ const ContactDocumentsView: React.FC<ContactDocumentsViewProps> = ({ contact, on
     }
   };
 
+  const handleTogglePrivacy = async (doc: Doc) => {
+    try {
+      // Optimistic update
+      setDocuments(prev => prev.map(d => d.id === doc.id ? { ...d, is_private: !d.is_private } : d));
+
+      const tokenStr = api.getToken() || '';
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/documents/${doc.id}/toggle-privacy`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${tokenStr}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to toggle privacy');
+      }
+
+      // No need to reload, optimistic update is sufficient, or could reload to be safe
+      // await loadDocuments(); 
+    } catch (error) {
+      console.error('Failed to toggle privacy:', error);
+      alert('Failed to toggle document visibility.');
+      // Revert on error
+      setDocuments(prev => prev.map(d => d.id === doc.id ? { ...d, is_private: !d.is_private } : d));
+    }
+  };
+
   return (
     <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm w-full mx-auto animate-fade-in">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between mb-6 pb-4 border-b border-gray-200 dark:border-gray-700 gap-4">
@@ -358,6 +411,7 @@ const ContactDocumentsView: React.FC<ContactDocumentsViewProps> = ({ contact, on
                         handleDownload={handleDownload}
                         handleDelete={handleDelete}
                         isStaffOrAdmin={isStaffOrAdmin}
+                        handleTogglePrivacy={handleTogglePrivacy}
                       />
                     ))}
                   </ul>
@@ -394,6 +448,7 @@ const ContactDocumentsView: React.FC<ContactDocumentsViewProps> = ({ contact, on
                           handleDownload={handleDownload}
                           handleDelete={handleDelete}
                           isStaffOrAdmin={isStaffOrAdmin}
+                          handleTogglePrivacy={handleTogglePrivacy}
                         />
                       ))}
                     </ul>
