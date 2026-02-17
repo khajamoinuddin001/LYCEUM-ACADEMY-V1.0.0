@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { X, Plus, Trash2, Search, Package, UserPlus } from 'lucide-react';
+import { X, Plus, Trash2, Package, UserPlus } from 'lucide-react';
 import * as api from '@/utils/api';
 import AddVendorModal from './add_vendor_modal';
+import type { AccountingTransaction } from '@/types';
 
 interface LineItem {
     description: string;
@@ -11,51 +12,70 @@ interface LineItem {
     amount: number;
 }
 
-interface NewPurchaseModalProps {
-    isOpen: boolean;
+interface EditPurchaseModalProps {
+    transaction: AccountingTransaction;
     onClose: () => void;
-    onSave: (purchase: any) => Promise<void>;
-    contacts?: any[]; // Added contacts prop
+    onSave: (id: string, updates: Partial<AccountingTransaction>) => Promise<void>;
+    contacts?: any[];
 }
 
-const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
-    isOpen,
+const EditPurchaseModal: React.FC<EditPurchaseModalProps> = ({
+    transaction,
     onClose,
     onSave,
-    contacts = [] // Default to empty array if not provided
+    contacts = []
 }) => {
-    const [relatedContactId, setRelatedContactId] = useState<number | undefined>(undefined);
-    const [relatedContactName, setRelatedContactName] = useState('');
+    const [relatedContactId, setRelatedContactId] = useState<number | undefined>(
+        transaction.contactId ? Number(transaction.contactId) : undefined
+    );
+    const [relatedContactName, setRelatedContactName] = useState(''); // We'll try to find this on load
     const [formData, setFormData] = useState({
-        vendorName: '',
+        vendorName: transaction.customerName || '', // In chart of accounts/transactions, customer_name holds the 3rd party
         vendorId: undefined as number | undefined,
-        date: new Date().toISOString().split('T')[0],
-        paymentMethod: 'Cash' as 'Cash' | 'Online',
-        status: 'Paid' as 'Paid' | 'Pending' | 'Overdue',
-        notes: '',
-        additionalDiscount: 0 as string | number
+        date: transaction.date || new Date().toISOString().split('T')[0],
+        paymentMethod: (transaction.paymentMethod || 'Cash') as 'Cash' | 'Online',
+        status: (transaction.status || 'Paid') as 'Paid' | 'Pending' | 'Overdue',
+        notes: '', // Transaction doesn't have a specific notes field separate from description usually, but we can look at metadata or just ignore for now
+        additionalDiscount: transaction.additionalDiscount || 0
     });
 
-    const [lineItems, setLineItems] = useState<LineItem[]>([
-        { description: '', longDescription: '', quantity: 1, rate: 0, amount: 0 }
-    ]);
+    const [lineItems, setLineItems] = useState<LineItem[]>([]);
 
     // Inventory & Vendor State
     const [vendors, setVendors] = useState<api.Vendor[]>([]);
     const [products, setProducts] = useState<api.Product[]>([]);
     const [showAddVendor, setShowAddVendor] = useState(false);
 
-    const [vendorSearch, setVendorSearch] = useState('');
-    const [showSuggestions, setShowSuggestions] = useState(false);
     const [saving, setSaving] = useState(false);
     const [activeDropdownIndex, setActiveDropdownIndex] = useState<number | null>(null);
     const [addingProduct, setAddingProduct] = useState(false);
 
     useEffect(() => {
-        if (isOpen) {
-            loadData();
+        loadData();
+        initializeForm();
+    }, [transaction]);
+
+    const initializeForm = () => {
+        // Resolve related contact name
+        if (transaction.contactId && contacts.length > 0) {
+            const found = contacts.find(c => c.id == transaction.contactId);
+            if (found) setRelatedContactName(found.name);
         }
-    }, [isOpen]);
+
+        // Initialize line items
+        if (transaction.lineItems && transaction.lineItems.length > 0) {
+            setLineItems(transaction.lineItems);
+        } else {
+            // Fallback
+            setLineItems([{
+                description: transaction.description || 'Purchase Item',
+                longDescription: '',
+                quantity: 1,
+                rate: transaction.amount || 0,
+                amount: transaction.amount || 0
+            }]);
+        }
+    };
 
     const loadData = async () => {
         try {
@@ -73,6 +93,7 @@ const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
     // Calculate totals
     const subtotal = lineItems.reduce((sum, item) => sum + item.amount, 0);
     const total = Math.max(0, subtotal - (parseFloat(formData.additionalDiscount.toString()) || 0));
+
     const handleVendorSelect = (name: string) => {
         const found = vendors.find(v => v.name === name);
         setFormData({
@@ -104,13 +125,10 @@ const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
                 price: price || 0,
                 type: 'Goods'
             });
-            // Add to local state so it shows up in products immediately
             setProducts(prev => [...prev, newProduct]);
-
-            // Select the newly added product
             handleProductSelect(index, newProduct);
         } catch (error) {
-            console.error('Failed to add product to inventory:', error);
+            console.error('Failed to add product:', error);
             alert('Failed to add item to inventory.');
         } finally {
             setAddingProduct(false);
@@ -120,14 +138,11 @@ const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
     const handleDeleteProductFromInventory = async (e: React.MouseEvent, productId: number) => {
         e.stopPropagation();
         if (!window.confirm('Are you sure you want to delete this item from inventory?')) return;
-
         try {
             await api.deleteProduct(productId);
-            // Remove from local state
             setProducts(prev => prev.filter(p => p.id !== productId));
         } catch (error) {
-            console.error('Failed to delete product from inventory:', error);
-            alert('Failed to delete item from inventory.');
+            console.error('Failed to delete product:', error);
         }
     };
 
@@ -136,7 +151,7 @@ const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
         updated[index] = { ...updated[index], [field]: value };
 
         if (field === 'quantity' || field === 'rate') {
-            updated[index].amount = updated[index].quantity * updated[index].rate;
+            updated[index].amount = (updated[index].quantity || 0) * (updated[index].rate || 0);
         }
 
         setLineItems(updated);
@@ -160,27 +175,18 @@ const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
             return;
         }
 
-        if (lineItems.every(item => !item.description.trim())) {
-            alert('Please add at least one line item');
-            return;
-        }
-
         setSaving(true);
         try {
-            // Transaction model relies on customerName
-            // We can optionally store vendorId in metadata if needed, but the transaction model relies on customerName
-            const purchase = {
+            const updates = {
                 customerName: formData.vendorName,
-                // If the vendor exists in our specialized table, we could perhaps link it, 
-                // but standard transactions link to contacts. 
-                // Since user wanted separate logic, we rely on the Name string.
                 contactId: relatedContactId || null,
                 date: formData.date,
-                type: 'Purchase',
+                type: 'Purchase', // explicit
                 amount: total,
                 paymentMethod: formData.paymentMethod,
                 status: formData.status,
-                additionalDiscount: parseFloat(formData.additionalDiscount?.toString() || '0'),
+                additionalDiscount: parseFloat(formData.additionalDiscount.toString()) || 0,
+                lineItems: lineItems,
                 description: lineItems
                     .filter(item => item.description.trim())
                     .map(item => {
@@ -190,35 +196,18 @@ const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
                         }
                         return desc;
                     })
-                    .join(', '),
-                lineItems: lineItems // Save structured data
+                    .join(', ')
             };
 
-            await onSave(purchase);
+            await onSave(transaction.id, updates);
             onClose();
-
-            // Reset form
-            setFormData({
-                vendorName: '',
-                vendorId: undefined,
-                date: new Date().toISOString().split('T')[0],
-                paymentMethod: 'Cash',
-                status: 'Pending',
-                notes: '',
-                additionalDiscount: 0
-            });
-            setRelatedContactId(undefined);
-            setRelatedContactName('');
-            setLineItems([{ description: '', longDescription: '', quantity: 1, rate: 0, amount: 0 }]);
         } catch (error) {
-            console.error('Failed to create purchase:', error);
-            alert('Failed to create purchase. Please try again.');
+            console.error('Failed to update purchase:', error);
+            alert('Failed to update purchase. Please try again.');
         } finally {
             setSaving(false);
         }
     };
-
-    if (!isOpen) return null;
 
     return (
         <>
@@ -227,12 +216,9 @@ const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
                     <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex items-center justify-between">
                         <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
                             <Package className="text-lyceum-blue" />
-                            Record New Purchase
+                            Edit Purchase
                         </h2>
-                        <button
-                            onClick={onClose}
-                            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                        >
+                        <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
                             <X className="w-5 h-5" />
                         </button>
                     </div>
@@ -248,7 +234,7 @@ const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
                                     <div className="relative flex-1">
                                         <input
                                             type="text"
-                                            list="vendors-list-purchase"
+                                            list="vendors-list-edit-purchase"
                                             value={formData.vendorName}
                                             onChange={(e) => handleVendorSelect(e.target.value)}
                                             className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
@@ -256,7 +242,7 @@ const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
                                             autoComplete="off"
                                             required
                                         />
-                                        <datalist id="vendors-list-purchase">
+                                        <datalist id="vendors-list-edit-purchase">
                                             {vendors.map(v => (
                                                 <option key={v.id} value={v.name} />
                                             ))}
@@ -294,7 +280,7 @@ const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
                             </label>
                             <input
                                 type="text"
-                                list="contacts-list-purchase"
+                                list="contacts-list-edit-purchase"
                                 value={relatedContactName}
                                 onChange={(e) => {
                                     setRelatedContactName(e.target.value);
@@ -304,14 +290,11 @@ const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
                                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
                                 placeholder="Search student or client name..."
                             />
-                            <datalist id="contacts-list-purchase">
+                            <datalist id="contacts-list-edit-purchase">
                                 {contacts.map(c => (
                                     <option key={c.id} value={c.name} />
                                 ))}
                             </datalist>
-                            <p className="text-xs text-gray-500 mt-1">
-                                Link this purchase to a student file (Internal record only).
-                            </p>
                         </div>
 
                         <div>
@@ -360,7 +343,6 @@ const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
                                                 />
                                                 {activeDropdownIndex === index && (
                                                     <div className="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl z-[60] max-h-60 overflow-y-auto">
-                                                        {/* Search Results */}
                                                         {products
                                                             .filter(p => p.name.toLowerCase().includes(item.description.toLowerCase()))
                                                             .map(product => (
@@ -371,7 +353,6 @@ const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
                                                                 >
                                                                     <div className="flex-1">
                                                                         <div className="font-medium text-gray-900 dark:text-white">{product.name}</div>
-                                                                        <div className="text-xs text-gray-500">Inventory Item</div>
                                                                     </div>
                                                                     <div className="flex items-center gap-3">
                                                                         <div className="text-sm font-semibold text-lyceum-blue">₹{product.price}</div>
@@ -379,15 +360,12 @@ const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
                                                                             type="button"
                                                                             onClick={(e) => handleDeleteProductFromInventory(e, product.id)}
                                                                             className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors opacity-0 group-hover:opacity-100"
-                                                                            title="Delete from inventory"
                                                                         >
                                                                             <Trash2 size={14} />
                                                                         </button>
                                                                     </div>
                                                                 </div>
                                                             ))}
-
-                                                        {/* Add to Inventory Option */}
                                                         {item.description.trim() && !products.find(p => p.name.toLowerCase() === item.description.toLowerCase()) && (
                                                             <button
                                                                 type="button"
@@ -402,21 +380,10 @@ const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
                                                                 <p className="text-[10px] opacity-75 mt-0.5 ml-6">Saves with ₹{item.rate} base price</p>
                                                             </button>
                                                         )}
-
-                                                        {/* No Results */}
-                                                        {item.description.trim() && products.filter(p => p.name.toLowerCase().includes(item.description.toLowerCase())).length === 0 && !addingProduct && (
-                                                            <div className="p-4 text-center text-sm text-gray-500 italic border-t border-gray-100 dark:border-gray-700">
-                                                                No matching inventory items
-                                                            </div>
-                                                        )}
                                                     </div>
                                                 )}
-                                                {/* Click away detection overlay */}
                                                 {activeDropdownIndex === index && (
-                                                    <div
-                                                        className="fixed inset-0 z-[55]"
-                                                        onClick={() => setActiveDropdownIndex(null)}
-                                                    />
+                                                    <div className="fixed inset-0 z-[55]" onClick={() => setActiveDropdownIndex(null)} />
                                                 )}
                                             </div>
                                             <input
@@ -477,7 +444,7 @@ const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
                                             <input
                                                 type="number"
                                                 value={formData.additionalDiscount}
-                                                onChange={(e) => setFormData({ ...formData, additionalDiscount: e.target.value })}
+                                                onChange={(e) => setFormData({ ...formData, additionalDiscount: parseFloat(e.target.value) || 0 })}
                                                 className="w-24 px-2 py-1 text-right text-sm border border-gray-300 dark:border-gray-600 rounded focus:ring-1 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
                                                 min="0"
                                                 step="0.01"
@@ -509,7 +476,6 @@ const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
                             </select>
                         </div>
 
-                        {/* Action Buttons */}
                         <div className="flex gap-3 pt-4">
                             <button
                                 type="button"
@@ -523,7 +489,7 @@ const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
                                 disabled={saving}
                                 className="flex-1 px-4 py-2 bg-lyceum-blue text-white rounded-lg hover:bg-lyceum-blue-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-bold shadow-lg shadow-blue-500/30"
                             >
-                                {saving ? 'Recording...' : 'Record Purchase'}
+                                {saving ? 'Saving...' : 'Save Changes'}
                             </button>
                         </div>
                     </form>
@@ -546,4 +512,4 @@ const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
     );
 };
 
-export default NewPurchaseModal;
+export default EditPurchaseModal;

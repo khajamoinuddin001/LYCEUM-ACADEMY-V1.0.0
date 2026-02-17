@@ -229,7 +229,8 @@ const NewInvoiceModal: React.FC<NewInvoiceModalProps> = ({
             }
             return desc;
           })
-          .join(', ')
+          .join(', '),
+        lineItems: lineItems // Save structured data
       };
 
       await onSave(invoice);

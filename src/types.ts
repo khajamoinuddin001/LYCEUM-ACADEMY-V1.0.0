@@ -482,6 +482,13 @@ export interface AccountingTransaction {
   dueDate?: string;
   additionalDiscount?: number;
   metadata?: any;
+  lineItems?: {
+    description: string;
+    longDescription?: string;
+    quantity: number;
+    rate: number;
+    amount: number;
+  }[];
 }
 export type UserRole = 'Admin' | 'Staff' | 'Student';
 

@@ -2283,7 +2283,8 @@ router.get('/transactions', authenticateToken, async (req, res) => {
       dueDate: t.due_date,
       additionalDiscount: t.additional_discount,
       metadata: typeof t.metadata === 'string' ? JSON.parse(t.metadata) : (t.metadata || {}),
-      amount: Number(t.amount)
+      amount: Number(t.amount),
+      lineItems: t.line_items // Map snake_case to camelCase
     }));
     res.json(transactions);
   } catch (error) {
@@ -2443,8 +2444,8 @@ router.post('/transactions', authenticateToken, async (req, res) => {
     }
 
     const result = await query(`
-      INSERT INTO transactions(id, contact_id, customer_name, date, description, type, status, amount, payment_method, due_date, additional_discount, metadata)
-      VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      INSERT INTO transactions(id, contact_id, customer_name, date, description, type, status, amount, payment_method, due_date, additional_discount, metadata, line_items)
+      VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       RETURNING *
     `, [
       id,
@@ -2458,7 +2459,8 @@ router.post('/transactions', authenticateToken, async (req, res) => {
       transaction.paymentMethod || null,
       transaction.dueDate || null,
       transaction.additionalDiscount || 0,
-      JSON.stringify(transaction.metadata || {})
+      JSON.stringify(transaction.metadata || {}),
+      JSON.stringify(transaction.lineItems || [])
     ]);
     const newTransaction = result.rows[0];
 
@@ -2562,7 +2564,8 @@ router.post('/transactions', authenticateToken, async (req, res) => {
       paymentMethod: newTransaction.payment_method,
       dueDate: newTransaction.due_date,
       additionalDiscount: newTransaction.additional_discount,
-      amount: Number(newTransaction.amount) // Ensure number
+      amount: Number(newTransaction.amount), // Ensure number
+      lineItems: newTransaction.line_items // Return line items
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -2578,8 +2581,8 @@ router.put('/transactions/:id', authenticateToken, async (req, res) => {
     const transaction = req.body;
     await query(`
       UPDATE transactions SET
-      contact_id = $1, customer_name = $2, date = $3, description = $4, type = $5, status = $6, amount = $7, payment_method = $8, due_date = $9, additional_discount = $10, metadata = $11
-      WHERE id = $12
+      contact_id = $1, customer_name = $2, date = $3, description = $4, type = $5, status = $6, amount = $7, payment_method = $8, due_date = $9, additional_discount = $10, metadata = $11, line_items = $12
+      WHERE id = $13
     `, [
       transaction.contactId || null,
       transaction.customerName,
@@ -2592,12 +2595,14 @@ router.put('/transactions/:id', authenticateToken, async (req, res) => {
       transaction.dueDate || null,
       transaction.additionalDiscount || 0,
       JSON.stringify(transaction.metadata || {}),
+      JSON.stringify(transaction.lineItems || []),
       req.params.id
     ]);
     const result = await query('SELECT * FROM transactions WHERE id = $1', [req.params.id]);
     const updated = result.rows[0];
     res.json({
       ...updated,
+      lineItems: updated.line_items,
       contactId: updated.contact_id,
       customerName: updated.customer_name,
       paymentMethod: updated.payment_method,

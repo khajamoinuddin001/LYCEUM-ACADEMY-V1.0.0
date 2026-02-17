@@ -2,45 +2,61 @@ import React, { useState, useEffect } from 'react';
 import { X, UserPlus, Wallet } from 'lucide-react';
 import * as api from '@/utils/api';
 import AddPayeeModal from './add_payee_modal';
+import type { AccountingTransaction } from '@/types';
 
-interface NewExpenseModalProps {
-    isOpen: boolean;
+interface EditExpenseModalProps {
+    transaction: AccountingTransaction;
     onClose: () => void;
-    onSave: (expense: any) => Promise<void>;
+    onSave: (id: string, updates: Partial<AccountingTransaction>) => Promise<void>;
 }
 
-const NewExpenseModal: React.FC<NewExpenseModalProps> = ({
-    isOpen,
+const EditExpenseModal: React.FC<EditExpenseModalProps> = ({
+    transaction,
     onClose,
     onSave
 }) => {
     const [formData, setFormData] = useState({
-        payeeName: '',
+        payeeName: transaction.customerName || '',
         payeeId: undefined as number | undefined,
-        date: new Date().toISOString().split('T')[0],
-        category: '',
-        amount: '',
-        paymentMethod: 'Cash' as 'Cash' | 'Online',
-        status: 'Paid' as 'Paid' | 'Pending' | 'Overdue',
-        description: '',
-        additionalDiscount: ''
+        date: transaction.date || new Date().toISOString().split('T')[0],
+        category: '', // Will extract from description or leave empty
+        amount: transaction.amount?.toString() || '',
+        paymentMethod: (transaction.paymentMethod || 'Cash') as 'Cash' | 'Online',
+        status: (transaction.status || 'Paid') as 'Paid' | 'Pending' | 'Overdue',
+        description: transaction.description || '',
+        additionalDiscount: transaction.additionalDiscount?.toString() || ''
     });
 
     const [payees, setPayees] = useState<api.ExpensePayee[]>([]);
     const [showAddPayee, setShowAddPayee] = useState(false);
     const [saving, setSaving] = useState(false);
 
-    // Common categories for suggestion (can be expanded dynamically later)
+    // Common categories for suggestion
     const categorySuggestions = [
         'Rent', 'Utilities', 'Salaries', 'Office Supplies',
         'Marketing', 'Travel', 'Maintenance', 'Insurance', 'Meals', 'Internet', 'General'
     ];
 
     useEffect(() => {
-        if (isOpen) {
-            loadPayees();
+        loadPayees();
+        initializeCategory();
+    }, [transaction]);
+
+    const initializeCategory = () => {
+        // Try to parse category from description if it matches "Category: Description" format
+        // This is a heuristic based on how NewExpenseModal saves it.
+        if (transaction.description && transaction.description.includes(': ')) {
+            const parts = transaction.description.split(': ');
+            if (parts.length > 1 && categorySuggestions.includes(parts[0])) {
+                setFormData(prev => ({
+                    ...prev,
+                    category: parts[0],
+                    // We keep the full description as is, or we could strip the category prefix.
+                    // Let's keep it simple and just set the category dropdown if it matches.
+                }));
+            }
         }
-    }, [isOpen]);
+    };
 
     const loadPayees = async () => {
         try {
@@ -58,7 +74,6 @@ const NewExpenseModal: React.FC<NewExpenseModalProps> = ({
                 ...prev,
                 payeeName: name,
                 payeeId: found.id,
-                // Auto-fill category if available
                 category: found.default_category || prev.category
             }));
         } else {
@@ -87,45 +102,41 @@ const NewExpenseModal: React.FC<NewExpenseModalProps> = ({
         try {
             const finalAmount = Math.max(0, parseFloat(formData.amount) - (parseFloat(formData.additionalDiscount) || 0));
 
-            const expense = {
-                customerName: formData.payeeName, // Payee Name stored as customerName
-                contactId: null, // Expenses don't link to contacts
+            // Logic to update description if category changed
+            let description = formData.description;
+            // If the user entered a category and the description doesn't start with it, maybe prepend it?
+            // Actually, `NewExpenseModal` does this: `${formData.category}: ${formData.description}`
+            // But here we are editing. If the user changes category, we might want to update the description.
+            // Let's rely on the user to update the description field directly if needed, or we can follow the "New" pattern
+            // if we want to enforce structure.
+            // For now, let's just save what's in the description box, but maybe update it if empty.
+
+            // Simple update object
+            const updates = {
+                customerName: formData.payeeName,
                 date: formData.date,
                 type: 'Expense',
                 amount: finalAmount,
                 paymentMethod: formData.paymentMethod,
                 status: formData.status,
                 additionalDiscount: parseFloat(formData.additionalDiscount) || 0,
-                // Combine category and description for the main description field
-                description: formData.category
-                    ? `${formData.category}: ${formData.description}`
-                    : formData.description,
-                lineItems: [] // Expenses don't have detailed line items, but we should make sure the property exists if required by schema types
+                description: formData.description,
+                // We can also save category in metadata if we want better persistence later
+                metadata: {
+                    ...transaction.metadata,
+                    category: formData.category
+                }
             };
 
-            await onSave(expense);
+            await onSave(transaction.id, updates);
             onClose();
-
-            // Reset form
-            setFormData({
-                payeeName: '',
-                payeeId: undefined,
-                date: new Date().toISOString().split('T')[0],
-                category: '',
-                amount: '',
-                paymentMethod: 'Cash',
-                status: 'Paid',
-                description: ''
-            });
         } catch (error) {
-            console.error('Failed to create expense:', error);
-            alert('Failed to create expense. Please try again.');
+            console.error('Failed to update expense:', error);
+            alert('Failed to update expense. Please try again.');
         } finally {
             setSaving(false);
         }
     };
-
-    if (!isOpen) return null;
 
     return (
         <>
@@ -134,12 +145,9 @@ const NewExpenseModal: React.FC<NewExpenseModalProps> = ({
                     <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex items-center justify-between">
                         <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
                             <Wallet className="text-red-500" />
-                            Record New Expense
+                            Edit Expense
                         </h2>
-                        <button
-                            onClick={onClose}
-                            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                        >
+                        <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
                             <X className="w-5 h-5" />
                         </button>
                     </div>
@@ -155,7 +163,7 @@ const NewExpenseModal: React.FC<NewExpenseModalProps> = ({
                                     <div className="relative flex-1">
                                         <input
                                             type="text"
-                                            list="payees-list"
+                                            list="payees-list-edit-expense"
                                             value={formData.payeeName}
                                             onChange={(e) => handlePayeeSelect(e.target.value)}
                                             className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
@@ -163,7 +171,7 @@ const NewExpenseModal: React.FC<NewExpenseModalProps> = ({
                                             autoComplete="off"
                                             required
                                         />
-                                        <datalist id="payees-list">
+                                        <datalist id="payees-list-edit-expense">
                                             {payees.map(p => (
                                                 <option key={p.id} value={p.name} />
                                             ))}
@@ -202,13 +210,13 @@ const NewExpenseModal: React.FC<NewExpenseModalProps> = ({
                                 </label>
                                 <input
                                     type="text"
-                                    list="category-list"
+                                    list="category-list-edit-expense"
                                     value={formData.category}
                                     onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
                                     placeholder="e.g. Utilities"
                                 />
-                                <datalist id="category-list">
+                                <datalist id="category-list-edit-expense">
                                     {categorySuggestions.map(cat => (
                                         <option key={cat} value={cat} />
                                     ))}
@@ -267,8 +275,6 @@ const NewExpenseModal: React.FC<NewExpenseModalProps> = ({
                             </div>
                         </div>
 
-
-
                         {/* Status */}
                         <div>
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -313,12 +319,12 @@ const NewExpenseModal: React.FC<NewExpenseModalProps> = ({
                                 disabled={saving}
                                 className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-bold shadow-lg shadow-red-500/30"
                             >
-                                {saving ? 'Recording...' : 'Record Expense'}
+                                {saving ? 'Saving...' : 'Save Changes'}
                             </button>
                         </div>
-                    </form >
-                </div >
-            </div >
+                    </form>
+                </div>
+            </div>
 
             <AddPayeeModal
                 isOpen={showAddPayee}
@@ -337,4 +343,4 @@ const NewExpenseModal: React.FC<NewExpenseModalProps> = ({
     );
 };
 
-export default NewExpenseModal;
+export default EditExpenseModal;

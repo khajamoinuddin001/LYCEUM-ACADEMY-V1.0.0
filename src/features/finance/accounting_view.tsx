@@ -7,6 +7,9 @@ import type { AccountingTransaction, Contact, User } from '@/types';
 import * as api from '@/utils/api';
 import AccountTransferModal from './account_transfer_modal';
 import EditTransactionModal from './edit_transaction_modal';
+import EditInvoiceModal from './edit_invoice_modal';
+import EditPurchaseModal from './edit_purchase_modal';
+import EditExpenseModal from './edit_expense_modal';
 import TransactionPrintView from './transaction_print_view';
 import NewInvoiceModal from './new_invoice_modal';
 import NewPurchaseModal from './new_purchase_modal';
@@ -691,14 +694,37 @@ const AccountingView: React.FC<AccountingViewProps> = ({
                     onSave={onSaveTransaction}
                 />
 
-                {/* Edit Transaction Modal */}
+                {/* Edit Transaction/Invoice/Purchase/Expense Modal */}
                 {editingTransaction && (
-                    <EditTransactionModal
-                        transaction={editingTransaction}
-                        contacts={contacts}
-                        onClose={() => setEditingTransaction(null)}
-                        onSave={handleUpdateTransaction}
-                    />
+                    (editingTransaction.type === 'Income' || editingTransaction.type === 'Invoice') ? (
+                        <EditInvoiceModal
+                            transaction={editingTransaction}
+                            contacts={contacts}
+                            onClose={() => setEditingTransaction(null)}
+                            onSave={handleUpdateTransaction}
+                            onAddContact={onAddContact}
+                        />
+                    ) : editingTransaction.type === 'Purchase' ? (
+                        <EditPurchaseModal
+                            transaction={editingTransaction}
+                            contacts={contacts}
+                            onClose={() => setEditingTransaction(null)}
+                            onSave={handleUpdateTransaction}
+                        />
+                    ) : editingTransaction.type === 'Expense' ? (
+                        <EditExpenseModal
+                            transaction={editingTransaction}
+                            onClose={() => setEditingTransaction(null)}
+                            onSave={handleUpdateTransaction}
+                        />
+                    ) : (
+                        <EditTransactionModal
+                            transaction={editingTransaction}
+                            contacts={contacts}
+                            onClose={() => setEditingTransaction(null)}
+                            onSave={handleUpdateTransaction}
+                        />
+                    )
                 )}
 
                 {/* Print Transaction View */}

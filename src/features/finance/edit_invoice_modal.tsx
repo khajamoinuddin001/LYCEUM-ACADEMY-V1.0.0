@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { X, Plus, Trash2, Search, Package, UserPlus } from 'lucide-react';
+import { X, Plus, Trash2, Search, User } from 'lucide-react';
 import * as api from '@/utils/api';
-import AddVendorModal from './add_vendor_modal';
+import type { Contact, AccountingTransaction } from '@/types';
+import QuickAddContactModal from './quick_add_contact_modal';
 
 interface LineItem {
     description: string;
@@ -11,75 +12,140 @@ interface LineItem {
     amount: number;
 }
 
-interface NewPurchaseModalProps {
-    isOpen: boolean;
+interface EditInvoiceModalProps {
+    transaction: AccountingTransaction;
     onClose: () => void;
-    onSave: (purchase: any) => Promise<void>;
-    contacts?: any[]; // Added contacts prop
+    contacts: Contact[];
+    onSave: (id: string, updates: Partial<AccountingTransaction>) => Promise<void>;
+    onAddContact: (contact: any) => Promise<Contact>;
 }
 
-const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
-    isOpen,
+const EditInvoiceModal: React.FC<EditInvoiceModalProps> = ({
+    transaction,
     onClose,
+    contacts,
     onSave,
-    contacts = [] // Default to empty array if not provided
+    onAddContact
 }) => {
-    const [relatedContactId, setRelatedContactId] = useState<number | undefined>(undefined);
-    const [relatedContactName, setRelatedContactName] = useState('');
+    const [showQuickAdd, setShowQuickAdd] = useState(false);
     const [formData, setFormData] = useState({
-        vendorName: '',
-        vendorId: undefined as number | undefined,
-        date: new Date().toISOString().split('T')[0],
-        paymentMethod: 'Cash' as 'Cash' | 'Online',
-        status: 'Paid' as 'Paid' | 'Pending' | 'Overdue',
+        contactId: transaction.contactId?.toString() || '',
+        customerName: transaction.customerName || '',
+        email: '', // Display only
+        phone: '', // Display only
+        date: transaction.date || new Date().toISOString().split('T')[0],
+        dueDate: transaction.dueDate || '',
+        paymentMethod: transaction.paymentMethod || 'Cash',
+        status: transaction.status || 'Paid',
         notes: '',
-        additionalDiscount: 0 as string | number
+        additionalDiscount: transaction.additionalDiscount?.toString() || ''
     });
 
-    const [lineItems, setLineItems] = useState<LineItem[]>([
-        { description: '', longDescription: '', quantity: 1, rate: 0, amount: 0 }
-    ]);
+    const [lineItems, setLineItems] = useState<LineItem[]>([]);
 
-    // Inventory & Vendor State
-    const [vendors, setVendors] = useState<api.Vendor[]>([]);
     const [products, setProducts] = useState<api.Product[]>([]);
-    const [showAddVendor, setShowAddVendor] = useState(false);
-
-    const [vendorSearch, setVendorSearch] = useState('');
-    const [showSuggestions, setShowSuggestions] = useState(false);
+    const [customerSearch, setCustomerSearch] = useState('');
     const [saving, setSaving] = useState(false);
     const [activeDropdownIndex, setActiveDropdownIndex] = useState<number | null>(null);
     const [addingProduct, setAddingProduct] = useState(false);
 
-    useEffect(() => {
-        if (isOpen) {
-            loadData();
-        }
-    }, [isOpen]);
+    // Filter customers
+    const customers = contacts.filter(c =>
+        !c.type || c.type === 'Customer' || c.type === 'Both'
+    );
 
-    const loadData = async () => {
+    useEffect(() => {
+        loadProducts();
+        initializeForm();
+    }, [transaction]);
+
+    const initializeForm = () => {
+        // Find contact details to populate email/phone
+        if (transaction.contactId) {
+            const contact = contacts.find(c => c.id === transaction.contactId);
+            if (contact) {
+                setFormData(prev => ({
+                    ...prev,
+                    email: contact.email || '',
+                    phone: contact.phone || ''
+                }));
+            }
+        }
+
+        // Initialize line items
+        if (transaction.lineItems && transaction.lineItems.length > 0) {
+            setLineItems(transaction.lineItems);
+        } else {
+            // Fallback for old transactions: Create single line item from description/amount
+            setLineItems([{
+                description: transaction.description || 'Invoice Item',
+                longDescription: '',
+                quantity: 1,
+                rate: transaction.amount || 0,
+                amount: transaction.amount || 0
+            }]);
+        }
+    };
+
+    const loadProducts = async () => {
         try {
-            const [vData, pData] = await Promise.all([
-                api.getVendors(),
-                api.getProducts()
-            ]);
-            setVendors(vData);
-            setProducts(pData);
+            const data = await api.getProducts();
+            setProducts(data);
         } catch (error) {
-            console.error('Failed to load vendors/products:', error);
+            console.error('Failed to fetch products:', error);
         }
     };
 
     // Calculate totals
     const subtotal = lineItems.reduce((sum, item) => sum + item.amount, 0);
     const total = Math.max(0, subtotal - (parseFloat(formData.additionalDiscount.toString()) || 0));
-    const handleVendorSelect = (name: string) => {
-        const found = vendors.find(v => v.name === name);
-        setFormData({
-            ...formData,
-            vendorName: name,
-            vendorId: found?.id
-        });
+
+    const handleCustomerNameChange = (name: string) => {
+        // 1. Update name immediately
+        const newState = { ...formData, customerName: name };
+
+        // 2. Try to find existing contact
+        const found = customers.find(c => c.name.toLowerCase() === name.toLowerCase());
+
+        if (found) {
+            newState.contactId = found.id.toString();
+            newState.email = found.email || '';
+            newState.phone = found.phone || '';
+        } else {
+            newState.contactId = '';
+            newState.email = '';
+            newState.phone = '';
+        }
+
+        setFormData(newState);
+    };
+
+    const handleQuickAddContact = async (contactData: any) => {
+        try {
+            const newContact = await onAddContact(contactData);
+            setFormData({
+                ...formData,
+                contactId: newContact.id.toString(),
+                customerName: newContact.name,
+                email: newContact.email || '',
+                phone: newContact.phone || ''
+            });
+            setShowQuickAdd(false);
+        } catch (error) {
+            throw error;
+        }
+    };
+
+    const updateLineItem = (index: number, field: keyof LineItem, value: any) => {
+        const updated = [...lineItems];
+        updated[index] = { ...updated[index], [field]: value };
+
+        // Recalculate amount
+        if (field === 'quantity' || field === 'rate') {
+            updated[index].amount = (updated[index].quantity || 0) * (updated[index].rate || 0);
+        }
+
+        setLineItems(updated);
     };
 
     const handleProductSelect = (index: number, product: api.Product) => {
@@ -102,7 +168,7 @@ const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
             const newProduct = await api.saveProduct({
                 name: name,
                 price: price || 0,
-                type: 'Goods'
+                type: 'Service'
             });
             // Add to local state so it shows up in products immediately
             setProducts(prev => [...prev, newProduct]);
@@ -131,17 +197,6 @@ const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
         }
     };
 
-    const updateLineItem = (index: number, field: keyof LineItem, value: any) => {
-        const updated = [...lineItems];
-        updated[index] = { ...updated[index], [field]: value };
-
-        if (field === 'quantity' || field === 'rate') {
-            updated[index].amount = updated[index].quantity * updated[index].rate;
-        }
-
-        setLineItems(updated);
-    };
-
     const addLineItem = () => {
         setLineItems([...lineItems, { description: '', longDescription: '', quantity: 1, rate: 0, amount: 0 }]);
     };
@@ -155,8 +210,8 @@ const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        if (!formData.vendorName) {
-            alert('Please select or enter a vendor name');
+        if (!formData.customerName) {
+            alert('Please enter a customer name');
             return;
         }
 
@@ -167,20 +222,17 @@ const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
 
         setSaving(true);
         try {
-            // Transaction model relies on customerName
-            // We can optionally store vendorId in metadata if needed, but the transaction model relies on customerName
-            const purchase = {
-                customerName: formData.vendorName,
-                // If the vendor exists in our specialized table, we could perhaps link it, 
-                // but standard transactions link to contacts. 
-                // Since user wanted separate logic, we rely on the Name string.
-                contactId: relatedContactId || null,
+            const updates = {
+                contactId: formData.contactId ? parseInt(formData.contactId) : null,
+                customerName: formData.customerName,
                 date: formData.date,
-                type: 'Purchase',
+                dueDate: formData.dueDate || formData.date,
+                type: transaction.type, // Maintain original type
                 amount: total,
-                paymentMethod: formData.paymentMethod,
-                status: formData.status,
+                paymentMethod: formData.paymentMethod as any,
+                status: formData.status as any,
                 additionalDiscount: parseFloat(formData.additionalDiscount?.toString() || '0'),
+                lineItems: lineItems, // Save structured data
                 description: lineItems
                     .filter(item => item.description.trim())
                     .map(item => {
@@ -190,35 +242,18 @@ const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
                         }
                         return desc;
                     })
-                    .join(', '),
-                lineItems: lineItems // Save structured data
+                    .join(', ')
             };
 
-            await onSave(purchase);
+            await onSave(transaction.id, updates);
             onClose();
-
-            // Reset form
-            setFormData({
-                vendorName: '',
-                vendorId: undefined,
-                date: new Date().toISOString().split('T')[0],
-                paymentMethod: 'Cash',
-                status: 'Pending',
-                notes: '',
-                additionalDiscount: 0
-            });
-            setRelatedContactId(undefined);
-            setRelatedContactName('');
-            setLineItems([{ description: '', longDescription: '', quantity: 1, rate: 0, amount: 0 }]);
         } catch (error) {
-            console.error('Failed to create purchase:', error);
-            alert('Failed to create purchase. Please try again.');
+            console.error('Failed to update invoice:', error);
+            alert('Failed to update invoice. Please try again.');
         } finally {
             setSaving(false);
         }
     };
-
-    if (!isOpen) return null;
 
     return (
         <>
@@ -226,8 +261,7 @@ const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
                 <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto animate-fade-in">
                     <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex items-center justify-between">
                         <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                            <Package className="text-lyceum-blue" />
-                            Record New Purchase
+                            Edit {transaction.type}
                         </h2>
                         <button
                             onClick={onClose}
@@ -238,44 +272,58 @@ const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
                     </div>
 
                     <form onSubmit={handleSubmit} className="p-6 space-y-6">
-                        {/* Vendor Selection */}
+                        {/* Customer Selection */}
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                    Vendor/Supplier <span className="text-red-500">*</span>
+                                    Customer Name <span className="text-red-500">*</span>
                                 </label>
-                                <div className="flex gap-2">
-                                    <div className="relative flex-1">
-                                        <input
-                                            type="text"
-                                            list="vendors-list-purchase"
-                                            value={formData.vendorName}
-                                            onChange={(e) => handleVendorSelect(e.target.value)}
-                                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
-                                            placeholder="Select or type vendor..."
-                                            autoComplete="off"
-                                            required
-                                        />
-                                        <datalist id="vendors-list-purchase">
-                                            {vendors.map(v => (
-                                                <option key={v.id} value={v.name} />
-                                            ))}
-                                        </datalist>
-                                    </div>
-                                    <button
-                                        type="button"
-                                        onClick={() => setShowAddVendor(true)}
-                                        className="px-3 py-2 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 border border-gray-300 dark:border-gray-600"
-                                        title="Add New Vendor"
-                                    >
-                                        <UserPlus size={20} />
-                                    </button>
+                                <div className="relative">
+                                    <input
+                                        type="text"
+                                        list="customer-list"
+                                        value={formData.customerName}
+                                        onChange={(e) => handleCustomerNameChange(e.target.value)}
+                                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white pl-10"
+                                        placeholder="Search or type name..."
+                                        autoComplete="off"
+                                        required
+                                    />
+                                    <User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+                                    <datalist id="customer-list">
+                                        {customers.map(c => (
+                                            <option key={c.id} value={c.name} />
+                                        ))}
+                                    </datalist>
                                 </div>
+                                {/* Auto-filled details display */}
+                                {(formData.email || formData.phone) && (
+                                    <div className="mt-2 text-xs text-gray-500 bg-gray-50 dark:bg-gray-700/50 p-2 rounded border border-gray-100 dark:border-gray-600">
+                                        {formData.email && <div>✉️ {formData.email}</div>}
+                                        {formData.phone && <div>📞 {formData.phone}</div>}
+                                    </div>
+                                )}
                             </div>
 
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                    Purchase Date
+                                    Client (Entity)
+                                </label>
+                                <input
+                                    type="text"
+                                    value={transaction.contact || ''} // We don't edit this here currently as it's derived usually, but keep as display or simple input if needed? Original code had it.
+                                    readOnly
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-500"
+                                    placeholder="Company or Entity Name"
+                                />
+                                <p className="text-xs text-gray-500 mt-1">Entity is derived from contact details.</p>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                    Date
                                 </label>
                                 <input
                                     type="date"
@@ -285,73 +333,87 @@ const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
                                     required
                                 />
                             </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                    Due Date
+                                </label>
+                                <input
+                                    type="date"
+                                    value={formData.dueDate}
+                                    onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                                />
+                            </div>
                         </div>
 
-                        {/* Related Contact Selection */}
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                Related Contact / Student (Optional)
-                            </label>
-                            <input
-                                type="text"
-                                list="contacts-list-purchase"
-                                value={relatedContactName}
-                                onChange={(e) => {
-                                    setRelatedContactName(e.target.value);
-                                    const found = contacts.find(c => c.name === e.target.value);
-                                    setRelatedContactId(found ? found.id : undefined);
-                                }}
-                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
-                                placeholder="Search student or client name..."
-                            />
-                            <datalist id="contacts-list-purchase">
-                                {contacts.map(c => (
-                                    <option key={c.id} value={c.name} />
-                                ))}
-                            </datalist>
-                            <p className="text-xs text-gray-500 mt-1">
-                                Link this purchase to a student file (Internal record only).
-                            </p>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                    Amount (₹)
+                                </label>
+                                <input
+                                    type="number"
+                                    value={total}
+                                    readOnly
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-500 focus:outline-none"
+                                />
+                                <p className="text-xs text-gray-500 mt-1">Calculated from line items</p>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                    Payment Method
+                                </label>
+                                <select
+                                    value={formData.paymentMethod}
+                                    onChange={(e) => setFormData({ ...formData, paymentMethod: e.target.value as 'Cash' | 'Online' })}
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                                >
+                                    <option value="Cash">Cash</option>
+                                    <option value="Online">Online/Bank</option>
+                                </select>
+                            </div>
                         </div>
 
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                Payment Method
-                            </label>
-                            <select
-                                value={formData.paymentMethod}
-                                onChange={(e) => setFormData({ ...formData, paymentMethod: e.target.value as 'Cash' | 'Online' })}
-                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
-                            >
-                                <option value="Cash">Cash</option>
-                                <option value="Online">Online/Bank</option>
-                            </select>
+                        <div className="grid grid-cols-1 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                    Status
+                                </label>
+                                <select
+                                    value={formData.status}
+                                    onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                                >
+                                    <option value="Paid">Paid</option>
+                                    <option value="Pending">Pending</option>
+                                    <option value="Overdue">Overdue</option>
+                                </select>
+                            </div>
                         </div>
 
                         {/* Line Items */}
                         <div>
                             <div className="flex items-center justify-between mb-3">
                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                                    Items Purchased (Inventory)
+                                    Description
                                 </label>
-                                <button
-                                    type="button"
-                                    onClick={addLineItem}
-                                    className="text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 flex items-center gap-1 font-medium"
-                                >
-                                    <Plus className="w-4 h-4" />
-                                    Add Item
-                                </button>
+                                <div className="text-xs text-gray-500">
+                                    (Item Description / Qty / Rate)
+                                </div>
                             </div>
 
-                            <div className="space-y-2">
+
+                            <div className="space-y-4">
                                 {lineItems.map((item, index) => (
-                                    <div key={index} className="flex gap-2 items-start">
-                                        <div className="flex-1 space-y-2">
-                                            <div className="relative">
+                                    <div key={index} className="flex flex-col gap-2 p-3 bg-gray-50 dark:bg-gray-700/30 rounded-lg border border-gray-100 dark:border-gray-700">
+                                        <div className="flex gap-2 items-start">
+                                            {/* Description with Search */}
+                                            <div className="flex-1 space-y-2 relative">
                                                 <input
                                                     type="text"
-                                                    placeholder="Item Name"
+                                                    placeholder="item 1 (1 × ₹17000)"
                                                     value={item.description}
                                                     onChange={(e) => updateLineItem(index, 'description', e.target.value)}
                                                     onFocus={() => setActiveDropdownIndex(index)}
@@ -418,45 +480,60 @@ const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
                                                         onClick={() => setActiveDropdownIndex(null)}
                                                     />
                                                 )}
+                                                <textarea
+                                                    placeholder="Add extra details..."
+                                                    value={item.longDescription || ''}
+                                                    onChange={(e) => updateLineItem(index, 'longDescription', e.target.value)}
+                                                    className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 focus:ring-1 focus:ring-blue-500 text-gray-600 dark:text-gray-400"
+                                                    rows={2}
+                                                />
                                             </div>
+                                        </div>
+                                        <div className="flex items-center gap-2">
                                             <input
-                                                type="text"
-                                                placeholder="Add extra details..."
-                                                value={item.longDescription || ''}
-                                                onChange={(e) => updateLineItem(index, 'longDescription', e.target.value)}
-                                                className="w-full px-2 py-1 text-xs border border-gray-200 dark:border-gray-700 rounded bg-gray-50 dark:bg-gray-800/50 focus:ring-1 focus:ring-blue-500 text-gray-600 dark:text-gray-400"
+                                                type="number"
+                                                placeholder="Qty"
+                                                value={item.quantity}
+                                                onChange={(e) => updateLineItem(index, 'quantity', parseFloat(e.target.value) || 0)}
+                                                className="w-20 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white text-center"
+                                                min="0"
+                                                step="0.01"
                                             />
+                                            <span className="text-gray-400">×</span>
+                                            <input
+                                                type="number"
+                                                placeholder="Rate"
+                                                value={item.rate}
+                                                onChange={(e) => updateLineItem(index, 'rate', parseFloat(e.target.value) || 0)}
+                                                className="w-28 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white text-right"
+                                                min="0"
+                                                step="0.01"
+                                            />
+                                            <span className="text-gray-400">=</span>
+                                            <div className="w-28 px-3 py-2 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white text-right font-medium">
+                                                ₹{item.amount.toFixed(2)}
+                                            </div>
+                                            {lineItems.length > 1 && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => removeLineItem(index)}
+                                                    className="p-2 text-red-600 hover:text-red-700 dark:text-red-400"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
+                                            )}
+                                            {index === lineItems.length - 1 && (
+                                                <button
+                                                    type="button"
+                                                    onClick={addLineItem}
+                                                    className="ml-auto flex items-center gap-1 text-sm bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 px-3 py-2 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+                                                >
+                                                    <Plus className="w-4 h-4" />
+                                                    Add
+                                                </button>
+                                            )}
                                         </div>
-                                        <input
-                                            type="number"
-                                            placeholder="Qty"
-                                            value={item.quantity}
-                                            onChange={(e) => updateLineItem(index, 'quantity', parseFloat(e.target.value) || 0)}
-                                            className="w-20 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white text-center"
-                                            min="0"
-                                            step="0.01"
-                                        />
-                                        <input
-                                            type="number"
-                                            placeholder="Price"
-                                            value={item.rate}
-                                            onChange={(e) => updateLineItem(index, 'rate', parseFloat(e.target.value) || 0)}
-                                            className="w-28 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white text-right"
-                                            min="0"
-                                            step="0.01"
-                                        />
-                                        <div className="w-28 px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white text-right font-medium">
-                                            ₹{item.amount.toFixed(2)}
-                                        </div>
-                                        {lineItems.length > 1 && (
-                                            <button
-                                                type="button"
-                                                onClick={() => removeLineItem(index)}
-                                                className="p-2 text-red-600 hover:text-red-700 dark:text-red-400"
-                                            >
-                                                <Trash2 className="w-4 h-4" />
-                                            </button>
-                                        )}
+
                                     </div>
                                 ))}
                             </div>
@@ -493,22 +570,6 @@ const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
                             </div>
                         </div>
 
-                        {/* Status */}
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                Status
-                            </label>
-                            <select
-                                value={formData.status}
-                                onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
-                                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
-                            >
-                                <option value="Paid">Paid</option>
-                                <option value="Pending">Pending</option>
-                                <option value="Overdue">Overdue</option>
-                            </select>
-                        </div>
-
                         {/* Action Buttons */}
                         <div className="flex gap-3 pt-4">
                             <button
@@ -523,27 +584,23 @@ const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({
                                 disabled={saving}
                                 className="flex-1 px-4 py-2 bg-lyceum-blue text-white rounded-lg hover:bg-lyceum-blue-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-bold shadow-lg shadow-blue-500/30"
                             >
-                                {saving ? 'Recording...' : 'Record Purchase'}
+                                {saving ? 'Saving...' : 'Save Changes'}
                             </button>
                         </div>
                     </form>
                 </div>
             </div>
 
-            <AddVendorModal
-                isOpen={showAddVendor}
-                onClose={() => setShowAddVendor(false)}
-                onSave={(newVendor) => {
-                    setVendors([...vendors, newVendor]);
-                    setFormData({
-                        ...formData,
-                        vendorName: newVendor.name,
-                        vendorId: newVendor.id
-                    });
-                }}
-            />
+            {/* Quick Add Contact Modal */}
+            {showQuickAdd && (
+                <QuickAddContactModal
+                    onClose={() => setShowQuickAdd(false)}
+                    onSave={handleQuickAddContact}
+                    defaultType="Customer"
+                />
+            )}
         </>
     );
 };
 
-export default NewPurchaseModal;
+export default EditInvoiceModal;
