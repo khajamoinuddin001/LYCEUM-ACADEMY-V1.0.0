@@ -2271,6 +2271,106 @@ router.post('/leads/:id/quotations', authenticateToken, async (req, res) => {
   }
 });
 
+// Helper: Deduct amount from Contact's Accounts Receivable (FIFO)
+const deductFromAR = async (contactId, amount) => {
+  if (!contactId || amount <= 0) return [];
+
+  // Fetch contact metadata
+  const contactRes = await query('SELECT metadata FROM contacts WHERE id = $1', [contactId]);
+  if (contactRes.rows.length === 0) return [];
+
+  const contact = contactRes.rows[0];
+  let metadata = contact.metadata || {};
+  if (typeof metadata === 'string') {
+    try { metadata = JSON.parse(metadata); } catch (e) { metadata = {}; }
+  }
+
+  if (!metadata.accountsReceivable || metadata.accountsReceivable.length === 0) return [];
+
+  let amountToDeduct = parseFloat(amount);
+  let arUpdated = false;
+
+  // Process AR entries (FIFO)
+  metadata.accountsReceivable = metadata.accountsReceivable.map(entry => {
+    if (amountToDeduct <= 0 || entry.status === 'Paid') return entry;
+
+    const remaining = parseFloat(entry.remainingAmount);
+    if (remaining <= 0) return entry;
+
+    let deduction = 0;
+    if (remaining > amountToDeduct) {
+      // Partial deduction of this entry
+      deduction = amountToDeduct;
+      entry.remainingAmount = remaining - deduction;
+      entry.paidAmount = (entry.paidAmount || 0) + deduction;
+      amountToDeduct = 0;
+    } else {
+      // Fully deduct this entry
+      deduction = remaining;
+      entry.remainingAmount = 0;
+      entry.paidAmount = (entry.paidAmount || 0) + deduction;
+      entry.status = 'Paid';
+      entry.paidAt = new Date().toISOString();
+      amountToDeduct -= deduction;
+    }
+    entry._lastDeduction = (entry._lastDeduction || 0) + deduction;
+    arUpdated = true;
+    return entry;
+  });
+
+  if (arUpdated) {
+    await query('UPDATE contacts SET metadata = $1 WHERE id = $2', [JSON.stringify(metadata), contactId]);
+
+    // Extract deductions for returning
+    const deductions = metadata.accountsReceivable
+      .filter(e => e._lastDeduction > 0)
+      .map(e => ({ id: e.id, amount: e._lastDeduction }));
+
+    // Cleanup temporary field
+    metadata.accountsReceivable.forEach(e => delete e._lastDeduction);
+    await query('UPDATE contacts SET metadata = $1 WHERE id = $2', [JSON.stringify(metadata), contactId]);
+
+    return deductions;
+  }
+
+  return [];
+};
+
+// Helper: Revert AR deductions (for Edit/Delete)
+const revertARDeductions = async (contactId, arDeductions) => {
+  if (!contactId || !arDeductions || arDeductions.length === 0) return;
+
+  const contactRes = await query('SELECT metadata FROM contacts WHERE id = $1', [contactId]);
+  if (contactRes.rows.length === 0) return;
+
+  const contact = contactRes.rows[0];
+  let metadata = contact.metadata || {};
+  if (typeof metadata === 'string') {
+    try { metadata = JSON.parse(metadata); } catch (e) { metadata = {}; }
+  }
+
+  if (metadata.accountsReceivable) {
+    let contactUpdated = false;
+    arDeductions.forEach(deduction => {
+      const entry = metadata.accountsReceivable.find(e => e.id === deduction.id);
+      if (entry) {
+        entry.remainingAmount = parseFloat(entry.remainingAmount) + parseFloat(deduction.amount);
+        entry.paidAmount = Math.max(0, parseFloat(entry.paidAmount) - parseFloat(deduction.amount));
+        if (entry.status === 'Paid' && entry.remainingAmount > 0) {
+          entry.status = 'Pending';
+          delete entry.paidAt;
+        }
+        contactUpdated = true;
+      }
+    });
+
+    if (contactUpdated) {
+      await query('UPDATE contacts SET metadata = $1 WHERE id = $2', [JSON.stringify(metadata), contactId]);
+      console.log(`✅ Reverted AR for Contact ${contactId}`);
+    }
+  }
+};
+
 // Transactions routes
 router.get('/transactions', authenticateToken, async (req, res) => {
   try {
@@ -2574,11 +2674,32 @@ router.post('/transactions', authenticateToken, async (req, res) => {
 
 router.put('/transactions/:id', authenticateToken, async (req, res) => {
   try {
-    console.log('PUT /transactions/:id - User:', req.user);
-    console.log('PUT /transactions/:id - Body:', req.body);
-    console.log('PUT /transactions/:id - Params:', req.params);
-
+    const transactionId = req.params.id;
     const transaction = req.body;
+
+    // 1. Fetch existing transaction to revert previous AR effects
+    const existingRes = await query('SELECT * FROM transactions WHERE id = $1', [transactionId]);
+    if (existingRes.rows.length === 0) return res.status(404).json({ error: 'Transaction not found' });
+
+    const existingTx = existingRes.rows[0];
+    const existingMetadata = typeof existingTx.metadata === 'string' ? JSON.parse(existingTx.metadata) : (existingTx.metadata || {});
+    const arDeductions = existingMetadata.arDeductions || [];
+    const contactId = existingTx.contact_id;
+
+    // Revert previous deductions if any
+    if (arDeductions.length > 0 && contactId) {
+      await revertARDeductions(contactId, arDeductions);
+    }
+
+    // 2. Update Transaction
+    // Ensure we keep existing metadata but clear old arDeductions until re-applied
+    const newMetadata = { ...existingMetadata };
+    delete newMetadata.arDeductions;
+
+    // Allow updating metadata from request but don't overwrite blindly if not provided
+    const requestMetadata = transaction.metadata || {};
+    const mergedMetadata = { ...newMetadata, ...requestMetadata };
+
     await query(`
       UPDATE transactions SET
       contact_id = $1, customer_name = $2, date = $3, description = $4, type = $5, status = $6, amount = $7, payment_method = $8, due_date = $9, additional_discount = $10, metadata = $11, line_items = $12
@@ -2594,11 +2715,31 @@ router.put('/transactions/:id', authenticateToken, async (req, res) => {
       transaction.paymentMethod,
       transaction.dueDate || null,
       transaction.additionalDiscount || 0,
-      JSON.stringify(transaction.metadata || {}),
+      JSON.stringify(mergedMetadata),
       JSON.stringify(transaction.lineItems || []),
-      req.params.id
+      transactionId
     ]);
-    const result = await query('SELECT * FROM transactions WHERE id = $1', [req.params.id]);
+
+    // 3. Apply New AR Deductions (if Invoice/Income and linked to Contact)
+    // Only if status is arguably 'valid' for deduction? Usually creation implies deduction.
+    // For now, always apply if it's an Invoice/Income as per creation logic.
+    let newArDeductions = [];
+    const targetContactId = transaction.contactId || existingTx.contact_id; // Use new or fallback to old? Usually new.
+
+    if ((transaction.type === 'Invoice' || transaction.type === 'Income') && targetContactId) {
+      newArDeductions = await deductFromAR(targetContactId, transaction.amount);
+
+      if (newArDeductions.length > 0) {
+        // Update metadata with new deductions
+        mergedMetadata.arDeductions = newArDeductions;
+        await query('UPDATE transactions SET metadata = $1 WHERE id = $2', [
+          JSON.stringify(mergedMetadata),
+          transactionId
+        ]);
+      }
+    }
+
+    const result = await query('SELECT * FROM transactions WHERE id = $1', [transactionId]);
     const updated = result.rows[0];
     res.json({
       ...updated,
@@ -2993,8 +3134,8 @@ router.get('/recurring-tasks', authenticateToken, async (req, res) => {
   try {
     const result = await query(`
       SELECT rt.*, 
-             COALESCE(l.contact, c.name) as contact_name, 
-             COALESCE(l.company, c.department) as company 
+             COALESCE(l.contact, c.name) as contact_name,
+             COALESCE(l.company, c.department) as company
       FROM recurring_tasks rt
       LEFT JOIN leads l ON rt.lead_id = l.id
       LEFT JOIN contacts c ON rt.contact_id = c.id
