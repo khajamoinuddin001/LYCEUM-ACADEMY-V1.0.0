@@ -74,9 +74,22 @@ const PreviewModal = ({ url, filename, type, onClose }: { url: string; filename:
 };
 
 const DocumentItem = ({ doc, analyzingDocId, handleAnalyzeClick, handlePreview, handleDownload, handleDelete, isStaffOrAdmin, handleTogglePrivacy }: any) => (
-  <li className="py-4 flex items-center justify-between">
+  <li
+    className="py-4 flex items-center justify-between group hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg px-2 -mx-2 transition-colors"
+    draggable={isStaffOrAdmin}
+    onDragStart={(e) => {
+      if (!isStaffOrAdmin) {
+        e.preventDefault();
+        return;
+      }
+      e.dataTransfer.setData('application/json', JSON.stringify(doc));
+      e.dataTransfer.effectAllowed = 'move';
+    }}
+  >
     <div className="flex items-center">
-      <Paperclip className="w-6 h-6 text-gray-400 mr-4" />
+      <div className="cursor-grab active:cursor-grabbing p-1 mr-2 text-gray-300 hover:text-gray-500">
+        <Paperclip className="w-6 h-6" />
+      </div>
       <div>
         <p className="text-sm font-medium text-gray-900 dark:text-gray-100 flex items-center gap-2">
           {doc.name}
@@ -87,7 +100,7 @@ const DocumentItem = ({ doc, analyzingDocId, handleAnalyzeClick, handlePreview, 
         </p>
       </div>
     </div>
-    <div className="flex items-center space-x-2">
+    <div className="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
       {isStaffOrAdmin && (
         <label className="flex items-center cursor-pointer mr-2" title={doc.is_private ? "Make Public" : "Make Private"}>
           <div className="relative">
@@ -111,7 +124,7 @@ const DocumentItem = ({ doc, analyzingDocId, handleAnalyzeClick, handlePreview, 
         className="inline-flex items-center px-3 py-1.5 text-xs font-semibold text-lyceum-blue bg-lyceum-blue/10 rounded-md hover:bg-lyceum-blue/20 disabled:opacity-50 disabled:cursor-wait"
       >
         <Sparkles size={14} className={`mr-1.5 ${analyzingDocId === doc.id ? 'animate-pulse' : ''}`} />
-        {analyzingDocId === doc.id ? 'Analyzing...' : 'Analyze with AI'}
+        {analyzingDocId === doc.id ? 'Analyzing...' : 'Analyze'}
       </button>
       <button
         onClick={() => handlePreview(doc)}
@@ -227,24 +240,88 @@ const ContactDocumentsView: React.FC<ContactDocumentsViewProps> = ({ contact, on
     }
   };
 
-  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
+  const uploadFile = async (file: File, category: string, isPrivateDoc: boolean) => {
     try {
       setUploading(true);
-      // Now passing selectedCategory even for private docs
-      await api.uploadDocument(contact.id, file, isPrivate, selectedCategory);
+      await api.uploadDocument(contact.id, file, isPrivateDoc, category);
       await loadDocuments();
       setIsPrivate(false); // Reset
     } catch (error) {
       console.error('Failed to upload document:', error);
-      alert('Failed to upload document. Please try again.');
+      alert(`Failed to upload ${file.name}. Please try again.`);
     } finally {
       setUploading(false);
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
+    }
+  };
+
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    await uploadFile(file, selectedCategory, isPrivate);
+  };
+
+  const [dragOverCategory, setDragOverCategory] = useState<string | null>(null);
+
+  const handleDragOver = (e: React.DragEvent, category: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverCategory(category);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverCategory(null);
+  };
+
+  const handleDrop = async (e: React.DragEvent, category: string, isPrivateSection: boolean) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverCategory(null);
+
+    // Check if it's an internal drag (moving existing doc)
+    const draggedDocId = e.dataTransfer.getData('application/json');
+
+    if (draggedDocId) {
+      // It's a move operation
+      const doc = JSON.parse(draggedDocId);
+
+      // If dropping in same category and same privacy, do nothing
+      if (doc.category === category && doc.is_private === isPrivateSection) return;
+
+      try {
+        // Optimistic update
+        setDocuments(prev => prev.map(d => d.id === doc.id ? { ...d, category: category, is_private: isPrivateSection } : d));
+
+        const tokenStr = api.getToken() || '';
+        const res = await fetch(`${import.meta.env.VITE_API_URL}/documents/${doc.id}`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${tokenStr}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ category, is_private: isPrivateSection })
+        });
+
+        if (!res.ok) throw new Error('Failed to move document');
+
+        // await loadDocuments(); // Optional, if you want server confirmation
+      } catch (error) {
+        console.error('Failed to move document:', error);
+        alert('Failed to move document. Please try again.');
+        // Revert (reload from server)
+        loadDocuments();
+      }
+      return;
+    }
+
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+      // Upload the first file
+      await uploadFile(files[0], category, isPrivateSection);
     }
   };
 
@@ -394,8 +471,14 @@ const ContactDocumentsView: React.FC<ContactDocumentsViewProps> = ({ contact, on
           <div className="space-y-6">
             <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100 border-l-4 border-lyceum-blue pl-3">Common Documents</h3>
             {categories.map(category => (
-              <div key={category} className="space-y-3">
-                <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest flex items-center gap-2">
+              <div
+                key={category}
+                className={`space-y-3 transition-all rounded-lg p-2 ${dragOverCategory === `common-${category}` ? 'bg-lyceum-blue/10 border-2 border-dashed border-lyceum-blue transform scale-[1.01]' : 'border-2 border-transparent'}`}
+                onDragOver={(e) => handleDragOver(e, `common-${category}`)}
+                onDragLeave={handleDragLeave}
+                onDrop={(e) => handleDrop(e, category, false)}
+              >
+                <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest flex items-center gap-2 pointer-events-none">
                   <span>{category}</span>
                   <div className="h-px bg-gray-200 dark:bg-gray-700 flex-grow"></div>
                 </h4>
@@ -416,7 +499,10 @@ const ContactDocumentsView: React.FC<ContactDocumentsViewProps> = ({ contact, on
                     ))}
                   </ul>
                 ) : (
-                  <p className="text-gray-400 italic text-xs pl-4 pb-2">No documents in this category.</p>
+                  <div className="h-20 flex flex-col items-center justify-center border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50/50 dark:bg-gray-800/50 text-gray-400">
+                    <Upload size={20} className="mb-1 opacity-50" />
+                    <p className="text-xs font-medium">Drop file here to upload</p>
+                  </div>
                 )}
               </div>
             ))}
@@ -431,8 +517,14 @@ const ContactDocumentsView: React.FC<ContactDocumentsViewProps> = ({ contact, on
               </h3>
 
               {privateCategories.map(category => (
-                <div key={category} className="space-y-3 mb-6">
-                  <h4 className="text-xs font-bold text-red-400 uppercase tracking-widest flex items-center gap-2">
+                <div
+                  key={category}
+                  className={`space-y-3 mb-6 transition-all rounded-lg p-2 ${dragOverCategory === `private-${category}` ? 'bg-red-100 border-2 border-dashed border-red-300 transform scale-[1.01]' : 'border-2 border-transparent'}`}
+                  onDragOver={(e) => handleDragOver(e, `private-${category}`)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e, category, true)}
+                >
+                  <h4 className="text-xs font-bold text-red-400 uppercase tracking-widest flex items-center gap-2 pointer-events-none">
                     <span>{category}</span>
                     <div className="h-px bg-red-100 dark:bg-red-900/30 flex-grow"></div>
                   </h4>
@@ -453,7 +545,10 @@ const ContactDocumentsView: React.FC<ContactDocumentsViewProps> = ({ contact, on
                       ))}
                     </ul>
                   ) : (
-                    <p className="text-gray-400 italic text-xs pl-4 pb-2">No internal documents in this category.</p>
+                    <div className="h-20 flex flex-col items-center justify-center border-2 border-dashed border-red-100 dark:border-red-900/30 rounded-lg bg-red-50/50 dark:bg-red-900/5 text-red-300">
+                      <Upload size={20} className="mb-1 opacity-50" />
+                      <p className="text-xs font-medium">Drop private file here</p>
+                    </div>
                   )}
                 </div>
               ))}

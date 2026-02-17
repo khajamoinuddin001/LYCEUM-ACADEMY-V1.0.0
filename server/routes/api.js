@@ -1352,6 +1352,59 @@ router.get('/leads', authenticateToken, async (req, res) => {
   }
 });
 
+// Update Document Category/Privacy
+router.put('/documents/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { category, is_private } = req.body;
+
+    // Check if document exists and get current info
+    const docCheck = await query('SELECT * FROM documents WHERE id = $1', [id]);
+    if (docCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+
+    const doc = docCheck.rows[0];
+
+    // Access control: only Staff/Admin can move documents or change privacy
+    if (req.user.role !== 'Admin' && req.user.role !== 'Staff') {
+      return res.status(403).json({ error: 'Unauthorized to update document' });
+    }
+
+    // Update the document
+    // We only update fields that are provided
+    let updateFields = [];
+    let values = [];
+    let paramCount = 1;
+
+    if (category !== undefined) {
+      updateFields.push(`category = $${paramCount}`);
+      values.push(category);
+      paramCount++;
+    }
+
+    if (is_private !== undefined) {
+      updateFields.push(`is_private = $${paramCount}`);
+      values.push(is_private);
+      paramCount++;
+    }
+
+    if (updateFields.length === 0) {
+      return res.json({ message: 'No changes provided' });
+    }
+
+    values.push(id);
+    const sql = `UPDATE documents SET ${updateFields.join(', ')} WHERE id = $${paramCount} RETURNING *`;
+
+    const result = await query(sql, values);
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error updating document:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Visa Operations Routes
 router.get('/visa-operations/items/:id', authenticateToken, async (req, res) => {
   try {
