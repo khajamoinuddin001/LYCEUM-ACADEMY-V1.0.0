@@ -70,7 +70,8 @@ body {
   }
 
   /* 2. Un-hide ONLY the print portal and position it correctly */
-  body>.print-portal-container {
+  body>.print-portal-container,
+  body>.print-preview-portal {
     display: block !important;
     position: absolute !important;
     left: 0 !important;
@@ -86,7 +87,8 @@ body {
   }
 
   /* 3. Ensure deep visibility for portal contents */
-  .print-portal-container * {
+  .print-portal-container *,
+  .print-preview-portal * {
     visibility: visible !important;
   }
 

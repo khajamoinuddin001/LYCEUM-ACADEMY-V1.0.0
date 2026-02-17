@@ -31,6 +31,7 @@ interface NewContactFormProps {
     onDeleteContact?: (id: number) => void;
     visaOperations?: VisaOperation[];
     onOperationCreated?: (op: any) => void;
+    onPrintTransaction: (transaction: AccountingTransaction) => void;
 }
 
 const SessionPlayer: React.FC<{
@@ -214,7 +215,8 @@ const NewContactForm: React.FC<NewContactFormProps> = ({
     onSaveTask,
     onDeleteContact,
     visaOperations,
-    onOperationCreated
+    onOperationCreated,
+    onPrintTransaction
 }) => {
     const [currentTab, setCurrentTab] = useState<'details' | 'finance' | 'visa'>('details');
     const [formData, setFormData] = useState(initialFormState);
@@ -653,7 +655,15 @@ const NewContactForm: React.FC<NewContactFormProps> = ({
                                     transactions.filter(tx => tx.contactId === contact?.id && tx.type === 'Income').map(tx => (
                                         <tr key={tx.id} className="text-sm">
                                             <td className="px-6 py-4 whitespace-nowrap text-gray-500">{tx.date}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900 dark:text-gray-100">{tx.id}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900 dark:text-gray-100">
+                                                <button
+                                                    onClick={() => onPrintTransaction(tx)}
+                                                    className="font-medium text-lyceum-blue hover:text-lyceum-blue-dark hover:underline focus:outline-none"
+                                                    title="View Invoice"
+                                                >
+                                                    {tx.id}
+                                                </button>
+                                            </td>
                                             <td className="px-6 py-4 text-gray-500 max-w-xs truncate">{tx.description}</td>
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${tx.status === 'Paid' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>

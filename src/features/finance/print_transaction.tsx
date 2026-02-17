@@ -1,5 +1,6 @@
 
 import React from 'react';
+import ReactDOM from 'react-dom';
 import type { AccountingTransaction, Contact } from '@/types';
 import { IndianRupee } from '@/components/common/icons';
 
@@ -12,7 +13,17 @@ interface PrintTransactionProps {
 const PrintTransaction: React.FC<PrintTransactionProps> = ({ transaction, contact, onClose }) => {
     const isInvoice = transaction.type === 'Invoice';
 
-    return (
+    // Use a unique portal container for print preview so it's not hidden on screen
+    // but handled correctly by print styles
+    let portalContainer = document.querySelector('.print-preview-portal');
+
+    if (!portalContainer) {
+        portalContainer = document.createElement('div');
+        portalContainer.className = 'print-preview-portal';
+        document.body.appendChild(portalContainer);
+    }
+
+    return ReactDOM.createPortal(
         <div className="fixed inset-0 bg-white z-[100] overflow-y-auto p-8 print:p-0">
             <div className="max-w-4xl mx-auto border border-gray-100 p-8 shadow-sm print:shadow-none print:border-none">
 
@@ -20,12 +31,12 @@ const PrintTransaction: React.FC<PrintTransactionProps> = ({ transaction, contac
                 <div className="flex justify-between items-start mb-12">
                     <div>
                         <h1 className="text-4xl font-bold text-lyceum-blue mb-2">LYCEUM ACADEMY</h1>
-                        <p className="text-gray-500 text-sm">Empowering Your Future</p>
+                        <p className="text-gray-500 text-sm">Creative Learning</p>
                         <div className="mt-4 text-xs text-gray-500 leading-relaxed">
-                            123 Academy Road, Suite 500<br />
-                            Hyderabad, Telangana, 500001<br />
-                            Email: accounts@lyceum.edu<br />
-                            Phone: +91 98765 43210
+                            Opp. HP petrol pump, falaknuma<br />
+                            Hyderabad, Telangana, 500005<br />
+                            Email: Omar@lyceumacad.com <br />
+                            Phone: +91 78930 78792
                         </div>
                     </div>
                     <div className="text-right">
@@ -84,12 +95,28 @@ const PrintTransaction: React.FC<PrintTransactionProps> = ({ transaction, contac
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                        <tr>
-                            <td className="px-4 py-4 text-sm text-gray-800 font-medium">{transaction.description}</td>
-                            <td className="px-4 py-4 text-right text-sm text-gray-600">1</td>
-                            <td className="px-4 py-4 text-right text-sm text-gray-600">₹{Math.abs(transaction.amount).toLocaleString('en-IN')}</td>
-                            <td className="px-4 py-4 text-right text-sm font-bold text-gray-900">₹{Math.abs(transaction.amount).toLocaleString('en-IN')}</td>
-                        </tr>
+                        {transaction.lineItems && transaction.lineItems.length > 0 ? (
+                            transaction.lineItems.map((item, index) => (
+                                <tr key={index}>
+                                    <td className="px-4 py-4 text-sm text-gray-800 font-medium">
+                                        <div className="font-semibold">{item.description}</div>
+                                        {item.longDescription && (
+                                            <div className="text-xs text-gray-500 mt-1">{item.longDescription}</div>
+                                        )}
+                                    </td>
+                                    <td className="px-4 py-4 text-right text-sm text-gray-600">{item.quantity}</td>
+                                    <td className="px-4 py-4 text-right text-sm text-gray-600">₹{item.rate.toLocaleString('en-IN')}</td>
+                                    <td className="px-4 py-4 text-right text-sm font-bold text-gray-900">₹{item.amount.toLocaleString('en-IN')}</td>
+                                </tr>
+                            ))
+                        ) : (
+                            <tr>
+                                <td className="px-4 py-4 text-sm text-gray-800 font-medium">{transaction.description}</td>
+                                <td className="px-4 py-4 text-right text-sm text-gray-600">1</td>
+                                <td className="px-4 py-4 text-right text-sm text-gray-600">₹{Math.abs(transaction.amount).toLocaleString('en-IN')}</td>
+                                <td className="px-4 py-4 text-right text-sm font-bold text-gray-900">₹{Math.abs(transaction.amount).toLocaleString('en-IN')}</td>
+                            </tr>
+                        )}
                     </tbody>
                     <tfoot>
                         <tr className="border-t-2 border-gray-200">
@@ -112,7 +139,7 @@ const PrintTransaction: React.FC<PrintTransactionProps> = ({ transaction, contac
 
                 {/* Footer Note */}
                 <div className="text-center pt-8 border-t border-gray-100 text-gray-400 text-xs italic">
-                    <p>Thank you for choosing Lyceum Academy. Please contact accounts@lyceum.edu for any queries.</p>
+                    <p>Thank you for choosing Lyceum Academy. Please contact Omar@lyceumacad.com for any queries.</p>
                     <p className="mt-1">Generated electronically on {new Date().toLocaleString()}</p>
                 </div>
             </div>
@@ -132,7 +159,8 @@ const PrintTransaction: React.FC<PrintTransactionProps> = ({ transaction, contac
                     Close Preview
                 </button>
             </div>
-        </div>
+        </div>,
+        portalContainer
     );
 };
 
