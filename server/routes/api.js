@@ -1432,7 +1432,7 @@ router.get('/visa-operations/items/:id', authenticateToken, async (req, res) => 
       return res.status(403).json({ error: 'Unauthorized access to visa operation items' });
     }
 
-    if (item.item_type === 'document') {
+    if (item.item_type === 'document' || item.item_type === 'dependency_document') {
       const isPreview = req.query.preview === 'true';
       res.setHeader('Content-Type', item.content_type || 'application/octet-stream');
       res.setHeader('Content-Disposition', `${isPreview ? 'inline' : 'attachment'}; filename="${item.name || 'document'}"`);
@@ -1861,6 +1861,56 @@ router.delete('/visa-operations/:id/ds-160/document/:itemId', authenticateToken,
   }
 });
 
+router.post('/visa-operations/:id/ds-160/dependency/document', authenticateToken, upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const { type } = req.body;
+    const isPrivate = type === 'internal' || !type; // Default to private if internal or undefined
+
+    const opResult = await query('SELECT contact_id FROM visa_operations WHERE id = $1', [req.params.id]);
+    if (opResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Operation not found' });
+    }
+
+    const contactId = opResult.rows[0].contact_id;
+
+    // Create entry in visa_operation_items (Private by default for dependency/internal)
+    const itemResult = await query(`
+      INSERT INTO visa_operation_items (operation_id, item_type, name, content_type, file_data)
+      VALUES ($1, 'dependency_document', $2, $3, $4)
+      RETURNING id
+    `, [req.params.id, req.file.originalname, req.file.mimetype, req.file.buffer]);
+
+    // Also add to documents with correct visibility
+    if (contactId) {
+      await query(`
+        INSERT INTO documents (contact_id, name, type, size, content, is_private, category)
+        VALUES ($1, $2, $3, $4, $5, $6, 'DS-160')
+      `, [contactId, req.file.originalname, req.file.mimetype, req.file.size, req.file.buffer, isPrivate]);
+    }
+
+    res.json({
+      id: itemResult.rows[0].id,
+      name: req.file.originalname
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete('/visa-operations/:id/ds-160/dependency/document/:itemId', authenticateToken, async (req, res) => {
+  try {
+    const itemId = parseInt(req.params.itemId);
+    await query('DELETE FROM visa_operation_items WHERE id = $1', [itemId]);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.put('/visa-operations/:id/ds-160/status', authenticateToken, async (req, res) => {
   try {
     const { studentStatus, adminStatus, rejectionReason } = req.body;
@@ -1881,13 +1931,13 @@ router.put('/visa-operations/:id/ds-160/status', authenticateToken, async (req, 
     const result = await query(`
       UPDATE visa_operations
       SET ds_data = $1,
-          student_status = COALESCE($3, student_status),
-          admin_status = COALESCE($4, admin_status),
-          rejection_reason = COALESCE($5, rejection_reason),
-          admin_name = COALESCE($6, admin_name)
+      student_status = COALESCE($3, student_status),
+      admin_status = COALESCE($4, admin_status),
+      rejection_reason = COALESCE($5, rejection_reason),
+      admin_name = COALESCE($6, admin_name)
       WHERE id = $2
-      RETURNING *
-    `, [
+    RETURNING *
+      `, [
       JSON.stringify(updatedDsData),
       req.params.id,
       studentStatus,
@@ -1906,10 +1956,10 @@ router.put('/visa-operations/:id/ds-160/status', authenticateToken, async (req, 
 
         await query(`
           INSERT INTO notifications(title, description, read, link_to, recipient_roles)
-          VALUES ($1, $2, $3, $4, $5)
+    VALUES($1, $2, $3, $4, $5)
         `, [
           'DS-160 Approved by Student',
-          `A client ${clientName} has approved the DS-160, waiting for admin to approve.`,
+          `A client ${clientName} has approved the DS - 160, waiting for admin to approve.`,
           0,
           JSON.stringify({ type: 'visa_operation', id: req.params.id }),
           JSON.stringify(['Admin'])
@@ -1942,26 +1992,60 @@ router.post('/visa-operations', authenticateToken, async (req, res) => {
     const { contactId, name, phone, country } = req.body;
 
     // Generate VOP-XXXXX number
-    const lastOpResult = await query(
-      "SELECT vop_number FROM visa_operations WHERE vop_number LIKE 'VOP-%' ORDER BY id DESC LIMIT 1"
-    );
+    // Generate VOP-XXXXX number with retry logic
+    let vopNumber;
+    let retries = 0;
+    const maxRetries = 5;
+    let newOp;
 
-    let nextNumber = 1;
-    if (lastOpResult.rows.length > 0) {
-      const lastVop = lastOpResult.rows[0].vop_number;
-      const lastNum = parseInt(lastVop.split('-')[1]);
-      if (!isNaN(lastNum)) nextNumber = lastNum + 1;
+    while (retries < maxRetries) {
+      // Find the highest existing number across both formats (VOP-XXXXX and VOP - XXXXX)
+      const lastOpResult = await query(
+        `SELECT vop_number FROM visa_operations 
+         WHERE vop_number ~ '^VOP\s*-\s*[0-9]+$' 
+         ORDER BY CAST(SUBSTRING(vop_number FROM '[0-9]+') AS INTEGER) DESC 
+         LIMIT 1`
+      );
+
+      let nextNumber = 1;
+      if (lastOpResult.rows.length > 0) {
+        const lastVop = lastOpResult.rows[0].vop_number;
+        // Extract number ignoring spaces
+        const match = lastVop.match(/(\d+)/);
+        if (match) {
+          nextNumber = parseInt(match[0]) + 1;
+        }
+      }
+
+      // Add retry offset if we're retrying
+      nextNumber += retries;
+
+      // Format: VOP-XXXXX (Standardized without spaces)
+      vopNumber = `VOP-${String(nextNumber).padStart(5, '0')}`;
+
+      try {
+        const result = await query(`
+          INSERT INTO visa_operations(vop_number, contact_id, name, phone, country, user_id)
+          VALUES($1, $2, $3, $4, $5, $6)
+          RETURNING *
+        `, [vopNumber, contactId, name, phone, country, req.user.id]);
+
+        newOp = result.rows[0];
+        break; // Success!
+      } catch (err) {
+        if (err.code === '23505' && err.constraint === 'visa_operations_vop_number_key') {
+          console.warn(`Collision for ${vopNumber}, retrying...`);
+          retries++;
+        } else {
+          throw err; // Other error
+        }
+      }
     }
 
-    const vopNumber = `VOP-${String(nextNumber).padStart(5, '0')}`;
+    if (!newOp) {
+      throw new Error('Failed to generate unique VOP number after retries');
+    }
 
-    const result = await query(`
-      INSERT INTO visa_operations (vop_number, contact_id, name, phone, country, user_id)
-      VALUES ($1, $2, $3, $4, $5, $6)
-      RETURNING *
-    `, [vopNumber, contactId, name, phone, country, req.user.id]);
-
-    const newOp = result.rows[0];
     res.json({
       ...newOp,
       vopNumber: newOp.vop_number,
@@ -2000,7 +2084,7 @@ router.post('/leads', authenticateToken, async (req, res) => {
 
     if (existingContact.rows.length === 0) {
       // Create NEW contact if no safe match found
-      console.log(`📝 Auto-creating contact for manual lead: ${lead.contact}`);
+      console.log(`📝 Auto - creating contact for manual lead: ${lead.contact} `);
 
       const now = new Date();
       const yy = now.getFullYear().toString().slice(-2);
@@ -2010,7 +2094,7 @@ router.post('/leads', authenticateToken, async (req, res) => {
 
       const todayContacts = await query(
         "SELECT contact_id FROM contacts WHERE contact_id LIKE $1 ORDER BY contact_id DESC LIMIT 1",
-        [`${datePrefix}%`]
+        [`${datePrefix}% `]
       );
 
       let sequence = 0;
@@ -2020,11 +2104,11 @@ router.post('/leads', authenticateToken, async (req, res) => {
         if (!isNaN(lastSeq)) sequence = lastSeq + 1;
       }
 
-      const generatedContactId = `${datePrefix}${String(sequence).padStart(3, '0')}`;
+      const generatedContactId = `${datePrefix}${String(sequence).padStart(3, '0')} `;
 
       await query(`
-        INSERT INTO contacts (name, email, phone, contact_id, source, department, notes, checklist, activity_log, recorded_sessions)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        INSERT INTO contacts(name, email, phone, contact_id, source, department, notes, checklist, activity_log, recorded_sessions)
+    VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       `, [
         lead.contact,
         lead.email,
@@ -2053,7 +2137,7 @@ router.post('/leads', authenticateToken, async (req, res) => {
         {
           date: new Date().toISOString(),
           action: 'Manual Lead Created',
-          details: `Connected to new lead: ${lead.title}`
+          details: `Connected to new lead: ${lead.title} `
         }
       ];
 
@@ -2063,9 +2147,9 @@ router.post('/leads', authenticateToken, async (req, res) => {
     // 1. Create the Lead
     const leadResult = await query(`
       INSERT INTO leads(title, company, value, contact, stage, email, phone, source, assigned_to, notes, quotations)
-VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-RETURNING *
-  `, [
+    VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    RETURNING *
+      `, [
       lead.title,
       lead.company,
       lead.value || 0,
@@ -2105,7 +2189,7 @@ router.post('/public/enquiries', async (req, res) => {
 
     if (existingContact.rows.length === 0) {
       // 2. Create NEW contact if no safe match found
-      console.log(`📝 Auto-creating individual contact: ${enquiry.name} (${enquiry.phone})`);
+      console.log(`📝 Auto - creating individual contact: ${enquiry.name} (${enquiry.phone})`);
 
       const now = new Date();
       const yy = now.getFullYear().toString().slice(-2);
@@ -2115,7 +2199,7 @@ router.post('/public/enquiries', async (req, res) => {
 
       const todayContacts = await query(
         "SELECT contact_id FROM contacts WHERE contact_id LIKE $1 ORDER BY contact_id DESC LIMIT 1",
-        [`${datePrefix}%`]
+        [`${datePrefix}% `]
       );
 
       let sequence = 0;
@@ -2125,11 +2209,11 @@ router.post('/public/enquiries', async (req, res) => {
         if (!isNaN(lastSeq)) sequence = lastSeq + 1;
       }
 
-      const generatedContactId = `${datePrefix}${String(sequence).padStart(3, '0')}`;
+      const generatedContactId = `${datePrefix}${String(sequence).padStart(3, '0')} `;
 
       await query(`
-        INSERT INTO contacts (name, email, phone, contact_id, source, department, notes, checklist, activity_log, recorded_sessions)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        INSERT INTO contacts(name, email, phone, contact_id, source, department, notes, checklist, activity_log, recorded_sessions)
+VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       `, [
         enquiry.name,
         enquiry.email,
@@ -2137,7 +2221,7 @@ router.post('/public/enquiries', async (req, res) => {
         generatedContactId,
         enquiry.source || 'Website',
         'Unassigned',
-        `Interest: ${enquiry.interest}. Country: ${enquiry.country}. Message: ${enquiry.message}`,
+        `Interest: ${enquiry.interest}.Country: ${enquiry.country}.Message: ${enquiry.message} `,
         JSON.stringify(DEFAULT_CHECKLIST_ITEMS.map(item => ({ ...item, id: Date.now() + Math.random() }))),
         JSON.stringify([{ date: new Date().toISOString(), action: 'Enquiry Received', details: `Initial enquiry from ${enquiry.source || 'Website'}.` }]),
         '[]'
@@ -2159,7 +2243,7 @@ router.post('/public/enquiries', async (req, res) => {
         {
           date: new Date().toISOString(),
           action: 'Secondary Enquiry',
-          details: `New enquiry from ${enquiry.source || 'Website'}. Interest: ${enquiry.interest}.`
+          details: `New enquiry from ${enquiry.source || 'Website'}.Interest: ${enquiry.interest}.`
         }
       ];
 
@@ -2169,10 +2253,10 @@ router.post('/public/enquiries', async (req, res) => {
     // 3. Create Lead from Enquiry (Always create a new lead)
     const leadResult = await query(`
       INSERT INTO leads(title, company, value, contact, stage, email, phone, source, assigned_to, notes, quotations)
-      VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-      RETURNING *
-    `, [
-      `${enquiry.source || 'Website'} Enquiry: ${enquiry.name}`, // Title
+VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+RETURNING *
+  `, [
+      `${enquiry.source || 'Website'} Enquiry: ${enquiry.name} `, // Title
       'Individual',                                             // Company
       0,                                                        // Value
       contactName,                                              // Contact Name
@@ -2181,7 +2265,7 @@ router.post('/public/enquiries', async (req, res) => {
       enquiry.phone,                                            // Phone
       enquiry.source || 'Website',                             // Source
       null,                                                     // Assigned To
-      `Interest: ${enquiry.interest}. Country: ${enquiry.country}. Message: ${enquiry.message}`, // Notes
+      `Interest: ${enquiry.interest}.Country: ${enquiry.country}.Message: ${enquiry.message} `, // Notes
       JSON.stringify([])                                        // Quotations
     ]);
 
@@ -2270,10 +2354,10 @@ router.post('/leads/:id/quotations', authenticateToken, async (req, res) => {
     let sequence = 1;
     // Find max QUO- ID across ALL leads
     const maxIdResult = await query(`
-      SELECT q->>'id' as id 
+      SELECT q ->> 'id' as id 
       FROM leads l, jsonb_array_elements(l.quotations) q 
-      WHERE q->>'id' LIKE 'QUO-%' 
-      ORDER BY q->>'id' DESC 
+      WHERE q ->> 'id' LIKE 'QUO-%' 
+      ORDER BY q ->> 'id' DESC 
       LIMIT 1
     `);
 
@@ -2289,11 +2373,11 @@ router.post('/leads/:id/quotations', authenticateToken, async (req, res) => {
     let newId;
     let isUnique = false;
     while (!isUnique) {
-      newId = `QUO-${String(sequence).padStart(6, '0')}`;
+      newId = `QUO - ${String(sequence).padStart(6, '0')} `;
       // Collision check
       const check = await query(`
             SELECT 1 FROM leads l, jsonb_array_elements(l.quotations) q 
-            WHERE q->>'id' = $1
+            WHERE q ->> 'id' = $1
         `, [newId]);
       if (check.rows.length === 0) {
         isUnique = true;
@@ -2461,10 +2545,10 @@ router.post('/vendors', authenticateToken, async (req, res) => {
     if (!name) return res.status(400).json({ error: 'Vendor name is required' });
 
     const result = await query(`
-      INSERT INTO vendors (name, email, phone, gstin, address)
-      VALUES ($1, $2, $3, $4, $5)
-      RETURNING *
-    `, [name, email || null, phone || null, gstin || null, address || null]);
+      INSERT INTO vendors(name, email, phone, gstin, address)
+VALUES($1, $2, $3, $4, $5)
+RETURNING *
+  `, [name, email || null, phone || null, gstin || null, address || null]);
 
     res.json(result.rows[0]);
   } catch (error) {
@@ -2488,10 +2572,10 @@ router.post('/products', authenticateToken, async (req, res) => {
     if (!name) return res.status(400).json({ error: 'Product name is required' });
 
     const result = await query(`
-      INSERT INTO products (name, description, price, type)
-      VALUES ($1, $2, $3, $4)
-      RETURNING *
-    `, [name, description || null, price || 0, type || 'Goods']);
+      INSERT INTO products(name, description, price, type)
+VALUES($1, $2, $3, $4)
+RETURNING *
+  `, [name, description || null, price || 0, type || 'Goods']);
 
     res.json(result.rows[0]);
   } catch (error) {
@@ -2539,10 +2623,10 @@ router.post('/expense-payees', authenticateToken, async (req, res) => {
     }
 
     const result = await query(`
-      INSERT INTO expense_payees (name, default_category)
-      VALUES ($1, $2)
-      RETURNING *
-    `, [name, defaultCategory || null]);
+      INSERT INTO expense_payees(name, default_category)
+VALUES($1, $2)
+RETURNING *
+  `, [name, defaultCategory || null]);
 
     res.json(result.rows[0]);
   } catch (error) {
@@ -2568,7 +2652,7 @@ router.post('/transactions', authenticateToken, async (req, res) => {
       const prefix = typePrefixMap[transaction.type] || 'TXN';
 
       // Find latest ID for this prefix to increment
-      const maxSeqResult = await query("SELECT id FROM transactions WHERE id LIKE $1 ORDER BY id DESC LIMIT 1", [`${prefix}-%`]);
+      const maxSeqResult = await query("SELECT id FROM transactions WHERE id LIKE $1 ORDER BY id DESC LIMIT 1", [`${prefix} -% `]);
       let sequence = 1;
 
       if (maxSeqResult.rows.length > 0) {
@@ -2585,7 +2669,7 @@ router.post('/transactions', authenticateToken, async (req, res) => {
       // Collision Check Loop
       let isUnique = false;
       while (!isUnique) {
-        const generatedId = `${prefix}-${String(sequence).padStart(6, '0')}`;
+        const generatedId = `${prefix} -${String(sequence).padStart(6, '0')} `;
         const check = await query("SELECT id FROM transactions WHERE id = $1", [generatedId]);
         if (check.rows.length === 0) {
           id = generatedId;
@@ -2598,9 +2682,9 @@ router.post('/transactions', authenticateToken, async (req, res) => {
 
     const result = await query(`
       INSERT INTO transactions(id, contact_id, customer_name, date, description, type, status, amount, payment_method, due_date, additional_discount, metadata, line_items)
-      VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-      RETURNING *
-    `, [
+VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+RETURNING *
+  `, [
       id,
       transaction.contactId || null,
       transaction.customerName,
@@ -2701,7 +2785,7 @@ router.post('/transactions', authenticateToken, async (req, res) => {
             metadata.accountsReceivable.forEach(e => delete e._lastDeduction);
             await query('UPDATE contacts SET metadata = $1 WHERE id = $2', [JSON.stringify(metadata), contactId]);
 
-            console.log(`✅ Updated AR for Contact ${contactId} based on Invoice ${newTransaction.id}`);
+            console.log(`✅ Updated AR for Contact ${contactId} based on Invoice ${newTransaction.id} `);
           }
         }
       } catch (arError) {
@@ -2755,9 +2839,9 @@ router.put('/transactions/:id', authenticateToken, async (req, res) => {
 
     await query(`
       UPDATE transactions SET
-      contact_id = $1, customer_name = $2, date = $3, description = $4, type = $5, status = $6, amount = $7, payment_method = $8, due_date = $9, additional_discount = $10, metadata = $11, line_items = $12
+contact_id = $1, customer_name = $2, date = $3, description = $4, type = $5, status = $6, amount = $7, payment_method = $8, due_date = $9, additional_discount = $10, metadata = $11, line_items = $12
       WHERE id = $13
-    `, [
+  `, [
       transaction.contactId || null,
       transaction.customerName,
       transaction.date,
@@ -2854,7 +2938,7 @@ router.delete('/transactions/:id', authenticateToken, async (req, res) => {
 
             if (contactUpdated) {
               await query('UPDATE contacts SET metadata = $1 WHERE id = $2', [JSON.stringify(contactMetadata), contactId]);
-              console.log(`♻️ Reverted AR deductions for Contact ${contactId} after deleting Transaction ${transactionId}`);
+              console.log(`♻️ Reverted AR deductions for Contact ${contactId} after deleting Transaction ${transactionId} `);
             }
           }
         }
@@ -2939,7 +3023,7 @@ router.get('/tasks', authenticateToken, async (req, res) => {
       SELECT tasks.*, contacts.name as contact_name 
       FROM tasks 
       LEFT JOIN contacts ON tasks.contact_id = contacts.id
-    `;
+  `;
     const params = [];
 
     if (req.user.role === 'Admin') {
@@ -2986,7 +3070,7 @@ router.get('/tasks', authenticateToken, async (req, res) => {
         FROM tasks 
         LEFT JOIN contacts ON tasks.contact_id = contacts.id
         WHERE tasks.contact_id = $1
-      `;
+  `;
       while (params.length > 0) params.pop();
       params.push(req.query.contactId);
     } else if (req.query.recurringTaskId) {
@@ -2995,7 +3079,7 @@ router.get('/tasks', authenticateToken, async (req, res) => {
         FROM tasks 
         LEFT JOIN contacts ON tasks.contact_id = contacts.id
         WHERE tasks.recurring_task_id = $1
-      `;
+  `;
       while (params.length > 0) params.pop();
       params.push(req.query.recurringTaskId);
     }
@@ -3033,7 +3117,7 @@ const getNextTaskId = async (prefix = 'TSK') => {
   let isUnique = false;
   let taskId;
   while (!isUnique) {
-    taskId = `${prefix}-${String(nextNum).padStart(6, '0')}`;
+    taskId = `${prefix} -${String(nextNum).padStart(6, '0')} `;
     const existingTask = await query('SELECT id FROM tasks WHERE task_id = $1', [taskId]);
     const existingRT = await query('SELECT id FROM recurring_tasks WHERE task_id = $1', [taskId]);
     if (existingTask.rows.length === 0 && existingRT.rows.length === 0) {
@@ -3054,10 +3138,10 @@ router.post('/tasks', authenticateToken, async (req, res) => {
 
     const result = await query(`
       INSERT INTO tasks(
-        task_id, title, description, due_date, status, assigned_to, assigned_by, priority, replies, contact_id, activity_type, is_visible_to_student, ticket_id
-      ) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-      RETURNING *
-    `, [
+    task_id, title, description, due_date, status, assigned_to, assigned_by, priority, replies, contact_id, activity_type, is_visible_to_student, ticket_id
+  ) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+RETURNING *
+  `, [
       taskId,
       task.title,
       task.description,
@@ -3075,9 +3159,9 @@ router.post('/tasks', authenticateToken, async (req, res) => {
 
     // Create initial time log
     await query(`
-      INSERT INTO task_time_logs (task_id, assigned_to)
-      VALUES ($1, $2)
-    `, [result.rows[0].id, task.assignedTo]);
+      INSERT INTO task_time_logs(task_id, assigned_to)
+VALUES($1, $2)
+  `, [result.rows[0].id, task.assignedTo]);
 
     res.json(transformTask(result.rows[0]));
   } catch (error) {
@@ -3129,17 +3213,17 @@ const generateTaskInstances = async () => {
     const globalAssigneeId = settingsRes.rows[0]?.value?.userId || null;
 
     const rtRes = await query(`
-      SELECT DISTINCT ON (rt.id) rt.*, 
-             COALESCE(l.contact, c.name) as contact_name, 
-             COALESCE(l.phone, c.phone) as phone, 
-             COALESCE(l.email, c.email) as email
+      SELECT DISTINCT ON(rt.id) rt.*,
+  COALESCE(l.contact, c.name) as contact_name,
+  COALESCE(l.phone, c.phone) as phone,
+  COALESCE(l.email, c.email) as email
       FROM recurring_tasks rt
       LEFT JOIN leads l ON rt.lead_id = l.id
       LEFT JOIN contacts c ON rt.contact_id = c.id
-      WHERE rt.is_active = true 
-        AND (rt.lead_id IS NOT NULL OR rt.contact_id IS NOT NULL)
-        AND (rt.next_generation_at IS NULL OR rt.next_generation_at <= $1)
-    `, [now]);
+      WHERE rt.is_active = true
+AND(rt.lead_id IS NOT NULL OR rt.contact_id IS NOT NULL)
+AND(rt.next_generation_at IS NULL OR rt.next_generation_at <= $1)
+  `, [now]);
 
     for (const rt of rtRes.rows) {
       const nextGen = new Date(now.getTime() + rt.frequency_days * 24 * 60 * 60 * 1000);
@@ -3149,9 +3233,9 @@ const generateTaskInstances = async () => {
 
       await query(`
         INSERT INTO tasks(
-          task_id, title, description, due_date, status, assigned_to, priority, visibility_emails, recurring_task_id, contact_id
-        ) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-      `, [
+    task_id, title, description, due_date, status, assigned_to, priority, visibility_emails, recurring_task_id, contact_id
+  ) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    `, [
         taskId,
         rt.title,
         rt.description,
@@ -3168,9 +3252,9 @@ const generateTaskInstances = async () => {
         UPDATE recurring_tasks 
         SET last_generated_at = $1, next_generation_at = $2
         WHERE id = $3
-      `, [now, nextGen, rt.id]);
+  `, [now, nextGen, rt.id]);
 
-      console.log(`🤖 Generated recurring task instance ${taskId} for LT-${rt.id}`);
+      console.log(`🤖 Generated recurring task instance ${taskId} for LT - ${rt.id}`);
     }
   } catch (err) {
     console.error('Error generating recurring task instances:', err);
@@ -3186,14 +3270,14 @@ setTimeout(generateTaskInstances, 5000);
 router.get('/recurring-tasks', authenticateToken, async (req, res) => {
   try {
     const result = await query(`
-      SELECT rt.*, 
-             COALESCE(l.contact, c.name) as contact_name,
-             COALESCE(l.company, c.department) as company
+      SELECT rt.*,
+    COALESCE(l.contact, c.name) as contact_name,
+    COALESCE(l.company, c.department) as company
       FROM recurring_tasks rt
       LEFT JOIN leads l ON rt.lead_id = l.id
       LEFT JOIN contacts c ON rt.contact_id = c.id
       ORDER BY rt.created_at DESC
-    `);
+  `);
     res.json(result.rows.map(transformRecurringTask));
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -3210,8 +3294,8 @@ router.post('/recurring-tasks', authenticateToken, async (req, res) => {
 
     await query(`
       INSERT INTO recurring_tasks(task_id, lead_id, contact_id, title, description, frequency_days, next_generation_at, visibility_emails, assigned_to, is_active)
-      VALUES($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, $7, $8, true)
-    `, [
+VALUES($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, $7, $8, true)
+  `, [
       taskId,
       leadId || null,
       contactId || null,
@@ -3277,8 +3361,8 @@ router.put('/tasks/:id', authenticateToken, async (req, res) => {
 
     let updateQuery = `
       UPDATE tasks SET
-      title = $1, description = $2, due_date = $3, status = $4, assigned_to = $5, priority = $6
-    `;
+title = $1, description = $2, due_date = $3, status = $4, assigned_to = $5, priority = $6
+  `;
     const params = [
       task.title,
       task.description,
@@ -3290,11 +3374,11 @@ router.put('/tasks/:id', authenticateToken, async (req, res) => {
     ];
 
     if (completedBy) {
-      updateQuery += `, completed_by = $${params.length + 1}, completed_at = $${params.length + 2}`;
+      updateQuery += `, completed_by = $${params.length + 1}, completed_at = $${params.length + 2} `;
       params.push(completedBy, completedAt);
     }
 
-    updateQuery += ` WHERE id = $${params.length + 1 - (completedBy ? 0 : 2)}`; // Adjust param index logic if needed, simpler to just overwrite params logic
+    updateQuery += ` WHERE id = $${params.length + 1 - (completedBy ? 0 : 2)} `; // Adjust param index logic if needed, simpler to just overwrite params logic
 
     // Re-doing params construction for clarity
     const updateFields = [
@@ -3306,12 +3390,12 @@ router.put('/tasks/:id', authenticateToken, async (req, res) => {
 
     // Add replies if present
     if (task.replies !== undefined) {
-      updateFields.push(`replies = $${updateParams.length + 1}`);
+      updateFields.push(`replies = $${updateParams.length + 1} `);
       updateParams.push(JSON.stringify(task.replies));
     }
 
     if (task.visibility_emails !== undefined) {
-      updateFields.push(`visibility_emails = $${updateParams.length + 1}`);
+      updateFields.push(`visibility_emails = $${updateParams.length + 1} `);
       updateParams.push(JSON.stringify(task.visibility_emails));
     }
 
@@ -3355,13 +3439,13 @@ router.put('/tasks/:id', authenticateToken, async (req, res) => {
         UPDATE task_time_logs
         SET end_time = CURRENT_TIMESTAMP
         WHERE task_id = $1 AND assigned_to = $2 AND end_time IS NULL
-      `, [req.params.id, previousAssignee]);
+  `, [req.params.id, previousAssignee]);
 
       // Start new log
       await query(`
-        INSERT INTO task_time_logs (task_id, assigned_to)
-        VALUES ($1, $2)
-      `, [req.params.id, newAssignee]);
+        INSERT INTO task_time_logs(task_id, assigned_to)
+VALUES($1, $2)
+  `, [req.params.id, newAssignee]);
     }
     // 2. If status changed to 'done' (and wasn't before)
     else if (newStatus === 'done' && previousStatus !== 'done') {
@@ -3370,15 +3454,15 @@ router.put('/tasks/:id', authenticateToken, async (req, res) => {
         UPDATE task_time_logs
         SET end_time = CURRENT_TIMESTAMP
         WHERE task_id = $1 AND end_time IS NULL
-      `, [req.params.id]);
+  `, [req.params.id]);
     }
     // 3. If status changed *from* 'done' (reopened)
     else if (previousStatus === 'done' && newStatus !== 'done') {
       // Start a new log for current assignee
       await query(`
-        INSERT INTO task_time_logs (task_id, assigned_to)
-        VALUES ($1, $2)
-      `, [req.params.id, newAssignee]);
+        INSERT INTO task_time_logs(task_id, assigned_to)
+VALUES($1, $2)
+  `, [req.params.id, newAssignee]);
     }
 
     res.json(transformTask(updated.rows[0]));
@@ -3391,18 +3475,18 @@ router.put('/tasks/:id', authenticateToken, async (req, res) => {
 router.get('/tasks/:id/logs', authenticateToken, async (req, res) => {
   try {
     const result = await query(`
-      SELECT 
-        ttl.id,
-        ttl.task_id as "taskId",
-        ttl.assigned_to as "assignedTo",
-        ttl.start_time as "startTime",
-        ttl.end_time as "endTime",
-        u.name as "assigneeName"
+SELECT
+ttl.id,
+  ttl.task_id as "taskId",
+  ttl.assigned_to as "assignedTo",
+  ttl.start_time as "startTime",
+  ttl.end_time as "endTime",
+  u.name as "assigneeName"
       FROM task_time_logs ttl
       LEFT JOIN users u ON ttl.assigned_to = u.id
       WHERE ttl.task_id = $1
       ORDER BY ttl.start_time ASC
-    `, [req.params.id]);
+  `, [req.params.id]);
     res.json(result.rows);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -3431,9 +3515,9 @@ router.post('/tasks/attachments', authenticateToken, upload.single('file'), asyn
 
     const result = await query(`
       INSERT INTO task_attachments(filename, content_type, file_data, file_size, task_id)
-      VALUES($1, $2, $3, $4, $5)
+VALUES($1, $2, $3, $4, $5)
       RETURNING id, filename, content_type, file_size
-    `, [req.file.originalname, req.file.mimetype, req.file.buffer, req.file.size, taskId || null]);
+  `, [req.file.originalname, req.file.mimetype, req.file.buffer, req.file.size, taskId || null]);
 
     const attachment = result.rows[0];
     res.json({
@@ -3441,7 +3525,7 @@ router.post('/tasks/attachments', authenticateToken, upload.single('file'), asyn
       name: attachment.filename,
       contentType: attachment.content_type,
       size: attachment.file_size,
-      url: `/tasks/attachments/${attachment.id}`,
+      url: `/ tasks / attachments / ${attachment.id} `,
       taskId: taskId
     });
   } catch (error) {
@@ -3464,7 +3548,7 @@ router.get('/tasks/attachments/:id', authenticateToken, async (req, res) => {
 
     // Set headers
     res.setHeader('Content-Type', content_type);
-    res.setHeader('Content-Disposition', `${isPreview ? 'inline' : 'attachment'}; filename="${filename}"`);
+    res.setHeader('Content-Disposition', `${isPreview ? 'inline' : 'attachment'}; filename = "${filename}"`);
 
     // Send binary data
     res.send(file_data);
@@ -3512,7 +3596,7 @@ router.post('/tickets', authenticateToken, upload.array('attachments', 5), async
     let isUnique = false;
     while (!isUnique) {
       const randomNum = Math.floor(Math.random() * 900000) + 100000;
-      ticketId = `TKT-${randomNum}`;
+      ticketId = `TKT - ${randomNum} `;
       const existing = await client.query('SELECT id FROM tickets WHERE ticket_id = $1', [ticketId]);
       if (existing.rows.length === 0) isUnique = true;
     }
@@ -3544,9 +3628,9 @@ router.post('/tickets', authenticateToken, upload.array('attachments', 5), async
     // Insert Ticket
     const ticketResult = await client.query(`
       INSERT INTO tickets(ticket_id, contact_id, subject, description, priority, assigned_to, created_by, status, category)
-      VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9)
-      RETURNING *
-    `, [ticketId, contactId, subject, description, priority || 'Medium', assignedTo, req.user.id, 'Open', category || 'Others']);
+VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9)
+RETURNING *
+  `, [ticketId, contactId, subject, description, priority || 'Medium', assignedTo, req.user.id, 'Open', category || 'Others']);
 
     const newTicket = ticketResult.rows[0];
 
@@ -3555,8 +3639,8 @@ router.post('/tickets', authenticateToken, upload.array('attachments', 5), async
       for (const file of req.files) {
         await client.query(`
           INSERT INTO ticket_attachments(ticket_id, filename, content_type, file_data, file_size)
-          VALUES($1, $2, $3, $4, $5)
-        `, [newTicket.id, file.originalname, file.mimetype, file.buffer, file.size]);
+VALUES($1, $2, $3, $4, $5)
+  `, [newTicket.id, file.originalname, file.mimetype, file.buffer, file.size]);
       }
     }
 
@@ -3565,14 +3649,14 @@ router.post('/tickets', authenticateToken, upload.array('attachments', 5), async
     // Fetch the ticket with its attachments and names for the response
     const finalResult = await client.query(`
       SELECT t.*, c.name as contact_name, u1.name as assigned_to_name, u2.name as created_by_name,
-        (SELECT json_agg(json_build_object('id', ta.id, 'name', ta.filename, 'size', ta.file_size))
+  (SELECT json_agg(json_build_object('id', ta.id, 'name', ta.filename, 'size', ta.file_size))
          FROM ticket_attachments ta WHERE ta.ticket_id = t.id) as attachments
       FROM tickets t
       LEFT JOIN contacts c ON t.contact_id = c.id
       LEFT JOIN users u1 ON t.assigned_to = u1.id
       LEFT JOIN users u2 ON t.created_by = u2.id
       WHERE t.id = $1
-    `, [newTicket.id]);
+  `, [newTicket.id]);
 
     res.json(transformTicket(finalResult.rows[0]));
   } catch (error) {
@@ -3592,24 +3676,24 @@ router.get('/tickets/attachments/:id', authenticateToken, async (req, res) => {
       FROM ticket_attachments ta
       JOIN tickets t ON ta.ticket_id = t.id
       LEFT JOIN contacts c ON t.contact_id = c.id
-      WHERE ta.id = $1 AND (
-        $2 = 'Admin' OR 
-        ($2 = 'Staff' AND (
-          t.assigned_to = $3 OR t.created_by = $3 
-          OR (t.assigned_to IS NULL AND (
-              (c.counselor_assigned IS NULL AND c.counselor_assigned_2 IS NULL)
+      WHERE ta.id = $1 AND(
+    $2 = 'Admin' OR
+    ($2 = 'Staff' AND(
+      t.assigned_to = $3 OR t.created_by = $3 
+          OR(t.assigned_to IS NULL AND(
+        (c.counselor_assigned IS NULL AND c.counselor_assigned_2 IS NULL)
               OR c.counselor_assigned = $4
               OR c.counselor_assigned_2 = $4
-          ))
-        )) OR
-        ($2 = 'Student' AND c.user_id = $3)
+      ))
+    )) OR
+      ($2 = 'Student' AND c.user_id = $3)
       )
-    `, [req.params.id, req.user.role, req.user.id, req.user.name]);
+`, [req.params.id, req.user.role, req.user.id, req.user.name]);
     if (result.rows.length === 0) return res.status(403).json({ error: 'Unauthorized: You do not have access to this attachment.' });
 
     const attachment = result.rows[0];
     res.setHeader('Content-Type', attachment.content_type);
-    res.setHeader('Content-Disposition', `inline; filename="${attachment.filename}"`);
+    res.setHeader('Content-Disposition', `inline; filename = "${attachment.filename}"`);
     res.send(attachment.file_data);
   } catch (error) {
     console.error('Error serving attachment:', error);
@@ -3626,41 +3710,41 @@ router.get('/tickets', authenticateToken, async (req, res) => {
     if (req.user.role === 'Admin') {
       // Admin sees all tickets
       queryText = `
-        SELECT t.*, c.name as contact_name, 
-               COALESCE(u1.name, c.counselor_assigned, c.counselor_assigned_2) as assigned_to_name, 
-               u2.name as created_by_name,
-               (SELECT json_agg(json_build_object('id', ta.id, 'name', ta.filename, 'size', ta.file_size))
+        SELECT t.*, c.name as contact_name,
+  COALESCE(u1.name, c.counselor_assigned, c.counselor_assigned_2) as assigned_to_name,
+  u2.name as created_by_name,
+  (SELECT json_agg(json_build_object('id', ta.id, 'name', ta.filename, 'size', ta.file_size))
                 FROM ticket_attachments ta WHERE ta.ticket_id = t.id) as attachments,
-               (SELECT json_agg(json_build_object('id', tk.id, 'taskId', tk.task_id, 'title', tk.title, 'status', tk.status, 'isVisibleToStudent', tk.is_visible_to_student))
+  (SELECT json_agg(json_build_object('id', tk.id, 'taskId', tk.task_id, 'title', tk.title, 'status', tk.status, 'isVisibleToStudent', tk.is_visible_to_student))
                 FROM tasks tk WHERE tk.ticket_id = t.id) as linked_tasks
         FROM tickets t
         LEFT JOIN contacts c ON t.contact_id = c.id
         LEFT JOIN users u1 ON t.assigned_to = u1.id
         LEFT JOIN users u2 ON t.created_by = u2.id
         ORDER BY t.created_at DESC
-      `;
+  `;
     } else if (req.user.role === 'Staff') {
       // Staff sees tickets assigned to them, created by them, or unassigned ones that match their counselor assignment
       queryText = `
-        SELECT t.*, c.name as contact_name, 
-               COALESCE(u1.name, c.counselor_assigned, c.counselor_assigned_2) as assigned_to_name, 
-               u2.name as created_by_name,
-               (SELECT json_agg(json_build_object('id', ta.id, 'name', ta.filename, 'size', ta.file_size))
+        SELECT t.*, c.name as contact_name,
+  COALESCE(u1.name, c.counselor_assigned, c.counselor_assigned_2) as assigned_to_name,
+  u2.name as created_by_name,
+  (SELECT json_agg(json_build_object('id', ta.id, 'name', ta.filename, 'size', ta.file_size))
                 FROM ticket_attachments ta WHERE ta.ticket_id = t.id) as attachments,
-               (SELECT json_agg(json_build_object('id', tk.id, 'taskId', tk.task_id, 'title', tk.title, 'status', tk.status, 'isVisibleToStudent', tk.is_visible_to_student))
+  (SELECT json_agg(json_build_object('id', tk.id, 'taskId', tk.task_id, 'title', tk.title, 'status', tk.status, 'isVisibleToStudent', tk.is_visible_to_student))
                 FROM tasks tk WHERE tk.ticket_id = t.id) as linked_tasks
         FROM tickets t
         LEFT JOIN contacts c ON t.contact_id = c.id
         LEFT JOIN users u1 ON t.assigned_to = u1.id
         LEFT JOIN users u2 ON t.created_by = u2.id
-        WHERE t.assigned_to = $1 OR t.created_by = $1 
-           OR (t.assigned_to IS NULL AND (
-               (c.counselor_assigned IS NULL AND c.counselor_assigned_2 IS NULL)
+        WHERE t.assigned_to = $1 OR t.created_by = $1
+OR(t.assigned_to IS NULL AND(
+  (c.counselor_assigned IS NULL AND c.counselor_assigned_2 IS NULL)
                OR c.counselor_assigned = $2
                OR c.counselor_assigned_2 = $2
-           ))
+))
         ORDER BY t.created_at DESC
-      `;
+  `;
       params = [req.user.id, req.user.name];
     } else if (req.user.role === 'Student') {
       // Students see their own tickets
@@ -3670,12 +3754,12 @@ router.get('/tickets', authenticateToken, async (req, res) => {
       }
 
       queryText = `
-        SELECT t.*, c.name as contact_name, 
-               COALESCE(u1.name, c.counselor_assigned, c.counselor_assigned_2) as assigned_to_name, 
-               u2.name as created_by_name,
-               (SELECT json_agg(json_build_object('id', ta.id, 'name', ta.filename, 'size', ta.file_size))
+        SELECT t.*, c.name as contact_name,
+  COALESCE(u1.name, c.counselor_assigned, c.counselor_assigned_2) as assigned_to_name,
+  u2.name as created_by_name,
+  (SELECT json_agg(json_build_object('id', ta.id, 'name', ta.filename, 'size', ta.file_size))
                 FROM ticket_attachments ta WHERE ta.ticket_id = t.id) as attachments,
-               (SELECT json_agg(json_build_object('id', tk.id, 'taskId', tk.task_id, 'title', tk.title, 'status', tk.status, 'isVisibleToStudent', tk.is_visible_to_student))
+  (SELECT json_agg(json_build_object('id', tk.id, 'taskId', tk.task_id, 'title', tk.title, 'status', tk.status, 'isVisibleToStudent', tk.is_visible_to_student))
                 FROM tasks tk WHERE tk.ticket_id = t.id AND tk.is_visible_to_student = true) as linked_tasks
         FROM tickets t
         LEFT JOIN contacts c ON t.contact_id = c.id
@@ -3683,7 +3767,7 @@ router.get('/tickets', authenticateToken, async (req, res) => {
         LEFT JOIN users u2 ON t.created_by = u2.id
         WHERE t.contact_id = $1
         ORDER BY t.created_at DESC
-      `;
+  `;
       params = [contactResult.rows[0].id];
     }
 
@@ -3701,14 +3785,14 @@ router.get('/tickets', authenticateToken, async (req, res) => {
 router.get('/tickets/:id', authenticateToken, async (req, res) => {
   try {
     const result = await query(`
-      SELECT t.*, c.name as contact_name, 
-             COALESCE(u1.name, c.counselor_assigned, c.counselor_assigned_2) as assigned_to_name, 
-             u2.name as created_by_name,
-             (SELECT json_agg(json_build_object('id', ta.id, 'name', ta.filename, 'size', ta.file_size))
+      SELECT t.*, c.name as contact_name,
+  COALESCE(u1.name, c.counselor_assigned, c.counselor_assigned_2) as assigned_to_name,
+  u2.name as created_by_name,
+  (SELECT json_agg(json_build_object('id', ta.id, 'name', ta.filename, 'size', ta.file_size))
               FROM ticket_attachments ta WHERE ta.ticket_id = t.id) as attachments,
-             (SELECT json_agg(json_build_object('id', tk.id, 'taskId', tk.task_id, 'title', tk.title, 'status', tk.status, 'isVisibleToStudent', tk.is_visible_to_student))
+  (SELECT json_agg(json_build_object('id', tk.id, 'taskId', tk.task_id, 'title', tk.title, 'status', tk.status, 'isVisibleToStudent', tk.is_visible_to_student))
               FROM tasks tk WHERE tk.ticket_id = t.id) as linked_tasks,
-             (SELECT json_agg(json_build_object('id', tm.id, 'message', tm.message, 'senderId', tm.sender_id, 'senderName', u.name, 'createdAt', tm.created_at))
+  (SELECT json_agg(json_build_object('id', tm.id, 'message', tm.message, 'senderId', tm.sender_id, 'senderName', u.name, 'createdAt', tm.created_at))
               FROM ticket_messages tm
               LEFT JOIN users u ON tm.sender_id = u.id
               WHERE tm.ticket_id = t.id
@@ -3717,19 +3801,19 @@ router.get('/tickets/:id', authenticateToken, async (req, res) => {
       LEFT JOIN contacts c ON t.contact_id = c.id
       LEFT JOIN users u1 ON t.assigned_to = u1.id
       LEFT JOIN users u2 ON t.created_by = u2.id
-      WHERE t.id = $1 AND (
-        $2 = 'Admin' OR 
-        ($2 = 'Staff' AND (
-          t.assigned_to = $3 OR t.created_by = $3 
-          OR (t.assigned_to IS NULL AND (
-              (c.counselor_assigned IS NULL AND c.counselor_assigned_2 IS NULL)
+      WHERE t.id = $1 AND(
+    $2 = 'Admin' OR
+    ($2 = 'Staff' AND(
+      t.assigned_to = $3 OR t.created_by = $3 
+          OR(t.assigned_to IS NULL AND(
+        (c.counselor_assigned IS NULL AND c.counselor_assigned_2 IS NULL)
               OR c.counselor_assigned = $4
               OR c.counselor_assigned_2 = $4
-          ))
-        )) OR
-        ($2 = 'Student' AND c.user_id = $3)
+      ))
+    )) OR
+      ($2 = 'Student' AND c.user_id = $3)
       )
-    `, [req.params.id, req.user.role, req.user.id, req.user.name]);
+`, [req.params.id, req.user.role, req.user.id, req.user.name]);
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Ticket not found' });
@@ -3751,23 +3835,23 @@ router.put('/tickets/:id', authenticateToken, async (req, res) => {
     const result = await query(`
       UPDATE tickets 
       SET status = $1, priority = $2, assigned_to = $3, resolution_notes = $4, updated_at = CURRENT_TIMESTAMP, category = $9
-      WHERE id = $5 AND EXISTS (
-        SELECT 1 FROM tickets t2
+      WHERE id = $5 AND EXISTS(
+  SELECT 1 FROM tickets t2
         LEFT JOIN contacts c ON t2.contact_id = c.id
-        WHERE t2.id = $5 AND (
-          $6 = 'Admin' OR
-          ($6 = 'Staff' AND (
-            t2.assigned_to = $7 OR t2.created_by = $7 
-            OR (t2.assigned_to IS NULL AND (
-                (c.counselor_assigned IS NULL AND c.counselor_assigned_2 IS NULL)
+        WHERE t2.id = $5 AND(
+    $6 = 'Admin' OR
+    ($6 = 'Staff' AND(
+      t2.assigned_to = $7 OR t2.created_by = $7 
+            OR(t2.assigned_to IS NULL AND(
+        (c.counselor_assigned IS NULL AND c.counselor_assigned_2 IS NULL)
                 OR c.counselor_assigned = $8
                 OR c.counselor_assigned_2 = $8
-            ))
-          ))
-        )
+      ))
+    ))
+)
       )
-      RETURNING *
-    `, [status, priority, assignedTo, resolutionNotes, req.params.id, req.user.role, req.user.id, req.user.name, category]);
+RETURNING *
+  `, [status, priority, assignedTo, resolutionNotes, req.params.id, req.user.role, req.user.id, req.user.name, category]);
 
     if (result.rows.length === 0) {
       return res.status(403).json({ error: 'Unauthorized: You do not have permission to update this ticket.' });
@@ -3775,17 +3859,17 @@ router.put('/tickets/:id', authenticateToken, async (req, res) => {
 
     // Fetch the full record with names after update
     const finalResult = await query(`
-      SELECT t.*, c.name as contact_name, 
-             COALESCE(u1.name, c.counselor_assigned, c.counselor_assigned_2) as assigned_to_name, 
-             u2.name as created_by_name,
-             (SELECT json_agg(json_build_object('id', ta.id, 'name', ta.filename, 'size', ta.file_size))
+      SELECT t.*, c.name as contact_name,
+  COALESCE(u1.name, c.counselor_assigned, c.counselor_assigned_2) as assigned_to_name,
+  u2.name as created_by_name,
+  (SELECT json_agg(json_build_object('id', ta.id, 'name', ta.filename, 'size', ta.file_size))
               FROM ticket_attachments ta WHERE ta.ticket_id = t.id) as attachments
       FROM tickets t
       LEFT JOIN contacts c ON t.contact_id = c.id
       LEFT JOIN users u1 ON t.assigned_to = u1.id
       LEFT JOIN users u2 ON t.created_by = u2.id
       WHERE t.id = $1
-    `, [req.params.id]);
+  `, [req.params.id]);
 
     res.json(transformTicket(finalResult.rows[0]));
   } catch (error) {
@@ -3842,20 +3926,20 @@ router.get('/tickets/:id/messages', authenticateToken, async (req, res) => {
       LEFT JOIN users u ON tm.sender_id = u.id
       JOIN tickets t ON tm.ticket_id = t.id
       LEFT JOIN contacts c ON t.contact_id = c.id
-      WHERE tm.ticket_id = $1 AND (
-        $2 = 'Admin' OR 
-        ($2 = 'Staff' AND (
-          t.assigned_to = $3 OR t.created_by = $3 
-          OR (t.assigned_to IS NULL AND (
-              (c.counselor_assigned IS NULL AND c.counselor_assigned_2 IS NULL)
+      WHERE tm.ticket_id = $1 AND(
+    $2 = 'Admin' OR
+    ($2 = 'Staff' AND(
+      t.assigned_to = $3 OR t.created_by = $3 
+          OR(t.assigned_to IS NULL AND(
+        (c.counselor_assigned IS NULL AND c.counselor_assigned_2 IS NULL)
               OR c.counselor_assigned = $4
               OR c.counselor_assigned_2 = $4
-          ))
-        )) OR
-        ($2 = 'Student' AND c.user_id = $3)
+      ))
+    )) OR
+      ($2 = 'Student' AND c.user_id = $3)
       )
       ORDER BY tm.created_at ASC
-    `, [req.params.id, req.user.role, req.user.id, req.user.name]);
+  `, [req.params.id, req.user.role, req.user.id, req.user.name]);
 
     res.json(result.rows.map(row => ({
       ...row,
@@ -3903,10 +3987,10 @@ router.post('/tickets/:id/messages', authenticateToken, async (req, res) => {
     }
 
     const result = await query(`
-      INSERT INTO ticket_messages (ticket_id, sender_id, message)
-      VALUES ($1, $2, $3)
-      RETURNING *
-    `, [ticketId, senderId, message]);
+      INSERT INTO ticket_messages(ticket_id, sender_id, message)
+VALUES($1, $2, $3)
+RETURNING *
+  `, [ticketId, senderId, message]);
 
     const newMessage = result.rows[0];
 
@@ -3925,11 +4009,11 @@ router.delete('/tickets/:id', authenticateToken, async (req, res) => {
   try {
     const deleteResult = await query(`
       DELETE FROM tickets 
-      WHERE id = $1 AND (
-        $2 = 'Admin' OR -- Typically only admins delete, but if staff can:
-        ($2 = 'Staff' AND created_by = $3)
+      WHERE id = $1 AND(
+    $2 = 'Admin' OR-- Typically only admins delete, but if staff can:
+      ($2 = 'Staff' AND created_by = $3)
       )
-    `, [req.params.id, req.user.role, req.user.id]);
+`, [req.params.id, req.user.role, req.user.id]);
 
     if (deleteResult.rowCount === 0) {
       return res.status(403).json({ error: 'Unauthorized or ticket not found' });
@@ -3978,16 +4062,16 @@ router.get('/channels', authenticateToken, async (req, res) => {
     // If Admin is auditing another user
     if (userId && req.user.role === 'Admin') {
       const result = await query(`
-        SELECT * FROM channels 
-        WHERE members @> $1::jsonb
-      `, [JSON.stringify([parseInt(userId)])]);
+SELECT * FROM channels 
+        WHERE members @> $1:: jsonb
+  `, [JSON.stringify([parseInt(userId)])]);
       return res.json(result.rows);
     }
 
     // Normal behavior: only return channels where user is a member
     const result = await query(`
-      SELECT * FROM channels 
-      WHERE members @> $1::jsonb
+SELECT * FROM channels 
+      WHERE members @> $1:: jsonb
     `, [JSON.stringify([req.user.id])]);
     res.json(result.rows);
   } catch (error) {
@@ -4029,14 +4113,14 @@ router.put('/channels/:id', authenticateToken, async (req, res) => {
     const channel = req.body;
     const result = await query(`
       INSERT INTO channels(id, name, type, members, messages)
-      VALUES($1, $2, $3, $4, $5)
-      ON CONFLICT (id) DO UPDATE SET
-        name = EXCLUDED.name,
-        type = EXCLUDED.type,
-        members = EXCLUDED.members,
-        messages = EXCLUDED.messages
-      RETURNING *
-    `, [
+VALUES($1, $2, $3, $4, $5)
+      ON CONFLICT(id) DO UPDATE SET
+name = EXCLUDED.name,
+  type = EXCLUDED.type,
+  members = EXCLUDED.members,
+  messages = EXCLUDED.messages
+RETURNING *
+  `, [
       req.params.id,
       channel.name,
       channel.type,
@@ -4058,9 +4142,9 @@ router.post('/channels/upload', authenticateToken, upload.single('file'), async 
 
     const result = await query(`
       INSERT INTO channel_attachments(filename, content_type, file_data, file_size)
-      VALUES($1, $2, $3, $4)
+VALUES($1, $2, $3, $4)
       RETURNING id, filename, content_type, file_size
-    `, [req.file.originalname, req.file.mimetype, req.file.buffer, req.file.size]);
+  `, [req.file.originalname, req.file.mimetype, req.file.buffer, req.file.size]);
 
     const attachment = result.rows[0];
     res.json({
@@ -4068,7 +4152,7 @@ router.post('/channels/upload', authenticateToken, upload.single('file'), async 
       name: attachment.filename,
       contentType: attachment.content_type,
       size: attachment.file_size,
-      url: `/channels/attachments/${attachment.id}`
+      url: `/ channels / attachments / ${attachment.id} `
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -4087,7 +4171,7 @@ router.get('/channels/attachments/:id', authenticateToken, async (req, res) => {
     const { filename, content_type, file_data } = result.rows[0];
     res.set({
       'Content-Type': content_type,
-      'Content-Disposition': `inline; filename="${filename}"`
+      'Content-Disposition': `inline; filename = "${filename}"`
     });
     res.send(file_data);
   } catch (error) {
@@ -4223,7 +4307,7 @@ router.post('/lms-courses/:id/enroll', authenticateToken, async (req, res) => {
 
       let isUnique = false;
       while (!isUnique) {
-        transactionId = `INV-${String(sequence).padStart(6, '0')}`;
+        transactionId = `INV - ${String(sequence).padStart(6, '0')} `;
         const check = await query("SELECT id FROM transactions WHERE id = $1", [transactionId]);
         if (check.rows.length === 0) {
           isUnique = true;
@@ -4618,10 +4702,10 @@ router.get('/activity-log', authenticateToken, async (req, res) => {
     let result;
     if (search) {
       result = await query(`
-        SELECT * FROM activity_log 
+SELECT * FROM activity_log 
         WHERE admin_name ILIKE $1 OR action ILIKE $1 
         ORDER BY timestamp DESC LIMIT 200
-      `, [`%${search}%`]);
+  `, [` % ${search}% `]);
     } else {
       result = await query('SELECT * FROM activity_log ORDER BY timestamp DESC LIMIT 100');
     }
@@ -4775,9 +4859,9 @@ router.post('/settings/payment', authenticateToken, requireRole('Admin'), async 
     const { upiId } = req.body;
     await query(`
       INSERT INTO system_settings(key, value)
-      VALUES($1, $2)
+VALUES($1, $2)
       ON CONFLICT(key) DO UPDATE SET value = $2
-    `, ['PAYMENT_UPI_ID', { upiId }]);
+  `, ['PAYMENT_UPI_ID', { upiId }]);
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -4790,13 +4874,13 @@ router.post('/settings/payment-qr', authenticateToken, requireRole('Admin'), upl
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    const base64Data = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+    const base64Data = `data:${req.file.mimetype}; base64, ${req.file.buffer.toString('base64')} `;
 
     await query(`
       INSERT INTO system_settings(key, value)
-      VALUES($1, $2)
+VALUES($1, $2)
       ON CONFLICT(key) DO UPDATE SET value = $2
-    `, ['PAYMENT_QR_CODE', { qrCode: base64Data }]);
+  `, ['PAYMENT_QR_CODE', { qrCode: base64Data }]);
 
     res.json({ success: true, qrCode: base64Data });
   } catch (error) {
@@ -4818,9 +4902,9 @@ router.post('/settings/:key', authenticateToken, requireRole('Admin'), async (re
     const { value } = req.body;
     await query(`
       INSERT INTO system_settings(key, value)
-      VALUES($1, $2)
+VALUES($1, $2)
       ON CONFLICT(key) DO UPDATE SET value = $2
-    `, [req.params.key, value]);
+  `, [req.params.key, value]);
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });

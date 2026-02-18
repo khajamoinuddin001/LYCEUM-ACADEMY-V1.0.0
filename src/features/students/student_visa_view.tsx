@@ -18,7 +18,7 @@ import {
     ArrowRight
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { updateVisaOperationSlotBooking, updateDs160Status, downloadDocument, downloadVisaOperationItem, getToken, API_BASE_URL } from '@/utils/api';
+import { updateVisaOperationSlotBooking, updateDs160Status, updateVisaOperationDs160, downloadDocument, downloadVisaOperationItem, getToken, API_BASE_URL } from '@/utils/api';
 
 interface StudentVisaViewProps {
     operations: VisaOperation[];
@@ -89,7 +89,7 @@ export const StudentVisaView: React.FC<StudentVisaViewProps> = ({ operations = [
     const handleDsStatusUpdate = async (status: 'accepted' | 'rejected') => {
         if (!operation) return;
         if (status === 'rejected' && !dsRejectionReason) {
-            alert('Please provide a reason for rejection.');
+            alert('PLS FILL REASON FOR REJECTION');
             return;
         }
 
@@ -101,6 +101,32 @@ export const StudentVisaView: React.FC<StudentVisaViewProps> = ({ operations = [
             });
             alert(`DS-160 details ${status === 'accepted' ? 'approved' : 'rejected'} successfully!`);
             window.location.reload(); // Refresh to get updated status
+        } finally {
+            setIsDsSubmitting(false);
+        }
+    };
+
+    const handleDependencyStatusUpdate = async (index: number, status: 'accepted' | 'rejected', reason?: string) => {
+        if (!operation || !operation.dsData) return;
+
+        setIsDsSubmitting(true);
+        try {
+            const updatedDependencies = [...(operation.dsData.dependencies || [])];
+            updatedDependencies[index] = {
+                ...updatedDependencies[index],
+                studentStatus: status,
+                rejectionReason: reason || ''
+            };
+
+            await updateVisaOperationDs160(operation.id, {
+                dependencies: updatedDependencies
+            });
+
+            alert(`Dependency ${status === 'accepted' ? 'approved' : 'rejected'} successfully!`);
+            window.location.reload();
+        } catch (error) {
+            console.error('Failed to update dependency status:', error);
+            alert('Failed to update status. Please try again.');
         } finally {
             setIsDsSubmitting(false);
         }
@@ -318,6 +344,129 @@ export const StudentVisaView: React.FC<StudentVisaViewProps> = ({ operations = [
                                                             <button onClick={() => handlePreviewFile(doc.id)} className="text-blue-600 hover:text-blue-700"><Eye size={14} /></button>
                                                             <button onClick={() => handleDownloadFile(doc.id, doc.name)} className="text-blue-600 hover:text-blue-700"><Download size={14} /></button>
                                                         </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Dependents Section */}
+                                    {operation.dsData.dependencies && operation.dsData.dependencies.length > 0 && (
+                                        <div className="space-y-3 pt-2">
+                                            <div className="flex items-center gap-2 mb-2 px-1">
+                                                <UserIcon size={14} className="text-purple-500" />
+                                                <span className="text-[10px] font-black text-purple-500 uppercase tracking-widest">Dependents</span>
+                                            </div>
+                                            <div className="space-y-3">
+                                                {operation.dsData.dependencies.map((dep: any, index: number) => (
+                                                    <div key={index} className="p-3 bg-purple-50 dark:bg-purple-900/20 rounded-xl border border-purple-100 dark:border-purple-800/50 space-y-2">
+                                                        <div className="flex justify-between items-center">
+                                                            <div className="flex flex-col">
+                                                                <span className="text-xs font-bold text-slate-700 dark:text-slate-200">Dependent #{index + 1}</span>
+                                                                <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                                                                    Expires: {dep.expiryDate || 'N/A'}
+                                                                </span>
+                                                            </div>
+                                                            <div className="flex flex-col items-end gap-1">
+                                                                <span className="text-[10px] font-mono bg-white dark:bg-purple-900/50 px-2 py-1 rounded text-purple-600 dark:text-purple-300 border border-purple-100 dark:border-purple-800">
+                                                                    {dep.confirmationNumber || 'No #'}
+                                                                </span>
+                                                                <div className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${dep.studentStatus === 'accepted' ? 'bg-emerald-100 text-emerald-600' :
+                                                                    dep.studentStatus === 'rejected' ? 'bg-rose-100 text-rose-600' :
+                                                                        'bg-slate-200 text-slate-500'
+                                                                    }`}>
+                                                                    {dep.studentStatus || 'Pending'}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                        {(dep.fillingDocuments?.length > 0 || dep.fillingDocumentId) && (
+                                                            <div className="space-y-2 pt-2 border-t border-purple-100 dark:border-purple-800/50 mt-1">
+                                                                {(dep.fillingDocuments || (dep.fillingDocumentId ? [{ id: dep.fillingDocumentId, name: dep.fillingDocumentName }] : [])).map((doc: any) => (
+                                                                    <div key={doc.id} className="flex justify-between items-center bg-white dark:bg-purple-900/30 p-2 rounded-lg border border-purple-100 dark:border-purple-800/50">
+                                                                        <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300 truncate max-w-[140px] flex items-center gap-1.5">
+                                                                            <FileText size={12} className="text-purple-500" />
+                                                                            {doc.name}
+                                                                        </span>
+                                                                        <div className="flex gap-2">
+                                                                            <button
+                                                                                onClick={() => handlePreviewFile(doc.id)}
+                                                                                className="p-1 text-purple-600 hover:text-purple-700 hover:bg-purple-100 rounded transition-colors"
+                                                                                title="Preview"
+                                                                            >
+                                                                                <Eye size={12} />
+                                                                            </button>
+                                                                            <button
+                                                                                onClick={() => handleDownloadFile(doc.id, doc.name || 'dependent-filling.pdf')}
+                                                                                className="p-1 text-purple-600 hover:text-purple-700 hover:bg-purple-100 rounded transition-colors"
+                                                                                title="Download"
+                                                                            >
+                                                                                <Download size={12} />
+                                                                            </button>
+                                                                        </div>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        )}
+
+                                                        {(dep.fillingDocuments?.length > 0 || dep.fillingDocumentId) && dep.studentStatus === 'pending' && (
+                                                            <div className="flex gap-2 mt-2">
+                                                                <button
+                                                                    onClick={() => handleDependencyStatusUpdate(index, 'accepted')}
+                                                                    disabled={isDsSubmitting}
+                                                                    className="flex-1 bg-emerald-600 text-white py-1.5 rounded text-[10px] font-bold hover:bg-emerald-700 transition-colors"
+                                                                >
+                                                                    Approve
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => {
+                                                                        const reason = prompt('Reason for rejection:');
+                                                                        if (reason) handleDependencyStatusUpdate(index, 'rejected', reason);
+                                                                    }}
+                                                                    disabled={isDsSubmitting}
+                                                                    className="flex-1 bg-rose-600 text-white py-1.5 rounded text-[10px] font-bold hover:bg-rose-700 transition-colors"
+                                                                >
+                                                                    Reject
+                                                                </button>
+                                                            </div>
+                                                        )}
+                                                        {dep.studentStatus === 'rejected' && dep.rejectionReason && (
+                                                            <div className="bg-rose-50 p-2 rounded border border-rose-100 mt-1">
+                                                                <p className="text-[10px] text-rose-600 italic">"Reason: {dep.rejectionReason}"</p>
+                                                            </div>
+                                                        )}
+
+                                                        {/* Confirmation Document for Student */}
+                                                        {dep.confirmationDocumentId && (
+                                                            <div className="mt-3 bg-emerald-50/50 p-3 rounded-lg border border-emerald-100">
+                                                                <div className="flex items-center gap-2 mb-2">
+                                                                    <ShieldCheck size={12} className="text-emerald-600" />
+                                                                    <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">Confirmation Available</span>
+                                                                </div>
+                                                                <div className="flex justify-between items-center bg-white p-2 rounded-lg border border-emerald-100/50 shadow-sm">
+                                                                    <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300 truncate max-w-[140px] flex items-center gap-1.5">
+                                                                        <FileText size={12} className="text-emerald-500" />
+                                                                        {dep.confirmationDocumentName}
+                                                                    </span>
+                                                                    <div className="flex gap-2">
+                                                                        <button
+                                                                            onClick={() => handlePreviewFile(dep.confirmationDocumentId)}
+                                                                            className="p-1 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded transition-colors"
+                                                                            title="Preview Confirmation"
+                                                                        >
+                                                                            <Eye size={12} />
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => handleDownloadFile(dep.confirmationDocumentId, dep.confirmationDocumentName || 'confirmation.pdf')}
+                                                                            className="p-1 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded transition-colors"
+                                                                            title="Download Confirmation"
+                                                                        >
+                                                                            <Download size={12} />
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 ))}
                                             </div>

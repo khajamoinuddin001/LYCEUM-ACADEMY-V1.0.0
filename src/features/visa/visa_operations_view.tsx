@@ -28,7 +28,7 @@ import {
     KeyRound,
     Trash2
 } from 'lucide-react';
-import { createVisaOperation, updateVisaOperationCgi, updateVisaOperationSlotBooking, updateVisaOperationDs160, uploadDs160Document, deleteDs160Document, updateDs160Status, downloadDocument, downloadVisaOperationItem, getToken, API_BASE_URL } from '@/utils/api';
+import { createVisaOperation, updateVisaOperationCgi, updateVisaOperationSlotBooking, updateVisaOperationDs160, uploadDs160Document, deleteDs160Document, updateDs160Status, downloadDocument, downloadVisaOperationItem, getToken, API_BASE_URL, uploadDs160DependencyDocument, deleteDs160DependencyDocument } from '@/utils/api';
 import type { Contact, VisaOperation, User } from '@/types';
 
 interface VisaOperationsViewProps {
@@ -92,7 +92,8 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
         studentStatus: 'pending' as 'pending' | 'accepted' | 'rejected',
         adminStatus: 'pending' as 'pending' | 'accepted' | 'rejected',
         rejectionReason: '',
-        adminName: ''
+        adminName: '',
+        dependencies: [] as any[]
     });
     const [showPassword, setShowPassword] = useState(false);
     const [activeOp, setActiveOp] = useState<VisaOperation | null>(null);
@@ -111,6 +112,132 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
     const [listSearchQuery, setListSearchQuery] = useState('');
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
+
+    const handleAddDependency = () => {
+        setDsFormData(prev => ({
+            ...prev,
+            dependencies: [
+                ...prev.dependencies,
+                {
+                    confirmationNumber: '',
+                    startDate: '',
+                    expiryDate: '',
+                    securityQuestion: '',
+                    securityAnswer: '',
+                    basicDsBox: '',
+                    documentId: undefined,
+                    documentName: '',
+                    fillingDocumentId: undefined, // DEPRECATED: Use fillingDocuments
+                    fillingDocumentName: '',      // DEPRECATED: Use fillingDocuments
+                    fillingDocuments: [],         // NEW: Array for multiple documents
+                    studentStatus: 'pending',
+                    adminStatus: 'pending'
+                }
+            ]
+        }));
+    };
+
+    const handleRemoveDependency = (index: number) => {
+        setDsFormData(prev => ({
+            ...prev,
+            dependencies: prev.dependencies.filter((_, i) => i !== index)
+        }));
+    };
+
+    const handleDependencyChange = (index: number, field: string, value: any) => {
+        setDsFormData(prev => {
+            const newDeps = [...prev.dependencies];
+            newDeps[index] = { ...newDeps[index], [field]: value };
+            if (field === 'startDate') {
+                newDeps[index].expiryDate = calculateExpiry(value);
+            }
+            return { ...prev, dependencies: newDeps };
+        });
+    };
+
+    const handleDependencyFileUpload = async (index: number, e: React.ChangeEvent<HTMLInputElement>, type: 'internal' | 'filling' | 'confirmation' = 'internal') => {
+        const file = e.target.files?.[0];
+        if (!file || !activeOp) return;
+
+        setIsSubmitting(true);
+        try {
+            // We use the same endpoint but will likely need to store the result in the correct field
+            // Since the backend might not differentiate yet, we rely on the frontend to solve where it goes
+            // For now, let's assume `uploadDs160DependencyDocument` is generic or we add a type param to it
+            const response = await uploadDs160DependencyDocument(activeOp.id, file, type);
+
+            setDsFormData(prev => {
+                const newDeps = [...prev.dependencies];
+                if (type === 'internal') {
+                    newDeps[index] = { ...newDeps[index], documentId: response.id, documentName: response.name };
+                } else if (type === 'filling') {
+                    // Append new document to the list
+                    const existingDocs = newDeps[index].fillingDocuments || [];
+                    newDeps[index] = {
+                        ...newDeps[index],
+                        fillingDocuments: [...existingDocs, { id: response.id, name: response.name }],
+                        // Reset statuses on new upload
+                        studentStatus: 'pending',
+                        adminStatus: 'pending'
+                    };
+                } else {
+                    newDeps[index] = { ...newDeps[index], confirmationDocumentId: response.id, confirmationDocumentName: response.name };
+                }
+                return { ...prev, dependencies: newDeps };
+            });
+            alert(`${type === 'filling' ? 'Filling' : type === 'confirmation' ? 'Confirmation' : 'Internal'} document uploaded successfully!`);
+        } catch (error) {
+            console.error('Failed to upload dependency document:', error);
+            alert('Failed to upload document. Please try again.');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleDependencyFileDelete = async (index: number, type: 'internal' | 'filling' | 'confirmation' = 'internal', docIdToDelete?: number) => {
+        if (!activeOp || !confirm('Are you sure you want to delete this document?')) return;
+
+        const dep = dsFormData.dependencies[index];
+        let docId: number | undefined;
+
+        if (type === 'internal') docId = dep.documentId;
+        else if (type === 'filling') docId = docIdToDelete || dep.fillingDocumentId; // Support both array deletion and legacy single field
+        else docId = dep.confirmationDocumentId;
+
+        if (!docId) return;
+
+        setIsSubmitting(true);
+        try {
+            await deleteDs160DependencyDocument(activeOp.id, docId);
+            setDsFormData(prev => {
+                const newDeps = [...prev.dependencies];
+                if (type === 'internal') {
+                    newDeps[index] = { ...newDeps[index], documentId: undefined, documentName: '' };
+                } else if (type === 'filling') {
+                    // Remove from array if ID is provided
+                    if (docIdToDelete) {
+                        const currentDocs = newDeps[index].fillingDocuments || [];
+                        newDeps[index] = {
+                            ...newDeps[index],
+                            fillingDocuments: currentDocs.filter((d: any) => d.id !== docIdToDelete)
+                        };
+                    } else {
+                        // Legacy cleanup
+                        newDeps[index] = { ...newDeps[index], fillingDocumentId: undefined, fillingDocumentName: '' };
+                    }
+                } else {
+                    newDeps[index] = { ...newDeps[index], confirmationDocumentId: undefined, confirmationDocumentName: '' };
+                }
+                return { ...prev, dependencies: newDeps };
+            });
+            alert('Dependency document deleted!');
+        } catch (error) {
+            console.error('Failed to delete dependency document:', error);
+            alert('Failed to delete document. Please try again.');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
 
     const filteredOperations = useMemo(() => {
         return operations.filter(op => {
@@ -285,12 +412,12 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
         }
     };
 
-    const calculateExpiry = (startDate: string) => {
+    function calculateExpiry(startDate: string) {
         if (!startDate) return '';
         const date = new Date(startDate);
         date.setDate(date.getDate() + 20);
         return date.toISOString().split('T')[0];
-    };
+    }
 
     const handleDsStatusUpdate = async (data: { studentStatus?: string, adminStatus?: string, rejectionReason?: string }) => {
         if (!activeOp) return;
@@ -456,12 +583,14 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                                             </td>
                                             <td className="px-6 py-4 text-right">
                                                 <div className="flex items-center justify-end gap-2">
-                                                    {op.dsData?.studentStatus === 'accepted' && op.dsData?.adminStatus === 'pending' ? (
+                                                    {op.dsData?.studentStatus === 'accepted' && op.dsData?.adminStatus === 'pending' ||
+                                                        op.dsData?.dependencies?.some((d: any) => d.studentStatus === 'accepted' && d.adminStatus === 'pending') ? (
                                                         <div className="flex items-center gap-1.5 px-2 py-1 bg-purple-50 border border-purple-200 rounded-md animate-pulse">
                                                             <div className="w-1.5 h-1.5 bg-purple-500 rounded-full"></div>
                                                             <span className="text-[9px] font-black text-purple-700 uppercase tracking-tighter">Waiting for Admin Approval</span>
                                                         </div>
-                                                    ) : op.dsData?.confirmationDocumentId ? (
+                                                    ) : (op.dsData?.confirmationDocumentId &&
+                                                        (!op.dsData?.dependencies?.length || op.dsData.dependencies.every((d: any) => d.confirmationDocumentId))) ? (
                                                         <div className="flex items-center gap-1.5 px-2 py-1 bg-emerald-50 border border-emerald-200 rounded-md">
                                                             <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div>
                                                             <span className="text-[9px] font-black text-emerald-700 uppercase tracking-tighter">Process Completed</span>
@@ -1223,6 +1352,7 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                                             </div>
                                         </div>
                                     </div>
+
                                 </div>
                             </div>
 
@@ -1391,6 +1521,359 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                             </div>
                         </div>
 
+                        {/* Dependencies Section - Moved Outside Main Grid */}
+                        <div className="pt-8 border-t border-slate-100">
+                            <div className="flex justify-between items-center mb-6">
+                                <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                                    <div className="p-1.5 bg-blue-100 rounded-lg">
+                                        <UserIcon size={20} className="text-blue-600" />
+                                    </div>
+                                    Dependencies ({dsFormData.dependencies.length})
+                                </h3>
+                                <button
+                                    onClick={handleAddDependency}
+                                    className="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center gap-2 bg-blue-50 px-4 py-2 rounded-xl transition-colors hover:bg-blue-100 border border-blue-100 shadow-sm"
+                                >
+                                    <Plus size={16} />
+                                    Add Dependency
+                                </button>
+                            </div>
+
+                            <div className="space-y-8">
+                                {dsFormData.dependencies.map((dep, index) => (
+                                    <div key={index} className="bg-white rounded-3xl p-8 border border-slate-200 shadow-sm relative group">
+                                        {/* Header */}
+                                        <div className="flex items-center justify-between mb-8">
+                                            <span className="text-sm font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-lg border border-slate-200 uppercase tracking-wider">
+                                                Dependent #{index + 1}
+                                            </span>
+                                            <div className="h-px bg-slate-100 flex-1 mx-4"></div>
+                                            <button
+                                                onClick={() => handleRemoveDependency(index)}
+                                                className="text-slate-400 hover:text-rose-600 bg-slate-50 hover:bg-rose-50 p-2 rounded-lg transition-colors border border-slate-100 hover:border-rose-100"
+                                                title="Remove Dependency"
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
+                                        </div>
+
+                                        {/* 2-Column Grid Layout matching Main Box */}
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                            {/* Left Column: Details */}
+                                            <div className="space-y-6">
+                                                <h4 className="text-sm font-bold text-slate-800 border-b border-slate-100 pb-2">dependent Details</h4>
+
+                                                <div className="space-y-4">
+                                                    <div>
+                                                        <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Confirmation Number</label>
+                                                        <input
+                                                            type="text"
+                                                            value={dep.confirmationNumber}
+                                                            onChange={(e) => handleDependencyChange(index, 'confirmationNumber', e.target.value)}
+                                                            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:border-blue-500 outline-none transition-all font-mono font-bold text-slate-700"
+                                                            placeholder="AA00XXXXXX"
+                                                        />
+                                                    </div>
+
+                                                    <div className="grid grid-cols-2 gap-4">
+                                                        <div>
+                                                            <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Start Date</label>
+                                                            <input
+                                                                type="date"
+                                                                value={dep.startDate}
+                                                                onChange={(e) => handleDependencyChange(index, 'startDate', e.target.value)}
+                                                                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:border-blue-500 outline-none transition-all font-medium"
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Expiry Date</label>
+                                                            <input
+                                                                type="date"
+                                                                readOnly
+                                                                value={dep.expiryDate}
+                                                                className="w-full px-4 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-slate-500 font-medium cursor-not-allowed"
+                                                            />
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="grid grid-cols-2 gap-4">
+                                                        <div>
+                                                            <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Security Question</label>
+                                                            <input
+                                                                type="text"
+                                                                value={dep.securityQuestion}
+                                                                onChange={(e) => handleDependencyChange(index, 'securityQuestion', e.target.value)}
+                                                                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:border-blue-500 outline-none transition-all text-sm font-medium"
+                                                                placeholder="Q..."
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Answer</label>
+                                                            <input
+                                                                type="text"
+                                                                value={dep.securityAnswer}
+                                                                onChange={(e) => handleDependencyChange(index, 'securityAnswer', e.target.value)}
+                                                                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:border-blue-500 outline-none transition-all text-sm font-medium"
+                                                                placeholder="A..."
+                                                            />
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="pt-4 border-t border-slate-100">
+                                                        <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Basic DS (Internal Note)</label>
+                                                        <textarea
+                                                            rows={2}
+                                                            value={dep.basicDsBox}
+                                                            onChange={(e) => handleDependencyChange(index, 'basicDsBox', e.target.value)}
+                                                            className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:border-blue-500 outline-none transition-all text-sm font-medium resize-none mb-4 shadow-sm"
+                                                            placeholder="Internal notes..."
+                                                        />
+
+                                                        <div className="flex flex-wrap items-center gap-3">
+                                                            <input
+                                                                type="file"
+                                                                id={`dep-doc-${index}`}
+                                                                className="hidden"
+                                                                onChange={(e) => handleDependencyFileUpload(index, e, 'internal')}
+                                                            />
+                                                            <label
+                                                                htmlFor={`dep-doc-${index}`}
+                                                                className="flex items-center gap-2 bg-slate-100 text-slate-600 px-4 py-2 rounded-lg text-xs font-bold hover:bg-slate-200 transition-all cursor-pointer border border-slate-200"
+                                                            >
+                                                                <Upload size={14} />
+                                                                {dep.documentName ? 'Replace Internal' : 'Upload Internal'}
+                                                            </label>
+
+                                                            {dep.documentId && (
+                                                                <div className="flex items-center gap-3 bg-slate-50 px-3 py-2 rounded-xl border border-slate-100">
+                                                                    <FileText size={14} className="text-slate-400" />
+                                                                    <div className="flex flex-col">
+                                                                        <span className="text-xs font-bold text-slate-700 max-w-[150px] truncate">{dep.documentName}</span>
+                                                                        <div className="flex items-center gap-2 mt-0.5">
+                                                                            <button
+                                                                                onClick={() => handlePreviewFile(dep.documentId!)}
+                                                                                className="text-[10px] font-bold text-slate-500 hover:text-slate-800 transition-colors"
+                                                                            >
+                                                                                Preview
+                                                                            </button>
+                                                                            <button
+                                                                                onClick={() => handleDependencyFileDelete(index, 'internal')}
+                                                                                className="text-[10px] font-bold text-rose-500 hover:text-rose-700 transition-colors"
+                                                                            >
+                                                                                Delete
+                                                                            </button>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Right Column: Filling & Status */}
+                                            <div className="space-y-6">
+                                                {/* DS-160 Filling Section */}
+                                                <div className="bg-blue-50/30 p-6 rounded-3xl border border-blue-100/50">
+                                                    <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                                                        <div className="p-1.5 bg-blue-100 rounded-lg">
+                                                            <FileText size={18} className="text-blue-600" />
+                                                        </div>
+                                                        DS-160 Filling
+                                                    </h3>
+
+                                                    <div className="flex flex-col gap-3">
+                                                        <input
+                                                            type="file"
+                                                            id={`dep-filling-doc-${index}`}
+                                                            className="hidden"
+                                                            onChange={(e) => handleDependencyFileUpload(index, e, 'filling')}
+                                                        />
+                                                        <label
+                                                            htmlFor={`dep-filling-doc-${index}`}
+                                                            className="flex items-center justify-center gap-2 bg-blue-600 text-white px-5 py-3 rounded-xl text-sm font-bold hover:bg-blue-700 transition-all cursor-pointer shadow-md active:scale-95"
+                                                        >
+                                                            <Upload size={16} />
+                                                            Upload Filling Document
+                                                        </label>
+
+                                                        {(dep.fillingDocuments?.length > 0 || dep.fillingDocumentId) ? (
+                                                            <div className="space-y-2 mt-2">
+                                                                {(dep.fillingDocuments || (dep.fillingDocumentId ? [{ id: dep.fillingDocumentId, name: dep.fillingDocumentName }] : [])).map((doc: any, i: number) => (
+                                                                    <div key={doc.id} className="flex items-center gap-3 bg-white px-4 py-3 rounded-2xl border border-blue-100 shadow-sm">
+                                                                        <div className="flex items-center justify-center w-8 h-8 bg-blue-50 text-blue-600 rounded-lg font-bold text-xs shrink-0">
+                                                                            {i + 1}
+                                                                        </div>
+                                                                        <div className="flex-1 min-w-0">
+                                                                            <div className="text-xs font-bold text-slate-700 truncate">{doc.name}</div>
+                                                                            <div className="flex items-center gap-3 mt-1.5 pt-1.5 border-t border-slate-50">
+                                                                                <button
+                                                                                    onClick={() => handlePreviewFile(doc.id)}
+                                                                                    className="flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:text-blue-800 transition-colors"
+                                                                                >
+                                                                                    <Eye size={12} />
+                                                                                    Preview
+                                                                                </button>
+                                                                                <button
+                                                                                    onClick={() => handleDependencyFileDelete(index, 'filling', doc.id)}
+                                                                                    className="flex items-center gap-1 text-[10px] font-bold text-rose-600 hover:text-rose-800 transition-colors ml-auto"
+                                                                                >
+                                                                                    <Trash2 size={12} />
+                                                                                    Delete
+                                                                                </button>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        ) : (
+                                                            <div className="text-center py-4 border-2 border-dashed border-slate-100 rounded-xl">
+                                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">No filling document</p>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                {/* Status & Approvals Section */}
+                                                <div>
+                                                    <h3 className="text-sm font-bold text-slate-800 border-b border-slate-100 pb-2 mb-4">Status & Approvals</h3>
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                        {/* Student Response */}
+                                                        <div className={`p-4 rounded-2xl border ${dep.studentStatus === 'accepted' ? 'bg-emerald-50 border-emerald-100' : dep.studentStatus === 'rejected' ? 'bg-rose-50 border-rose-100' : 'bg-slate-50 border-slate-100'}`}>
+                                                            <div className="flex justify-between items-center mb-2">
+                                                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Student Response</span>
+                                                                <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${dep.studentStatus === 'accepted' ? 'bg-emerald-100 text-emerald-600' : dep.studentStatus === 'rejected' ? 'bg-rose-100 text-rose-600' : 'bg-slate-200 text-slate-600'}`}>
+                                                                    {dep.studentStatus || 'Pending'}
+                                                                </span>
+                                                            </div>
+                                                            {dep.studentStatus === 'accepted' ? (
+                                                                <div className="flex gap-2 items-start mt-2 p-2 bg-white/50 rounded-lg border border-emerald-100">
+                                                                    <CheckCircle size={14} className="text-emerald-500 mt-0.5 shrink-0" />
+                                                                    <p className="text-xs text-emerald-600 font-bold">Approved by student.</p>
+                                                                </div>
+                                                            ) : dep.studentStatus === 'rejected' && dep.rejectionReason ? (
+                                                                <div className="flex gap-2 items-start mt-2 p-2 bg-white/50 rounded-lg border border-rose-100">
+                                                                    <AlertCircle size={14} className="text-rose-500 mt-0.5 shrink-0" />
+                                                                    <p className="text-xs text-rose-600 italic">"Rejected: {dep.rejectionReason}"</p>
+                                                                </div>
+                                                            ) : user?.role === 'Admin' || user?.role === 'Staff' ? (
+                                                                <button
+                                                                    onClick={() => {
+                                                                        if (window.confirm('Are you sure you want to approve this on behalf of the student?')) {
+                                                                            const newDeps = [...dsFormData.dependencies];
+                                                                            newDeps[index].studentStatus = 'accepted';
+                                                                            setDsFormData(prev => ({ ...prev, dependencies: newDeps }));
+                                                                        }
+                                                                    }}
+                                                                    className="w-full mt-2 flex items-center justify-center gap-2 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 hover:text-slate-800 rounded-lg text-xs font-bold transition-all"
+                                                                >
+                                                                    <UserCheck size={14} />
+                                                                    Approve on behalf
+                                                                </button>
+                                                            ) : null}
+                                                        </div>
+
+                                                        {/* Admin Status */}
+                                                        <div className={`p-4 rounded-2xl border ${dep.adminStatus === 'accepted' ? 'bg-emerald-50 border-emerald-100' : dep.adminStatus === 'rejected' ? 'bg-rose-50 border-rose-100' : 'bg-slate-50 border-slate-100'}`}>
+                                                            <div className="flex justify-between items-center mb-2">
+                                                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Admin Status</span>
+                                                                <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${dep.adminStatus === 'accepted' ? 'bg-emerald-100 text-emerald-600' : dep.adminStatus === 'rejected' ? 'bg-rose-100 text-rose-600' : 'bg-slate-200 text-slate-600'}`}>
+                                                                    {dep.adminStatus || 'Pending'}
+                                                                </span>
+                                                            </div>
+
+                                                            {user?.role === 'Admin' && (!dep.adminStatus || dep.adminStatus === 'pending') && (
+                                                                <div className="space-y-2 mt-2">
+                                                                    <div className="flex gap-2">
+                                                                        <button
+                                                                            onClick={() => handleDependencyChange(index, 'adminStatus', 'accepted')}
+                                                                            className="flex-1 bg-emerald-600 text-white py-1.5 rounded-lg font-bold text-xs hover:bg-emerald-700 transition-colors"
+                                                                        >
+                                                                            Accept
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => handleDependencyChange(index, 'adminStatus', 'rejected')}
+                                                                            className="flex-1 bg-rose-600 text-white py-1.5 rounded-lg font-bold text-xs hover:bg-rose-700 transition-colors"
+                                                                        >
+                                                                            Reject
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Confirmation Document Section - Shows only when both accepted */}
+                                                    {dep.studentStatus === 'accepted' && dep.adminStatus === 'accepted' && (
+                                                        <div className="bg-emerald-50/50 p-6 rounded-3xl border border-emerald-100 mt-4">
+                                                            <h3 className="text-sm font-bold text-emerald-800 mb-4 flex items-center gap-2">
+                                                                <ShieldCheck size={16} className="text-emerald-600" />
+                                                                Confirmation Document
+                                                            </h3>
+
+                                                            <div className="flex flex-col gap-3">
+                                                                <input
+                                                                    type="file"
+                                                                    id={`dep-confirmation-doc-${index}`}
+                                                                    className="hidden"
+                                                                    onChange={(e) => handleDependencyFileUpload(index, e, 'confirmation')}
+                                                                />
+                                                                <label
+                                                                    htmlFor={`dep-confirmation-doc-${index}`}
+                                                                    className="flex items-center justify-center gap-2 bg-emerald-600 text-white px-5 py-3 rounded-xl text-sm font-bold hover:bg-emerald-700 transition-all cursor-pointer shadow-md active:scale-95"
+                                                                >
+                                                                    <Upload size={16} />
+                                                                    Upload Confirmation
+                                                                </label>
+
+                                                                {dep.confirmationDocumentId ? (
+                                                                    <div className="flex items-center gap-3 bg-white px-4 py-3 rounded-2xl border border-emerald-100 shadow-sm mt-2">
+                                                                        <div className="flex items-center justify-center w-8 h-8 bg-emerald-50 text-emerald-600 rounded-lg font-bold text-xs shrink-0">
+                                                                            <CheckCircle size={14} />
+                                                                        </div>
+                                                                        <div className="flex-1 min-w-0">
+                                                                            <div className="text-xs font-bold text-slate-700 truncate">{dep.confirmationDocumentName}</div>
+                                                                            <div className="flex items-center gap-3 mt-1.5 pt-1.5 border-t border-slate-50">
+                                                                                <button
+                                                                                    onClick={() => handlePreviewFile(dep.confirmationDocumentId!)}
+                                                                                    className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 hover:text-emerald-800 transition-colors"
+                                                                                >
+                                                                                    <Eye size={12} />
+                                                                                    Preview
+                                                                                </button>
+                                                                                <button
+                                                                                    onClick={() => handleDependencyFileDelete(index, 'confirmation')}
+                                                                                    className="flex items-center gap-1 text-[10px] font-bold text-rose-600 hover:text-rose-800 transition-colors ml-auto"
+                                                                                >
+                                                                                    <Trash2 size={12} />
+                                                                                    Delete
+                                                                                </button>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                ) : (
+                                                                    <div className="text-center py-4 border-2 border-dashed border-emerald-100/50 rounded-xl bg-white/50">
+                                                                        <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">No confirmation uploaded</p>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+
+                                {dsFormData.dependencies.length === 0 && (
+                                    <div className="text-center py-8 border-2 border-dashed border-slate-100 rounded-2xl">
+                                        <p className="text-sm text-slate-400 font-bold">No dependencies added yet.</p>
+                                        <p className="text-xs text-slate-400 mt-1">Click "Add Dependency" to remove this empty state.</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
                         <div className="pt-4 flex justify-end gap-4 border-t border-slate-100">
                             <button
                                 onClick={() => setStep('detail')}
@@ -1463,7 +1946,8 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                                 studentStatus: activeOp?.dsData?.studentStatus || 'pending',
                                 adminStatus: activeOp?.dsData?.adminStatus || 'pending',
                                 rejectionReason: activeOp?.dsData?.rejectionReason || '',
-                                adminName: activeOp?.dsData?.adminName || ''
+                                adminName: activeOp?.dsData?.adminName || '',
+                                dependencies: activeOp?.dsData?.dependencies || []
                             });
                             setStep('ds');
                         }}
@@ -1550,7 +2034,8 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                                             studentStatus: activeOp?.dsData?.studentStatus || 'pending',
                                             adminStatus: activeOp?.dsData?.adminStatus || 'pending',
                                             rejectionReason: activeOp?.dsData?.rejectionReason || '',
-                                            adminName: activeOp?.dsData?.adminName || ''
+                                            adminName: activeOp?.dsData?.adminName || '',
+                                            dependencies: activeOp?.dsData?.dependencies || []
                                         });
                                         setStep('ds');
                                     }}

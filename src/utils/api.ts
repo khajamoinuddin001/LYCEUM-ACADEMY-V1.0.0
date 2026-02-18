@@ -912,6 +912,52 @@ export const updateDs160Status = async (
   });
 };
 
+export const uploadDs160DependencyDocument = async (id: number, file: File, type: 'internal' | 'filling' | 'confirmation' = 'internal'): Promise<any> => {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('type', type);
+
+  // We need to use raw fetch here because apiRequest handles JSON by default and doesn't support FormData automatically unless we customize it, 
+  // or maybe apiRequest DOES check for FormData? 
+  // Looking at other upload functions, they seem to use raw fetch or a customized call.
+  // Wait, the previous `uploadDs160Document` (if visible) might show how it's done. 
+  // But to be safe and consistent with the code I replaced (which was using raw fetch logic implicitly or explicitly), 
+  // I will use `apiRequest` but I need to make sure `apiRequest` handles FormData. 
+  // Actually, checking `uploadDs160Document` earlier (it wasn't fully visible but `uploadDs160Document` was imported).
+  // Let's assume `apiRequest` handles it if I don't set Content-Type header. 
+  // BUT the previous diff showed `uploadDs160DependencyDocument` using `apiRequest`... wait, no. 
+  // The snippet I removed in the PREVIOUS step had `const response = await fetch(...)`.
+  // So I should probably stick to `fetch` to be safe, OR fix `apiRequest`.
+  // The `uploadDs160Document` implementation (which I verified earlier uses `uploadDs160Document` in `visa_operations_view.tsx`) likely uses `fetch` or a special handler.
+
+  // Let's look at `uploadDs160Document` in `api.ts` if I can... 
+  // I'll stick to `fetch` pattern which was there before I messed it up, just to be safe.
+
+  const token = getToken();
+  const headers: HeadersInit = {
+    ...(token && { 'Authorization': `Bearer ${token}` }),
+  };
+
+  const response = await fetch(`${API_BASE_URL}/visa-operations/${id}/ds-160/dependency/document`, {
+    method: 'POST',
+    headers,
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Upload failed' }));
+    throw new Error(error.error || `HTTP ${response.status}`);
+  }
+
+  return response.json();
+};
+
+export const deleteDs160DependencyDocument = async (id: number, itemId: number): Promise<any> => {
+  return apiRequest<any>(`/visa-operations/${id}/ds-160/dependency/document/${itemId}`, {
+    method: 'DELETE',
+  });
+};
+
 export const saveEvent = async (eventData: Omit<CalendarEvent, 'id'> & { id?: number }): Promise<CalendarEvent[]> => {
   if (eventData.id) {
     await apiRequest(`/events/${eventData.id}`, {
