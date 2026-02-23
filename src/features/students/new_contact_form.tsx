@@ -6,6 +6,7 @@ import VideoRecordingModal from '@/features/shared/video_recording_modal';
 import CameraModal from '@/features/shared/camera_modal';
 import { uploadContactPhoto } from '@/utils/api';
 import { VisaOperationsView } from '../visa/visa_operations_view';
+import ContactUniversityApplicationsView from './contact_university_applications';
 import { VisaOperation } from '@/types';
 
 interface NewContactFormProps {
@@ -97,7 +98,7 @@ const SessionPlayer: React.FC<{
                     >
                         <Trash2 size={14} />
                     </button>
-                    <ChevronDown size={16} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                    <ChevronDown size={16} className={`transition - transform ${isOpen ? 'rotate-180' : ''} `} />
                 </div>
             </div>
             {isOpen && (
@@ -218,7 +219,7 @@ const NewContactForm: React.FC<NewContactFormProps> = ({
     onOperationCreated,
     onPrintTransaction
 }) => {
-    const [currentTab, setCurrentTab] = useState<'details' | 'finance' | 'visa'>('details');
+    const [currentTab, setCurrentTab] = useState<'details' | 'finance' | 'visa' | 'university'>('details');
     const [formData, setFormData] = useState(initialFormState);
     const [isSummarizing, setIsSummarizing] = useState(false);
     const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
@@ -472,7 +473,7 @@ const NewContactForm: React.FC<NewContactFormProps> = ({
                         >
                             {formData.avatarUrl ? (
                                 <img
-                                    src={formData.avatarUrl.startsWith('blob:') || formData.avatarUrl.startsWith('http') ? formData.avatarUrl : `${import.meta.env.VITE_API_URL}${formData.avatarUrl}`}
+                                    src={formData.avatarUrl.startsWith('blob:') || formData.avatarUrl.startsWith('http') ? formData.avatarUrl : `${import.meta.env.VITE_API_URL}${formData.avatarUrl} `}
                                     alt="Contact Avatar"
                                     className="w-full h-full object-cover"
                                 />
@@ -506,7 +507,7 @@ const NewContactForm: React.FC<NewContactFormProps> = ({
                 </div>
             </div>
 
-            <div className="flex border-b border-gray-200 dark:border-gray-700 px-6 overflow-x-auto whitespace-nowrap">
+            <div className="flex border-b border-gray-200 dark:border-gray-700 px-6 overflow-x-auto whitespace-nowrap custom-scrollbar">
                 <button
                     onClick={() => setCurrentTab('details')}
                     className={`px-1 py-3 font-semibold transition-colors ${currentTab === 'details' ? 'text-lyceum-blue border-b-2 border-lyceum-blue' : 'text-gray-500 dark:text-gray-400 hover:text-lyceum-blue'}`}
@@ -528,12 +529,20 @@ const NewContactForm: React.FC<NewContactFormProps> = ({
                 <button onClick={onNavigateToCRM} disabled={!contact} className="ml-4 px-1 py-3 font-medium text-gray-500 dark:text-gray-400 hover:text-lyceum-blue disabled:opacity-50 disabled:cursor-not-allowed">CRM</button>
                 <button onClick={onNavigateToTasks} disabled={!contact} className="ml-4 px-1 py-3 font-medium text-gray-500 dark:text-gray-400 hover:text-lyceum-blue disabled:opacity-50 disabled:cursor-not-allowed">Tasks</button>
                 <button onClick={onNavigateToCourses} disabled={!contact} className="ml-4 px-1 py-3 font-medium text-gray-500 dark:text-gray-400 hover:text-lyceum-blue disabled:opacity-50 disabled:cursor-not-allowed">Courses</button>
+
                 <button
                     onClick={() => setCurrentTab('visa')}
                     disabled={!contact}
                     className={`ml-4 px-1 py-3 font-semibold transition-colors disabled:opacity-50 ${currentTab === 'visa' ? 'text-lyceum-blue border-b-2 border-lyceum-blue' : 'text-gray-500 dark:text-gray-400 hover:text-lyceum-blue'}`}
                 >
                     Visa Operations
+                </button>
+                <button
+                    onClick={() => setCurrentTab('university')}
+                    disabled={!contact}
+                    className={`ml-4 px-1 py-3 font-semibold transition-colors disabled:opacity-50 ${currentTab === 'university' ? 'text-lyceum-blue border-b-2 border-lyceum-blue' : 'text-gray-500 dark:text-gray-400 hover:text-lyceum-blue'}`}
+                >
+                    University Application
                 </button>
             </div>
 
@@ -666,11 +675,11 @@ const NewContactForm: React.FC<NewContactFormProps> = ({
                                             </td>
                                             <td className="px-6 py-4 text-gray-500 max-w-xs truncate">{tx.description}</td>
                                             <td className="px-6 py-4 whitespace-nowrap">
-                                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${tx.status === 'Paid' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                                                <span className={`px - 2 py - 0.5 rounded - full text - [10px] font - bold uppercase ${tx.status === 'Paid' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'} `}>
                                                     {tx.status}
                                                 </span>
                                             </td>
-                                            <td className={`px-6 py-4 whitespace-nowrap text-right font-bold ${tx.amount > 0 ? 'text-green-600' : 'text-red-500'}`}>
+                                            <td className={`px - 6 py - 4 whitespace - nowrap text - right font - bold ${tx.amount > 0 ? 'text-green-600' : 'text-red-500'} `}>
                                                 ₹{Math.abs(tx.amount).toLocaleString('en-IN')}
                                             </td>
                                         </tr>
@@ -692,6 +701,10 @@ const NewContactForm: React.FC<NewContactFormProps> = ({
                         existingOperations={visaOperations?.filter(op => op.contactId === contact?.id)}
                         onOperationCreated={onOperationCreated}
                     />
+                </div>
+            ) : currentTab === 'university' && contact ? (
+                <div className="p-6">
+                    <ContactUniversityApplicationsView contact={contact} />
                 </div>
             ) : null}
 
@@ -755,7 +768,7 @@ const NewContactForm: React.FC<NewContactFormProps> = ({
 
                         <ul className="space-y-4 max-h-96 overflow-y-auto custom-scrollbar pr-2">
                             {contact?.activityLog?.map((activity, index) => (
-                                <li key={`${activity.id}-${index}`} className="flex items-start gap-3">
+                                <li key={`${activity.id} -${index} `} className="flex items-start gap-3">
                                     <ActivityIcon action={activity.action} />
                                     <div>
                                         <p className="text-sm text-gray-700 dark:text-gray-200">{activity.description}</p>
@@ -809,14 +822,14 @@ const NewContactForm: React.FC<NewContactFormProps> = ({
             />
 
             <style>{`
-            @keyframes fade-in {
-            from { opacity: 0; transform: translateY(10px); }
+@keyframes fade -in {
+    from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
             }
-            .animate-fade-in {
-            animation: fade-in 0.3s ease-out forwards;
+            .animate - fade -in {
+    animation: fade -in 0.3s ease- out forwards;
             }
-        `}</style>
+`}</style>
         </div>
     );
 };

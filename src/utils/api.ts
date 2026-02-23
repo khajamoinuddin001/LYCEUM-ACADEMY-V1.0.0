@@ -1,4 +1,7 @@
-import type { CalendarEvent, Contact, CrmLead, AccountingTransaction, CrmStage, Quotation, User, UserRole, AppPermissions, ActivityLog, DocumentAnalysisResult, Document as Doc, ChecklistItem, QuotationTemplate, Visitor, TodoTask, Ticket, PaymentActivityLog, LmsCourse, LmsLesson, LmsModule, Coupon, ContactActivity, ContactActivityAction, DiscussionPost, DiscussionThread, RecordedSession, Channel, Notification, RecurringTask, VisaOperation } from '../types';
+import type {
+  CalendarEvent, Contact, CrmLead, AccountingTransaction, CrmStage, Quotation, User, UserRole, AppPermissions, ActivityLog, DocumentAnalysisResult, Document as Doc, ChecklistItem, QuotationTemplate, Visitor, TodoTask, Ticket, PaymentActivityLog, LmsCourse, LmsLesson, LmsModule, Coupon, ContactActivity, ContactActivityAction, DiscussionPost, DiscussionThread, RecordedSession, Channel, Notification, RecurringTask, VisaOperation,
+  UniversityCourse
+} from '../types';
 import { DEFAULT_PERMISSIONS, DEFAULT_CHECKLIST } from '@/lib/constants';
 
 export const API_BASE_URL = import.meta.env.VITE_API_URL;
@@ -799,6 +802,58 @@ export const uploadPaymentQr = async (file: File) => {
   }
 
   return await response.json();
+};
+
+// University Courses
+export const getUniversityCourses = async (country?: string): Promise<UniversityCourse[]> => {
+  let url = '/university-courses';
+  if (country) {
+    url += `?country=${encodeURIComponent(country)}`;
+  }
+  return apiRequest<UniversityCourse[]>(url);
+};
+
+export const createUniversityCourse = async (data: Omit<UniversityCourse, 'id' | 'createdAt'>): Promise<UniversityCourse> => {
+  return apiRequest<UniversityCourse>('/university-courses', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  });
+};
+
+export const updateUniversityCourse = async (id: number, data: Omit<UniversityCourse, 'id' | 'createdAt'>): Promise<UniversityCourse> => {
+  return apiRequest<UniversityCourse>(`/university-courses/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data)
+  });
+};
+
+export const deleteUniversityCourse = async (id: number): Promise<void> => {
+  return apiRequest(`/university-courses/${id}`, {
+    method: 'DELETE',
+  });
+};
+
+export const uploadUniversityLogo = async (id: number, file: Blob): Promise<{ logoUrl: string }> => {
+  const formData = new FormData();
+  formData.append('logo', file);
+
+  const token = getToken();
+  const headers: HeadersInit = {
+    ...(token && { 'Authorization': `Bearer ${token}` }),
+  };
+
+  const response = await fetch(`${API_BASE_URL}/university-courses/${id}/logo`, {
+    method: 'POST',
+    headers,
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Failed to upload logo' }));
+    throw new Error(error.error || `HTTP ${response.status}`);
+  }
+
+  return response.json();
 };
 
 export const applyLeave = async (leave: { startDate: string; endDate: string; reason: string }) => {

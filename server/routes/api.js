@@ -875,10 +875,21 @@ router.delete('/contacts/:id', authenticateToken, async (req, res) => {
     // Finally, delete the contact
     await query('DELETE FROM contacts WHERE id = $1', [contactId]);
 
-    // If contact has a linked user, delete the user account as well
+    // If contact has a linked user, attempt to delete the user account as well
     if (contact.user_id) {
-      await query('DELETE FROM users WHERE id = $1', [contact.user_id]);
-      console.log(`Associated user account (ID: ${contact.user_id}) deleted for contact ${contactId}`);
+      // Check if there are ANY OTHER contacts tied to this same user_id (e.g., duplicates)
+      const otherContactsQuery = await query('SELECT id FROM contacts WHERE user_id = $1', [contact.user_id]);
+
+      if (otherContactsQuery.rows.length > 0) {
+        console.log(`Skipping user account deletion (ID: ${contact.user_id}) because other contacts reference it.`);
+      } else {
+        try {
+          await query('DELETE FROM users WHERE id = $1', [contact.user_id]);
+          console.log(`Associated user account (ID: ${contact.user_id}) deleted for contact ${contactId}`);
+        } catch (userDeleteError) {
+          console.warn(`Could not delete associated user (ID: ${contact.user_id}) due to foreign key constraints in other tables. Skipping user deletion.`);
+        }
+      }
     }
 
     res.json({ success: true, message: 'Contact and associated records processed successfully' });
@@ -5237,7 +5248,233 @@ router.delete('/visitors/:id', authenticateToken, async (req, res) => {
   }
 });
 
+
+// ==========================================
+// UNIVERSITY COURSES ROUTES
+// ==========================================
+
+// Get all university courses (with optional filtering)
+router.get('/university-courses', authenticateToken, async (req, res) => {
+  try {
+    const { country } = req.query;
+    let queryText = 'SELECT * FROM university_courses';
+    const params = [];
+
+    if (country) {
+      queryText += ' WHERE country = $1';
+      params.push(country);
+    }
+
+    queryText += ' ORDER BY university_name, course_name';
+
+    const result = await query(queryText, params);
+    res.json(result.rows.map(row => ({
+      id: row.id,
+      universityName: row.university_name,
+      country: row.country,
+      courseName: row.course_name,
+      intake: row.intake,
+      minSscPercent: parseFloat(row.min_ssc_percent),
+      minInterPercent: parseFloat(row.min_inter_percent),
+      minDegreePercent: row.min_degree_percent ? parseFloat(row.min_degree_percent) : null,
+      requiredExam: row.required_exam,
+      minExamScore: row.min_exam_score ? parseFloat(row.min_exam_score) : null,
+      acceptedExams: row.accepted_exams || [],
+      applicationFee: row.application_fee,
+      enrollmentDeposit: row.enrollment_deposit,
+      wesRequirement: row.wes_requirement,
+      logoUrl: row.logo_url,
+      createdAt: row.created_at
+    })));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Create a new university course (Admin/Staff only)
+router.post('/university-courses', authenticateToken, async (req, res) => {
+  if (req.user.role === 'Student') {
+    return res.status(403).json({ error: 'Permission denied' });
+  }
+
+  try {
+    const {
+      universityName, country, courseName, intake,
+      minSscPercent, minInterPercent, minDegreePercent,
+      requiredExam, minExamScore, acceptedExams,
+      applicationFee, enrollmentDeposit, wesRequirement
+    } = req.body;
+
+    const result = await query(`
+      INSERT INTO university_courses (
+        university_name, country, course_name, intake,
+        min_ssc_percent, min_inter_percent, min_degree_percent,
+        required_exam, min_exam_score, accepted_exams,
+        application_fee, enrollment_deposit, wes_requirement
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      RETURNING *
+    `, [
+      universityName, country, courseName, intake,
+      minSscPercent, minInterPercent, minDegreePercent,
+      requiredExam, minExamScore,
+      JSON.stringify(acceptedExams || []),
+      applicationFee, enrollmentDeposit, wesRequirement
+    ]);
+
+    const row = result.rows[0];
+    res.status(201).json({
+      id: row.id,
+      universityName: row.university_name,
+      country: row.country,
+      courseName: row.course_name,
+      intake: row.intake,
+      minSscPercent: parseFloat(row.min_ssc_percent),
+      minInterPercent: parseFloat(row.min_inter_percent),
+      minDegreePercent: row.min_degree_percent ? parseFloat(row.min_degree_percent) : null,
+      requiredExam: row.required_exam,
+      minExamScore: row.min_exam_score ? parseFloat(row.min_exam_score) : null,
+      acceptedExams: row.accepted_exams || [],
+      applicationFee: row.application_fee,
+      enrollmentDeposit: row.enrollment_deposit,
+      wesRequirement: row.wes_requirement,
+      logoUrl: row.logo_url,
+      createdAt: row.created_at
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update a university course (Admin/Staff only)
+router.put('/university-courses/:id', authenticateToken, async (req, res) => {
+  if (req.user.role === 'Student') {
+    return res.status(403).json({ error: 'Permission denied' });
+  }
+
+  try {
+    const {
+      universityName, country, courseName, intake,
+      minSscPercent, minInterPercent, minDegreePercent,
+      requiredExam, minExamScore, acceptedExams,
+      applicationFee, enrollmentDeposit, wesRequirement
+    } = req.body;
+
+    const result = await query(`
+      UPDATE university_courses
+      SET university_name = $1, country = $2, course_name = $3, intake = $4,
+          min_ssc_percent = $5, min_inter_percent = $6, min_degree_percent = $7,
+          required_exam = $8, min_exam_score = $9, accepted_exams = $10,
+          application_fee = $11, enrollment_deposit = $12, wes_requirement = $13
+      WHERE id = $14
+      RETURNING *
+    `, [
+      universityName, country, courseName, intake,
+      minSscPercent, minInterPercent, minDegreePercent,
+      requiredExam, minExamScore,
+      JSON.stringify(acceptedExams || []),
+      applicationFee, enrollmentDeposit, wesRequirement,
+      req.params.id
+    ]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Course not found' });
+    }
+
+    const row = result.rows[0];
+    res.json({
+      id: row.id,
+      universityName: row.university_name,
+      country: row.country,
+      courseName: row.course_name,
+      intake: row.intake,
+      minSscPercent: parseFloat(row.min_ssc_percent),
+      minInterPercent: parseFloat(row.min_inter_percent),
+      minDegreePercent: row.min_degree_percent ? parseFloat(row.min_degree_percent) : null,
+      requiredExam: row.required_exam,
+      minExamScore: row.min_exam_score ? parseFloat(row.min_exam_score) : null,
+      acceptedExams: row.accepted_exams || [],
+      applicationFee: row.application_fee,
+      enrollmentDeposit: row.enrollment_deposit,
+      wesRequirement: row.wes_requirement,
+      logoUrl: row.logo_url,
+      createdAt: row.created_at
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete a university course (Admin/Staff only)
+router.delete('/university-courses/:id', authenticateToken, async (req, res) => {
+  if (req.user.role === 'Student') {
+    return res.status(403).json({ error: 'Permission denied' });
+  }
+
+  try {
+    const result = await query('DELETE FROM university_courses WHERE id = $1', [req.params.id]);
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Course not found' });
+    }
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
+// Serve university logo from DB
+router.get('/university-courses/:id/logo', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await query('SELECT logo_data, logo_mimetype FROM university_courses WHERE id = $1', [id]);
+
+    if (result.rows.length === 0 || !result.rows[0].logo_data) {
+      return res.status(404).send('Logo not found');
+    }
+
+    const { logo_data, logo_mimetype } = result.rows[0];
+    res.setHeader('Content-Type', logo_mimetype || 'image/jpeg');
+    res.send(logo_data);
+  } catch (error) {
+    console.error('Error serving logo:', error);
+    res.status(500).send('Error serving logo');
+  }
+});
+
+// University logo upload route (DB Storage)
+router.post('/university-courses/:id/logo', authenticateToken, uploadAvatar.single('logo'), async (req, res) => {
+  if (req.user.role === 'Student') {
+    return res.status(403).json({ error: 'Permission denied' });
+  }
+
+  try {
+    const courseId = parseInt(req.params.id);
+    if (!req.file) {
+      return res.status(400).json({ error: 'No logo uploaded' });
+    }
+
+    const file = req.file;
+    const logoUrl = `/university-courses/${courseId}/logo?t=${Date.now()}`;
+
+    // Update logo_data, mimetype, and set the URL to point to our serving endpoint
+    const result = await query(
+      'UPDATE university_courses SET logo_url = $1, logo_data = $2, logo_mimetype = $3 WHERE id = $4 RETURNING logo_url',
+      [logoUrl, file.buffer, file.mimetype, courseId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Course not found' });
+    }
+
+    res.json({ success: true, logoUrl: result.rows[0].logo_url });
+  } catch (error) {
+    console.error('Error uploading logo:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;
 // trigger reload 1770196752
 // trigger reload 1770196793
 // trigger reload 1770196806
+// trigger reload 1770196899

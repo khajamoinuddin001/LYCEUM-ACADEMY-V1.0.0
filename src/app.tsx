@@ -73,6 +73,8 @@ import DepartmentDashboard from '@/features/dashboard/department_dashboard';
 import AttendanceView from '@/features/hr/attendance_view';
 import { TermsView, PrivacyView, LandingDocumentsView } from '@/features/shared/legal_views';
 import StudentDocumentsView from '@/features/students/student_documents_view';
+import StudentUniversityApplicationView from '@/features/students/student_university_view';
+import UniversityManager from '@/features/admin/university_manager';
 import MarketingView from '@/features/marketing/marketing_view';
 import {
   DndContext,
@@ -82,6 +84,8 @@ import {
   useSensor,
   useSensors,
   DragEndEvent,
+  DragStartEvent,
+  DragOverlay,
 } from '@dnd-kit/core';
 import {
   arrayMove,
@@ -159,6 +163,7 @@ const DashboardLayout: React.FC = () => {
   const [editingTask, setEditingTask] = useState<TodoTask | null>(null);
   const [taskFilters, setTaskFilters] = useState<{ userId?: number; all?: boolean }>({});
   const taskFiltersRef = useRef(taskFilters);
+  const [activeDragId, setActiveDragId] = useState<string | null>(null);
 
   // Keep ref in sync with state
   useEffect(() => {
@@ -261,7 +266,11 @@ const DashboardLayout: React.FC = () => {
 
   useEffect(() => {
     if (currentUser) {
-      const availableApps = ODOO_APPS.filter(app => currentUser.role === 'Admin' || app.name in (currentUser.permissions || {}));
+      const studentOnlyApps = ['Visa Application', 'Documents', 'Quotations', 'My Profile'];
+      const availableApps = ODOO_APPS.filter(app => {
+        if (studentOnlyApps.includes(app.name)) return false;
+        return currentUser.role === 'Admin' || app.name in (currentUser.permissions || {});
+      });
 
       const savedOrder = localStorage.getItem(APPS_STORAGE_KEY);
       if (savedOrder) {
@@ -293,7 +302,12 @@ const DashboardLayout: React.FC = () => {
     })
   );
 
+  const handleGlobalDragStart = (event: DragStartEvent) => {
+    setActiveDragId(String(event.active.id));
+  };
+
   const handleGlobalDragEnd = (event: DragEndEvent) => {
+    setActiveDragId(null);
     const { active, over } = event;
     if (!over) return;
 
@@ -1924,9 +1938,9 @@ const DashboardLayout: React.FC = () => {
         />
       );
       case 'Visitor Display': return <VisitorDisplay />;
-      case 'Department Dashboard': return <DepartmentDashboard user={currentUser} tickets={tickets} onViewVisits={handleViewContactVisits} onTicketSelect={(ticketId) => { setSelectedTicketId(ticketId); setActiveApp('Tickets'); }} />;
       case 'Attendance': return <AttendanceView user={currentUser} users={users} onUpdateUser={handleUpdateUser} />;
       case 'Analytics': return <MarketingView />;
+      case 'University Manager': return <UniversityManager user={currentUser} />;
       default: return <AppView appName={activeApp} onNavigateBack={() => handleAppSelect('Apps')} />;
     }
   }
@@ -2011,6 +2025,7 @@ const DashboardLayout: React.FC = () => {
     <DndContext
       sensors={sensors}
       collisionDetection={closestCenter}
+      onDragStart={handleGlobalDragStart}
       onDragEnd={handleGlobalDragEnd}
       modifiers={[restrictToWindowEdges]}
     >
@@ -2136,6 +2151,22 @@ const DashboardLayout: React.FC = () => {
                   return <StudentVisaView operations={visaOperations} />;
                 }
 
+                // Student University Application Page
+                if (activeApp === 'University Application') {
+                  const studentContact = contacts.find(c =>
+                    c.userId === currentUser.id ||
+                    (c.email && currentUser.email && c.email.toLowerCase() === currentUser.email.toLowerCase())
+                  );
+                  return studentContact ? (
+                    <StudentUniversityApplicationView
+                      student={studentContact}
+                      onNavigateBack={() => handleAppSelect('Apps')}
+                      onSave={handleSaveContact}
+                      onNavigateToTickets={() => handleAppSelect('Tickets')}
+                    />
+                  ) : <div>Loading...</div>;
+                }
+
                 // Student Dashboard (default)
                 if (activeApp === 'student_dashboard' || activeApp === 'dashboard') {
                   // Robustly find the student contact
@@ -2208,6 +2239,18 @@ const DashboardLayout: React.FC = () => {
           </>
         )}
       </div>
+      <DragOverlay dropAnimation={{ duration: 250, easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)' }}>
+        {activeDragId ? (
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.3)] p-4 border-2 border-lyceum-blue/50 w-64 opacity-95 backdrop-blur-md rotate-3 scale-105 transition-all">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-lyceum-blue/10 flex items-center justify-center shrink-0">
+                <div className="w-6 h-6 bg-lyceum-blue rounded-md shadow-sm" />
+              </div>
+              <span className="font-black tracking-tight text-gray-900 dark:text-white text-lg">{activeDragId}</span>
+            </div>
+          </div>
+        ) : null}
+      </DragOverlay>
     </DndContext>
   );
 };

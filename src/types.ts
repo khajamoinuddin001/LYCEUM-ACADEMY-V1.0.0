@@ -192,11 +192,20 @@ export interface VisaInformation {
     academicInformation?: {
       passingBodyUniversity?: string;
       passingYear?: string;
+      sscPercentage?: string;
+      intermediatePercentage?: string;
+      degreePercentage?: string;
+      major?: 'Bachelors' | 'Masters';
     };
     languageProficiency?: {
       languageProficiency?: string;
       score?: string;
       examDate?: string;
+    };
+    applicationState?: {
+      step?: number;
+      basket?: { courseId: number; courseName: string }[];
+      selectedCountry?: string;
     };
   };
   adminControl?: {
@@ -643,4 +652,23 @@ export interface VisaOperation {
     adminName?: string;
   };
   showCgiOnPortal?: boolean;
+}
+
+export interface UniversityCourse {
+  id: number;
+  universityName: string;
+  country: string;
+  courseName: string;
+  intake: string;
+  minSscPercent: number;
+  minInterPercent: number;
+  minDegreePercent?: number;
+  requiredExam?: string; // Legacy field, kept for compatibility if needed
+  minExamScore?: number; // Legacy field
+  acceptedExams?: { exam: string; score: number }[]; // New field for multiple exams
+  applicationFee?: string;
+  enrollmentDeposit?: string;
+  wesRequirement?: string;
+  logoUrl?: string;
+  createdAt?: string;
 }

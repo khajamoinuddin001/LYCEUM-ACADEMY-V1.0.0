@@ -1,5 +1,8 @@
 import React from 'react';
-import { BookOpen, FileText, User, Paperclip, Receipt, CheckCircle2, MessagesSquare } from 'lucide-react';
+import { BookOpen, FileText, User, Paperclip, Receipt, CheckCircle2, MessagesSquare, GraduationCap } from 'lucide-react';
+
+import { useDraggable } from '@dnd-kit/core';
+import { CSS } from '@dnd-kit/utilities';
 
 interface StudentAppsViewProps {
     onAppSelect: (appName: string) => void;
@@ -12,6 +15,62 @@ interface AppCard {
     bgColor: string;
     iconColor: string;
 }
+
+const DraggableAppCard: React.FC<{ app: AppCard, onAppSelect: (appName: string) => void }> = ({ app, onAppSelect }) => {
+    const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+        id: app.name,
+        data: { name: app.name, type: 'APP_GRID_ITEM' }
+    });
+
+    const style = {
+        transform: CSS.Translate.toString(transform),
+        zIndex: isDragging ? 50 : 'auto',
+        opacity: isDragging ? 0.3 : 1,
+    };
+
+    return (
+        <button
+            ref={setNodeRef}
+            style={style}
+            {...attributes}
+            {...listeners}
+            onClick={() => !isDragging && onAppSelect(app.name)}
+            className={`group relative bg-white dark:bg-gray-800 rounded-xl shadow-md hover:shadow-xl transition-all duration-300 p-6 text-left border border-gray-200 dark:border-gray-700 hover:border-lyceum-blue dark:hover:border-lyceum-blue transform hover:-translate-y-1 cursor-grab active:cursor-grabbing ${isDragging ? 'shadow-2xl scale-105 ring-2 ring-blue-500' : ''}`}
+        >
+            {/* Icon Container */}
+            <div className={`${app.bgColor} ${app.iconColor} w-20 h-20 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300`}>
+                {app.icon}
+            </div>
+
+            {/* App Name */}
+            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2 group-hover:text-lyceum-blue dark:group-hover:text-lyceum-blue transition-colors">
+                {app.name}
+            </h3>
+
+            {/* Description */}
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+                {app.description}
+            </p>
+
+            {/* Hover Arrow */}
+            <div className="absolute top-6 right-6 opacity-0 group-hover:opacity-100 transition-opacity">
+                <svg
+                    className="w-6 h-6 text-lyceum-blue"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                >
+                    <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 5l7 7-7 7"
+                    />
+                </svg>
+            </div>
+        </button>
+    );
+};
 
 const StudentAppsView: React.FC<StudentAppsViewProps> = ({ onAppSelect }) => {
     const apps: AppCard[] = [
@@ -78,6 +137,13 @@ const StudentAppsView: React.FC<StudentAppsViewProps> = ({ onAppSelect }) => {
             bgColor: 'bg-teal-100 dark:bg-teal-900/20',
             iconColor: 'text-teal-600 dark:text-teal-400',
         },
+        {
+            name: 'University Application',
+            icon: <GraduationCap size={48} />,
+            description: 'Track your university applications and admission status',
+            bgColor: 'bg-indigo-100 dark:bg-indigo-900/20',
+            iconColor: 'text-indigo-600 dark:text-indigo-400',
+        },
     ];
 
     return (
@@ -94,48 +160,7 @@ const StudentAppsView: React.FC<StudentAppsViewProps> = ({ onAppSelect }) => {
                 {/* Apps Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {apps.map((app) => (
-                        <button
-                            key={app.name}
-                            onClick={() => onAppSelect(app.name)}
-                            draggable
-                            onDragStart={(e) => {
-                                e.dataTransfer.setData('application/json', JSON.stringify({ name: app.name, type: 'APP_GRID_ITEM' }));
-                                e.dataTransfer.effectAllowed = 'copyMove';
-                            }}
-                            className="group relative bg-white dark:bg-gray-800 rounded-xl shadow-md hover:shadow-xl transition-all duration-300 p-6 text-left border border-gray-200 dark:border-gray-700 hover:border-lyceum-blue dark:hover:border-lyceum-blue transform hover:-translate-y-1 cursor-grab active:cursor-grabbing"
-                        >
-                            {/* Icon Container */}
-                            <div className={`${app.bgColor} ${app.iconColor} w-20 h-20 rounded-2xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300`}>
-                                {app.icon}
-                            </div>
-
-                            {/* App Name */}
-                            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2 group-hover:text-lyceum-blue dark:group-hover:text-lyceum-blue transition-colors">
-                                {app.name}
-                            </h3>
-
-                            {/* Description */}
-                            <p className="text-sm text-gray-600 dark:text-gray-400">
-                                {app.description}
-                            </p>
-
-                            {/* Hover Arrow */}
-                            <div className="absolute top-6 right-6 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <svg
-                                    className="w-6 h-6 text-lyceum-blue"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
-                                >
-                                    <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M9 5l7 7-7 7"
-                                    />
-                                </svg>
-                            </div>
-                        </button>
+                        <DraggableAppCard key={app.name} app={app} onAppSelect={onAppSelect} />
                     ))}
                 </div>
 

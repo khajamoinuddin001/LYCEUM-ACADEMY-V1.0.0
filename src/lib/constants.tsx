@@ -143,6 +143,36 @@ export const ODOO_APPS: OdooApp[] = [
     bgColor: 'bg-orange-100',
     iconColor: 'text-orange-600',
   },
+  {
+    name: 'Documents',
+    icon: <Paperclip size={36} />,
+    bgColor: 'bg-green-100',
+    iconColor: 'text-green-600',
+  },
+  {
+    name: 'Visa Application',
+    icon: <FileText size={36} />,
+    bgColor: 'bg-orange-100',
+    iconColor: 'text-orange-600',
+  },
+  {
+    name: 'Quotations',
+    icon: <FileText size={36} />,
+    bgColor: 'bg-indigo-100',
+    iconColor: 'text-indigo-600',
+  },
+  {
+    name: 'My Profile',
+    icon: <UserCircle size={36} />,
+    bgColor: 'bg-purple-100',
+    iconColor: 'text-purple-600',
+  },
+  {
+    name: 'University Manager',
+    icon: <Cog size={36} />, // Using Cog for management, could be GraduationCap too
+    bgColor: 'bg-indigo-100',
+    iconColor: 'text-indigo-600',
+  },
 ];
 
 export const STAFF_ROLES: UserRole[] = ['Admin', 'Staff'];
@@ -155,7 +185,7 @@ const adminPermissions = ODOO_APPS.reduce((acc, app) => {
   return acc;
 }, {} as { [appName: string]: AppPermissions });
 
-const employeeFullAccessApps = new Set(['Contacts', 'CRM', 'Calendar', 'Discuss', 'Tasks', 'Tickets', 'Reception', 'Sales', 'Analytics', 'LMS', 'Visitor Display', 'Department Dashboard', 'Attendance', 'University Application']);
+const employeeFullAccessApps = new Set(['Contacts', 'CRM', 'Calendar', 'Discuss', 'Tasks', 'Tickets', 'Reception', 'Sales', 'Analytics', 'LMS', 'Visitor Display', 'Department Dashboard', 'Attendance', 'University Application', 'University Manager']);
 const employeeReadOnlyApps = new Set(['dashboard', 'Accounts']);
 const employeePermissions: { [appName: string]: AppPermissions } = ODOO_APPS.reduce((acc, app) => {
   if (employeeFullAccessApps.has(app.name)) {
@@ -173,6 +203,10 @@ export const DEFAULT_PERMISSIONS: Record<UserRole, { [appName: string]: AppPermi
     'LMS': readOnly,
     'Discuss': fullAccess,
     'Visa Application': fullAccess,
+    'Documents': fullAccess,
+    'Accounts': fullAccess,
+    'Quotations': fullAccess,
+    'My Profile': fullAccess,
   },
 };
 

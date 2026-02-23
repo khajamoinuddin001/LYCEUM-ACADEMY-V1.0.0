@@ -772,6 +772,60 @@ export async function initDatabase() {
     await client.query('ALTER TABLE visa_operations ADD COLUMN IF NOT EXISTS rejection_reason TEXT');
     await client.query('ALTER TABLE visa_operations ADD COLUMN IF NOT EXISTS admin_name TEXT');
 
+    // UNIVERSITY COURSES
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS university_courses (
+        id SERIAL PRIMARY KEY,
+        university_name TEXT NOT NULL,
+        country TEXT NOT NULL,
+        course_name TEXT NOT NULL,
+        intake TEXT NOT NULL,
+        min_ssc_percent NUMERIC NOT NULL,
+        min_inter_percent NUMERIC NOT NULL,
+        min_degree_percent NUMERIC,
+        required_exam TEXT,
+        min_exam_score NUMERIC,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Add accepted_exams column if it doesn't exist
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name = 'university_courses' AND column_name = 'accepted_exams'
+        ) THEN
+          ALTER TABLE university_courses ADD COLUMN accepted_exams JSONB DEFAULT '[]'::jsonb;
+        END IF;
+
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'university_courses' AND column_name = 'application_fee') THEN
+          ALTER TABLE university_courses ADD COLUMN application_fee VARCHAR(255);
+        END IF;
+
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'university_courses' AND column_name = 'enrollment_deposit') THEN
+          ALTER TABLE university_courses ADD COLUMN enrollment_deposit VARCHAR(255);
+        END IF;
+
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'university_courses' AND column_name = 'wes_requirement') THEN
+          ALTER TABLE university_courses ADD COLUMN wes_requirement VARCHAR(255);
+        END IF;
+
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'university_courses' AND column_name = 'logo_url') THEN
+          ALTER TABLE university_courses ADD COLUMN logo_url TEXT;
+        END IF;
+
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'university_courses' AND column_name = 'logo_data') THEN
+          ALTER TABLE university_courses ADD COLUMN logo_data BYTEA;
+        END IF;
+
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'university_courses' AND column_name = 'logo_mimetype') THEN
+          ALTER TABLE university_courses ADD COLUMN logo_mimetype TEXT;
+        END IF;
+      END $$;
+    `);
+
     console.log("✅ Database initialized successfully");
   } catch (err) {
     if (client) await client.query("ROLLBACK");

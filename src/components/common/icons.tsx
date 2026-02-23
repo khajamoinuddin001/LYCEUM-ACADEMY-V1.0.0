@@ -109,5 +109,7 @@ export {
   Chrome,
   Compass,
   Navigation,
-  History
+  History,
+  School,
+  Globe2
 } from 'lucide-react';
