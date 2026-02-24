@@ -571,7 +571,8 @@ const createAccountsReceivable = async (leadId: number, quotationId: number): Pr
     remainingAmount: quotation.total,
     status: 'Outstanding',
     createdAt: new Date().toISOString(),
-    agreedAt: new Date().toISOString()
+    agreedAt: new Date().toISOString(),
+    lineItems: quotation.lineItems
   };
 
   // Store AR in contact metadata (using type assertion for metadata)

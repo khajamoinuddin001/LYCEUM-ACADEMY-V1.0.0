@@ -899,9 +899,11 @@ const DashboardLayout: React.FC = () => {
                   ...ar,
                   status: data.status,
                   // We map Transaction fields back to AR fields where applicable
-                  remainingAmount: data.status === 'Paid' ? 0 : ar.remainingAmount, // Auto-clear remaining if paid
-                  paidAmount: data.status === 'Paid' ? ar.originalAmount : ar.paidAmount,
-                  dueDate: data.dueDate
+                  remainingAmount: data.status === 'Paid' ? 0 : data.amount, // auto clear remianing if paid, otherwise let it be updated from modal calculation
+                  paidAmount: data.status === 'Paid' ? ar.originalAmount || ar.totalAmount : ar.paidAmount,
+                  dueDate: data.dueDate,
+                  lineItems: data.lineItems,
+                  additionalDiscount: data.additionalDiscount
                 };
               }
               return ar;

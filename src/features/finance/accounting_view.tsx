@@ -176,7 +176,9 @@ const AccountingView: React.FC<AccountingViewProps> = ({
                     contactId: contact.id,
                     contact: contact.department !== 'Unassigned' ? contact.department : '', // Map Department to Client (Entity)
                     customerName: contact.name, // Map Name to Customer Name
-                    invoiceNumber: ar.quotationRef
+                    invoiceNumber: ar.quotationRef,
+                    lineItems: ar.lineItems,
+                    additionalDiscount: ar.additionalDiscount
                 };
                 combined.push(arTransaction);
             });
