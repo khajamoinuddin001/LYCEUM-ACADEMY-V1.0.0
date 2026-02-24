@@ -159,16 +159,30 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     const isAssignedToCurrentUser = task.assignedTo === user.id || task.assignedTo === user.name;
     const canReply = isAssignedToCurrentUser && task.status !== 'Done';
 
-    const getAuthenticatedUrl = (url: string) => {
+    const getAuthenticatedUrl = (url: string, preview = false) => {
         if (!url) return '';
         // If it's a blob url (local preview before upload), return as is
         if (url.startsWith('blob:')) return url;
 
         const token = getToken();
-        if (!token) return url;
 
-        const separator = url.includes('?') ? '&' : '?';
-        return `${url}${separator}token=${token}`;
+        // Sanitize old URLs that might have spaces (e.g. from the previous bug '/ tasks / attachments / ...')
+        const sanitizedUrl = url.replace(/ /g, '');
+
+        // If the url is relative, prepend API_BASE_URL. API_BASE_URL already contains '/api', so we remove '/api' if present.
+        let fullUrl = sanitizedUrl.startsWith('/')
+            ? `${import.meta.env.VITE_API_URL}${sanitizedUrl.startsWith('/api') ? sanitizedUrl.replace(/^\/api/, '') : sanitizedUrl}`
+            : sanitizedUrl;
+
+        if (preview) {
+            const separator = fullUrl.includes('?') ? '&' : '?';
+            fullUrl = `${fullUrl}${separator}preview=true`;
+        }
+
+        if (!token) return fullUrl;
+
+        const separator = fullUrl.includes('?') ? '&' : '?';
+        return `${fullUrl}${separator}token=${token}`;
     };
 
     return (
@@ -547,7 +561,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                                     return (
                                         <div className="flex items-center justify-center min-h-[400px]">
                                             <img
-                                                src={getAuthenticatedUrl(previewAttachment.url)}
+                                                src={getAuthenticatedUrl(previewAttachment.url, true)}
                                                 alt={previewAttachment.name}
                                                 className="max-w-full max-h-[70vh] object-contain rounded-lg"
                                                 onError={(e) => {
@@ -572,7 +586,7 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                                 } else if (isPDF) {
                                     return (
                                         <iframe
-                                            src={getAuthenticatedUrl(previewAttachment.url)}
+                                            src={getAuthenticatedUrl(previewAttachment.url, true)}
                                             className="w-full h-[70vh] rounded-lg border border-gray-200 dark:border-gray-700"
                                             title={previewAttachment.name}
                                         />
