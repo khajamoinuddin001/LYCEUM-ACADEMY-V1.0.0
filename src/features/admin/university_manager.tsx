@@ -479,8 +479,8 @@ const UniversityManager: React.FC<UniversityManagerProps> = ({ user }) => {
                                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Min SSC %</label>
                                             <input
                                                 type="number"
-                                                value={formData.minSscPercent}
-                                                onChange={(e) => setFormData({ ...formData, minSscPercent: parseFloat(e.target.value) })}
+                                                value={formData.minSscPercent || ''}
+                                                onChange={(e) => setFormData({ ...formData, minSscPercent: e.target.value ? parseFloat(e.target.value) : 0 })}
                                                 className="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                                             />
                                         </div>
@@ -488,8 +488,8 @@ const UniversityManager: React.FC<UniversityManagerProps> = ({ user }) => {
                                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Min Inter %</label>
                                             <input
                                                 type="number"
-                                                value={formData.minInterPercent}
-                                                onChange={(e) => setFormData({ ...formData, minInterPercent: parseFloat(e.target.value) })}
+                                                value={formData.minInterPercent || ''}
+                                                onChange={(e) => setFormData({ ...formData, minInterPercent: e.target.value ? parseFloat(e.target.value) : 0 })}
                                                 className="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                                             />
                                         </div>
@@ -499,7 +499,7 @@ const UniversityManager: React.FC<UniversityManagerProps> = ({ user }) => {
                                         <input
                                             type="number"
                                             value={formData.minDegreePercent || ''}
-                                            onChange={(e) => setFormData({ ...formData, minDegreePercent: e.target.value ? parseFloat(e.target.value) : undefined })}
+                                            onChange={(e) => setFormData({ ...formData, minDegreePercent: e.target.value ? parseFloat(e.target.value) : 0 })}
                                             className="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                                             placeholder="Required for Masters"
                                         />
@@ -547,7 +547,7 @@ const UniversityManager: React.FC<UniversityManagerProps> = ({ user }) => {
                                                 <input
                                                     type="number"
                                                     value={newExamScore || ''}
-                                                    onChange={(e) => setNewExamScore(parseFloat(e.target.value))}
+                                                    onChange={(e) => setNewExamScore(e.target.value ? parseFloat(e.target.value) : 0)}
                                                     className="w-full px-2 py-1.5 text-sm border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                                                     placeholder="0"
                                                 />

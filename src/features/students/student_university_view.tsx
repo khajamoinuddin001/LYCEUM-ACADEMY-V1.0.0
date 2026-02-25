@@ -1078,7 +1078,7 @@ const StudentUniversityApplicationView: React.FC<StudentUniversityApplicationVie
                                                         className="pl-4 pr-10 py-3 bg-white/70 dark:bg-gray-800/60 backdrop-blur border border-gray-200/50 dark:border-gray-700/50 rounded-2xl text-gray-900 dark:text-white font-medium text-sm focus:ring-2 focus:ring-lyceum-blue/30 outline-none appearance-none cursor-pointer"
                                                     >
                                                         <option value="">All Intakes</option>
-                                                        {[...new Set(availableCourses.map(c => c.intake).filter(Boolean))].sort().map(intake => (
+                                                        {[...new Set(availableCourses.flatMap(c => (c.intake || '').split(',').map(i => i.trim())).filter(Boolean))].sort().map(intake => (
                                                             <option key={intake} value={intake}>{intake}</option>
                                                         ))}
                                                     </select>
@@ -1111,7 +1111,7 @@ const StudentUniversityApplicationView: React.FC<StudentUniversityApplicationVie
                                                     }).filter(({ course, courseName }) => {
                                                         const uniMatch = !filterUniversity || course.universityName.toLowerCase().includes(filterUniversity.toLowerCase());
                                                         const courseMatch = !filterCourse || courseName.toLowerCase().includes(filterCourse.toLowerCase());
-                                                        const intakeMatch = !filterIntake || course.intake === filterIntake;
+                                                        const intakeMatch = !filterIntake || (course.intake || '').split(',').map(i => i.trim()).includes(filterIntake);
                                                         return uniMatch && courseMatch && intakeMatch;
                                                     }).map(({ course, courseName }, index) => {
                                                         const matchData = calculateMatchScore(course);
@@ -1287,7 +1287,9 @@ const StudentUniversityApplicationView: React.FC<StudentUniversityApplicationVie
                                                             <p className="text-lyceum-blue font-black tracking-widest text-xs uppercase mt-1">{selectedBasketItem.courseName}</p>
                                                             <div className="flex flex-wrap gap-2 mt-3">
                                                                 <span className="px-3 py-1 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-xl text-xs font-bold flex items-center gap-1"><Globe2 size={10} />{selectedBasketItem.course.country}</span>
-                                                                <span className="px-3 py-1 bg-gray-100 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 rounded-xl text-xs font-bold">{selectedBasketItem.course.intake}</span>
+                                                                {(selectedBasketItem.course.intake || '').split(',').map(i => i.trim()).filter(Boolean).map((intake, i) => (
+                                                                    <span key={i} className="px-3 py-1 bg-gray-100 dark:bg-gray-700/50 text-gray-600 dark:text-gray-300 rounded-xl text-xs font-bold">{intake}</span>
+                                                                ))}
                                                             </div>
                                                         </div>
                                                         <button onClick={() => { handleToggleBasket(selectedBasketItem.course, selectedBasketItem.courseName); setSelectedBasketItem(null); }} className="p-2.5 text-gray-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 rounded-2xl transition-all" title="Remove from shortlist">
@@ -1414,7 +1416,7 @@ const StudentUniversityApplicationView: React.FC<StudentUniversityApplicationVie
                                                     <div className="flex items-center gap-4 mt-3">
                                                         <span className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400 font-medium"><Globe2 size={13} />{item.course.country}</span>
                                                         <span className="w-1 h-1 rounded-full bg-gray-300 dark:bg-gray-600" />
-                                                        <span className="text-sm text-gray-500 dark:text-gray-400 font-medium">{item.course.intake}</span>
+                                                        <span className="text-sm text-gray-500 dark:text-gray-400 font-medium">{(item.course.intake || '').split(',').map(i => i.trim()).filter(Boolean).join(', ')}</span>
                                                     </div>
                                                 </div>
 
