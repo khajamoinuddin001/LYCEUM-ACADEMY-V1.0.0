@@ -90,7 +90,10 @@ export function requireRole(...roles) {
     if (!req.user) {
       return res.status(401).json({ error: 'Authentication required' });
     }
-    if (!roles.includes(req.user.role)) {
+    const userRoleLower = req.user.role?.toLowerCase();
+    const authorized = roles.some(role => role.toLowerCase() === userRoleLower);
+
+    if (!authorized) {
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
     next();

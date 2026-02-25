@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, GraduationCap, Calendar, BookOpen, CheckCircle2, Search, Plus, Building2, Globe2, Sparkles, Languages, ArrowRight, Edit3, Award, Clock, MapPin, School, FileText, ChevronRight, Check, Bookmark, X, Trash2, Copy, ClipboardList } from 'lucide-react';
+import { ArrowLeft, GraduationCap, Calendar, BookOpen, CheckCircle2, Search, Plus, Building2, Globe2, Sparkles, Languages, ArrowRight, Edit3, Award, Clock, MapPin, School, FileText, ChevronRight, Check, Bookmark, X, Trash2, Copy, ClipboardList, Folder } from 'lucide-react';
 import { Contact, UniversityCourse } from '@/types';
 import * as api from '@/utils/api';
 
@@ -8,9 +8,10 @@ interface StudentUniversityApplicationViewProps {
     onNavigateBack: () => void;
     onSave?: (updatedContact: Contact) => Promise<void | Contact>;
     onNavigateToTickets?: () => void;
+    onNavigateToDocuments?: () => void;
 }
 
-const StudentUniversityApplicationView: React.FC<StudentUniversityApplicationViewProps> = ({ student, onNavigateBack, onSave, onNavigateToTickets }) => {
+const StudentUniversityApplicationView: React.FC<StudentUniversityApplicationViewProps> = ({ student, onNavigateBack, onSave, onNavigateToTickets, onNavigateToDocuments }) => {
     const hasApplications = (student.visaInformation?.universityApplication?.universities?.length || 0) > 0;
     const hasAcademicInfo = !!student.visaInformation?.universityApplication?.academicInformation?.sscPercentage;
     const hasLanguageInfo = !!student.visaInformation?.universityApplication?.languageProficiency?.score;
@@ -431,7 +432,7 @@ const StudentUniversityApplicationView: React.FC<StudentUniversityApplicationVie
 
                     <div className="relative pt-6 pb-2">
                         <div className="absolute top-[38px] left-4 right-4 h-0.5 bg-gray-200/50 dark:bg-gray-700/50 rounded-full" />
-                        <div className="absolute top-[38px] left-4 h-0.5 bg-lyceum-blue rounded-full transition-all duration-700 shadow-[0_0_10px_rgba(59,130,246,0.5)]" style={{ width: app.status === 'Offer Received' ? '100%' : app.status === 'In Review' ? '66%' : app.status === 'Applied' ? '33%' : '0%' }} />
+                        <div className="absolute top-[38px] left-4 h-0.5 bg-lyceum-blue rounded-full transition-all duration-700 shadow-[0_0_10px_rgba(59,130,246,0.5)]" style={{ width: ['Offer Received', 'Received Acceptance', 'Received I20'].includes(app.status) ? '100%' : app.status === 'In Review' ? '66%' : app.status === 'Applied' ? '33%' : '0%' }} />
 
                         <div className="flex justify-between relative z-10 w-full space-x-1">
                             {[
@@ -440,8 +441,8 @@ const StudentUniversityApplicationView: React.FC<StudentUniversityApplicationVie
                                 { status: 'In Review', icon: <Search size={12} /> },
                                 { status: 'Offer Received', icon: <Award size={12} /> }
                             ].map((stage, i) => {
-                                const isPassed = (app.status === 'Offer Received') || (app.status === 'In Review' && i <= 2) || (app.status === 'Applied' && i <= 1) || (app.status === 'Shortlisted' && i === 0);
-                                const isCurrent = app.status === stage.status;
+                                const isPassed = (['Offer Received', 'Received Acceptance', 'Received I20'].includes(app.status)) || (app.status === 'In Review' && i <= 2) || (app.status === 'Applied' && i <= 1) || (app.status === 'Shortlisted' && i === 0);
+                                const isCurrent = stage.status === 'Offer Received' ? ['Offer Received', 'Received Acceptance', 'Received I20'].includes(app.status) : app.status === stage.status;
                                 return (
                                     <div key={stage.status} className="flex flex-col items-center gap-2">
                                         <div className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all duration-500 ${isPassed
@@ -463,9 +464,20 @@ const StudentUniversityApplicationView: React.FC<StudentUniversityApplicationVie
                             <Calendar size={14} />
                             {new Date(app.applicationSubmissionDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
                         </div>
-                        <div className={`px-4 py-1.5 rounded-xl border text-xs font-black uppercase tracking-wider ${currentStatusColor} flex items-center gap-1.5`}>
-                            <div className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
-                            {app.status}
+                        <div className="flex items-center gap-2">
+                            {['Received Acceptance', 'Received I20'].includes(app.status) && (
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); onNavigateToDocuments?.(); }}
+                                    className="px-3 py-1.5 rounded-xl border border-lyceum-blue/30 text-xs font-bold text-lyceum-blue hover:bg-lyceum-blue hover:text-white transition-all shadow-sm flex items-center gap-1.5"
+                                >
+                                    <FileText size={12} />
+                                    {app.status === 'Received Acceptance' ? 'See Acceptance' : 'See I20'}
+                                </button>
+                            )}
+                            <div className={`px-4 py-1.5 rounded-xl border text-xs font-black uppercase tracking-wider ${currentStatusColor} flex items-center gap-1.5`}>
+                                <div className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
+                                {app.status}
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -514,6 +526,15 @@ const StudentUniversityApplicationView: React.FC<StudentUniversityApplicationVie
                                                 <div className="w-2 h-2 rounded-full bg-blue-300 animate-pulse" />
                                                 {expandedApp.ackNumber}
                                             </span>
+                                            {['Received Acceptance', 'Received I20'].includes(expandedApp.status) && (
+                                                <button
+                                                    onClick={() => onNavigateToDocuments?.()}
+                                                    className="px-4 py-1.5 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-xl text-xs font-black uppercase tracking-widest leading-none flex items-center gap-2 transition-colors border border-white/20 border-dotted"
+                                                >
+                                                    <FileText size={12} />
+                                                    {expandedApp.status === 'Received Acceptance' ? 'See Acceptance' : 'See I20'}
+                                                </button>
+                                            )}
                                             <span className="px-4 py-1.5 bg-green-500/30 backdrop-blur-md border border-green-500/30 rounded-xl text-xs font-black uppercase tracking-widest leading-none">
                                                 {expandedApp.status}
                                             </span>
@@ -541,7 +562,7 @@ const StudentUniversityApplicationView: React.FC<StudentUniversityApplicationVie
                                         <div className="relative pt-10 pb-16">
                                             <div className="absolute top-[62px] left-8 right-8 h-1.5 bg-gray-100 dark:bg-gray-800 rounded-full" />
                                             <div className="absolute top-[62px] left-8 h-1.5 bg-lyceum-blue rounded-full transition-all duration-1000 shadow-[0_0_25px_rgba(59,130,246,0.5)]"
-                                                style={{ width: expandedApp.status === 'Offer Received' ? '100.1%' : expandedApp.status === 'In Review' ? '66.6%' : expandedApp.status === 'Applied' ? '33.3%' : '0%' }}
+                                                style={{ width: ['Offer Received', 'Received Acceptance', 'Received I20'].includes(expandedApp.status) ? '100.1%' : expandedApp.status === 'In Review' ? '66.6%' : expandedApp.status === 'Applied' ? '33.3%' : '0%' }}
                                             />
 
                                             <div className="flex justify-between relative z-10">
@@ -551,8 +572,8 @@ const StudentUniversityApplicationView: React.FC<StudentUniversityApplicationVie
                                                     { status: 'In Review', icon: <Search size={20} />, desc: 'University is evaluating' },
                                                     { status: 'Offer Received', icon: <Award size={20} />, desc: 'Admission letter issued' }
                                                 ].map((stage, i) => {
-                                                    const isPassed = (expandedApp.status === 'Offer Received') || (expandedApp.status === 'In Review' && i <= 2) || (expandedApp.status === 'Applied' && i <= 1) || (expandedApp.status === 'Shortlisted' && i === 0);
-                                                    const isCurrent = expandedApp.status === stage.status;
+                                                    const isPassed = (['Offer Received', 'Received Acceptance', 'Received I20'].includes(expandedApp.status)) || (expandedApp.status === 'In Review' && i <= 2) || (expandedApp.status === 'Applied' && i <= 1) || (expandedApp.status === 'Shortlisted' && i === 0);
+                                                    const isCurrent = stage.status === 'Offer Received' ? ['Offer Received', 'Received Acceptance', 'Received I20'].includes(expandedApp.status) : expandedApp.status === stage.status;
 
                                                     return (
                                                         <div key={stage.status} className="flex flex-col items-center gap-5 w-32 sm:w-48">
@@ -599,9 +620,34 @@ const StudentUniversityApplicationView: React.FC<StudentUniversityApplicationVie
                                                         {new Date(expandedApp.applicationSubmissionDate).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}
                                                     </p>
                                                 </div>
-                                                <div>
+                                                <div className="space-y-4">
                                                     <p className="text-[11px] text-gray-400 font-bold uppercase tracking-widest mb-2">Portal Remark</p>
-                                                    <p className="text-xl font-black text-gray-900 dark:text-white leading-snug">{expandedApp.remarks || 'No remarks provided'}</p>
+                                                    <div className="bg-blue-50/50 dark:bg-blue-500/5 p-6 rounded-[30px] border border-blue-100/50 dark:border-blue-500/10 shadow-inner">
+                                                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100 leading-relaxed whitespace-pre-wrap">
+                                                            {expandedApp.studentRemark || 'No specific message from the staff at the moment.'}
+                                                        </p>
+
+                                                        {expandedApp.requiresDocument && (
+                                                            <div className="mt-6 pt-6 border-t border-blue-100/50 dark:border-blue-500/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                                                                <div className="flex items-center gap-3">
+                                                                    <div className="w-10 h-10 rounded-2xl bg-amber-100 dark:bg-amber-500/20 flex items-center justify-center text-amber-600 dark:text-amber-400">
+                                                                        <Folder size={18} />
+                                                                    </div>
+                                                                    <div>
+                                                                        <p className="text-xs font-black text-gray-900 dark:text-white uppercase tracking-widest">Action Required</p>
+                                                                        <p className="text-[11px] text-gray-500 dark:text-gray-400 font-medium">Please upload the requested documents</p>
+                                                                    </div>
+                                                                </div>
+                                                                <button
+                                                                    onClick={() => onNavigateToDocuments?.()}
+                                                                    className="w-full sm:w-auto px-6 py-3 bg-lyceum-blue hover:bg-blue-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                                                                >
+                                                                    <Plus size={16} />
+                                                                    Upload Documents
+                                                                </button>
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>

@@ -2166,6 +2166,7 @@ const DashboardLayout: React.FC = () => {
                       onNavigateBack={() => handleAppSelect('Apps')}
                       onSave={handleSaveContact}
                       onNavigateToTickets={() => handleAppSelect('Tickets')}
+                      onNavigateToDocuments={() => handleAppSelect('Documents')}
                     />
                   ) : <div>Loading...</div>;
                 }
