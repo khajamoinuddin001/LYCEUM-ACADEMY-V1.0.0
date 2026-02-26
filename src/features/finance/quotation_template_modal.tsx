@@ -6,6 +6,7 @@ interface QuotationTemplateModalProps {
   template: QuotationTemplate | null;
   onClose: () => void;
   onSave: (template: QuotationTemplate) => void;
+  userRole?: string;
 }
 
 const DOCUMENT_CATEGORIES = [
@@ -13,7 +14,7 @@ const DOCUMENT_CATEGORIES = [
   'Gap Justification', 'Acceptance', 'I20', 'DS-160', 'SEVIS confirmation', 'Appointment Confirmation', 'University Affidavit Forms', 'Other'
 ];
 
-const QuotationTemplateModal: React.FC<QuotationTemplateModalProps> = ({ template, onClose, onSave }) => {
+const QuotationTemplateModal: React.FC<QuotationTemplateModalProps> = ({ template, onClose, onSave, userRole }) => {
   const [isAnimatingOut, setIsAnimatingOut] = useState(false);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -162,13 +163,15 @@ const QuotationTemplateModal: React.FC<QuotationTemplateModalProps> = ({ templat
                       onChange={(e) => handleLineItemChange(index, 'price', parseFloat(e.target.value) || 0)}
                       className={`${inputClasses} w-32`}
                     />
-                    <button
-                      onClick={() => setExpandedSettingsIndex(expandedSettingsIndex === index ? null : index)}
-                      className={`p-2 rounded-md transition-colors ${expandedSettingsIndex === index ? 'text-lyceum-blue bg-lyceum-blue/10' : 'text-gray-400 hover:text-lyceum-blue'}`}
-                      title="Item Settings"
-                    >
-                      <Cog size={18} />
-                    </button>
+                    {userRole === 'Admin' && (
+                      <button
+                        onClick={() => setExpandedSettingsIndex(expandedSettingsIndex === index ? null : index)}
+                        className={`p-2 rounded-md transition-colors ${expandedSettingsIndex === index ? 'text-lyceum-blue bg-lyceum-blue/10' : 'text-gray-400 hover:text-lyceum-blue'}`}
+                        title="Item Settings"
+                      >
+                        <Cog size={18} />
+                      </button>
+                    )}
                     <button
                       onClick={() => removeLineItem(index)}
                       disabled={lineItems.length <= 1}
@@ -185,8 +188,8 @@ const QuotationTemplateModal: React.FC<QuotationTemplateModalProps> = ({ templat
                         <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest">Document Requirements</h4>
                         <div className="flex items-center gap-2">
                           <button
-                            onClick={() => handleLineItemChange(index, 'isDocumentUnlockEnabled', !item.isDocumentUnlockEnabled)}
-                            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${item.isDocumentUnlockEnabled ? 'bg-lyceum-blue' : 'bg-gray-200 dark:bg-gray-700'}`}
+                            onClick={() => userRole === 'Admin' && handleLineItemChange(index, 'isDocumentUnlockEnabled', !item.isDocumentUnlockEnabled)}
+                            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${item.isDocumentUnlockEnabled ? 'bg-lyceum-blue' : 'bg-gray-200 dark:bg-gray-700'} ${userRole !== 'Admin' ? 'opacity-50 cursor-not-allowed' : ''}`}
                           >
                             <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${item.isDocumentUnlockEnabled ? 'translate-x-5' : 'translate-x-1'}`} />
                           </button>
@@ -200,15 +203,16 @@ const QuotationTemplateModal: React.FC<QuotationTemplateModalProps> = ({ templat
                             <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">
                               Unlock Document Categories
                             </label>
-                            <div className="grid grid-cols-2 gap-2 bg-gray-50 dark:bg-gray-900/30 p-3 rounded-lg border border-gray-100 dark:border-gray-700 max-h-48 overflow-y-auto">
+                            <div className={`grid grid-cols-2 gap-2 bg-gray-50 dark:bg-gray-900/30 p-3 rounded-lg border border-gray-100 dark:border-gray-700 max-h-48 overflow-y-auto ${userRole !== 'Admin' ? 'opacity-70 pointer-events-none' : ''}`}>
                               {DOCUMENT_CATEGORIES.map(cat => {
                                 const isChecked = (item.linkedDocumentCategories || []).includes(cat);
                                 return (
-                                  <label key={cat} className="flex items-center gap-2 cursor-pointer group">
+                                  <label key={cat} className={`flex items-center gap-2 cursor-pointer group ${userRole !== 'Admin' ? 'cursor-not-allowed' : ''}`}>
                                     <input
                                       type="checkbox"
-                                      className="rounded border-gray-300 text-lyceum-blue focus:ring-lyceum-blue w-3.5 h-3.5"
+                                      className="rounded border-gray-300 text-lyceum-blue focus:ring-lyceum-blue w-3.5 h-3.5 disabled:opacity-50"
                                       checked={isChecked}
+                                      disabled={userRole !== 'Admin'}
                                       onChange={() => {
                                         const current = item.linkedDocumentCategories || [];
                                         const next = isChecked
@@ -232,9 +236,10 @@ const QuotationTemplateModal: React.FC<QuotationTemplateModalProps> = ({ templat
                                 Unlock Condition
                               </label>
                               <select
-                                className="w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-lyceum-blue text-xs dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                className="w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-lyceum-blue text-xs dark:bg-gray-700 dark:border-gray-600 dark:text-white disabled:opacity-70"
                                 value={item.unlockThresholdType || 'Full'}
                                 onChange={(e) => handleLineItemChange(index, 'unlockThresholdType', e.target.value)}
+                                disabled={userRole !== 'Admin'}
                               >
                                 <option value="Full">Full Payment (₹{(item.price || 0).toLocaleString('en-IN')})</option>
                                 <option value="Custom">Custom Amount Paid</option>
@@ -250,9 +255,10 @@ const QuotationTemplateModal: React.FC<QuotationTemplateModalProps> = ({ templat
                                   type="number"
                                   min="0"
                                   max={item.price || 0}
-                                  className="w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-lyceum-blue text-xs dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                  className="w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-lyceum-blue text-xs dark:bg-gray-700 dark:border-gray-600 dark:text-white disabled:opacity-70"
                                   value={item.unlockThresholdAmount || 0}
                                   onChange={(e) => handleLineItemChange(index, 'unlockThresholdAmount', parseFloat(e.target.value) || 0)}
+                                  disabled={userRole !== 'Admin'}
                                 />
                               </div>
                             )}

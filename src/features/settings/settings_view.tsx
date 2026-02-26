@@ -180,7 +180,7 @@ const NotificationsTab: React.FC = () => {
     );
 };
 
-const TemplatesTab: React.FC<Pick<SettingsViewProps, 'quotationTemplates' | 'onSaveTemplate' | 'onDeleteTemplate'>> = ({ quotationTemplates, onSaveTemplate, onDeleteTemplate }) => {
+const TemplatesTab: React.FC<Pick<SettingsViewProps, 'quotationTemplates' | 'onSaveTemplate' | 'onDeleteTemplate' | 'user'>> = ({ quotationTemplates, onSaveTemplate, onDeleteTemplate, user }) => {
     const [editingTemplate, setEditingTemplate] = useState<QuotationTemplate | 'new' | null>(null);
     const [isLockEnforced, setIsLockEnforced] = useState<boolean>(true);
 
@@ -214,16 +214,18 @@ const TemplatesTab: React.FC<Pick<SettingsViewProps, 'quotationTemplates' | 'onS
                 <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Quotation Templates</h3>
                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Manage pre-built quotation packages.</p>
             </div>
-            <div className="p-6 bg-lyceum-blue/5 border-b border-gray-200 dark:border-gray-700">
-                <Toggle
-                    label="Enforce Payment-Conditioned Documents"
-                    enabled={isLockEnforced}
-                    setEnabled={handleToggleLock}
-                />
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 font-medium">
-                    When enabled, student document categories linked to quotation items remain locked until the specified payment is received.
-                </p>
-            </div>
+            {user.role === 'Admin' && (
+                <div className="p-6 bg-lyceum-blue/5 border-b border-gray-200 dark:border-gray-700">
+                    <Toggle
+                        label="Enforce Payment-Conditioned Documents"
+                        enabled={isLockEnforced}
+                        setEnabled={handleToggleLock}
+                    />
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 font-medium">
+                        When enabled, student document categories linked to quotation items remain locked until the specified payment is received.
+                    </p>
+                </div>
+            )}
             <div className="p-6">
                 <div className="flex justify-end mb-4">
                     <button
@@ -265,6 +267,7 @@ const TemplatesTab: React.FC<Pick<SettingsViewProps, 'quotationTemplates' | 'onS
                         onSaveTemplate(template);
                         setEditingTemplate(null);
                     }}
+                    userRole={user.role}
                 />
             )}
         </div>
@@ -469,7 +472,7 @@ const SettingsView: React.FC<SettingsViewProps> = (props) => {
             case 'Security': return <SecurityTab user={props.user} onChangePassword={props.onChangePassword} />;
             case 'Appearance': return <AppearanceTab />;
             case 'Notifications': return <NotificationsTab />;
-            case 'Templates': return <TemplatesTab {...props} />;
+            case 'Templates': return <TemplatesTab {...props} user={props.user} />;
             case 'Coupons': return <CouponsTab {...props} />;
             case 'Payment': return <PaymentTab />;
             default: return null;

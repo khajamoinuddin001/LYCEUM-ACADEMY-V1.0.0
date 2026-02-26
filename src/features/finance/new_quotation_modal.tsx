@@ -747,6 +747,7 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ lead, onCancel, onS
               onSaveTemplate(template);
               setTemplateToEditInModal(null);
             }}
+            userRole={user.role}
           />
         )
       }
