@@ -5479,14 +5479,14 @@ router.post('/university-courses/:id/logo', authenticateToken, uploadAvatar.sing
   }
 });
 
-// Chatbot endpoint using DeepSeek API
+// Chatbot endpoint using OpenRouter API (StepFun 3.5 Flash)
 router.post('/chat', async (req, res) => {
   try {
     const { message, history } = req.body;
-    const apiKey = process.env.DEEPSEEK_API_KEY;
+    const apiKey = process.env.OPENROUTER_API_KEY;
 
     if (!apiKey) {
-      return res.status(500).json({ error: 'DEEPSEEK_API_KEY is not configured on the server.' });
+      return res.status(500).json({ error: 'OPENROUTER_API_KEY is not configured on the server.' });
     }
 
     const systemPrompt = `You are the Lyceum Academy AI Assistant. Your goal is to help users with study abroad inquiries, test prep, and navigating our platform.
@@ -5506,27 +5506,30 @@ Strict Rules:
 
     const fetch = (await import('node-fetch')).default;
 
-    const response = await fetch('https://api.deepseek.com/chat/completions', {
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
+        'Authorization': `Bearer ${apiKey}`,
+        'HTTP-Referer': 'https://lyceumacademy.com',
+        'X-Title': 'Lyceum Academy AI Assistant'
       },
       body: JSON.stringify({
-        model: 'deepseek-chat',
+        model: 'stepfun/step-3.5-flash:free',
         messages: messages,
         temperature: 0.7,
-        max_tokens: 500
+        max_tokens: 1000
       })
     });
 
     if (!response.ok) {
       const errorData = await response.text();
-      console.error('DeepSeek API Error:', errorData);
-      return res.status(response.status).json({ error: 'Failed to communicate with DeepSeek AI.' });
+      console.error('OpenRouter API Error:', errorData);
+      return res.status(response.status).json({ error: 'Failed to communicate with the AI assistant.' });
     }
 
     const data = await response.json();
+    console.log('OpenRouter Response Data:', JSON.stringify(data, null, 2));
     const reply = data.choices[0].message.content;
 
     res.json({ reply });
