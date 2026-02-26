@@ -161,18 +161,34 @@ const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
 
     const getAuthenticatedUrl = (url: string, preview = false) => {
         if (!url) return '';
-        // If it's a blob url (local preview before upload), return as is
         if (url.startsWith('blob:')) return url;
 
         const token = getToken();
+        let fullUrl = url.replace(/ /g, '');
 
-        // Sanitize old URLs that might have spaces (e.g. from the previous bug '/ tasks / attachments / ...')
-        const sanitizedUrl = url.replace(/ /g, '');
+        // If it's not an absolute URL, construct it
+        if (!fullUrl.startsWith('http://') && !fullUrl.startsWith('https://')) {
+            const baseUrl = import.meta.env.VITE_API_URL; // e.g., http://localhost:5002/api
 
-        // If the url is relative, prepend API_BASE_URL. API_BASE_URL already contains '/api', so we remove '/api' if present.
-        let fullUrl = sanitizedUrl.startsWith('/')
-            ? `${import.meta.env.VITE_API_URL}${sanitizedUrl.startsWith('/api') ? sanitizedUrl.replace(/^\/api/, '') : sanitizedUrl}`
-            : sanitizedUrl;
+            // Remove /api from the beginning of the relative path to avoid /api/api
+            let relativePath = fullUrl;
+            if (relativePath.startsWith('/api/')) {
+                relativePath = relativePath.substring(4);
+            } else if (relativePath.startsWith('api/')) {
+                relativePath = relativePath.substring(3);
+            } else if (relativePath === '/api' || relativePath === 'api') {
+                relativePath = '';
+            }
+
+            // Ensure single slash between baseUrl and relativePath
+            const cleanPath = relativePath.startsWith('/') ? relativePath : '/' + relativePath;
+            fullUrl = `${baseUrl}${cleanPath === '/' ? '' : cleanPath}`;
+        }
+
+        // Last resort: Fix double /api/api if it exists in the full URL
+        if (fullUrl.includes('/api/api/')) {
+            fullUrl = fullUrl.replace(/\/api\/api\//g, '/api/');
+        }
 
         if (preview) {
             const separator = fullUrl.includes('?') ? '&' : '?';

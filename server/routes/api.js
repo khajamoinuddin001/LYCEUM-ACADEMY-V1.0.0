@@ -3537,7 +3537,7 @@ VALUES($1, $2, $3, $4, $5)
       name: attachment.filename,
       contentType: attachment.content_type,
       size: attachment.file_size,
-      url: `/api/tasks/attachments/${attachment.id}`,
+      url: `/tasks/attachments/${attachment.id}`,
       taskId: taskId
     });
   } catch (error) {

@@ -80,7 +80,7 @@ const ContactTasksView: React.FC<ContactTasksViewProps> = ({ contact, user, onNa
 
                     processedAttachments = uploadedFiles.map(file => ({
                         name: file.name,
-                        url: `${api.API_BASE_URL || ''}${file.url}`, // Full URL including API base
+                        url: file.url,
                         size: file.size
                     }));
                 } catch (error) {
