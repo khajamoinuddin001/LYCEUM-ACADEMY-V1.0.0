@@ -34,6 +34,7 @@ import {
 import { DESTINATIONS_DATA } from '@/features/university/destinations/destinations_data';
 import { trackVisit } from '@/utils/visitor_tracking';
 import { API_BASE_URL } from '@/utils/api';
+import Chatbot from '@/components/Chatbot';
 
 interface LandingPageProps {
     onLogin: () => void;
@@ -1051,6 +1052,8 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onRegister, onTerms,
                     </div>
                 </div>
             </footer>
+
+            <Chatbot />
 
             <style>{`
                 @keyframes marquee {

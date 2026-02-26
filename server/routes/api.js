@@ -5478,6 +5478,63 @@ router.post('/university-courses/:id/logo', authenticateToken, uploadAvatar.sing
   }
 });
 
+// Chatbot endpoint using DeepSeek API
+router.post('/chat', async (req, res) => {
+  try {
+    const { message, history } = req.body;
+    const apiKey = process.env.DEEPSEEK_API_KEY;
+
+    if (!apiKey) {
+      return res.status(500).json({ error: 'DEEPSEEK_API_KEY is not configured on the server.' });
+    }
+
+    const systemPrompt = `You are the Lyceum Academy AI Assistant. Your goal is to help users with study abroad inquiries, test prep, and navigating our platform.
+
+Strict Rules:
+1. ONLY answer questions related to studying abroad, test preparation (IELTS, PTE, TOEFL, Duolingo), universities, destinations, visas, and enrolling at Lyceum Academy.
+2. If a user asks about anything else (e.g., coding, general knowledge, etc.), politely decline and steer them back to our services.
+3. When users ask about "Singapore visit" or destinations, guide them and provide this exact link: /destinations/singapore
+4. When users ask about "Duolingo", guide them and provide this exact link: /duolingo
+5. Keep answers concise, friendly, and professional. Use markdown. Link formatting should follow standard markdown [link text](url).`;
+
+    const messages = [
+      { role: 'system', content: systemPrompt },
+      ...(history || []),
+      { role: 'user', content: message }
+    ];
+
+    const fetch = (await import('node-fetch')).default;
+
+    const response = await fetch('https://api.deepseek.com/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: 'deepseek-chat',
+        messages: messages,
+        temperature: 0.7,
+        max_tokens: 500
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.text();
+      console.error('DeepSeek API Error:', errorData);
+      return res.status(response.status).json({ error: 'Failed to communicate with DeepSeek AI.' });
+    }
+
+    const data = await response.json();
+    const reply = data.choices[0].message.content;
+
+    res.json({ reply });
+  } catch (error) {
+    console.error('Chat endpoint error:', error);
+    res.status(500).json({ error: 'An error occurred while processing your request.' });
+  }
+});
+
 export default router;
 // trigger reload 1770196752
 // trigger reload 1770196793

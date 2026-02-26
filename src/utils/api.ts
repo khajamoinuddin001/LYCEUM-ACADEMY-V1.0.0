@@ -1705,3 +1705,10 @@ export const unlinkTaskFromTicket = async (ticketId: number, taskId: number): Pr
     body: JSON.stringify({ taskId }),
   });
 };
+
+export const chatWithAssistant = async (message: string, history: any[]): Promise<{ reply: string }> => {
+  return apiRequest<{ reply: string }>('/chat', {
+    method: 'POST',
+    body: JSON.stringify({ message, history }),
+  });
+};
