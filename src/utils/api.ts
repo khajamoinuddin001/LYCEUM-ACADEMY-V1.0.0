@@ -380,14 +380,14 @@ export const saveQuotation = async (leadId: number, quotationData: Omit<Quotatio
 };
 
 // Accept quotation (student action)
-export const acceptQuotation = async (quotationId: number): Promise<void> => {
+export const acceptQuotation = async (quotationId: number | string): Promise<void> => {
   // Find the lead and quotation
   const leads = await getLeads();
   let targetLead: CrmLead | null = null;
   let quotationIndex = -1;
 
   for (const lead of leads) {
-    const index = (lead.quotations || []).findIndex(q => q.id === quotationId);
+    const index = (lead.quotations || []).findIndex(q => String(q.id) === String(quotationId));
     if (index !== -1) {
       targetLead = lead;
       quotationIndex = index;
@@ -423,10 +423,10 @@ export const acceptQuotation = async (quotationId: number): Promise<void> => {
 };
 
 // Mark quotation as accepted (staff action for offline acceptance)
-export const markQuotationAccepted = async (leadId: number, quotationId: number): Promise<CrmLead[]> => {
+export const markQuotationAccepted = async (leadId: number, quotationId: number | string): Promise<CrmLead[]> => {
   const lead = await apiRequest<CrmLead>(`/leads/${leadId}`, { method: 'GET' });
   const quotations = [...(lead.quotations || [])];
-  const quotationIndex = quotations.findIndex(q => q.id === quotationId);
+  const quotationIndex = quotations.findIndex(q => String(q.id) === String(quotationId));
 
   if (quotationIndex === -1) {
     throw new Error('Quotation not found');
@@ -452,10 +452,10 @@ export const markQuotationAccepted = async (leadId: number, quotationId: number)
   return getLeads();
 };
 
-export const approveQuotation = async (leadId: number, quotationId: number): Promise<CrmLead[]> => {
+export const approveQuotation = async (leadId: number, quotationId: number | string): Promise<CrmLead[]> => {
   const lead = await apiRequest<CrmLead>(`/leads/${leadId}`, { method: 'GET' });
   const quotations = [...(lead.quotations || [])];
-  const quotationIndex = quotations.findIndex(q => q.id === quotationId);
+  const quotationIndex = quotations.findIndex(q => String(q.id) === String(quotationId));
 
   if (quotationIndex === -1) {
     throw new Error('Quotation not found');
@@ -491,10 +491,10 @@ export const deleteQuotation = async (leadId: number, quotationId: number): Prom
   return getLeads();
 };
 
-export const manualAcceptQuotation = async (leadId: number, quotationId: number): Promise<CrmLead[]> => {
+export const manualAcceptQuotation = async (leadId: number, quotationId: number | string): Promise<CrmLead[]> => {
   const lead = await apiRequest<CrmLead>(`/leads/${leadId}`, { method: 'GET' });
   const quotations = [...(lead.quotations || [])];
-  const quotationIndex = quotations.findIndex(q => q.id === quotationId);
+  const quotationIndex = quotations.findIndex(q => String(q.id) === String(quotationId));
 
   if (quotationIndex === -1) {
     throw new Error('Quotation not found');
@@ -544,9 +544,9 @@ export const shareQuotation = async (leadId: number, quotationId: number): Promi
 };
 
 // Create Accounts Receivable entry
-const createAccountsReceivable = async (leadId: number, quotationId: number): Promise<void> => {
+const createAccountsReceivable = async (leadId: number, quotationId: number | string): Promise<void> => {
   const lead = await apiRequest<CrmLead>(`/leads/${leadId}`, { method: 'GET' });
-  const quotation = (lead.quotations || []).find(q => q.id === quotationId);
+  const quotation = (lead.quotations || []).find(q => String(q.id) === String(quotationId));
 
   if (!quotation) {
     throw new Error('Quotation not found');
@@ -564,7 +564,7 @@ const createAccountsReceivable = async (leadId: number, quotationId: number): Pr
   const arEntry = {
     id: Date.now(),
     quotationId: quotation.id,
-    quotationRef: quotation.quotationNumber || `QUO-${quotation.id}`,
+    quotationRef: quotation.quotationNumber || (String(quotation.id).startsWith('QUO-') ? quotation.id : `QUO-${quotation.id}`),
     leadId: lead.id,
     totalAmount: quotation.total,
     paidAmount: 0,

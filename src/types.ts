@@ -417,6 +417,10 @@ export interface QuotationLineItem {
   description: string;
   price: number;
   quantity?: number;
+  isDocumentUnlockEnabled?: boolean;
+  linkedDocumentCategories?: string[]; // E.g., ['I20', 'Passport']
+  unlockThresholdType?: 'Full' | 'Custom';
+  unlockThresholdAmount?: number;
 }
 
 export interface QuotationTemplate {

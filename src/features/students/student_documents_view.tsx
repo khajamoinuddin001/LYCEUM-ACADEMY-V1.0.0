@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { Contact, Document as Doc, User } from '@/types';
-import { Paperclip, Upload, Download, ArrowLeft, Trash2, Eye, FileText, Clock, HardDrive, GraduationCap, Banknote, CalendarClock, MoreHorizontal, Plus, X } from '@/components/common/icons';
+import { Paperclip, Upload, Download, ArrowLeft, Trash2, Eye, FileText, Clock, HardDrive, GraduationCap, Banknote, CalendarClock, MoreHorizontal, Plus, X, Lock } from '@/components/common/icons';
 import * as api from '@/utils/api';
 
 interface StudentDocumentsViewProps {
@@ -122,7 +122,61 @@ const StudentDocumentsView: React.FC<StudentDocumentsViewProps> = ({ student, on
     const [uploading, setUploading] = useState(false);
     const [selectedCategory, setSelectedCategory] = useState<string>('Passport');
     const [previewData, setPreviewData] = useState<{ url: string; filename: string; type: string } | null>(null);
+    const [isLockEnforced, setIsLockEnforced] = useState<boolean>(true);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        const fetchSettings = async () => {
+            try {
+                const enforced = await api.getSystemSetting<boolean>('document_lock_enforced');
+                if (enforced !== null) {
+                    setIsLockEnforced(enforced);
+                }
+            } catch (error) {
+                console.error('Failed to fetch lock status:', error);
+            }
+        };
+        fetchSettings();
+    }, []);
+
+    const handleToggleLock = async () => {
+        try {
+            const newValue = !isLockEnforced;
+            await api.saveSystemSetting('document_lock_enforced', newValue);
+            setIsLockEnforced(newValue);
+        } catch (error) {
+            console.error('Failed to toggle lock:', error);
+            alert('Failed to update lock status');
+        }
+    };
+
+    const lockedCategories = React.useMemo(() => {
+        if (!isLockEnforced) return new Set<string>();
+        const locked = new Set<string>();
+        const arList = (student.metadata as any)?.accountsReceivable || [];
+
+        arList.forEach((ar: any) => {
+            const paidAmount = Number(ar.paidAmount) || 0;
+            const lineItems = ar.lineItems || [];
+
+            lineItems.forEach((item: any) => {
+                if (!item.isDocumentUnlockEnabled) return;
+                const linkedCategories = item.linkedDocumentCategories || [];
+                if (linkedCategories.length === 0) return;
+
+                const type = item.unlockThresholdType || 'Full';
+                const requiredAmount = type === 'Custom'
+                    ? (Number(item.unlockThresholdAmount) || 0)
+                    : (Number(item.price || 0) * Number(item.quantity || 1));
+
+                if (paidAmount < requiredAmount) {
+                    linkedCategories.forEach((cat: string) => locked.add(cat));
+                }
+            });
+        });
+
+        return locked;
+    }, [student, isLockEnforced]);
 
     const categories = [
         { name: 'Passport', icon: <FileText size={18} /> },
@@ -137,6 +191,13 @@ const StudentDocumentsView: React.FC<StudentDocumentsViewProps> = ({ student, on
         { name: 'University Affidavit Forms', icon: <FileText size={18} /> },
         { name: 'Other', icon: <MoreHorizontal size={18} /> }
     ];
+
+    useEffect(() => {
+        const unlocked = categories.filter(c => !lockedCategories.has(c.name));
+        if (lockedCategories.has(selectedCategory) && unlocked.length > 0) {
+            setSelectedCategory(unlocked[0].name);
+        }
+    }, [lockedCategories, selectedCategory]);
 
     // Group documents by category
     const groupedDocs = categories.reduce((acc, cat) => {
@@ -239,6 +300,22 @@ const StudentDocumentsView: React.FC<StudentDocumentsViewProps> = ({ student, on
                             </span>
                             My Documents
                         </h1>
+                        {user.role === 'Admin' && (
+                            <div className="mt-4 flex items-center gap-3 bg-gray-50 dark:bg-gray-900/50 px-4 py-2 rounded-2xl border border-gray-100 dark:border-gray-700 w-fit">
+                                <span className="text-xs font-black uppercase tracking-widest text-gray-400">Locking System</span>
+                                <button
+                                    onClick={handleToggleLock}
+                                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${isLockEnforced ? 'bg-lyceum-blue' : 'bg-gray-300 dark:bg-gray-600'}`}
+                                >
+                                    <span
+                                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isLockEnforced ? 'translate-x-6' : 'translate-x-1'}`}
+                                    />
+                                </button>
+                                <span className={`text-xs font-bold ${isLockEnforced ? 'text-lyceum-blue' : 'text-gray-500'}`}>
+                                    {isLockEnforced ? 'Enforced' : 'Disabled'}
+                                </span>
+                            </div>
+                        )}
                         <p className="text-lg text-gray-500 dark:text-gray-400 mt-4 max-w-2xl font-medium">
                             Upload and manage your academic certificates, passport copies, and financial records in one secure place.
                         </p>
@@ -248,7 +325,7 @@ const StudentDocumentsView: React.FC<StudentDocumentsViewProps> = ({ student, on
                         <div className="w-full text-center">
                             <p className="text-sm font-black text-gray-400 uppercase tracking-widest mb-3">Upload Category</p>
                             <div className="bg-gray-50 dark:bg-gray-900/50 p-1.5 rounded-2xl border border-gray-100 dark:border-gray-700 flex flex-wrap gap-1 justify-center">
-                                {categories.map(cat => (
+                                {categories.filter(cat => !lockedCategories.has(cat.name)).map(cat => (
                                     <button
                                         key={cat.name}
                                         onClick={() => setSelectedCategory(cat.name)}
@@ -273,11 +350,13 @@ const StudentDocumentsView: React.FC<StudentDocumentsViewProps> = ({ student, on
                             id="student-doc-upload-view"
                         />
                         <label
-                            htmlFor="student-doc-upload-view"
-                            className={`w-full inline-flex items-center justify-center px-8 py-4 bg-lyceum-blue text-white rounded-2xl shadow-xl shadow-lyceum-blue/30 hover:bg-lyceum-blue-dark hover:shadow-2xl hover:shadow-lyceum-blue/40 transition-all duration-300 cursor-pointer active:scale-95 ${uploading ? 'opacity-60 cursor-not-allowed' : ''}`}
+                            htmlFor={!lockedCategories.has(selectedCategory) ? "student-doc-upload-view" : undefined}
+                            className={`w-full inline-flex items-center justify-center px-8 py-4 bg-lyceum-blue text-white rounded-2xl shadow-xl shadow-lyceum-blue/30 hover:bg-lyceum-blue-dark hover:shadow-2xl hover:shadow-lyceum-blue/40 transition-all duration-300 ${uploading || lockedCategories.has(selectedCategory) ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer active:scale-95'}`}
                         >
                             <Upload size={22} className="mr-3" />
-                            <span className="text-lg font-black">{uploading ? 'Uploading...' : `Upload to ${selectedCategory.split(' ')[0]}`}</span>
+                            <span className="text-lg font-black">
+                                {lockedCategories.has(selectedCategory) ? 'Category Locked' : uploading ? 'Uploading...' : `Upload to ${selectedCategory.split(' ')[0]}`}
+                            </span>
                         </label>
                     </div>
                 </div>
@@ -327,7 +406,20 @@ const StudentDocumentsView: React.FC<StudentDocumentsViewProps> = ({ student, on
                                     </div>
                                 </div>
 
-                                {groupedDocs[cat.name].length > 0 ? (
+                                {lockedCategories.has(cat.name) ? (
+                                    <div className="p-12 bg-gray-50/50 dark:bg-gray-900/20 rounded-3xl border-2 border-dashed border-gray-200 dark:border-gray-800 flex flex-col items-center justify-center text-center opacity-70">
+                                        <div className="w-16 h-16 bg-white dark:bg-gray-800 rounded-2xl flex items-center justify-center text-lyceum-blue mb-4 shadow-sm">
+                                            <Lock size={28} />
+                                        </div>
+                                        <h3 className="text-gray-900 dark:text-white text-xl font-black mb-2">Access Restricted</h3>
+                                        <p className="text-gray-500 font-bold">Please Clear the payment to see the document</p>
+                                        <p className="text-sm text-gray-400 mt-4">
+                                            {groupedDocs[cat.name].length > 0
+                                                ? `You have ${groupedDocs[cat.name].length} ${groupedDocs[cat.name].length === 1 ? 'file' : 'files'} uploaded, but they are hidden until payment is clear.`
+                                                : 'Complete your pending payments to unlock this section for uploads.'}
+                                        </p>
+                                    </div>
+                                ) : groupedDocs[cat.name].length > 0 ? (
                                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
                                         {groupedDocs[cat.name].map((doc) => (
                                             <DocumentItem

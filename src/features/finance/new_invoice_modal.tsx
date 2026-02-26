@@ -52,6 +52,8 @@ const NewInvoiceModal: React.FC<NewInvoiceModalProps> = ({
   const [saving, setSaving] = useState(false);
   const [activeDropdownIndex, setActiveDropdownIndex] = useState<number | null>(null);
   const [addingProduct, setAddingProduct] = useState(false);
+  const [availableAREntries, setAvailableAREntries] = useState<any[]>([]);
+  const [selectedAREntryId, setSelectedAREntryId] = useState<number | null>(null);
 
   // Filter customers
   const customers = contacts.filter(c =>
@@ -106,6 +108,15 @@ const NewInvoiceModal: React.FC<NewInvoiceModalProps> = ({
     }
 
     setFormData(newState);
+
+    // Filter AR entries for this contact
+    if (found) {
+      const arList = (found as any).metadata?.accountsReceivable || [];
+      setAvailableAREntries(arList.filter((ar: any) => ar.status !== 'Paid'));
+    } else {
+      setAvailableAREntries([]);
+    }
+    setSelectedAREntryId(null);
   };
 
   const handleQuickAddContact = async (contactData: any) => {
@@ -230,7 +241,8 @@ const NewInvoiceModal: React.FC<NewInvoiceModalProps> = ({
             return desc;
           })
           .join(', '),
-        lineItems: lineItems // Save structured data
+        lineItems: lineItems, // Save structured data
+        linkedArId: selectedAREntryId
       };
 
       await onSave(invoice);
@@ -351,6 +363,30 @@ const NewInvoiceModal: React.FC<NewInvoiceModalProps> = ({
                 </select>
               </div>
             </div>
+
+            {/* Link to Quotation/AR */}
+            {availableAREntries.length > 0 && (
+              <div className="bg-blue-50 dark:bg-blue-900/10 p-4 rounded-lg border border-blue-100 dark:border-blue-800">
+                <label className="block text-sm font-medium text-blue-800 dark:text-blue-300 mb-2">
+                  Link to Quotation / Outstanding Fee
+                </label>
+                <select
+                  value={selectedAREntryId || ''}
+                  onChange={(e) => setSelectedAREntryId(e.target.value ? parseInt(e.target.value) : null)}
+                  className="w-full px-3 py-2 border border-blue-200 dark:border-blue-700 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                >
+                  <option value="">-- No Link (General Income) --</option>
+                  {availableAREntries.map(ar => (
+                    <option key={ar.id} value={ar.id}>
+                      {ar.quotationRef} - {ar.description || 'Quotation'} (Due: ₹{ar.remainingAmount})
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1.5 text-xs text-blue-600 dark:text-blue-400">
+                  Linking will update the student's payment status and unlock document sections.
+                </p>
+              </div>
+            )}
 
             {/* Line Items */}
             <div>

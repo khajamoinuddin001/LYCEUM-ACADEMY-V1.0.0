@@ -48,6 +48,8 @@ const EditInvoiceModal: React.FC<EditInvoiceModalProps> = ({
     const [saving, setSaving] = useState(false);
     const [activeDropdownIndex, setActiveDropdownIndex] = useState<number | null>(null);
     const [addingProduct, setAddingProduct] = useState(false);
+    const [availableAREntries, setAvailableAREntries] = useState<any[]>([]);
+    const [selectedAREntryId, setSelectedAREntryId] = useState<number | null>((transaction as any).linkedArId || null);
 
     // Filter customers
     const customers = contacts.filter(c =>
@@ -57,6 +59,13 @@ const EditInvoiceModal: React.FC<EditInvoiceModalProps> = ({
     useEffect(() => {
         loadProducts();
         initializeForm();
+        if (transaction.contactId) {
+            const contact = contacts.find(c => c.id === transaction.contactId);
+            if (contact) {
+                const arList = (contact as any).metadata?.accountsReceivable || [];
+                setAvailableAREntries(arList.filter((ar: any) => ar.status !== 'Paid' || ar.id === (transaction as any).linkedArId));
+            }
+        }
     }, [transaction]);
 
     const initializeForm = () => {
@@ -118,6 +127,14 @@ const EditInvoiceModal: React.FC<EditInvoiceModalProps> = ({
         }
 
         setFormData(newState);
+
+        // Filter AR entries for this contact
+        if (found) {
+            const arList = (found as any).metadata?.accountsReceivable || [];
+            setAvailableAREntries(arList.filter((ar: any) => ar.status !== 'Paid' || ar.id === (transaction as any).linkedArId));
+        } else {
+            setAvailableAREntries([]);
+        }
     };
 
     const handleQuickAddContact = async (contactData: any) => {
@@ -242,7 +259,8 @@ const EditInvoiceModal: React.FC<EditInvoiceModalProps> = ({
                         }
                         return desc;
                     })
-                    .join(', ')
+                    .join(', '),
+                linkedArId: selectedAREntryId
             };
 
             await onSave(transaction.id, updates);
@@ -375,6 +393,30 @@ const EditInvoiceModal: React.FC<EditInvoiceModalProps> = ({
                                 </select>
                             </div>
                         </div>
+
+                        {/* Link to Quotation/AR */}
+                        {availableAREntries.length > 0 && (
+                            <div className="bg-blue-50 dark:bg-blue-900/10 p-4 rounded-lg border border-blue-100 dark:border-blue-800">
+                                <label className="block text-sm font-medium text-blue-800 dark:text-blue-300 mb-2">
+                                    Link to Quotation / Outstanding Fee
+                                </label>
+                                <select
+                                    value={selectedAREntryId || ''}
+                                    onChange={(e) => setSelectedAREntryId(e.target.value ? parseInt(e.target.value) : null)}
+                                    className="w-full px-3 py-2 border border-blue-200 dark:border-blue-700 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                                >
+                                    <option value="">-- No Link (General Income) --</option>
+                                    {availableAREntries.map(ar => (
+                                        <option key={ar.id} value={ar.id}>
+                                            {ar.quotationRef} - {ar.description || 'Quotation'} (Due: ₹{ar.remainingAmount})
+                                        </option>
+                                    ))}
+                                </select>
+                                <p className="mt-1.5 text-xs text-blue-600 dark:text-blue-400">
+                                    Linking will update the student's payment status and unlock document sections.
+                                </p>
+                            </div>
+                        )}
 
                         <div className="grid grid-cols-1 gap-4">
                             <div>

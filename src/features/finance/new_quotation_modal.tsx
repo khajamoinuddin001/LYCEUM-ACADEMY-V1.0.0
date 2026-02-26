@@ -1,9 +1,14 @@
 
 import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
-import { ArrowLeft, IndianRupee, Plus, Trash2, Edit, X, Printer, Download } from '@/components/common/icons';
+import { ArrowLeft, IndianRupee, Plus, Trash2, Edit, X, Printer, Download, Cog } from '@/components/common/icons';
 import type { Quotation, CrmLead, User, QuotationTemplate, QuotationLineItem } from '@/types';
 import QuotationTemplateModal from './quotation_template_modal';
+
+const DOCUMENT_CATEGORIES = [
+  'Passport', 'Educational Documents', 'Financial Document & Affidavit of Support / CA Report & ITR\'s',
+  'Gap Justification', 'Acceptance', 'I20', 'DS-160', 'SEVIS confirmation', 'Appointment Confirmation', 'University Affidavit Forms', 'Other'
+];
 
 interface NewQuotationPageProps {
   lead: CrmLead;
@@ -19,7 +24,7 @@ interface NewQuotationPageProps {
 const BLANK_QUOTATION: Omit<Quotation, 'id' | 'status' | 'date'> = {
   title: 'New Quotation',
   description: '',
-  lineItems: [{ description: '', price: 0, quantity: 1 }],
+  lineItems: [{ description: '', price: 0, quantity: 1, linkedDocumentCategories: [], unlockThresholdType: 'Full', unlockThresholdAmount: 0 }],
   total: 0,
   discount: 0,
 };
@@ -68,6 +73,7 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ lead, onCancel, onS
   const [quotation, setQuotation] = useState<Omit<Quotation, 'id' | 'status' | 'date'> | Quotation>(BLANK_QUOTATION);
   const [isManageModalOpen, setIsManageModalOpen] = useState(false);
   const [templateToEditInModal, setTemplateToEditInModal] = useState<QuotationTemplate | 'new' | null>(null);
+  const [expandedSettingsIndex, setExpandedSettingsIndex] = useState<number | null>(null);
 
   const isEditing = !!quotationToEdit;
   const canWrite = user.role === 'Admin' || user.permissions?.['CRM']?.update || user.permissions?.['CRM']?.create;
@@ -112,7 +118,13 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ lead, onCancel, onS
     setQuotation({
       title: template.title,
       description: template.description,
-      lineItems: JSON.parse(JSON.stringify(template.lineItems)),
+      lineItems: template.lineItems.map(item => ({
+        ...item,
+        isDocumentUnlockEnabled: item.isDocumentUnlockEnabled || false,
+        linkedDocumentCategories: item.linkedDocumentCategories || [],
+        unlockThresholdType: item.unlockThresholdType || 'Full',
+        unlockThresholdAmount: item.unlockThresholdAmount || 0
+      })),
       total: template.total,
     });
   };
@@ -126,15 +138,15 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ lead, onCancel, onS
     setQuotation(q => ({ ...q, [name]: value }));
   };
 
-  const handleLineItemChange = (index: number, field: keyof QuotationLineItem, value: string | number) => {
+  const handleLineItemChange = (index: number, field: keyof QuotationLineItem, value: string | number | string[] | boolean) => {
     const newItems = [...quotation.lineItems];
-    const item = { ...newItems[index], [field]: value };
-    newItems[index] = item;
+    const item = { ...newItems[index], [field]: value } as Partial<QuotationLineItem>;
+    newItems[index] = item as QuotationLineItem;
     setQuotation(q => ({ ...q, lineItems: newItems }));
   };
 
   const addLineItem = () => {
-    setQuotation(q => ({ ...q, lineItems: [...q.lineItems, { description: '', price: 0, quantity: 1 }] }));
+    setQuotation(q => ({ ...q, lineItems: [...q.lineItems, { description: '', price: 0, quantity: 1, isDocumentUnlockEnabled: false, linkedDocumentCategories: [], unlockThresholdType: 'Full', unlockThresholdAmount: 0 }] }));
   };
 
   const removeLineItem = (index: number) => {
@@ -177,9 +189,7 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ lead, onCancel, onS
     };
 
     if (!isEditing && !quotationToSave.quotationNumber) {
-      // Generate unique 6-digit reference number
-      const randomDigits = Math.floor(100000 + Math.random() * 900000); // 100000-999999
-      quotationToSave.quotationNumber = `QUO-${randomDigits}`;
+      // Backend will generate a sequential QUO-0000001 reference number
     }
 
     console.log('Saving quotation:', quotationToSave);
@@ -501,41 +511,141 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ lead, onCancel, onS
 
             <div className="pt-2">
               <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Line Items</h3>
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {quotation.lineItems.map((item, index) => (
-                  <div key={index} className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      placeholder="Item description"
-                      value={item.description}
-                      onChange={(e) => handleLineItemChange(index, 'description', e.target.value)}
-                      className={`${inputClasses} flex-grow`}
-                      disabled={!canWrite}
-                    />
-                    <input
-                      type="number"
-                      placeholder="Qty"
-                      value={item.quantity || 1}
-                      onChange={(e) => handleLineItemChange(index, 'quantity', parseFloat(e.target.value) || 0)}
-                      className={inputClasses.replace('w-full', 'w-24')}
-                      min="1"
-                      disabled={!canWrite}
-                    />
-                    <input
-                      type="number"
-                      placeholder="Unit Price"
-                      value={item.price}
-                      onChange={(e) => handleLineItemChange(index, 'price', parseFloat(e.target.value) || 0)}
-                      className={`${inputClasses} w-32`}
-                      disabled={!canWrite}
-                    />
-                    <button
-                      onClick={() => removeLineItem(index)}
-                      disabled={!canWrite || quotation.lineItems.length <= 1}
-                      className="p-2 text-gray-500 hover:text-red-500 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                  <div key={index} className="p-3 shadow-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50/50 dark:bg-gray-800/30">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        placeholder="Item description"
+                        value={item.description}
+                        onChange={(e) => handleLineItemChange(index, 'description', e.target.value)}
+                        className={`${inputClasses} flex-grow`}
+                        disabled={!canWrite}
+                      />
+                      <input
+                        type="number"
+                        placeholder="Qty"
+                        value={item.quantity || 1}
+                        onChange={(e) => handleLineItemChange(index, 'quantity', parseFloat(e.target.value) || 0)}
+                        className={inputClasses.replace('w-full', 'w-24')}
+                        min="1"
+                        disabled={!canWrite}
+                      />
+                      <input
+                        type="number"
+                        placeholder="Unit Price"
+                        value={item.price}
+                        onChange={(e) => handleLineItemChange(index, 'price', parseFloat(e.target.value) || 0)}
+                        className={`${inputClasses} w-32`}
+                        disabled={!canWrite}
+                      />
+                      {user.role === 'Admin' && (
+                        <button
+                          onClick={() => setExpandedSettingsIndex(expandedSettingsIndex === index ? null : index)}
+                          className={`p-2 rounded-md transition-colors ${expandedSettingsIndex === index ? 'text-lyceum-blue bg-lyceum-blue/10' : 'text-gray-400 hover:text-lyceum-blue'}`}
+                          title="Item Settings"
+                        >
+                          <Cog size={18} />
+                        </button>
+                      )}
+                      <button
+                        onClick={() => removeLineItem(index)}
+                        disabled={!canWrite || quotation.lineItems.length <= 1}
+                        className="p-2 text-gray-500 hover:text-red-500 rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+
+                    {/* Document Unlock Settings Panel */}
+                    {expandedSettingsIndex === index && (
+                      <div className="mt-3 p-3 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-md shadow-sm space-y-3 animate-fade-in-fast">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest">Document Requirements</h4>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleLineItemChange(index, 'isDocumentUnlockEnabled', !item.isDocumentUnlockEnabled)}
+                              disabled={!canWrite}
+                              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${item.isDocumentUnlockEnabled ? 'bg-lyceum-blue' : 'bg-gray-200 dark:bg-gray-700'} ${!canWrite ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            >
+                              <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${item.isDocumentUnlockEnabled ? 'translate-x-5' : 'translate-x-1'}`} />
+                            </button>
+                            <span className="text-[10px] font-bold text-gray-500">{item.isDocumentUnlockEnabled ? 'Enabled' : 'Disabled'}</span>
+                          </div>
+                        </div>
+
+                        {item.isDocumentUnlockEnabled && (
+                          <div className="space-y-3 animate-fade-in-fast">
+
+                            <div>
+                              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                                Unlock Document Categories
+                              </label>
+                              <div className={`grid grid-cols-2 gap-2 bg-gray-50 dark:bg-gray-900/30 p-3 rounded-lg border border-gray-100 dark:border-gray-700 max-h-48 overflow-y-auto ${!canWrite ? 'opacity-70 pointer-events-none' : ''}`}>
+                                {DOCUMENT_CATEGORIES.map(cat => {
+                                  const isChecked = (item.linkedDocumentCategories || []).includes(cat);
+                                  return (
+                                    <label key={cat} className={`flex items-center gap-2 cursor-pointer group ${!canWrite ? 'cursor-not-allowed' : ''}`}>
+                                      <input
+                                        type="checkbox"
+                                        className="rounded border-gray-300 text-lyceum-blue focus:ring-lyceum-blue w-3.5 h-3.5 disabled:opacity-50"
+                                        checked={isChecked}
+                                        disabled={!canWrite}
+                                        onChange={() => {
+                                          const current = item.linkedDocumentCategories || [];
+                                          const next = isChecked
+                                            ? current.filter(c => c !== cat)
+                                            : [...current, cat];
+                                          handleLineItemChange(index, 'linkedDocumentCategories', next);
+                                        }}
+                                      />
+                                      <span className={`text-[11px] transition-colors ${isChecked ? 'text-lyceum-blue font-bold' : 'text-gray-600 dark:text-gray-400 group-hover:text-gray-900 dark:group-hover:text-gray-200'}`}>
+                                        {cat}
+                                      </span>
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            <div className="flex gap-4">
+                              <div className="flex-1">
+                                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                                  Unlock Condition
+                                </label>
+                                <select
+                                  className="w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-lyceum-blue text-xs dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                  value={item.unlockThresholdType || 'Full'}
+                                  onChange={(e) => handleLineItemChange(index, 'unlockThresholdType', e.target.value)}
+                                  disabled={!canWrite}
+                                >
+                                  <option value="Full">Full Payment (₹{((item.price || 0) * (item.quantity || 1)).toLocaleString('en-IN')})</option>
+                                  <option value="Custom">Custom Amount Paid</option>
+                                </select>
+                              </div>
+
+                              {item.unlockThresholdType === 'Custom' && (
+                                <div className="flex-1 animate-fade-in-fast">
+                                  <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                                    Custom Target Amount (₹)
+                                  </label>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max={(item.price || 0) * (item.quantity || 1)}
+                                    className="w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-lyceum-blue text-xs dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                    value={item.unlockThresholdAmount || 0}
+                                    onChange={(e) => handleLineItemChange(index, 'unlockThresholdAmount', parseFloat(e.target.value) || 0)}
+                                    disabled={!canWrite}
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

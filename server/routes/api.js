@@ -2384,7 +2384,7 @@ router.post('/leads/:id/quotations', authenticateToken, async (req, res) => {
     let newId;
     let isUnique = false;
     while (!isUnique) {
-      newId = `QUO - ${String(sequence).padStart(6, '0')} `;
+      newId = `QUO-${String(sequence).padStart(7, '0')}`;
       // Collision check
       const check = await query(`
             SELECT 1 FROM leads l, jsonb_array_elements(l.quotations) q 
@@ -2401,6 +2401,7 @@ router.post('/leads/:id/quotations', authenticateToken, async (req, res) => {
     const newQuotation = {
       ...quotationData,
       id: newId,
+      quotationNumber: newId,
       status: quotationData.status || 'In Review',
       date: new Date().toISOString().split('T')[0]
     };

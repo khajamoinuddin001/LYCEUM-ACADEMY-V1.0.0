@@ -899,8 +899,8 @@ const DashboardLayout: React.FC = () => {
                   ...ar,
                   status: data.status,
                   // We map Transaction fields back to AR fields where applicable
-                  remainingAmount: data.status === 'Paid' ? 0 : data.amount, // auto clear remianing if paid, otherwise let it be updated from modal calculation
-                  paidAmount: data.status === 'Paid' ? ar.originalAmount || ar.totalAmount : ar.paidAmount,
+                  remainingAmount: data.status === 'Paid' ? 0 : data.amount, // auto clear remaining if paid
+                  paidAmount: data.status === 'Paid' ? (ar.totalAmount || ar.originalAmount || data.amount) : ar.paidAmount,
                   dueDate: data.dueDate,
                   lineItems: data.lineItems,
                   additionalDiscount: data.additionalDiscount
@@ -920,16 +920,86 @@ const DashboardLayout: React.FC = () => {
         }
 
         // Update existing regular transaction
-        const { allTransactions } = await api.updateTransaction(data.id, data);
+        const { transaction: tx, allTransactions } = await api.updateTransaction(data.id, data);
         setTransactions(allTransactions);
+
+        // Handle Linking to AR entry if status is Paid and linkedArId is present
+        if ((data as any).linkedArId && data.contactId && data.status === 'Paid') {
+          const contact = contacts.find(c => c.id === data.contactId);
+          if (contact) {
+            const updatedMetadata = { ...((contact as any).metadata || {}) };
+            let arUpdated = false;
+            updatedMetadata.accountsReceivable = (updatedMetadata.accountsReceivable || []).map((ar: any) => {
+              if (ar.id === (data as any).linkedArId) {
+                const paymentAmount = Math.abs(data.amount);
+                // Be careful not to double count. Simplistic sync: if it's not already paid in full, update.
+                // Ideally we'd compare against previous state, but we'll stick to incrementing if transition happens?
+                // For now, let's just use the same increment logic as Create.
+                const newPaidAmount = (Number(ar.paidAmount) || 0) + paymentAmount;
+                const newRemainingAmount = Math.max(0, (Number(ar.totalAmount) || Number(ar.originalAmount)) - newPaidAmount);
+
+                arUpdated = true;
+                return {
+                  ...ar,
+                  paidAmount: newPaidAmount,
+                  remainingAmount: newRemainingAmount,
+                  status: newRemainingAmount <= 0 ? 'Paid' : 'Partial',
+                  updatedAt: new Date().toISOString()
+                };
+              }
+              return ar;
+            });
+
+            if (arUpdated) {
+              const updatedContact = { ...contact, metadata: updatedMetadata };
+              await api.saveContact(updatedContact, false);
+              setContacts(prev => prev.map(c => c.id === contact.id ? updatedContact : c));
+              logActivity(`Linked updated transaction ${tx.id} to AR entry ${(data as any).linkedArId} for ${contact.name}`);
+            }
+          }
+        }
         logActivity(`Updated ${data.type} ${data.id}.`);
       } else {
         // Create new
         const { transaction: tx, allTransactions } = await api.saveTransaction(data);
         setTransactions(allTransactions);
+
+        // Handle Linking to AR entry if specified
+        if ((data as any).linkedArId && data.contactId) {
+          const contact = contacts.find(c => c.id === data.contactId);
+          if (contact && data.status === 'Paid') {
+            const updatedMetadata = { ...((contact as any).metadata || {}) };
+            let arUpdated = false;
+            updatedMetadata.accountsReceivable = (updatedMetadata.accountsReceivable || []).map((ar: any) => {
+              if (ar.id === (data as any).linkedArId) {
+                const paymentAmount = Math.abs(data.amount);
+                const newPaidAmount = (Number(ar.paidAmount) || 0) + paymentAmount;
+                const newRemainingAmount = Math.max(0, (Number(ar.totalAmount) || Number(ar.originalAmount)) - newPaidAmount);
+
+                arUpdated = true;
+                return {
+                  ...ar,
+                  paidAmount: newPaidAmount,
+                  remainingAmount: newRemainingAmount,
+                  status: newRemainingAmount <= 0 ? 'Paid' : 'Partial',
+                  updatedAt: new Date().toISOString()
+                };
+              }
+              return ar;
+            });
+
+            if (arUpdated) {
+              const updatedContact = { ...contact, metadata: updatedMetadata };
+              await api.saveContact(updatedContact, false);
+              setContacts(prev => prev.map(c => c.id === contact.id ? updatedContact : c));
+              logActivity(`Linked transaction ${tx.id} to AR entry ${(data as any).linkedArId} for ${contact.name}`);
+            }
+          }
+        }
+
         addNotification({
           title: `New ${tx.type} Created`,
-          description: `${tx.type} ${tx.id} for ${tx.customerName} has been created.`,
+          description: `${tx.type} ${tx.id} for ${tx.customerName} has been created${(data as any).linkedArId && data.status === 'Paid' ? ' and linked to fee' : ''}.`,
           recipientRoles: ['Admin', 'Staff']
         });
         await api.logPaymentActivity(`${tx.type} ${tx.id} for ${tx.customerName} was created.`, tx.amount, 'invoice_created');
@@ -1478,6 +1548,38 @@ const DashboardLayout: React.FC = () => {
     const { allTransactions, paidTransaction } = await api.recordPayment(transactionId);
     setTransactions(allTransactions);
     if (paidTransaction) {
+      // If the transaction was linked to an AR entry, update the AR entry too
+      if ((paidTransaction as any).linkedArId && paidTransaction.contactId) {
+        const contact = contacts.find(c => c.id === paidTransaction.contactId);
+        if (contact) {
+          const updatedMetadata = { ...((contact as any).metadata || {}) };
+          let arUpdated = false;
+          updatedMetadata.accountsReceivable = (updatedMetadata.accountsReceivable || []).map((ar: any) => {
+            if (ar.id === (paidTransaction as any).linkedArId) {
+              const paymentAmount = Math.abs(paidTransaction.amount);
+              const newPaidAmount = (Number(ar.paidAmount) || 0) + paymentAmount;
+              const newRemainingAmount = Math.max(0, (Number(ar.totalAmount) || Number(ar.originalAmount)) - newPaidAmount);
+
+              arUpdated = true;
+              return {
+                ...ar,
+                paidAmount: newPaidAmount,
+                remainingAmount: newRemainingAmount,
+                status: newRemainingAmount <= 0 ? 'Paid' : 'Partial',
+                updatedAt: new Date().toISOString()
+              };
+            }
+            return ar;
+          });
+
+          if (arUpdated) {
+            const updatedContact = { ...contact, metadata: updatedMetadata };
+            await api.saveContact(updatedContact, false);
+            setContacts(prev => prev.map(c => c.id === contact.id ? updatedContact : c));
+          }
+        }
+      }
+
       addNotification({
         title: 'Payment Recorded',
         description: `Payment for invoice ${paidTransaction.id} (${paidTransaction.customerName}) has been recorded.`,

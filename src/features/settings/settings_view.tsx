@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Bell, FileText, Edit, Trash2, Plus, User as UserIcon, Lock, Palette, DollarSign, CreditCard } from '@/components/common/icons';
 import * as api from '@/utils/api';
 import type { QuotationTemplate, User, Coupon, LmsCourse } from '@/types';
@@ -182,12 +182,47 @@ const NotificationsTab: React.FC = () => {
 
 const TemplatesTab: React.FC<Pick<SettingsViewProps, 'quotationTemplates' | 'onSaveTemplate' | 'onDeleteTemplate'>> = ({ quotationTemplates, onSaveTemplate, onDeleteTemplate }) => {
     const [editingTemplate, setEditingTemplate] = useState<QuotationTemplate | 'new' | null>(null);
+    const [isLockEnforced, setIsLockEnforced] = useState<boolean>(true);
+
+    useEffect(() => {
+        const fetchSettings = async () => {
+            try {
+                const enforced = await api.getSystemSetting<boolean>('document_lock_enforced');
+                if (enforced !== null) {
+                    setIsLockEnforced(enforced);
+                }
+            } catch (error) {
+                console.error('Failed to fetch lock status:', error);
+            }
+        };
+        fetchSettings();
+    }, []);
+
+    const handleToggleLock = async (val: boolean) => {
+        try {
+            await api.saveSystemSetting('document_lock_enforced', val);
+            setIsLockEnforced(val);
+        } catch (error) {
+            console.error('Failed to toggle lock:', error);
+            alert('Failed to update lock status');
+        }
+    };
 
     return (
         <div>
             <div className="p-6 border-b border-gray-200 dark:border-gray-700">
                 <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Quotation Templates</h3>
                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Manage pre-built quotation packages.</p>
+            </div>
+            <div className="p-6 bg-lyceum-blue/5 border-b border-gray-200 dark:border-gray-700">
+                <Toggle
+                    label="Enforce Payment-Conditioned Documents"
+                    enabled={isLockEnforced}
+                    setEnabled={handleToggleLock}
+                />
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 font-medium">
+                    When enabled, student document categories linked to quotation items remain locked until the specified payment is received.
+                </p>
             </div>
             <div className="p-6">
                 <div className="flex justify-end mb-4">
