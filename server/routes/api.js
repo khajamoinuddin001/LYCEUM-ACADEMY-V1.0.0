@@ -2852,7 +2852,7 @@ router.put('/transactions/:id', authenticateToken, async (req, res) => {
     await query(`
       UPDATE transactions SET
 contact_id = $1, customer_name = $2, date = $3, description = $4, type = $5, status = $6, amount = $7, payment_method = $8, due_date = $9, additional_discount = $10, metadata = $11, line_items = $12
-      WHERE id = $13
+      WHERE TRIM(id) = $13
   `, [
       transaction.contactId || null,
       transaction.customerName,
@@ -2881,15 +2881,16 @@ contact_id = $1, customer_name = $2, date = $3, description = $4, type = $5, sta
       if (newArDeductions.length > 0) {
         // Update metadata with new deductions
         mergedMetadata.arDeductions = newArDeductions;
-        await query('UPDATE transactions SET metadata = $1 WHERE id = $2', [
+        await query('UPDATE transactions SET metadata = $1 WHERE TRIM(id) = $2', [
           JSON.stringify(mergedMetadata),
           transactionId
         ]);
       }
     }
 
-    const result = await query('SELECT * FROM transactions WHERE id = $1', [transactionId]);
+    const result = await query('SELECT * FROM transactions WHERE TRIM(id) = $1', [transactionId]);
     const updated = result.rows[0];
+    if (!updated) throw new Error("Transaction could not be refreshed after update");
     res.json({
       ...updated,
       lineItems: updated.line_items,
@@ -2960,7 +2961,7 @@ router.delete('/transactions/:id', authenticateToken, async (req, res) => {
       }
     }
 
-    await query('DELETE FROM transactions WHERE id = $1', [transactionId]);
+    await query('DELETE FROM transactions WHERE TRIM(id) = $1', [transactionId]);
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
