@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Contact, UniversityCourse } from '@/types';
 import * as api from '@/utils/api';
-import { X, Search as SearchIcon, Building2, BookOpen, HelpCircle, Save, Loader2, User } from 'lucide-react';
+import { X, Search as SearchIcon, Building2, BookOpen, HelpCircle, Save, Loader2, User, GraduationCap } from 'lucide-react';
 
 interface ManualApplicationModalProps {
     isOpen: boolean;
@@ -22,6 +22,7 @@ const ManualApplicationModal: React.FC<ManualApplicationModalProps> = ({ isOpen,
     const [formData, setFormData] = useState({
         universityName: '',
         course: '',
+        degree: "Master's",
         status: 'Applied'
     });
 
@@ -34,6 +35,7 @@ const ManualApplicationModal: React.FC<ManualApplicationModalProps> = ({ isOpen,
             setFormData({
                 universityName: '',
                 course: '',
+                degree: "Master's",
                 status: 'Applied'
             });
             setIsUniDropdownOpen(false);
@@ -95,6 +97,7 @@ const ManualApplicationModal: React.FC<ManualApplicationModalProps> = ({ isOpen,
             const newApp = {
                 universityName: formData.universityName,
                 course: formData.course,
+                degree: formData.degree,
                 status: formData.status,
                 ackNumber: newAck,
                 applicationSubmissionDate: new Date().toISOString(),
@@ -297,6 +300,21 @@ const ManualApplicationModal: React.FC<ManualApplicationModalProps> = ({ isOpen,
                                     onChange={(e) => setFormData({ ...formData, course: e.target.value })}
                                     className="w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl px-4 py-3.5 text-sm font-bold text-gray-900 dark:text-white focus:border-lyceum-blue focus:ring-4 focus:ring-blue-500/10 outline-none transition-all placeholder:font-medium"
                                 />
+                            </div>
+
+                            {/* Degree Dropdown */}
+                            <div className="space-y-2">
+                                <label className="text-xs font-bold text-gray-500 uppercase tracking-widest flex items-center gap-2">
+                                    <GraduationCap size={14} /> Degree <span className="text-red-500">*</span>
+                                </label>
+                                <select
+                                    value={formData.degree}
+                                    onChange={(e) => setFormData({ ...formData, degree: e.target.value })}
+                                    className="w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl px-4 py-3.5 text-sm font-bold text-gray-900 dark:text-white focus:border-lyceum-blue focus:ring-4 focus:ring-blue-500/10 outline-none transition-all appearance-none cursor-pointer"
+                                >
+                                    <option value="Bachelor's">Bachelor's</option>
+                                    <option value="Master's">Master's</option>
+                                </select>
                             </div>
 
                             {/* Status Select */}

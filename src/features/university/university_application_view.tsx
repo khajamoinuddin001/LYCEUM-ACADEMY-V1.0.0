@@ -435,6 +435,7 @@ const UniversityApplicationView: React.FC<UniversityApplicationViewProps> = ({ u
                                     <th className="px-6 py-4 font-extrabold rounded-tl-2xl">ACK Number</th>
                                     <th className="px-6 py-4 font-extrabold">Applicant</th>
                                     <th className="px-6 py-4 font-extrabold">University & Course</th>
+                                    <th className="px-6 py-4 font-extrabold">Degree</th>
                                     <th className="px-6 py-4 font-extrabold">Submission Date</th>
                                     <th className="px-6 py-4 font-extrabold">Status</th>
                                     <th className="px-6 py-4 font-extrabold text-right rounded-tr-2xl">Actions</th>
@@ -486,6 +487,21 @@ const UniversityApplicationView: React.FC<UniversityApplicationViewProps> = ({ u
                                                         <span className="truncate" title={item.app.course}>{item.app.course}</span>
                                                     </div>
                                                 </div>
+                                            </td>
+
+                                            <td className="px-6 py-4">
+                                                {item.app.degree ? (
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center shrink-0">
+                                                            <GraduationCap size={14} />
+                                                        </div>
+                                                        <span className="text-sm font-bold text-gray-900 dark:text-gray-100 uppercase tracking-tight">
+                                                            {item.app.degree}
+                                                        </span>
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-gray-300 dark:text-gray-600 text-xs">-</span>
+                                                )}
                                             </td>
 
                                             <td className="px-6 py-4">

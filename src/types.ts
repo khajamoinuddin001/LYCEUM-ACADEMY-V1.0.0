@@ -125,6 +125,7 @@ export interface Document {
 export interface UniversityApplicationDetails {
   universityName?: string;
   course?: string;
+  degree?: string; // e.g. Master's, Bachelor's
   applicationSubmissionDate?: string;
   status?: string;
   remarks?: string;
