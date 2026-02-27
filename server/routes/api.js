@@ -2664,7 +2664,7 @@ router.post('/transactions', authenticateToken, async (req, res) => {
       const prefix = typePrefixMap[transaction.type] || 'TXN';
 
       // Find latest ID for this prefix to increment
-      const maxSeqResult = await query("SELECT id FROM transactions WHERE id LIKE $1 ORDER BY id DESC LIMIT 1", [`${prefix} -% `]);
+      const maxSeqResult = await query("SELECT id FROM transactions WHERE id LIKE $1 ORDER BY id DESC LIMIT 1", [`${prefix}%`]);
       let sequence = 1;
 
       if (maxSeqResult.rows.length > 0) {
@@ -2681,7 +2681,7 @@ router.post('/transactions', authenticateToken, async (req, res) => {
       // Collision Check Loop
       let isUnique = false;
       while (!isUnique) {
-        const generatedId = `${prefix} -${String(sequence).padStart(6, '0')} `;
+        const generatedId = `${prefix}-${String(sequence).padStart(6, '0')}`;
         const check = await query("SELECT id FROM transactions WHERE id = $1", [generatedId]);
         if (check.rows.length === 0) {
           id = generatedId;
@@ -2823,11 +2823,11 @@ RETURNING *
 
 router.put('/transactions/:id', authenticateToken, async (req, res) => {
   try {
-    const transactionId = req.params.id;
+    const transactionId = req.params.id ? req.params.id.trim() : '';
     const transaction = req.body;
 
     // 1. Fetch existing transaction to revert previous AR effects
-    const existingRes = await query('SELECT * FROM transactions WHERE id = $1', [transactionId]);
+    const existingRes = await query('SELECT * FROM transactions WHERE TRIM(id) = $1', [transactionId]);
     if (existingRes.rows.length === 0) return res.status(404).json({ error: 'Transaction not found' });
 
     const existingTx = existingRes.rows[0];
@@ -2909,10 +2909,10 @@ contact_id = $1, customer_name = $2, date = $3, description = $4, type = $5, sta
 
 router.delete('/transactions/:id', authenticateToken, async (req, res) => {
   try {
-    const transactionId = req.params.id;
+    const transactionId = req.params.id ? req.params.id.trim() : '';
 
     // 1. Fetch transaction to check for AR deductions
-    const txRes = await query('SELECT * FROM transactions WHERE id = $1', [transactionId]);
+    const txRes = await query('SELECT * FROM transactions WHERE TRIM(id) = $1', [transactionId]);
     if (txRes.rows.length === 0) return res.status(404).json({ error: 'Transaction not found' });
 
     const transaction = txRes.rows[0];
