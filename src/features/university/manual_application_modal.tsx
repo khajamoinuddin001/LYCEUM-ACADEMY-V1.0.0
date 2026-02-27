@@ -77,11 +77,6 @@ const ManualApplicationModal: React.FC<ManualApplicationModalProps> = ({ isOpen,
             const fullContact = selectedStudent;
             if (!fullContact) throw new Error("Contact not found");
 
-            const generateAckNumber = (existingCount: number) => {
-                const n = existingCount + 1;
-                return `ACK-${String(n).padStart(7, '0')}`;
-            };
-
             // Prepare the new application construct
             const updatedContact = { ...fullContact };
 
@@ -92,7 +87,8 @@ const ManualApplicationModal: React.FC<ManualApplicationModalProps> = ({ isOpen,
                 updatedContact.visaInformation.universityApplication.universities = [];
             }
 
-            const newAck = generateAckNumber(updatedContact.visaInformation.universityApplication.universities.length);
+            const { ackNumber } = await api.getNextAckNumber();
+            const newAck = ackNumber;
 
             const newApp = {
                 universityName: formData.universityName,

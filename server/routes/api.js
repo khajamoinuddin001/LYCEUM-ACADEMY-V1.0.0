@@ -652,6 +652,19 @@ router.post('/contacts/:id/photo', authenticateToken, uploadAvatar.single('photo
   }
 });
 
+// ACK Number Generation
+router.get('/next-ack-number', authenticateToken, async (req, res) => {
+  try {
+    const result = await query("SELECT nextval('application_ack_seq') as seq");
+    const seq = result.rows[0].seq;
+    const ackNumber = `ACK-${String(seq).padStart(7, '0')}`;
+    res.json({ ackNumber });
+  } catch (error) {
+    console.error('Error generating ACK number:', error);
+    res.status(500).json({ error: 'Failed to generate ACK number' });
+  }
+});
+
 // Contacts routes
 router.get('/contacts', authenticateToken, async (req, res) => {
   try {

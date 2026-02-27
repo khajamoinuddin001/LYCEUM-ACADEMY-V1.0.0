@@ -212,6 +212,10 @@ export const getContactDocuments = async (contactId: number): Promise<any> => {
   return apiRequest(`/contacts/${contactId}/documents`);
 };
 
+export const getNextAckNumber = async (): Promise<{ ackNumber: string }> => {
+  return apiRequest('/next-ack-number');
+};
+
 export const downloadDocument = async (documentId: number, filename: string): Promise<void> => {
   const token = getToken();
   const headers: HeadersInit = {
