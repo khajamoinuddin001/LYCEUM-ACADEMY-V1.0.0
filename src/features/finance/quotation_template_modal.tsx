@@ -34,12 +34,13 @@ const QuotationTemplateModal: React.FC<QuotationTemplateModalProps> = ({ templat
         ...item,
         linkedDocumentCategories: item.linkedDocumentCategories || [],
         unlockThresholdType: item.unlockThresholdType || 'Full',
-        unlockThresholdAmount: item.unlockThresholdAmount || 0
-      })) : [{ description: '', price: 0, linkedDocumentCategories: [], unlockThresholdType: 'Full', unlockThresholdAmount: 0 }]);
+        unlockThresholdAmount: item.unlockThresholdAmount || 0,
+        unlockStages: item.unlockStages || []
+      })) : [{ description: '', price: 0, linkedDocumentCategories: [], unlockThresholdType: 'Full', unlockThresholdAmount: 0, unlockStages: [] }]);
     } else {
       setTitle('');
       setDescription('');
-      setLineItems([{ description: '', price: 0, linkedDocumentCategories: [], unlockThresholdType: 'Full', unlockThresholdAmount: 0 }]);
+      setLineItems([{ description: '', price: 0, linkedDocumentCategories: [], unlockThresholdType: 'Full', unlockThresholdAmount: 0, unlockStages: [] }]);
     }
     setError('');
   }, [template]);
@@ -59,7 +60,15 @@ const QuotationTemplateModal: React.FC<QuotationTemplateModalProps> = ({ templat
   };
 
   const addLineItem = () => {
-    setLineItems([...lineItems, { description: '', price: 0, isDocumentUnlockEnabled: false, linkedDocumentCategories: [], unlockThresholdType: 'Full', unlockThresholdAmount: 0 }]);
+    setLineItems([...lineItems, {
+      description: '',
+      price: 0,
+      isDocumentUnlockEnabled: false,
+      linkedDocumentCategories: [],
+      unlockThresholdType: 'Full',
+      unlockThresholdAmount: 0,
+      unlockStages: []
+    }]);
   };
 
   const removeLineItem = (index: number) => {
@@ -86,7 +95,8 @@ const QuotationTemplateModal: React.FC<QuotationTemplateModalProps> = ({ templat
         isDocumentUnlockEnabled: item.isDocumentUnlockEnabled || false,
         linkedDocumentCategories: item.linkedDocumentCategories || [],
         unlockThresholdType: item.unlockThresholdType || 'Full',
-        unlockThresholdAmount: item.unlockThresholdAmount || 0
+        unlockThresholdAmount: item.unlockThresholdAmount || 0,
+        unlockStages: item.unlockStages || []
       }));
 
     if (finalLineItems.length === 0) {
@@ -198,71 +208,124 @@ const QuotationTemplateModal: React.FC<QuotationTemplateModalProps> = ({ templat
                       </div>
 
                       {item.isDocumentUnlockEnabled && (
-                        <div className="space-y-3 animate-fade-in-fast">
-                          <div>
-                            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                              Unlock Document Categories
-                            </label>
-                            <div className={`grid grid-cols-2 gap-2 bg-gray-50 dark:bg-gray-900/30 p-3 rounded-lg border border-gray-100 dark:border-gray-700 max-h-48 overflow-y-auto ${userRole !== 'Admin' ? 'opacity-70 pointer-events-none' : ''}`}>
-                              {DOCUMENT_CATEGORIES.map(cat => {
-                                const isChecked = (item.linkedDocumentCategories || []).includes(cat);
-                                return (
-                                  <label key={cat} className={`flex items-center gap-2 cursor-pointer group ${userRole !== 'Admin' ? 'cursor-not-allowed' : ''}`}>
-                                    <input
-                                      type="checkbox"
-                                      className="rounded border-gray-300 text-lyceum-blue focus:ring-lyceum-blue w-3.5 h-3.5 disabled:opacity-50"
-                                      checked={isChecked}
-                                      disabled={userRole !== 'Admin'}
-                                      onChange={() => {
-                                        const current = item.linkedDocumentCategories || [];
-                                        const next = isChecked
-                                          ? current.filter(c => c !== cat)
-                                          : [...current, cat];
-                                        handleLineItemChange(index, 'linkedDocumentCategories', next);
+                        <div className="space-y-4 animate-fade-in-fast">
+                          {/* Stages List */}
+                          <div className="space-y-3">
+                            {(item.unlockStages || []).map((stage, sIdx) => (
+                              <div key={stage.id || sIdx} className="p-3 bg-gray-50 dark:bg-gray-900/50 rounded-lg border border-gray-100 dark:border-gray-700 relative group/stage">
+                                <div className="flex justify-between items-center mb-2">
+                                  <span className="text-[10px] font-black uppercase tracking-widest text-lyceum-blue">Stage {sIdx + 1}</span>
+                                  <button
+                                    onClick={() => {
+                                      const nextStages = (item.unlockStages || []).filter((_, i) => i !== sIdx);
+                                      handleLineItemChange(index, 'unlockStages', nextStages);
+                                    }}
+                                    className="text-gray-400 hover:text-red-500 transition-colors"
+                                    title="Remove Stage"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-3 mb-3">
+                                  <div>
+                                    <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-tighter mb-1">Condition</label>
+                                    <select
+                                      className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-lyceum-blue text-[11px] dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                      value={stage.type || 'Full'}
+                                      onChange={(e) => {
+                                        const nextStages = [...(item.unlockStages || [])];
+                                        nextStages[sIdx] = { ...stage, type: e.target.value as 'Full' | 'Custom' };
+                                        handleLineItemChange(index, 'unlockStages', nextStages);
                                       }}
-                                    />
-                                    <span className={`text-[11px] transition-colors ${isChecked ? 'text-lyceum-blue font-bold' : 'text-gray-600 dark:text-gray-400 group-hover:text-gray-900 dark:group-hover:text-gray-200'}`}>
-                                      {cat}
-                                    </span>
-                                  </label>
-                                );
-                              })}
-                            </div>
-                          </div>
+                                    >
+                                      <option value="Full">Full Payment (₹{(item.price || 0).toLocaleString('en-IN')})</option>
+                                      <option value="Custom">Custom Amount</option>
+                                    </select>
+                                  </div>
 
-                          <div className="flex gap-4">
-                            <div className="flex-1">
-                              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                                Unlock Condition
-                              </label>
-                              <select
-                                className="w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-lyceum-blue text-xs dark:bg-gray-700 dark:border-gray-600 dark:text-white disabled:opacity-70"
-                                value={item.unlockThresholdType || 'Full'}
-                                onChange={(e) => handleLineItemChange(index, 'unlockThresholdType', e.target.value)}
-                                disabled={userRole !== 'Admin'}
-                              >
-                                <option value="Full">Full Payment (₹{(item.price || 0).toLocaleString('en-IN')})</option>
-                                <option value="Custom">Custom Amount Paid</option>
-                              </select>
-                            </div>
+                                  {stage.type === 'Custom' && (
+                                    <div className="animate-fade-in-fast">
+                                      <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-tighter mb-1">Target Amount (₹)</label>
+                                      <input
+                                        type="number"
+                                        min="0"
+                                        className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-lyceum-blue text-[11px] dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                        value={stage.amount || 0}
+                                        onChange={(e) => {
+                                          const nextStages = [...(item.unlockStages || [])];
+                                          nextStages[sIdx] = { ...stage, amount: parseFloat(e.target.value) || 0 };
+                                          handleLineItemChange(index, 'unlockStages', nextStages);
+                                        }}
+                                      />
+                                    </div>
+                                  )}
+                                </div>
 
-                            {item.unlockThresholdType === 'Custom' && (
-                              <div className="flex-1 animate-fade-in-fast">
-                                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                                  Custom Target Amount (₹)
-                                </label>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  max={item.price || 0}
-                                  className="w-full px-2 py-1.5 border border-gray-300 rounded focus:ring-1 focus:ring-lyceum-blue text-xs dark:bg-gray-700 dark:border-gray-600 dark:text-white disabled:opacity-70"
-                                  value={item.unlockThresholdAmount || 0}
-                                  onChange={(e) => handleLineItemChange(index, 'unlockThresholdAmount', parseFloat(e.target.value) || 0)}
-                                  disabled={userRole !== 'Admin'}
-                                />
+                                <div>
+                                  <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-tighter mb-1">Unlock Categories</label>
+                                  <div className="grid grid-cols-2 gap-x-2 gap-y-1 bg-white dark:bg-gray-800 p-2 rounded border border-gray-100 dark:border-gray-700 max-h-32 overflow-y-auto">
+                                    {DOCUMENT_CATEGORIES.map(cat => {
+                                      const isChecked = (stage.linkedDocumentCategories || []).includes(cat);
+                                      return (
+                                        <label key={cat} className="flex items-center gap-1.5 cursor-pointer">
+                                          <input
+                                            type="checkbox"
+                                            className="rounded border-gray-300 text-lyceum-blue focus:ring-lyceum-blue w-3 h-3"
+                                            checked={isChecked}
+                                            onChange={() => {
+                                              const current = stage.linkedDocumentCategories || [];
+                                              const next = isChecked
+                                                ? current.filter(c => c !== cat)
+                                                : [...current, cat];
+                                              const nextStages = [...(item.unlockStages || [])];
+                                              nextStages[sIdx] = { ...stage, linkedDocumentCategories: next };
+                                              handleLineItemChange(index, 'unlockStages', nextStages);
+                                            }}
+                                          />
+                                          <span className={`text-[10px] truncate ${isChecked ? 'text-lyceum-blue font-bold' : 'text-gray-600 dark:text-gray-400'}`}>
+                                            {cat}
+                                          </span>
+                                        </label>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
                               </div>
-                            )}
+                            ))}
+
+                            {/* Add Stage Button */}
+                            <button
+                              onClick={() => {
+                                const currentStages = item.unlockStages || [];
+                                // Migration check
+                                const legacyStage = (currentStages.length === 0 && item.linkedDocumentCategories && item.linkedDocumentCategories.length > 0)
+                                  ? [{
+                                    id: Date.now().toString(),
+                                    type: item.unlockThresholdType || 'Full',
+                                    amount: item.unlockThresholdAmount || 0,
+                                    linkedDocumentCategories: item.linkedDocumentCategories
+                                  }]
+                                  : [];
+
+                                handleLineItemChange(index, 'unlockStages', [
+                                  ...legacyStage,
+                                  ...currentStages,
+                                  { id: (Date.now() + 1).toString(), type: 'Full', amount: 0, linkedDocumentCategories: [] }
+                                ]);
+                              }}
+                              className="w-full flex items-center justify-center gap-1 py-1.5 border border-dashed border-gray-300 dark:border-gray-600 rounded-lg text-[10px] font-bold text-gray-500 hover:text-lyceum-blue hover:border-lyceum-blue transition-all"
+                            >
+                              <Plus size={12} /> Add Unlock Stage
+                            </button>
                           </div>
+
+                          {/* Legacy Warning */}
+                          {(!item.unlockStages || item.unlockStages.length === 0) && item.linkedDocumentCategories && item.linkedDocumentCategories.length > 0 && (
+                            <p className="text-[10px] text-gray-400 italic">
+                              Note: This item uses a single unlock stage. Click "Add Unlock Stage" to convert to multiple stages.
+                            </p>
+                          )}
                         </div>
                       )}
                     </div>

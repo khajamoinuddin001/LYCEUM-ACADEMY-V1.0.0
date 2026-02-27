@@ -418,9 +418,17 @@ export interface QuotationLineItem {
   price: number;
   quantity?: number;
   isDocumentUnlockEnabled?: boolean;
-  linkedDocumentCategories?: string[]; // E.g., ['I20', 'Passport']
-  unlockThresholdType?: 'Full' | 'Custom';
-  unlockThresholdAmount?: number;
+  linkedDocumentCategories?: string[]; // Legacy: for backward compatibility
+  unlockThresholdType?: 'Full' | 'Custom'; // Legacy: for backward compatibility
+  unlockThresholdAmount?: number; // Legacy: for backward compatibility
+  unlockStages?: UnlockStage[]; // New: support multiple stages
+}
+
+export interface UnlockStage {
+  id: string;
+  amount: number;
+  type: 'Full' | 'Custom';
+  linkedDocumentCategories: string[];
 }
 
 export interface QuotationTemplate {

@@ -161,16 +161,31 @@ const StudentDocumentsView: React.FC<StudentDocumentsViewProps> = ({ student, on
 
             lineItems.forEach((item: any) => {
                 if (!item.isDocumentUnlockEnabled) return;
-                const linkedCategories = item.linkedDocumentCategories || [];
-                if (linkedCategories.length === 0) return;
 
-                const type = item.unlockThresholdType || 'Full';
-                const requiredAmount = type === 'Custom'
-                    ? (Number(item.unlockThresholdAmount) || 0)
-                    : (Number(item.price || 0) * Number(item.quantity || 1));
+                // Handle new multi-stage logic
+                if (item.unlockStages && item.unlockStages.length > 0) {
+                    item.unlockStages.forEach((stage: any) => {
+                        const requiredAmount = stage.type === 'Custom'
+                            ? (Number(stage.amount) || 0)
+                            : (Number(item.price || 0) * Number(item.quantity || 1));
 
-                if (paidAmount < requiredAmount) {
-                    linkedCategories.forEach((cat: string) => locked.add(cat));
+                        if (paidAmount < requiredAmount) {
+                            (stage.linkedDocumentCategories || []).forEach((cat: string) => locked.add(cat));
+                        }
+                    });
+                } else {
+                    // Legacy single-stage logic
+                    const linkedCategories = item.linkedDocumentCategories || [];
+                    if (linkedCategories.length === 0) return;
+
+                    const type = item.unlockThresholdType || 'Full';
+                    const requiredAmount = type === 'Custom'
+                        ? (Number(item.unlockThresholdAmount) || 0)
+                        : (Number(item.price || 0) * Number(item.quantity || 1));
+
+                    if (paidAmount < requiredAmount) {
+                        linkedCategories.forEach((cat: string) => locked.add(cat));
+                    }
                 }
             });
         });
