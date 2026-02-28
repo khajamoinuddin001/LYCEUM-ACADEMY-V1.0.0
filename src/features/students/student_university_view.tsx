@@ -241,27 +241,27 @@ const StudentUniversityApplicationView: React.FC<StudentUniversityApplicationVie
         }
     };
 
-    const generateAckNumber = (existingCount: number) => {
-        const n = existingCount + 1;
-        return `ACK-${String(n).padStart(7, '0')}`;
-    };
+    // Removed local generateAckNumber, using global api.getNextAckNumber() instead
 
     const handleConfirmShortlist = async () => {
         if (basket.length === 0) return;
         setLoading(true);
 
-        const newApps = basket.map((item, i) => ({
-            universityName: item.course.universityName,
-            course: item.courseName,
-            applicationSubmissionDate: new Date().toISOString().split('T')[0],
-            status: 'Shortlisted',
-            remarks: 'Shortlisted via basket',
-            ackNumber: generateAckNumber(myApplications.length + i),
-            logoUrl: item.course.logoUrl || null,
-            country: item.course.country || '',
-            intake: item.course.intake || '',
-            applicationFee: item.course.applicationFee || null,
-            enrollmentDeposit: item.course.enrollmentDeposit || null,
+        const newApps = await Promise.all(basket.map(async (item, i) => {
+            const { ackNumber } = await api.getNextAckNumber();
+            return {
+                universityName: item.course.universityName,
+                course: item.courseName,
+                applicationSubmissionDate: new Date().toISOString().split('T')[0],
+                status: 'Shortlisted',
+                remarks: 'Shortlisted via basket',
+                ackNumber: ackNumber,
+                logoUrl: item.course.logoUrl || null,
+                country: item.course.country || '',
+                intake: item.course.intake || '',
+                applicationFee: item.course.applicationFee || null,
+                enrollmentDeposit: item.course.enrollmentDeposit || null,
+            };
         }));
 
         const updatedApps = [...myApplications, ...newApps];
@@ -309,13 +309,14 @@ const StudentUniversityApplicationView: React.FC<StudentUniversityApplicationVie
 
     const handleSubmitSingle = async (item: { course: any; courseName: string }) => {
         setLoading(true);
+        const { ackNumber } = await api.getNextAckNumber();
         const newApp = {
             universityName: item.course.universityName,
             course: item.courseName,
             applicationSubmissionDate: new Date().toISOString().split('T')[0],
             status: 'Shortlisted',
             remarks: 'Submitted individually via basket',
-            ackNumber: generateAckNumber(myApplications.length),
+            ackNumber: ackNumber,
             logoUrl: item.course.logoUrl || null,
             country: item.course.country || '',
             intake: item.course.intake || '',
