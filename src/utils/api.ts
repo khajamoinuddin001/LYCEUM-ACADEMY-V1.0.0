@@ -962,6 +962,12 @@ export const deleteDs160Document = async (id: number, itemId: number): Promise<a
   });
 };
 
+export const deleteVisaOperation = async (id: number): Promise<void> => {
+  return apiRequest(`/visa-operations/${id}`, {
+    method: 'DELETE',
+  });
+};
+
 export const updateDs160Status = async (
   id: number,
   data: { studentStatus?: string; adminStatus?: string; rejectionReason?: string }

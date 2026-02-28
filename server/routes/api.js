@@ -2083,6 +2083,22 @@ router.post('/visa-operations', authenticateToken, async (req, res) => {
   }
 });
 
+router.delete('/visa-operations/:id', authenticateToken, requireRole('Admin'), async (req, res) => {
+  try {
+    const operationId = parseInt(req.params.id);
+    const result = await query('DELETE FROM visa_operations WHERE id = $1 RETURNING id', [operationId]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Visa operation not found' });
+    }
+
+    res.json({ success: true, message: 'Visa operation deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting visa operation:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.get('/leads/:id', authenticateToken, async (req, res) => {
   try {
     const result = await query('SELECT * FROM leads WHERE id = $1', [req.params.id]);

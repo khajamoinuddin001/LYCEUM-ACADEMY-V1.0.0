@@ -28,7 +28,7 @@ import {
     KeyRound,
     Trash2
 } from 'lucide-react';
-import { createVisaOperation, updateVisaOperationCgi, updateVisaOperationSlotBooking, updateVisaOperationDs160, uploadDs160Document, deleteDs160Document, updateDs160Status, downloadDocument, downloadVisaOperationItem, getToken, API_BASE_URL, uploadDs160DependencyDocument, deleteDs160DependencyDocument } from '@/utils/api';
+import { createVisaOperation, updateVisaOperationCgi, updateVisaOperationSlotBooking, updateVisaOperationDs160, uploadDs160Document, deleteDs160Document, updateDs160Status, downloadDocument, downloadVisaOperationItem, getToken, API_BASE_URL, uploadDs160DependencyDocument, deleteDs160DependencyDocument, deleteVisaOperation } from '@/utils/api';
 import type { Contact, VisaOperation, User } from '@/types';
 
 interface VisaOperationsViewProps {
@@ -407,6 +407,23 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
         } catch (error) {
             console.error('Failed to delete DS-160 document:', error);
             alert('Failed to delete document. Please try again.');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleDeleteOperation = async () => {
+        if (!activeOp || !window.confirm('Are you sure you want to delete this visa operation? This action cannot be undone.')) return;
+        setIsSubmitting(true);
+        try {
+            await deleteVisaOperation(activeOp.id);
+            setOperations(prev => prev.filter(op => op.id !== activeOp.id));
+            setActiveOp(null);
+            setStep('list');
+            alert('Visa operation deleted successfully!');
+        } catch (error) {
+            console.error('Failed to delete visa operation:', error);
+            alert('Failed to delete visa operation. Please try again.');
         } finally {
             setIsSubmitting(false);
         }
@@ -2005,6 +2022,17 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                     >
                         {activeOp?.slotBookingData?.consulate ? 'Update Slot' : 'Book Slot'}
                     </button>
+                    {user?.role === 'Admin' && (
+                        <button
+                            onClick={handleDeleteOperation}
+                            disabled={isSubmitting}
+                            className="flex-1 md:flex-none px-6 py-3 rounded-xl font-bold transition-all shadow-lg flex items-center justify-center gap-2 bg-rose-600 text-white hover:bg-rose-700 shadow-rose-600/20 disabled:opacity-50"
+                            title="Delete Operation"
+                        >
+                            <Trash2 size={20} />
+                            <span className="md:hidden lg:inline">Delete</span>
+                        </button>
+                    )}
                 </div>
             </div>
 
