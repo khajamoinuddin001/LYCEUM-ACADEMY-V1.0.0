@@ -45,6 +45,9 @@ export async function initDatabase() {
       }
     };
 
+    // Sequences
+    await client.query('CREATE SEQUENCE IF NOT EXISTS application_ack_seq START 100');
+
     // USERS
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
