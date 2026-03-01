@@ -82,7 +82,12 @@ app.use((req, res, next) => {
   const start = Date.now();
   res.on('finish', () => {
     const duration = Date.now() - start;
-    console.log(`${req.method} ${req.originalUrl} ${res.statusCode} ${duration}ms`);
+    let userInfo = 'Anonymous';
+    if (req.user) {
+      userInfo = req.user.name || req.user.email || req.user.id || 'Unknown User';
+      userInfo += ` (${req.user.role || 'No Role'})`;
+    }
+    console.log(`[${userInfo}] ${req.method} ${req.originalUrl} ${res.statusCode} ${duration}ms`);
   });
   next();
 });
