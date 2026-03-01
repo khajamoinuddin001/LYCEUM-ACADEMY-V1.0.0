@@ -78,16 +78,54 @@ const limiter = rateLimit({
 app.use(limiter);
 
 // 5. Request logging
+import { green, yellow, red, blue, magenta, cyan, gray, bold, bgRed } from 'colorette';
+
 app.use((req, res, next) => {
   const start = Date.now();
+
   res.on('finish', () => {
     const duration = Date.now() - start;
+
+    // User Info
     let userInfo = 'Anonymous';
     if (req.user) {
       userInfo = req.user.name || req.user.email || req.user.id || 'Unknown User';
       userInfo += ` (${req.user.role || 'No Role'})`;
     }
-    console.log(`[${userInfo}] ${req.method} ${req.originalUrl} ${res.statusCode} ${duration}ms`);
+    const colorUserInfo = gray(`[${userInfo}]`);
+
+    // HTTP Method
+    let colorMethod = req.method;
+    switch (req.method) {
+      case 'GET': colorMethod = blue(req.method); break;
+      case 'POST': colorMethod = magenta(req.method); break;
+      case 'PUT':
+      case 'PATCH': colorMethod = cyan(req.method); break;
+      case 'DELETE': colorMethod = red(req.method); break;
+      default: colorMethod = gray(req.method);
+    }
+
+    // Status Code
+    let colorStatus = res.statusCode.toString();
+    if (res.statusCode >= 500) {
+      colorStatus = bgRed(bold(res.statusCode));
+    } else if (res.statusCode >= 400) {
+      colorStatus = yellow(res.statusCode);
+    } else if (res.statusCode >= 300) {
+      colorStatus = cyan(res.statusCode);
+    } else if (res.statusCode >= 200) {
+      colorStatus = green(res.statusCode);
+    }
+
+    // Duration and Slow Request Warning
+    let colorDuration = `${duration}ms`;
+    let slowWarning = '';
+    if (duration > 500) {
+      colorDuration = red(bold(colorDuration));
+      slowWarning = yellow(' \u26A0\uFE0F SLOW REQUEST');
+    }
+
+    console.log(`${colorUserInfo} ${colorMethod} ${req.originalUrl} ${colorStatus} ${colorDuration}${slowWarning}`);
   });
   next();
 });
