@@ -78,7 +78,17 @@ const limiter = rateLimit({
 app.use(limiter);
 
 // 5. Request logging
-import { green, yellow, red, blue, magenta, cyan, gray, bold, bgRed } from 'colorette';
+// Inline ANSI color helpers — no external package needed
+const green = (s) => `\x1b[32m${s}\x1b[0m`;
+const yellow = (s) => `\x1b[33m${s}\x1b[0m`;
+const red = (s) => `\x1b[31m${s}\x1b[0m`;
+const blue = (s) => `\x1b[34m${s}\x1b[0m`;
+const magenta = (s) => `\x1b[35m${s}\x1b[0m`;
+const cyan = (s) => `\x1b[36m${s}\x1b[0m`;
+const gray = (s) => `\x1b[90m${s}\x1b[0m`;
+const bold = (s) => `\x1b[1m${s}\x1b[0m`;
+const bgRed = (s) => `\x1b[41m${s}\x1b[0m`;
+
 
 app.use((req, res, next) => {
   const start = Date.now();
