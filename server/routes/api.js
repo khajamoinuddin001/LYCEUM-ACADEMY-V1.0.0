@@ -4468,8 +4468,8 @@ router.post('/visitors', authenticateToken, async (req, res) => {
     const visitor = req.body;
     let contactId = null;
 
-    // 1. Check if contact exists by NAME (case-insensitive)
-    const contactCheck = await query('SELECT id FROM contacts WHERE LOWER(name) = LOWER($1)', [visitor.name]);
+    // 1. Check if contact exists by NAME (case-insensitive) AND PHONE number
+    const contactCheck = await query('SELECT id FROM contacts WHERE LOWER(name) = LOWER($1) AND phone = $2', [visitor.name, visitor.company]);
 
     if (contactCheck.rows.length > 0) {
       // Found existing contact
