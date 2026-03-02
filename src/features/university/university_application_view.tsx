@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Contact } from '@/types';
 import * as api from '@/utils/api';
 import {
@@ -80,6 +80,8 @@ const UniversityApplicationView: React.FC<UniversityApplicationViewProps> = ({ u
     const [showDocuments, setShowDocuments] = useState(false);
     const [showCredentials, setShowCredentials] = useState(false);
     const [showApplyModal, setShowApplyModal] = useState(false);
+    const [modalScrollAmount, setModalScrollAmount] = useState(0);
+    const modalScrollRef = useRef<HTMLDivElement>(null);
     const [editingDateAppIdx, setEditingDateAppIdx] = useState<{ studentId: string, appIdx: number } | null>(null);
     const [newDateValue, setNewDateValue] = useState('');
 
@@ -120,6 +122,7 @@ const UniversityApplicationView: React.FC<UniversityApplicationViewProps> = ({ u
     const handleSelectApp = async (item: { student: Contact, app: any, idx: number }) => {
         // Open immediately with current data
         setSelectedApp(item);
+        setModalScrollAmount(0);
         setIsSidebarExpanded(false);
         setShowDocuments(false);
         setShowCredentials(false);
@@ -666,483 +669,430 @@ const UniversityApplicationView: React.FC<UniversityApplicationViewProps> = ({ u
                         </div>
 
                         {/* Right: Application Details & Management */}
-                        <div className="flex-1 flex flex-col min-w-0 bg-[#fcfcfd] dark:bg-[#0f172a]">
-                            {/* Modal Header */}
-                            <div className="p-8 lg:p-12 pb-0 shrink-0 flex items-start justify-between">
-                                <div className="flex items-center gap-6 md:gap-8">
-                                    <div className="w-24 h-24 md:w-28 md:h-28 rounded-[32px] bg-white shadow-2xl flex items-center justify-center shrink-0 overflow-hidden border border-gray-100 dark:border-white/5 p-4">
-                                        {selectedApp.app.logoUrl ? (
-                                            <img src={`${api.API_BASE_URL}${selectedApp.app.logoUrl}`} alt="" className="w-full h-full object-contain" />
-                                        ) : (
-                                            <span className="text-4xl font-black text-gray-400">{selectedApp.app.universityName.charAt(0)}</span>
-                                        )}
-                                    </div>
-                                    <div>
-                                        <div className="flex items-center gap-3 mb-2 text-[11px] font-black tracking-widest uppercase">
-                                            <span className="text-lyceum-blue bg-blue-100 dark:bg-blue-500/20 px-3 py-1 rounded-xl">{selectedApp.app.ackNumber || 'NO-ACK'}</span>
-                                            {editingDateAppIdx?.studentId === selectedApp.student.id && editingDateAppIdx?.appIdx === selectedApp.idx ? (
-                                                <div className="flex items-center gap-2 bg-white dark:bg-gray-800 rounded-md px-2 py-1 border border-gray-200 dark:border-gray-700">
-                                                    <span className="text-gray-400">SUBMITTED</span>
-                                                    <input
-                                                        type="date"
-                                                        value={newDateValue}
-                                                        onChange={(e) => setNewDateValue(e.target.value)}
-                                                        className="bg-transparent border-none outline-none text-gray-900 dark:text-white"
-                                                    />
-                                                    <button
-                                                        onClick={() => handleUpdateSubmissionDate(selectedApp.student, selectedApp.idx)}
-                                                        disabled={updating}
-                                                        className="p-1 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded"
-                                                    >
-                                                        <Check size={14} />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => setEditingDateAppIdx(null)}
-                                                        className="p-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"
-                                                    >
-                                                        <X size={14} />
-                                                    </button>
-                                                </div>
+                        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+                            {/* Header — flex sibling to scroll area */}
+                            <div className={`relative w-full shrink-0 transition-all duration-700 ease-in-out border-b overflow-hidden tracking-tight ${modalScrollAmount > 50
+                                ? 'h-20 sm:h-24 border-gray-200/50 dark:border-gray-800/50 shadow-sm'
+                                : 'h-36 sm:h-40 border-transparent'
+                                }`}>
+
+                                {/* Layered backgrounds — cross-fade for smooth transition */}
+                                <div className={`absolute inset-0 pointer-events-none bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl transition-opacity duration-700 ${modalScrollAmount > 50 ? 'opacity-100' : 'opacity-0'}`} />
+                                <div className={`absolute inset-0 pointer-events-none bg-gradient-to-br from-slate-50 via-white to-blue-50/30 dark:from-[#0f172a] dark:via-[#0f172a] dark:to-blue-950/20 transition-opacity duration-700 ${modalScrollAmount > 50 ? 'opacity-0' : 'opacity-100'}`} />
+
+                                <div className="relative max-w-7xl mx-auto flex items-center justify-between h-full px-8 lg:px-12">
+                                    <div className="flex items-center gap-6 md:gap-8 transition-all duration-500">
+                                        <div className={`transition-all duration-500 rounded-[32px] bg-white shadow-2xl flex items-center justify-center shrink-0 overflow-hidden border border-gray-100 dark:border-white/5 ${modalScrollAmount > 50 ? 'w-14 h-14 p-2' : 'w-24 h-24 md:w-28 md:h-28 p-4'}`}>
+                                            {selectedApp.app.logoUrl ? (
+                                                <img src={`${api.API_BASE_URL}${selectedApp.app.logoUrl}`} alt="" className="w-full h-full object-contain" />
                                             ) : (
-                                                <span className="text-gray-400 flex items-center gap-2 group/date cursor-pointer">
-                                                    SUBMITTED {selectedApp.app.applicationSubmissionDate ? new Date(selectedApp.app.applicationSubmissionDate).toLocaleDateString() : 'N/A'}
-                                                    <button
-                                                        onClick={() => {
-                                                            setEditingDateAppIdx({ studentId: selectedApp.student.id, appIdx: selectedApp.idx });
-                                                            try {
-                                                                setNewDateValue(selectedApp.app.applicationSubmissionDate ? new Date(selectedApp.app.applicationSubmissionDate).toISOString().split('T')[0] : '');
-                                                            } catch {
-                                                                setNewDateValue('');
-                                                            }
-                                                        }}
-                                                        className="opacity-0 group-hover/date:opacity-100 text-gray-400 hover:text-lyceum-blue transition-opacity"
-                                                    >
-                                                        <Edit3 size={12} />
-                                                    </button>
+                                                <span className={`font-black text-gray-400 transition-all duration-500 ${modalScrollAmount > 50 ? 'text-xl' : 'text-4xl'}`}>
+                                                    {selectedApp.app.universityName.charAt(0)}
                                                 </span>
                                             )}
                                         </div>
-                                        <h2 className="text-2xl md:text-3xl lg:text-4xl font-black text-gray-900 dark:text-white leading-tight mb-2 tracking-tight flex items-center gap-4">
-                                            {selectedApp.app.universityName}
-                                            <button
-                                                onClick={() => { setShowDocuments(true); setShowCredentials(false); }}
-                                                className="hidden sm:flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-lyceum-blue hover:text-white dark:bg-gray-800 dark:hover:bg-lyceum-blue text-sm font-bold text-gray-600 dark:text-gray-300 rounded-xl transition-all shadow-sm"
-                                            >
-                                                <Folder size={16} />
-                                                Documents
-                                            </button>
-                                            <button
-                                                onClick={() => { setShowCredentials(true); setShowDocuments(false); }}
-                                                className="hidden sm:flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-emerald-500 hover:text-white dark:bg-gray-800 dark:hover:bg-emerald-500 text-sm font-bold text-gray-600 dark:text-gray-300 rounded-xl transition-all shadow-sm"
-                                            >
-                                                <Key size={16} />
-                                                App Credentials
-                                            </button>
-                                            {user?.role?.toLowerCase() === 'admin' && (
-                                                <button
-                                                    onClick={() => handleDeleteApplication(selectedApp.student, selectedApp.idx)}
-                                                    className="hidden sm:flex items-center gap-2 px-4 py-2 bg-red-50 hover:bg-red-500 hover:text-white dark:bg-red-500/10 dark:hover:bg-red-600 text-sm font-bold text-red-600 dark:text-red-400 rounded-xl transition-all shadow-sm ml-auto"
-                                                >
-                                                    <Trash2 size={16} />
-                                                    Delete Application
-                                                </button>
-                                            )}
-                                        </h2>
-                                        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mt-1">
-                                            <p className="text-sm font-bold text-lyceum-blue uppercase tracking-widest">{selectedApp.app.course}</p>
-                                            <div className="flex gap-2 mt-2 sm:hidden">
-                                                <button
-                                                    onClick={() => { setShowDocuments(true); setShowCredentials(false); }}
-                                                    className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-lyceum-blue hover:text-white dark:bg-gray-800 dark:hover:bg-lyceum-blue text-xs font-bold text-gray-600 dark:text-gray-300 rounded-xl transition-all shadow-sm flex-1 justify-center"
-                                                >
-                                                    <Folder size={14} />
-                                                    Documents
-                                                </button>
-                                                <button
-                                                    onClick={() => { setShowCredentials(true); setShowDocuments(false); }}
-                                                    className="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-emerald-500 hover:text-white dark:bg-gray-800 dark:hover:bg-emerald-500 text-xs font-bold text-gray-600 dark:text-gray-300 rounded-xl transition-all shadow-sm flex-1 justify-center"
-                                                >
-                                                    <Key size={14} />
-                                                    App Credentials
-                                                </button>
+                                        <div>
+                                            <div className={`flex items-center gap-3 text-[11px] font-black tracking-widest uppercase transition-all duration-500 overflow-hidden ${modalScrollAmount > 50 ? 'opacity-0 max-h-0 mb-0' : 'opacity-100 max-h-16 mb-2'}`}>
+                                                <span className="text-lyceum-blue bg-blue-100 dark:bg-blue-500/20 px-3 py-1 rounded-xl">{selectedApp.app.ackNumber || 'NO-ACK'}</span>
                                             </div>
+                                            <h2 className={`font-black text-gray-900 dark:text-white leading-tight tracking-tight flex flex-wrap items-center gap-3 transition-all duration-500 ${modalScrollAmount > 50 ? 'text-xl sm:text-2xl mb-0' : 'text-2xl md:text-3xl lg:text-4xl mb-1'}`}>
+                                                {selectedApp.app.universityName}
+                                                <div className="flex items-center gap-2">
+                                                    <button onClick={() => { setShowDocuments(true); setShowCredentials(false); }} className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-gray-100 hover:bg-lyceum-blue hover:text-white dark:bg-gray-800 dark:hover:bg-lyceum-blue text-xs font-bold text-gray-600 dark:text-gray-300 rounded-xl transition-all shadow-sm">
+                                                        <Folder size={13} /> Documents
+                                                    </button>
+                                                    <button onClick={() => { setShowCredentials(true); setShowDocuments(false); }} className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-gray-100 hover:bg-emerald-500 hover:text-white dark:bg-gray-800 dark:hover:bg-emerald-500 text-xs font-bold text-gray-600 dark:text-gray-300 rounded-xl transition-all shadow-sm">
+                                                        <Key size={13} /> Credentials
+                                                    </button>
+                                                </div>
+                                            </h2>
+                                            <p className={`font-bold text-lyceum-blue uppercase tracking-widest transition-all duration-500 ${modalScrollAmount > 50 ? 'text-[10px]' : 'text-sm'}`}>
+                                                {selectedApp.app.course}
+                                            </p>
                                         </div>
                                     </div>
+                                    <button onClick={() => { setSelectedApp(null); setIsSidebarExpanded(false); setShowDocuments(false); setShowCredentials(false); }} className="p-3 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-2xl transition-all shrink-0">
+                                        <X size={28} />
+                                    </button>
                                 </div>
-                                <button onClick={() => { setSelectedApp(null); setIsSidebarExpanded(false); setShowDocuments(false); setShowCredentials(false); }} className="p-3 text-gray-400 hover:text-white hover:bg-white/10 rounded-2xl transition-all">
-                                    <X size={28} />
-                                </button>
                             </div>
 
-                            {/* Modal Content */}
-                            <div className="flex-1 overflow-y-auto p-8 lg:p-12 custom-scrollbar">
-                                {showDocuments ? (
-                                    <div className="w-full max-w-7xl mx-auto">
-                                        <ContactDocumentsView
-                                            contact={selectedApp.student}
-                                            onNavigateBack={() => setShowDocuments(false)}
-                                            onAnalyze={async () => { /* Add analysis logic if needed */ }}
-                                            user={user}
-                                        />
-                                    </div>
-                                ) : showCredentials ? (
-                                    <div className="w-full max-w-7xl mx-auto">
-                                        <ApplicationCredentialsView
-                                            contact={selectedApp.student}
-                                            onNavigateBack={() => setShowCredentials(false)}
-                                        />
-                                    </div>
-                                ) : (
-                                    <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 lg:gap-12 max-w-7xl">
-                                        {/* Timeline & Progress */}
-                                        <div className="xl:col-span-8 space-y-8">
-                                            <div className="bg-white dark:bg-[#1e2330]/50 rounded-[40px] p-10 border border-gray-100 dark:border-gray-800/60 shadow-lg">
-                                                <h4 className="text-[11px] font-black uppercase tracking-widest text-gray-400 mb-8">Application Progress</h4>
+                            {/* Scroll Area — sibling to header, no sticky needed */}
+                            <div
+                                ref={modalScrollRef}
+                                onScroll={(e) => setModalScrollAmount(e.currentTarget.scrollTop)}
+                                className="flex-1 overflow-y-auto custom-scrollbar bg-[#f8fafc] dark:bg-[#0f172a]"
+                            >
+                                <div className="px-8 lg:px-12 py-10">
 
-                                                <div className="relative pt-4 pb-12">
-                                                    <div className="absolute top-[32px] left-6 right-6 h-1 bg-gray-50 dark:bg-gray-900 rounded-full" />
-                                                    <div className="absolute top-[32px] left-6 h-1 bg-lyceum-blue rounded-full transition-all duration-1000"
-                                                        style={{ width: ['Offer Received', 'Received Acceptance', 'Received I20'].includes(selectedApp.app.status) ? '100%' : selectedApp.app.status === 'In Review' ? '66%' : selectedApp.app.status === 'Applied' ? '33%' : '0%' }}
-                                                    />
+                                    {showDocuments ? (
+                                        <div className="w-full max-w-7xl mx-auto">
+                                            <ContactDocumentsView
+                                                contact={selectedApp.student}
+                                                onNavigateBack={() => setShowDocuments(false)}
+                                                onAnalyze={async () => { /* Add analysis logic if needed */ }}
+                                                user={user}
+                                            />
+                                        </div>
+                                    ) : showCredentials ? (
+                                        <div className="w-full max-w-7xl mx-auto">
+                                            <ApplicationCredentialsView
+                                                contact={selectedApp.student}
+                                                onNavigateBack={() => setShowCredentials(false)}
+                                            />
+                                        </div>
+                                    ) : (
+                                        <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 lg:gap-12 max-w-7xl">
+                                            {/* Timeline & Progress */}
+                                            <div className="xl:col-span-8 space-y-8">
+                                                <div className="bg-white dark:bg-[#1e2330]/50 rounded-[40px] p-10 border border-gray-100 dark:border-gray-800/60 shadow-lg">
+                                                    <h4 className="text-[11px] font-black uppercase tracking-widest text-gray-400 mb-8">Application Progress</h4>
 
-                                                    <div className="flex justify-between relative z-10">
-                                                        {[
-                                                            { status: 'Shortlisted', icon: <Bookmark size={14} /> },
-                                                            { status: 'Applied', icon: <FileText size={14} /> },
-                                                            { status: 'In Review', icon: <SearchIcon size={14} /> },
-                                                            { status: 'Offer Received', icon: <Award size={14} /> }
-                                                        ].map((stage, i) => {
-                                                            const isPassed = (['Offer Received', 'Received Acceptance', 'Received I20'].includes(selectedApp.app.status)) || (selectedApp.app.status === 'In Review' && i <= 2) || (selectedApp.app.status === 'Applied' && i <= 1) || (selectedApp.app.status === 'Shortlisted' && i === 0);
-                                                            const isCurrent = stage.status === 'Offer Received' ? ['Offer Received', 'Received Acceptance', 'Received I20'].includes(selectedApp.app.status) : selectedApp.app.status === stage.status;
+                                                    <div className="relative pt-4 pb-12">
+                                                        <div className="absolute top-[32px] left-6 right-6 h-1 bg-gray-50 dark:bg-gray-900 rounded-full" />
+                                                        <div className="absolute top-[32px] left-6 h-1 bg-lyceum-blue rounded-full transition-all duration-1000"
+                                                            style={{ width: ['Offer Received', 'Received Acceptance', 'Received I20'].includes(selectedApp.app.status) ? '100%' : selectedApp.app.status === 'In Review' ? '66%' : selectedApp.app.status === 'Applied' ? '33%' : '0%' }}
+                                                        />
 
-                                                            return (
-                                                                <div key={stage.status} className="flex flex-col items-center gap-3">
-                                                                    <div className={`w-10 h-10 rounded-[14px] flex items-center justify-center transition-all duration-500 ${isPassed
-                                                                        ? 'bg-lyceum-blue text-white shadow-lg shadow-blue-500/20'
-                                                                        : 'bg-white dark:bg-gray-700 text-gray-300 border border-gray-100 dark:border-gray-600'
-                                                                        } ${isCurrent ? 'scale-110 shadow-xl' : ''}`}>
-                                                                        {isCurrent ? <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" /> : stage.icon}
-                                                                    </div>
-                                                                    <span className={`text-[10px] font-black tracking-widest uppercase ${isCurrent ? 'text-gray-900 dark:text-gray-100' : 'text-gray-400'}`}>{stage.status}</span>
-                                                                </div>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                </div>
-                                            </div>
+                                                        <div className="flex justify-between relative z-10">
+                                                            {[
+                                                                { status: 'Shortlisted', icon: <Bookmark size={14} /> },
+                                                                { status: 'Applied', icon: <FileText size={14} /> },
+                                                                { status: 'In Review', icon: <SearchIcon size={14} /> },
+                                                                { status: 'Offer Received', icon: <Award size={14} /> }
+                                                            ].map((stage, i) => {
+                                                                const isPassed = (['Offer Received', 'Received Acceptance', 'Received I20'].includes(selectedApp.app.status)) || (selectedApp.app.status === 'In Review' && i <= 2) || (selectedApp.app.status === 'Applied' && i <= 1) || (selectedApp.app.status === 'Shortlisted' && i === 0);
+                                                                const isCurrent = stage.status === 'Offer Received' ? ['Offer Received', 'Received Acceptance', 'Received I20'].includes(selectedApp.app.status) : selectedApp.app.status === stage.status;
 
-                                            <div className="bg-white dark:bg-[#1e2330]/50 rounded-[40px] p-10 border border-gray-100 dark:border-gray-800/60 shadow-lg flex flex-col">
-                                                <div className="flex items-center justify-between">
-                                                    <h4 className="text-[11px] text-gray-400 font-bold uppercase tracking-widest flex items-center gap-2">
-                                                        <Sparkles size={14} className="text-lyceum-blue" />
-                                                        Student Portal Remark
-                                                    </h4>
-                                                    <div className="flex items-center gap-2">
-                                                        <button
-                                                            onClick={() => selectedApp && handleSelectApp(selectedApp)}
-                                                            className={`p-1.5 text-gray-400 hover:text-lyceum-blue hover:bg-lyceum-blue/10 rounded-lg transition-all ${refreshing ? 'animate-spin text-lyceum-blue' : ''}`}
-                                                            title="Refresh Status"
-                                                        >
-                                                            <Clock size={14} />
-                                                        </button>
-                                                        {user?.role?.toLowerCase() === 'admin' && (
-                                                            <button
-                                                                onClick={() => setShowMessageManager(!showMessageManager)}
-                                                                className={`p-1.5 rounded-lg transition-all ${showMessageManager ? 'text-lyceum-blue bg-lyceum-blue/10' : 'text-gray-400 hover:text-lyceum-blue hover:bg-lyceum-blue/10'}`}
-                                                                title="Manage Suggestions"
-                                                            >
-                                                                <Settings size={14} />
-                                                            </button>
-                                                        )}
-                                                        {!editingRemarks ? (
-                                                            <button
-                                                                onClick={() => {
-                                                                    setEditingRemarks(true);
-                                                                    setStudentRemarkInput(selectedApp.app.studentRemark || '');
-                                                                    setRequiresDocToggle(selectedApp.app.requiresDocument || false);
-                                                                }}
-                                                                className="flex items-center gap-2 px-3 py-1.5 bg-lyceum-blue/10 hover:bg-lyceum-blue/20 text-lyceum-blue rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
-                                                            >
-                                                                <Edit3 size={12} />
-                                                                Edit
-                                                            </button>
-                                                        ) : (
-                                                            <div className="flex items-center gap-4">
-                                                                <button
-                                                                    onClick={() => setEditingRemarks(false)}
-                                                                    className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-[10px] font-bold uppercase tracking-widest transition-colors"
-                                                                >
-                                                                    Cancel
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => handleSaveStudentRemark(studentRemarkInput, requiresDocToggle)}
-                                                                    disabled={savingStudentRemark}
-                                                                    className="text-lyceum-blue hover:text-blue-600 bg-blue-50 dark:bg-blue-500/10 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center gap-1 transition-colors disabled:opacity-50"
-                                                                >
-                                                                    {savingStudentRemark ? <div className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" /> : <Mail size={12} />}
-                                                                    Message
-                                                                </button>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </div>
-
-                                                {showMessageManager && user?.role?.toLowerCase() === 'admin' && (
-                                                    <div className="mt-6 p-6 bg-gray-50 dark:bg-gray-900/50 rounded-3xl border border-lyceum-blue/20 animate-in fade-in slide-in-from-top-4 duration-300">
-                                                        <div className="flex items-center justify-between mb-6">
-                                                            <h5 className="text-[10px] font-black uppercase tracking-[0.2em] text-lyceum-blue flex items-center gap-2">
-                                                                <Settings size={14} />
-                                                                Manage Predefined Suggestions
-                                                            </h5>
-                                                            <button
-                                                                onClick={() => {
-                                                                    setEditingMsgIdx(null);
-                                                                    setMsgInput('');
-                                                                    setMsgRequiresDoc(false);
-                                                                    setShowMessageManager(false);
-                                                                }}
-                                                                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
-                                                            >
-                                                                <X size={16} />
-                                                            </button>
-                                                        </div>
-
-                                                        <div className="space-y-4 mb-8">
-                                                            <div className="grid grid-cols-1 gap-4">
-                                                                <textarea
-                                                                    value={msgInput}
-                                                                    onChange={(e) => setMsgInput(e.target.value)}
-                                                                    className="w-full p-4 bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 focus:border-lyceum-blue rounded-2xl text-sm outline-none transition-all placeholder:text-gray-400"
-                                                                    placeholder="Type message text..."
-                                                                    rows={2}
-                                                                />
-                                                                <div className="flex items-center justify-between">
-                                                                    <label className="flex items-center gap-3 cursor-pointer group">
-                                                                        <div
-                                                                            onClick={() => setMsgRequiresDoc(!msgRequiresDoc)}
-                                                                            className={`w-10 h-5 rounded-full relative transition-all ${msgRequiresDoc ? 'bg-amber-500' : 'bg-gray-300'}`}
-                                                                        >
-                                                                            <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${msgRequiresDoc ? 'left-5.5' : 'left-0.5'}`} />
+                                                                return (
+                                                                    <div key={stage.status} className="flex flex-col items-center gap-3">
+                                                                        <div className={`w-10 h-10 rounded-[14px] flex items-center justify-center transition-all duration-500 ${isPassed
+                                                                            ? 'bg-lyceum-blue text-white shadow-lg shadow-blue-500/20'
+                                                                            : 'bg-white dark:bg-gray-700 text-gray-300 border border-gray-100 dark:border-gray-600'
+                                                                            } ${isCurrent ? 'scale-110 shadow-xl' : ''}`}>
+                                                                            {isCurrent ? <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" /> : stage.icon}
                                                                         </div>
-                                                                        <span className="text-xs font-bold text-gray-500 group-hover:text-gray-700 dark:group-hover:text-gray-300 transition-colors">
-                                                                            Triggers Document Upload
-                                                                        </span>
-                                                                    </label>
+                                                                        <span className={`text-[10px] font-black tracking-widest uppercase ${isCurrent ? 'text-gray-900 dark:text-gray-100' : 'text-gray-400'}`}>{stage.status}</span>
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div className="bg-white dark:bg-[#1e2330]/50 rounded-[40px] p-10 border border-gray-100 dark:border-gray-800/60 shadow-lg flex flex-col">
+                                                    <div className="flex items-center justify-between">
+                                                        <h4 className="text-[11px] text-gray-400 font-bold uppercase tracking-widest flex items-center gap-2">
+                                                            <Sparkles size={14} className="text-lyceum-blue" />
+                                                            Student Portal Remark
+                                                        </h4>
+                                                        <div className="flex items-center gap-2">
+                                                            <button
+                                                                onClick={() => selectedApp && handleSelectApp(selectedApp)}
+                                                                className={`p-1.5 text-gray-400 hover:text-lyceum-blue hover:bg-lyceum-blue/10 rounded-lg transition-all ${refreshing ? 'animate-spin text-lyceum-blue' : ''}`}
+                                                                title="Refresh Status"
+                                                            >
+                                                                <Clock size={14} />
+                                                            </button>
+                                                            {user?.role?.toLowerCase() === 'admin' && (
+                                                                <button
+                                                                    onClick={() => setShowMessageManager(!showMessageManager)}
+                                                                    className={`p-1.5 rounded-lg transition-all ${showMessageManager ? 'text-lyceum-blue bg-lyceum-blue/10' : 'text-gray-400 hover:text-lyceum-blue hover:bg-lyceum-blue/10'}`}
+                                                                    title="Manage Suggestions"
+                                                                >
+                                                                    <Settings size={14} />
+                                                                </button>
+                                                            )}
+                                                            {!editingRemarks ? (
+                                                                <button
+                                                                    onClick={() => {
+                                                                        setEditingRemarks(true);
+                                                                        setStudentRemarkInput(selectedApp.app.studentRemark || '');
+                                                                        setRequiresDocToggle(selectedApp.app.requiresDocument || false);
+                                                                    }}
+                                                                    className="flex items-center gap-2 px-3 py-1.5 bg-lyceum-blue/10 hover:bg-lyceum-blue/20 text-lyceum-blue rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
+                                                                >
+                                                                    <Edit3 size={12} />
+                                                                    Edit
+                                                                </button>
+                                                            ) : (
+                                                                <div className="flex items-center gap-4">
                                                                     <button
-                                                                        onClick={handleAddOrUpdateMessage}
-                                                                        disabled={!msgInput.trim()}
-                                                                        className="flex items-center gap-2 px-6 py-2 bg-lyceum-blue text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-blue-600 transition-all shadow-lg shadow-blue-500/20 disabled:opacity-50"
+                                                                        onClick={() => setEditingRemarks(false)}
+                                                                        className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-[10px] font-bold uppercase tracking-widest transition-colors"
                                                                     >
-                                                                        {editingMsgIdx !== null ? <Save size={14} /> : <Plus size={14} />}
-                                                                        {editingMsgIdx !== null ? 'Update' : 'Add Message'}
+                                                                        Cancel
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => handleSaveStudentRemark(studentRemarkInput, requiresDocToggle)}
+                                                                        disabled={savingStudentRemark}
+                                                                        className="text-lyceum-blue hover:text-blue-600 bg-blue-50 dark:bg-blue-500/10 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center gap-1 transition-colors disabled:opacity-50"
+                                                                    >
+                                                                        {savingStudentRemark ? <div className="w-3 h-3 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" /> : <Mail size={12} />}
+                                                                        Message
                                                                     </button>
                                                                 </div>
-                                                            </div>
-                                                        </div>
-
-                                                        <div className="space-y-2 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
-                                                            {predefinedMessages.map((msg: any, idx: number) => (
-                                                                <div key={idx} className="flex items-center justify-between p-3 bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 group hover:border-lyceum-blue/30 transition-all">
-                                                                    <div className="flex-1 min-w-0 pr-4">
-                                                                        <p className="text-sm font-medium text-gray-700 dark:text-gray-200 truncate">{msg.text}</p>
-                                                                        {msg.requiresDoc && <span className="text-[9px] text-amber-500 font-bold uppercase tracking-widest">Sets Doc Flag</span>}
-                                                                    </div>
-                                                                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                                        <button
-                                                                            onClick={() => {
-                                                                                setEditingMsgIdx(idx);
-                                                                                setMsgInput(msg.text);
-                                                                                setMsgRequiresDoc(msg.requiresDoc);
-                                                                            }}
-                                                                            className="p-1.5 text-gray-400 hover:text-lyceum-blue hover:bg-lyceum-blue/10 rounded-lg transition-all"
-                                                                        >
-                                                                            <Edit3 size={14} />
-                                                                        </button>
-                                                                        <button
-                                                                            onClick={() => handleDeleteMessage(idx)}
-                                                                            className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-all"
-                                                                        >
-                                                                            <Trash2 size={14} />
-                                                                        </button>
-                                                                    </div>
-                                                                </div>
-                                                            ))}
+                                                            )}
                                                         </div>
                                                     </div>
-                                                )}
-                                                {!editingRemarks ? (
-                                                    <div className="space-y-4">
-                                                        <div className="p-5 bg-blue-50/50 dark:bg-blue-500/5 rounded-2xl border border-blue-100 dark:border-blue-500/20 min-h-[100px] text-sm text-gray-600 dark:text-gray-300 font-medium whitespace-pre-wrap">
-                                                            {selectedApp.app.studentRemark || "No student remarks provided yet."}
-                                                        </div>
-                                                        <div className="flex flex-wrap gap-3">
-                                                            {selectedApp.app.requiresDocument && (
-                                                                <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 dark:bg-amber-500/10 border border-amber-100 dark:border-amber-500/20 rounded-xl text-amber-600 dark:text-amber-400 text-xs font-bold">
-                                                                    <FileText size={14} />
-                                                                    Document Request Active
+
+                                                    {showMessageManager && user?.role?.toLowerCase() === 'admin' && (
+                                                        <div className="mt-6 p-6 bg-gray-50 dark:bg-gray-900/50 rounded-3xl border border-lyceum-blue/20 animate-in fade-in slide-in-from-top-4 duration-300">
+                                                            <div className="flex items-center justify-between mb-6">
+                                                                <h5 className="text-[10px] font-black uppercase tracking-[0.2em] text-lyceum-blue flex items-center gap-2">
+                                                                    <Settings size={14} />
+                                                                    Manage Predefined Suggestions
+                                                                </h5>
+                                                                <button
+                                                                    onClick={() => {
+                                                                        setEditingMsgIdx(null);
+                                                                        setMsgInput('');
+                                                                        setMsgRequiresDoc(false);
+                                                                        setShowMessageManager(false);
+                                                                    }}
+                                                                    className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
+                                                                >
+                                                                    <X size={16} />
+                                                                </button>
+                                                            </div>
+
+                                                            <div className="space-y-4 mb-8">
+                                                                <div className="grid grid-cols-1 gap-4">
+                                                                    <textarea
+                                                                        value={msgInput}
+                                                                        onChange={(e) => setMsgInput(e.target.value)}
+                                                                        className="w-full p-4 bg-white dark:bg-gray-800 border-2 border-gray-100 dark:border-gray-700 focus:border-lyceum-blue rounded-2xl text-sm outline-none transition-all placeholder:text-gray-400"
+                                                                        placeholder="Type message text..."
+                                                                        rows={2}
+                                                                    />
+                                                                    <div className="flex items-center justify-between">
+                                                                        <label className="flex items-center gap-3 cursor-pointer group">
+                                                                            <div
+                                                                                onClick={() => setMsgRequiresDoc(!msgRequiresDoc)}
+                                                                                className={`w-10 h-5 rounded-full relative transition-all ${msgRequiresDoc ? 'bg-amber-500' : 'bg-gray-300'}`}
+                                                                            >
+                                                                                <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${msgRequiresDoc ? 'left-5.5' : 'left-0.5'}`} />
+                                                                            </div>
+                                                                            <span className="text-xs font-bold text-gray-500 group-hover:text-gray-700 dark:group-hover:text-gray-300 transition-colors">
+                                                                                Triggers Document Upload
+                                                                            </span>
+                                                                        </label>
+                                                                        <button
+                                                                            onClick={handleAddOrUpdateMessage}
+                                                                            disabled={!msgInput.trim()}
+                                                                            className="flex items-center gap-2 px-6 py-2 bg-lyceum-blue text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-blue-600 transition-all shadow-lg shadow-blue-500/20 disabled:opacity-50"
+                                                                        >
+                                                                            {editingMsgIdx !== null ? <Save size={14} /> : <Plus size={14} />}
+                                                                            {editingMsgIdx !== null ? 'Update' : 'Add Message'}
+                                                                        </button>
+                                                                    </div>
                                                                 </div>
-                                                            )}
-                                                            {selectedApp.app.requiresDocument && selectedApp.app.documentRequestDate && selectedApp.student.documents?.some(doc => {
-                                                                const uploadTime = new Date(doc.uploaded_at).getTime();
-                                                                const requestTime = new Date(selectedApp.app.documentRequestDate).getTime();
-                                                                return !isNaN(uploadTime) && !isNaN(requestTime) && uploadTime > requestTime;
-                                                            }) && (
-                                                                    <div className="flex items-center gap-2 px-4 py-2 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-100 dark:border-emerald-500/20 rounded-xl text-emerald-600 dark:text-emerald-400 text-xs font-bold animate-pulse">
-                                                                        <CheckCircle size={14} />
-                                                                        Received requested document
+                                                            </div>
+
+                                                            <div className="space-y-2 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
+                                                                {predefinedMessages.map((msg: any, idx: number) => (
+                                                                    <div key={idx} className="flex items-center justify-between p-3 bg-white dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 group hover:border-lyceum-blue/30 transition-all">
+                                                                        <div className="flex-1 min-w-0 pr-4">
+                                                                            <p className="text-sm font-medium text-gray-700 dark:text-gray-200 truncate">{msg.text}</p>
+                                                                            {msg.requiresDoc && <span className="text-[9px] text-amber-500 font-bold uppercase tracking-widest">Sets Doc Flag</span>}
+                                                                        </div>
+                                                                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                            <button
+                                                                                onClick={() => {
+                                                                                    setEditingMsgIdx(idx);
+                                                                                    setMsgInput(msg.text);
+                                                                                    setMsgRequiresDoc(msg.requiresDoc);
+                                                                                }}
+                                                                                className="p-1.5 text-gray-400 hover:text-lyceum-blue hover:bg-lyceum-blue/10 rounded-lg transition-all"
+                                                                            >
+                                                                                <Edit3 size={14} />
+                                                                            </button>
+                                                                            <button
+                                                                                onClick={() => handleDeleteMessage(idx)}
+                                                                                className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-all"
+                                                                            >
+                                                                                <Trash2 size={14} />
+                                                                            </button>
+                                                                        </div>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                    {!editingRemarks ? (
+                                                        <div className="space-y-4">
+                                                            <div className="p-5 bg-blue-50/50 dark:bg-blue-500/5 rounded-2xl border border-blue-100 dark:border-blue-500/20 min-h-[100px] text-sm text-gray-600 dark:text-gray-300 font-medium whitespace-pre-wrap">
+                                                                {selectedApp.app.studentRemark || "No student remarks provided yet."}
+                                                            </div>
+                                                            <div className="flex flex-wrap gap-3">
+                                                                {selectedApp.app.requiresDocument && (
+                                                                    <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 dark:bg-amber-500/10 border border-amber-100 dark:border-amber-500/20 rounded-xl text-amber-600 dark:text-amber-400 text-xs font-bold">
+                                                                        <FileText size={14} />
+                                                                        Document Request Active
                                                                     </div>
                                                                 )}
-                                                        </div>
-                                                    </div>
-                                                ) : (
-                                                    <div className="space-y-4">
-                                                        <div className="relative">
-                                                            <textarea
-                                                                value={studentRemarkInput}
-                                                                onChange={(e) => {
-                                                                    setStudentRemarkInput(e.target.value);
-                                                                    setShowSuggestions(true);
-                                                                }}
-                                                                onFocus={() => setShowSuggestions(true)}
-                                                                className="w-full p-4 bg-white dark:bg-gray-800 border-2 border-lyceum-blue/30 focus:border-lyceum-blue rounded-2xl text-sm text-gray-900 dark:text-gray-100 min-h-[120px] outline-none transition-all custom-scrollbar resize-y"
-                                                                placeholder="Type public message for student portal here..."
-                                                                autoFocus
-                                                            />
-                                                            {showSuggestions && studentRemarkInput.length > 0 && (
-                                                                <div className="absolute top-full left-0 right-0 z-10 mt-2 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-700 max-h-48 overflow-y-auto p-2 custom-scrollbar">
-                                                                    {predefinedMessages.filter((m: any) => m.text.toLowerCase().includes(studentRemarkInput.toLowerCase())).length > 0 ? (
-                                                                        predefinedMessages.filter((m: any) => m.text.toLowerCase().includes(studentRemarkInput.toLowerCase())).map((msg: any, idx: number) => (
-                                                                            <button
-                                                                                key={idx}
-                                                                                onClick={() => {
-                                                                                    setStudentRemarkInput(msg.text);
-                                                                                    setRequiresDocToggle(msg.requiresDoc);
-                                                                                    setShowSuggestions(false);
-                                                                                }}
-                                                                                className="w-full text-left px-4 py-3 hover:bg-lyceum-blue/5 rounded-xl transition-colors flex items-center gap-3 group"
-                                                                            >
-                                                                                <div className="shrink-0 w-8 h-8 rounded-lg bg-gray-50 dark:bg-gray-700/50 flex items-center justify-center text-gray-400 group-hover:text-lyceum-blue transition-colors">
-                                                                                    <SearchIcon size={14} />
-                                                                                </div>
-                                                                                <div className="flex-1">
-                                                                                    <p className="text-sm font-bold text-gray-700 dark:text-gray-300">{msg.text}</p>
-                                                                                    {msg.requiresDoc && <span className="text-[10px] text-amber-500 font-bold uppercase tracking-widest mt-0.5 block">Triggers Doc Upload</span>}
-                                                                                </div>
-                                                                            </button>
-                                                                        ))
-                                                                    ) : (
-                                                                        <div className="p-4 text-center text-xs text-gray-400 font-medium">No matching predefined messages</div>
+                                                                {selectedApp.app.requiresDocument && selectedApp.app.documentRequestDate && selectedApp.student.documents?.some(doc => {
+                                                                    const uploadTime = new Date(doc.uploaded_at).getTime();
+                                                                    const requestTime = new Date(selectedApp.app.documentRequestDate).getTime();
+                                                                    return !isNaN(uploadTime) && !isNaN(requestTime) && uploadTime > requestTime;
+                                                                }) && (
+                                                                        <div className="flex items-center gap-2 px-4 py-2 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-100 dark:border-emerald-500/20 rounded-xl text-emerald-600 dark:text-emerald-400 text-xs font-bold animate-pulse">
+                                                                            <CheckCircle size={14} />
+                                                                            Received requested document
+                                                                        </div>
                                                                     )}
-                                                                </div>
-                                                            )}
-                                                        </div>
-
-                                                        <div className="flex flex-wrap gap-2 text-left">
-                                                            <p className="w-full text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Quick Suggestions</p>
-                                                            {[...predefinedMessages].reverse().slice(0, 20).map((msg: any, idx: number) => (
-                                                                <button
-                                                                    key={idx}
-                                                                    onClick={() => {
-                                                                        setStudentRemarkInput(msg.text);
-                                                                        setRequiresDocToggle(msg.requiresDoc);
-                                                                    }}
-                                                                    className="px-3 py-1.5 bg-gray-50 dark:bg-gray-800/50 hover:bg-lyceum-blue/10 border border-gray-100 dark:border-gray-700 rounded-xl text-[11px] font-bold text-gray-500 dark:text-gray-400 transition-all text-left max-w-[200px] truncate"
-                                                                >
-                                                                    {msg.text}
-                                                                </button>
-                                                            ))}
-                                                        </div>
-
-                                                        <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border border-gray-100 dark:border-gray-700">
-                                                            <div className="flex items-center gap-3">
-                                                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${requiresDocToggle ? 'bg-amber-100 text-amber-600' : 'bg-gray-200 text-gray-500'}`}>
-                                                                    <Folder size={18} />
-                                                                </div>
-                                                                <div>
-                                                                    <p className="text-sm font-bold text-gray-900 dark:text-white">Requires Document Upload</p>
-                                                                    <p className="text-[11px] text-gray-500 dark:text-gray-400 font-medium">Show upload button in student portal</p>
-                                                                </div>
                                                             </div>
-                                                            <button
-                                                                onClick={() => setRequiresDocToggle(!requiresDocToggle)}
-                                                                className={`w-14 h-7 rounded-full relative transition-all duration-300 ${requiresDocToggle ? 'bg-lyceum-blue' : 'bg-gray-300 dark:bg-gray-600'}`}
-                                                            >
-                                                                <div className={`absolute top-1 w-5 h-5 bg-white rounded-full shadow-md transition-all duration-300 ${requiresDocToggle ? 'left-8' : 'left-1'}`} />
-                                                            </button>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="space-y-4">
+                                                            <div className="relative">
+                                                                <textarea
+                                                                    value={studentRemarkInput}
+                                                                    onChange={(e) => {
+                                                                        setStudentRemarkInput(e.target.value);
+                                                                        setShowSuggestions(true);
+                                                                    }}
+                                                                    onFocus={() => setShowSuggestions(true)}
+                                                                    className="w-full p-4 bg-white dark:bg-gray-800 border-2 border-lyceum-blue/30 focus:border-lyceum-blue rounded-2xl text-sm text-gray-900 dark:text-gray-100 min-h-[120px] outline-none transition-all custom-scrollbar resize-y"
+                                                                    placeholder="Type public message for student portal here..."
+                                                                    autoFocus
+                                                                />
+                                                                {showSuggestions && studentRemarkInput.length > 0 && (
+                                                                    <div className="absolute top-full left-0 right-0 z-10 mt-2 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-gray-100 dark:border-gray-700 max-h-48 overflow-y-auto p-2 custom-scrollbar">
+                                                                        {predefinedMessages.filter((m: any) => m.text.toLowerCase().includes(studentRemarkInput.toLowerCase())).length > 0 ? (
+                                                                            predefinedMessages.filter((m: any) => m.text.toLowerCase().includes(studentRemarkInput.toLowerCase())).map((msg: any, idx: number) => (
+                                                                                <button
+                                                                                    key={idx}
+                                                                                    onClick={() => {
+                                                                                        setStudentRemarkInput(msg.text);
+                                                                                        setRequiresDocToggle(msg.requiresDoc);
+                                                                                        setShowSuggestions(false);
+                                                                                    }}
+                                                                                    className="w-full text-left px-4 py-3 hover:bg-lyceum-blue/5 rounded-xl transition-colors flex items-center gap-3 group"
+                                                                                >
+                                                                                    <div className="shrink-0 w-8 h-8 rounded-lg bg-gray-50 dark:bg-gray-700/50 flex items-center justify-center text-gray-400 group-hover:text-lyceum-blue transition-colors">
+                                                                                        <SearchIcon size={14} />
+                                                                                    </div>
+                                                                                    <div className="flex-1">
+                                                                                        <p className="text-sm font-bold text-gray-700 dark:text-gray-300">{msg.text}</p>
+                                                                                        {msg.requiresDoc && <span className="text-[10px] text-amber-500 font-bold uppercase tracking-widest mt-0.5 block">Triggers Doc Upload</span>}
+                                                                                    </div>
+                                                                                </button>
+                                                                            ))
+                                                                        ) : (
+                                                                            <div className="p-4 text-center text-xs text-gray-400 font-medium">No matching predefined messages</div>
+                                                                        )}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+
+                                                            <div className="flex flex-wrap gap-2 text-left">
+                                                                <p className="w-full text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Quick Suggestions</p>
+                                                                {[...predefinedMessages].reverse().slice(0, 20).map((msg: any, idx: number) => (
+                                                                    <button
+                                                                        key={idx}
+                                                                        onClick={() => {
+                                                                            setStudentRemarkInput(msg.text);
+                                                                            setRequiresDocToggle(msg.requiresDoc);
+                                                                        }}
+                                                                        className="px-3 py-1.5 bg-gray-50 dark:bg-gray-800/50 hover:bg-lyceum-blue/10 border border-gray-100 dark:border-gray-700 rounded-xl text-[11px] font-bold text-gray-500 dark:text-gray-400 transition-all text-left max-w-[200px] truncate"
+                                                                    >
+                                                                        {msg.text}
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+
+                                                            <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border border-gray-100 dark:border-gray-700">
+                                                                <div className="flex items-center gap-3">
+                                                                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${requiresDocToggle ? 'bg-amber-100 text-amber-600' : 'bg-gray-200 text-gray-500'}`}>
+                                                                        <Folder size={18} />
+                                                                    </div>
+                                                                    <div>
+                                                                        <p className="text-sm font-bold text-gray-900 dark:text-white">Requires Document Upload</p>
+                                                                        <p className="text-[11px] text-gray-500 dark:text-gray-400 font-medium">Show upload button in student portal</p>
+                                                                    </div>
+                                                                </div>
+                                                                <button
+                                                                    onClick={() => setRequiresDocToggle(!requiresDocToggle)}
+                                                                    className={`w-14 h-7 rounded-full relative transition-all duration-300 ${requiresDocToggle ? 'bg-lyceum-blue' : 'bg-gray-300 dark:bg-gray-600'}`}
+                                                                >
+                                                                    <div className={`absolute top-1 w-5 h-5 bg-white rounded-full shadow-md transition-all duration-300 ${requiresDocToggle ? 'left-8' : 'left-1'}`} />
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                <div className="bg-white dark:bg-[#1e2330]/50 rounded-[40px] p-10 border border-gray-100 dark:border-gray-800/60 shadow-lg flex flex-col">
+                                                    <div className="flex justify-between items-center mb-6">
+                                                        <h4 className="text-[11px] font-black uppercase tracking-widest text-gray-400">Internal Remarks</h4>
+                                                    </div>
+                                                    <div className="p-5 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700 max-h-[250px] overflow-y-auto text-[13px] text-gray-600 dark:text-gray-400 whitespace-pre-wrap font-medium custom-scrollbar">
+                                                        {selectedApp.app.remarks || "No operational logs yet."}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Sidebar: Actions */}
+                                            <div className="xl:col-span-4 space-y-8 text-center">
+                                                <div className="bg-gray-900 dark:bg-black rounded-[40px] p-10 text-white shadow-2xl">
+                                                    <h4 className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-400 mb-6">Update Pipeline</h4>
+                                                    <div className="space-y-3">
+                                                        <button
+                                                            onClick={() => handleUpdateStatus(selectedApp.student, selectedApp.idx, 'Applied')}
+                                                            disabled={updating || selectedApp.app.status === 'Applied'}
+                                                            className="w-full py-3.5 bg-blue-600 hover:bg-blue-500 text-white font-black rounded-2xl text-xs tracking-widest uppercase transition-all flex items-center justify-center gap-2 group disabled:opacity-50"
+                                                        >
+                                                            <FileText size={16} /> Mark as Applied
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleUpdateStatus(selectedApp.student, selectedApp.idx, 'In Review')}
+                                                            disabled={updating || selectedApp.app.status === 'In Review'}
+                                                            className="w-full py-3.5 bg-violet-600 hover:bg-violet-500 text-white font-black rounded-2xl text-xs tracking-widest uppercase transition-all flex items-center justify-center gap-2 group disabled:opacity-50"
+                                                        >
+                                                            <SearchIcon size={16} /> Start Review
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleUpdateStatus(selectedApp.student, selectedApp.idx, 'Received Acceptance')}
+                                                            disabled={updating || selectedApp.app.status === 'Received Acceptance'}
+                                                            className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-2xl text-xs tracking-widest uppercase transition-all flex items-center justify-center gap-2 group disabled:opacity-50"
+                                                        >
+                                                            <Award size={16} /> Received Acceptance
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleUpdateStatus(selectedApp.student, selectedApp.idx, 'Received I20')}
+                                                            disabled={updating || selectedApp.app.status === 'Received I20'}
+                                                            className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-2xl text-xs tracking-widest uppercase transition-all flex items-center justify-center gap-2 group disabled:opacity-50"
+                                                        >
+                                                            <Award size={16} /> Received I20
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleUpdateStatus(selectedApp.student, selectedApp.idx, 'Rejected')}
+                                                            disabled={updating || selectedApp.app.status === 'Rejected'}
+                                                            className="w-full py-3.5 bg-red-600 hover:bg-red-500 text-white font-black rounded-2xl text-xs tracking-widest uppercase transition-all flex items-center justify-center gap-2 group disabled:opacity-50"
+                                                        >
+                                                            <X size={16} /> Reject App
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                <div className="bg-[#1e2330]/50 p-8 border border-gray-800/60 rounded-[40px] shadow-lg">
+                                                    <p className="text-[11px] text-gray-400 font-bold uppercase tracking-[0.2em] mb-6">Financials</p>
+                                                    <div className="space-y-4">
+                                                        <div className="flex justify-between items-center px-2">
+                                                            <span className="text-xs font-bold text-gray-500">App Fee</span>
+                                                            <span className="text-sm font-black text-white">${selectedApp.app.applicationFee || '0'}</span>
+                                                        </div>
+                                                        <div className="flex justify-between items-center px-2">
+                                                            <span className="text-xs font-bold text-gray-500">Deposit</span>
+                                                            <span className="text-sm font-black text-emerald-500">${selectedApp.app.enrollmentDeposit || '0'}</span>
                                                         </div>
                                                     </div>
-                                                )}
-                                            </div>
-
-                                            <div className="bg-white dark:bg-[#1e2330]/50 rounded-[40px] p-10 border border-gray-100 dark:border-gray-800/60 shadow-lg flex flex-col">
-                                                <div className="flex justify-between items-center mb-6">
-                                                    <h4 className="text-[11px] font-black uppercase tracking-widest text-gray-400">Internal Remarks</h4>
-                                                </div>
-                                                <div className="p-5 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700 max-h-[250px] overflow-y-auto text-[13px] text-gray-600 dark:text-gray-400 whitespace-pre-wrap font-medium custom-scrollbar">
-                                                    {selectedApp.app.remarks || "No operational logs yet."}
                                                 </div>
                                             </div>
                                         </div>
-
-                                        {/* Sidebar: Actions */}
-                                        <div className="xl:col-span-4 space-y-8 text-center">
-                                            <div className="bg-gray-900 dark:bg-black rounded-[40px] p-10 text-white shadow-2xl">
-                                                <h4 className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-400 mb-6">Update Pipeline</h4>
-                                                <div className="space-y-3">
-                                                    <button
-                                                        onClick={() => handleUpdateStatus(selectedApp.student, selectedApp.idx, 'Applied')}
-                                                        disabled={updating || selectedApp.app.status === 'Applied'}
-                                                        className="w-full py-3.5 bg-blue-600 hover:bg-blue-500 text-white font-black rounded-2xl text-xs tracking-widest uppercase transition-all flex items-center justify-center gap-2 group disabled:opacity-50"
-                                                    >
-                                                        <FileText size={16} /> Mark as Applied
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleUpdateStatus(selectedApp.student, selectedApp.idx, 'In Review')}
-                                                        disabled={updating || selectedApp.app.status === 'In Review'}
-                                                        className="w-full py-3.5 bg-violet-600 hover:bg-violet-500 text-white font-black rounded-2xl text-xs tracking-widest uppercase transition-all flex items-center justify-center gap-2 group disabled:opacity-50"
-                                                    >
-                                                        <SearchIcon size={16} /> Start Review
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleUpdateStatus(selectedApp.student, selectedApp.idx, 'Received Acceptance')}
-                                                        disabled={updating || selectedApp.app.status === 'Received Acceptance'}
-                                                        className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-2xl text-xs tracking-widest uppercase transition-all flex items-center justify-center gap-2 group disabled:opacity-50"
-                                                    >
-                                                        <Award size={16} /> Received Acceptance
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleUpdateStatus(selectedApp.student, selectedApp.idx, 'Received I20')}
-                                                        disabled={updating || selectedApp.app.status === 'Received I20'}
-                                                        className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-2xl text-xs tracking-widest uppercase transition-all flex items-center justify-center gap-2 group disabled:opacity-50"
-                                                    >
-                                                        <Award size={16} /> Received I20
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleUpdateStatus(selectedApp.student, selectedApp.idx, 'Rejected')}
-                                                        disabled={updating || selectedApp.app.status === 'Rejected'}
-                                                        className="w-full py-3.5 bg-red-600 hover:bg-red-500 text-white font-black rounded-2xl text-xs tracking-widest uppercase transition-all flex items-center justify-center gap-2 group disabled:opacity-50"
-                                                    >
-                                                        <X size={16} /> Reject App
-                                                    </button>
-                                                </div>
-                                            </div>
-
-                                            <div className="bg-[#1e2330]/50 p-8 border border-gray-800/60 rounded-[40px] shadow-lg">
-                                                <p className="text-[11px] text-gray-400 font-bold uppercase tracking-[0.2em] mb-6">Financials</p>
-                                                <div className="space-y-4">
-                                                    <div className="flex justify-between items-center px-2">
-                                                        <span className="text-xs font-bold text-gray-500">App Fee</span>
-                                                        <span className="text-sm font-black text-white">${selectedApp.app.applicationFee || '0'}</span>
-                                                    </div>
-                                                    <div className="flex justify-between items-center px-2">
-                                                        <span className="text-xs font-bold text-gray-500">Deposit</span>
-                                                        <span className="text-sm font-black text-emerald-500">${selectedApp.app.enrollmentDeposit || '0'}</span>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
+                                    )}
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1157,7 +1107,7 @@ const UniversityApplicationView: React.FC<UniversityApplicationViewProps> = ({ u
                     fetchStudents();
                 }}
             />
-        </div >
+        </div>
     );
 };
 

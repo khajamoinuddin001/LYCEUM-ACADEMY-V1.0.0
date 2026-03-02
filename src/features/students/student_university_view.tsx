@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { ArrowLeft, GraduationCap, Calendar, BookOpen, CheckCircle2, Search, Plus, Building2, Globe2, Sparkles, Languages, ArrowRight, Edit3, Award, Clock, MapPin, School, FileText, ChevronRight, Check, Bookmark, X, Trash2, Copy, ClipboardList, Folder } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { ArrowLeft, GraduationCap, Calendar, BookOpen, CheckCircle2, Search, Plus, Building2, Globe2, Sparkles, Languages, ArrowRight, Edit3, Award, Clock, MapPin, School, FileText, ChevronRight, Check, Bookmark, X, Trash2, Copy, ClipboardList, Folder, CreditCard, Landmark, LayoutDashboard } from 'lucide-react';
 import { Contact, UniversityCourse } from '@/types';
 import * as api from '@/utils/api';
 
@@ -44,6 +44,8 @@ const StudentUniversityApplicationView: React.FC<StudentUniversityApplicationVie
     const [expandedApp, setExpandedApp] = useState<any | null>(null);
     const [basket, setBasket] = useState<{ course: UniversityCourse; courseName: string }[]>(savedState?.basket || []);
     const [isBasketOpen, setIsBasketOpen] = useState(false);
+    const [scrollAmount, setScrollAmount] = useState(0);
+    const scrollRef = useRef<HTMLDivElement>(null);
 
     // Filters for Step 3 results
     const [filterUniversity, setFilterUniversity] = useState('');
@@ -494,64 +496,88 @@ const StudentUniversityApplicationView: React.FC<StudentUniversityApplicationVie
             {expandedApp ? (
                 /* Application Detail Full Page View */
                 <div className="flex-1 flex flex-col overflow-hidden animate-in fade-in duration-500 bg-white dark:bg-gray-900">
-                    <div className="relative w-full h-full flex flex-col overflow-hidden">
-                        {/* Header / Hero Section */}
-                        <div className="relative h-64 sm:h-80 shrink-0 overflow-hidden bg-gradient-to-br from-blue-600 to-indigo-900">
-                            <div className="absolute inset-0 opacity-20">
-                                <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-white blur-[100px] rounded-full" />
-                                <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-400 blur-[80px] rounded-full" />
-                            </div>
 
-                            <div className="absolute top-8 left-8 z-20">
-                                <button
-                                    onClick={() => setExpandedApp(null)}
-                                    className="flex items-center gap-2 px-4 py-2 bg-black/20 hover:bg-black/40 backdrop-blur-md rounded-2xl text-white transition-all hover:scale-105 active:scale-95 font-bold text-sm"
-                                >
-                                    <ArrowLeft size={18} />
-                                    Back to Applications
-                                </button>
-                            </div>
+                    {/* Header — flex sibling to scroll area so height changes don't affect scrollTop */}
+                    <div className={`relative w-full shrink-0 transition-all duration-700 ease-in-out overflow-hidden ${scrollAmount > 50
+                        ? 'h-24 sm:h-28 border-b border-gray-200/50 dark:border-gray-800/50 shadow-sm'
+                        : 'h-64 sm:h-80'
+                        }`}>
 
-                            <div className="absolute inset-0 p-8 sm:p-12 flex items-end">
-                                <div className="flex items-center gap-6 sm:gap-10 max-w-7xl mx-auto w-full">
-                                    <div className="w-24 h-24 sm:w-40 sm:h-40 rounded-[32px] bg-white shadow-2xl flex items-center justify-center shrink-0 border-4 border-white/10 overflow-hidden">
-                                        {expandedApp.logoUrl ? (
-                                            <img src={`${api.API_BASE_URL}${expandedApp.logoUrl}`} alt="" className="w-full h-full object-cover" />
-                                        ) : (
-                                            <span className="text-4xl font-black text-gray-900">{expandedApp.universityName.charAt(0)}</span>
+                        {/* Layer 1: Solid/Blur — fades IN as you scroll */}
+                        <div className={`absolute inset-0 bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl transition-opacity duration-700 ${scrollAmount > 50 ? 'opacity-100' : 'opacity-0'}`} />
+
+                        {/* Layer 2: Gradient — fades OUT as you scroll */}
+                        <div className={`absolute inset-0 bg-gradient-to-br from-blue-600 to-indigo-900 transition-opacity duration-700 ${scrollAmount > 50 ? 'opacity-0' : 'opacity-100'}`}>
+                            <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-white/20 blur-[100px] rounded-full" />
+                            <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-400/20 blur-[80px] rounded-full" />
+                        </div>
+
+                        {/* Back Button */}
+                        <div className={`absolute left-8 z-[110] transition-all duration-500 ${scrollAmount > 50 ? 'top-1/2 -translate-y-1/2' : 'top-8'}`}>
+                            <button
+                                onClick={() => { setExpandedApp(null); setScrollAmount(0); }}
+                                className={`flex items-center gap-2 px-4 py-2 rounded-2xl transition-all hover:scale-105 active:scale-95 font-bold text-sm ${scrollAmount > 50
+                                    ? 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200'
+                                    : 'bg-black/20 hover:bg-black/40 backdrop-blur-md text-white'
+                                    }`}
+                            >
+                                <ArrowLeft size={18} />
+                                <span className={scrollAmount > 50 ? 'hidden sm:inline' : 'inline'}>Back to Applications</span>
+                            </button>
+                        </div>
+
+                        {/* University Info */}
+                        <div className={`absolute inset-0 px-8 sm:px-12 flex items-end transition-all duration-500 ${scrollAmount > 50 ? 'justify-center sm:justify-end py-4' : 'justify-start py-12'}`}>
+                            <div className={`flex items-center max-w-7xl mx-auto w-full transition-all duration-500 ${scrollAmount > 50 ? 'gap-4 scale-90 translate-x-24 sm:translate-x-32' : 'gap-6 sm:gap-10'}`}>
+                                <div className={`rounded-[32px] bg-white shadow-2xl flex items-center justify-center shrink-0 border-4 border-white/10 overflow-hidden transition-all duration-500 mb-0 ${scrollAmount > 50 ? 'w-12 h-12 sm:w-16 sm:h-16' : 'w-24 h-24 sm:w-40 sm:h-40'}`}>
+                                    {expandedApp.logoUrl ? (
+                                        <img src={`${api.API_BASE_URL}${expandedApp.logoUrl}`} alt="" className="w-full h-full object-cover" />
+                                    ) : (
+                                        <span className={`font-black text-gray-900 transition-all ${scrollAmount > 50 ? 'text-xl' : 'text-4xl'}`}>
+                                            {expandedApp.universityName.charAt(0)}
+                                        </span>
+                                    )}
+                                </div>
+                                <div className={`transition-all duration-500 ${scrollAmount > 50 ? 'text-gray-900 dark:text-white pb-0' : 'text-white pb-2'}`}>
+                                    <div className={`flex flex-wrap items-center gap-3 transition-all duration-500 ${scrollAmount > 50 ? 'mb-0 scale-75 origin-left opacity-0 h-0 w-0 pointer-events-none' : 'mb-4'}`}>
+                                        <span className="px-4 py-1.5 bg-white/20 backdrop-blur-md rounded-xl text-xs font-black uppercase tracking-widest leading-none flex items-center gap-2">
+                                            <div className="w-2 h-2 rounded-full bg-blue-300 animate-pulse" />
+                                            {expandedApp.ackNumber}
+                                        </span>
+                                        {['Received Acceptance', 'Received I20'].includes(expandedApp.status) && (
+                                            <button
+                                                onClick={() => onNavigateToDocuments?.()}
+                                                className="px-4 py-1.5 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-xl text-xs font-black uppercase tracking-widest leading-none flex items-center gap-2 transition-colors border border-white/20 border-dotted"
+                                            >
+                                                <FileText size={12} />
+                                                {expandedApp.status === 'Received Acceptance' ? 'See Acceptance' : 'See I20'}
+                                            </button>
                                         )}
+                                        <span className="px-4 py-1.5 bg-green-500/30 backdrop-blur-md border border-green-500/30 rounded-xl text-xs font-black uppercase tracking-widest leading-none">
+                                            {expandedApp.status}
+                                        </span>
                                     </div>
-                                    <div className="text-white pb-2">
-                                        <div className="flex flex-wrap items-center gap-3 mb-4">
-                                            <span className="px-4 py-1.5 bg-white/20 backdrop-blur-md rounded-xl text-xs font-black uppercase tracking-widest leading-none flex items-center gap-2">
-                                                <div className="w-2 h-2 rounded-full bg-blue-300 animate-pulse" />
-                                                {expandedApp.ackNumber}
-                                            </span>
-                                            {['Received Acceptance', 'Received I20'].includes(expandedApp.status) && (
-                                                <button
-                                                    onClick={() => onNavigateToDocuments?.()}
-                                                    className="px-4 py-1.5 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-xl text-xs font-black uppercase tracking-widest leading-none flex items-center gap-2 transition-colors border border-white/20 border-dotted"
-                                                >
-                                                    <FileText size={12} />
-                                                    {expandedApp.status === 'Received Acceptance' ? 'See Acceptance' : 'See I20'}
-                                                </button>
-                                            )}
-                                            <span className="px-4 py-1.5 bg-green-500/30 backdrop-blur-md border border-green-500/30 rounded-xl text-xs font-black uppercase tracking-widest leading-none">
-                                                {expandedApp.status}
-                                            </span>
-                                        </div>
-                                        <h2 className="text-4xl sm:text-6xl font-black tracking-tight leading-tight">{expandedApp.universityName}</h2>
-                                        <p className="text-blue-100/80 font-bold text-xl mt-2 flex items-center gap-3">
-                                            <School size={24} className="shrink-0" />
-                                            {expandedApp.course}
-                                        </p>
-                                    </div>
+                                    <h2 className={`font-black tracking-tight leading-tight transition-all duration-500 ${scrollAmount > 50 ? 'text-xl sm:text-2xl' : 'text-4xl sm:text-6xl'}`}>
+                                        {expandedApp.universityName}
+                                    </h2>
+                                    <p className={`font-bold transition-all duration-500 flex items-center gap-3 ${scrollAmount > 50 ? 'text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-0' : 'text-lg sm:text-xl text-blue-100/80 mt-2'}`}>
+                                        <School className={`shrink-0 transition-all ${scrollAmount > 50 ? 'w-4 h-4' : 'w-6 h-6'}`} />
+                                        {expandedApp.course}
+                                    </p>
                                 </div>
                             </div>
                         </div>
+                    </div>
 
+                    {/* Scroll Area — sibling to header, no sticky needed */}
+                    <div
+                        ref={scrollRef}
+                        onScroll={(e) => setScrollAmount(e.currentTarget.scrollTop)}
+                        className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar"
+                    >
                         {/* Main Content Area */}
-                        <div className="flex-1 overflow-y-auto p-8 sm:p-12 custom-scrollbar bg-lyceum-light dark:bg-gray-900">
+                        <div className="w-full flex-grow p-8 sm:p-12 bg-lyceum-light dark:bg-gray-900">
+
                             <div className="max-w-7xl mx-auto">
                                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
                                     <div className="lg:col-span-12">
@@ -560,10 +586,13 @@ const StudentUniversityApplicationView: React.FC<StudentUniversityApplicationVie
                                             <div className="h-px flex-1 bg-gray-200 dark:bg-gray-800" />
                                         </h3>
 
-                                        <div className="relative pt-10 pb-16">
-                                            <div className="absolute top-[62px] left-8 right-8 h-1.5 bg-gray-100 dark:bg-gray-800 rounded-full" />
-                                            <div className="absolute top-[62px] left-8 h-1.5 bg-lyceum-blue rounded-full transition-all duration-1000 shadow-[0_0_25px_rgba(59,130,246,0.5)]"
-                                                style={{ width: ['Offer Received', 'Received Acceptance', 'Received I20'].includes(expandedApp.status) ? '100.1%' : expandedApp.status === 'In Review' ? '66.6%' : expandedApp.status === 'Applied' ? '33.3%' : '0%' }}
+                                        <div className="relative pt-12 pb-16 px-4">
+                                            {/* Background Track */}
+                                            <div className="absolute top-[68px] left-12 right-12 h-2 bg-gray-100 dark:bg-gray-800/80 rounded-full" />
+
+                                            {/* Active Progress Line */}
+                                            <div className="absolute top-[68px] left-12 h-2 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full transition-all duration-1000 shadow-[0_0_20px_rgba(59,130,246,0.5)]"
+                                                style={{ width: `calc(${['Offer Received', 'Received Acceptance', 'Received I20'].includes(expandedApp.status) ? '100%' : expandedApp.status === 'In Review' ? '66.6%' : expandedApp.status === 'Applied' ? '33.3%' : '0%'} - 24px)` }}
                                             />
 
                                             <div className="flex justify-between relative z-10">
@@ -577,16 +606,20 @@ const StudentUniversityApplicationView: React.FC<StudentUniversityApplicationVie
                                                     const isCurrent = stage.status === 'Offer Received' ? ['Offer Received', 'Received Acceptance', 'Received I20'].includes(expandedApp.status) : expandedApp.status === stage.status;
 
                                                     return (
-                                                        <div key={stage.status} className="flex flex-col items-center gap-5 w-32 sm:w-48">
-                                                            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-700 ${isPassed
-                                                                ? 'bg-lyceum-blue text-white shadow-2xl shadow-blue-500/30 ring-[8px] ring-blue-50 dark:ring-blue-900/20'
-                                                                : 'bg-white dark:bg-gray-800 text-gray-400 border-2 border-gray-100 dark:border-gray-700'
-                                                                } ${isCurrent ? 'scale-110' : 'scale-90 opacity-70'}`}>
-                                                                {isPassed ? <Check size={28} className="animate-in zoom-in" /> : stage.icon}
+                                                        <div key={stage.status} className="flex flex-col items-center gap-6 w-32 sm:w-48 group/stage">
+                                                            <div className={`relative w-16 h-16 sm:w-20 sm:h-20 rounded-[28px] flex items-center justify-center transition-all duration-700 ${isPassed
+                                                                ? 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-[0_15px_40px_-10px_rgba(59,130,246,0.6)] ring-8 ring-blue-500/10 dark:ring-blue-400/5'
+                                                                : 'bg-white dark:bg-gray-800 text-gray-400 border-2 border-gray-100 dark:border-gray-700 shadow-sm'
+                                                                } ${isCurrent ? 'scale-110 active-stage-glow' : 'scale-95 group-hover/stage:scale-100'}`}>
+                                                                {isPassed ? <Check size={32} className="animate-in zoom-in duration-500" /> : React.cloneElement(stage.icon as React.ReactElement, { size: 24 })}
+
+                                                                {isCurrent && (
+                                                                    <div className="absolute -inset-2 bg-blue-500/20 blur-xl rounded-full animate-pulse pointer-events-none" />
+                                                                )}
                                                             </div>
-                                                            <div className="text-center">
-                                                                <p className={`text-xs font-black tracking-widest uppercase mb-1.5 transition-colors ${isCurrent ? 'text-gray-900 dark:text-white' : 'text-gray-400'}`}>{stage.status}</p>
-                                                                <p className="text-[11px] text-gray-400 font-bold leading-tight hidden sm:block uppercase tracking-wider">{stage.desc}</p>
+                                                            <div className="text-center transition-all duration-500">
+                                                                <p className={`text-xs font-black tracking-[0.15em] uppercase mb-2 transition-colors ${isCurrent ? 'text-gray-900 dark:text-white' : 'text-gray-400'}`}>{stage.status}</p>
+                                                                <p className={`text-[11px] font-bold leading-tight hidden sm:block uppercase tracking-wider transition-opacity duration-500 ${isCurrent ? 'text-gray-500 dark:text-gray-400 opacity-100' : 'text-gray-400 opacity-60'}`}>{stage.desc}</p>
                                                             </div>
                                                         </div>
                                                     );
@@ -596,35 +629,47 @@ const StudentUniversityApplicationView: React.FC<StudentUniversityApplicationVie
                                     </div>
 
                                     <div className="lg:col-span-8 space-y-10">
-                                        <div className="bg-white dark:bg-gray-800/40 rounded-[40px] p-10 border border-gray-100 dark:border-gray-700/50 shadow-sm transition-all hover:shadow-md">
-                                            <h4 className="text-[12px] font-black uppercase tracking-widest text-gray-500 mb-8 flex items-center gap-2">
-                                                <ClipboardList size={16} /> Course Parameters
+                                        <div className="bg-white/60 dark:bg-gray-800/40 backdrop-blur-xl rounded-[40px] p-8 sm:p-10 border border-white dark:border-gray-700/50 shadow-[0_8px_30px_rgb(0,0,0,0.04)] transition-all hover:shadow-lg group/params">
+                                            <h4 className="text-[12px] font-black uppercase tracking-[0.2em] text-gray-400 mb-10 flex items-center gap-3">
+                                                <div className="w-8 h-8 rounded-xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center text-blue-600">
+                                                    <ClipboardList size={16} />
+                                                </div>
+                                                Course Parameters
                                             </h4>
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-10">
-                                                <div>
-                                                    <p className="text-[11px] text-gray-400 font-bold uppercase tracking-widest mb-2">Destination</p>
-                                                    <p className="text-xl font-black text-gray-900 dark:text-white flex items-center gap-3">
-                                                        <Globe2 size={20} className="text-blue-500" />
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-12">
+                                                <div className="group/item">
+                                                    <p className="text-[11px] text-gray-400 font-black uppercase tracking-widest mb-3 flex items-center gap-2">
+                                                        <Globe2 size={12} className="text-blue-500" /> Destination
+                                                    </p>
+                                                    <p className="text-2xl font-black text-gray-900 dark:text-white tracking-tight border-b-2 border-transparent group-hover/item:border-blue-500/30 transition-all pb-1 inline-block">
                                                         {expandedApp.country || 'N/A'}
                                                     </p>
                                                 </div>
-                                                <div>
-                                                    <p className="text-[11px] text-gray-400 font-bold uppercase tracking-widest mb-2">Target Intake</p>
-                                                    <p className="text-xl font-black text-gray-900 dark:text-white flex items-center gap-3">
-                                                        <Calendar size={20} className="text-blue-500" />
+                                                <div className="group/item">
+                                                    <p className="text-[11px] text-gray-400 font-black uppercase tracking-widest mb-3 flex items-center gap-2">
+                                                        <Calendar size={12} className="text-blue-500" /> Target Intake
+                                                    </p>
+                                                    <p className="text-2xl font-black text-gray-900 dark:text-white tracking-tight border-b-2 border-transparent group-hover/item:border-blue-500/30 transition-all pb-1 inline-block">
                                                         {expandedApp.intake || 'N/A'}
                                                     </p>
                                                 </div>
-                                                <div>
-                                                    <p className="text-[11px] text-gray-400 font-bold uppercase tracking-widest mb-2">Submission Date</p>
-                                                    <p className="text-xl font-black text-gray-900 dark:text-white">
+                                                <div className="group/item">
+                                                    <p className="text-[11px] text-gray-400 font-black uppercase tracking-widest mb-3 flex items-center gap-2">
+                                                        <Clock size={12} className="text-blue-500" /> Submission Date
+                                                    </p>
+                                                    <p className="text-2xl font-black text-gray-900 dark:text-white tracking-tight border-b-2 border-transparent group-hover/item:border-blue-500/30 transition-all pb-1 inline-block">
                                                         {new Date(expandedApp.applicationSubmissionDate).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' })}
                                                     </p>
                                                 </div>
                                                 <div className="space-y-4">
-                                                    <p className="text-[11px] text-gray-400 font-bold uppercase tracking-widest mb-2">Portal Remark</p>
-                                                    <div className="bg-blue-50/50 dark:bg-blue-500/5 p-6 rounded-[30px] border border-blue-100/50 dark:border-blue-500/10 shadow-inner">
-                                                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100 leading-relaxed whitespace-pre-wrap">
+                                                    <p className="text-[11px] text-gray-400 font-black uppercase tracking-widest mb-3 flex items-center gap-2">
+                                                        <FileText size={12} className="text-blue-500" /> Portal Remark
+                                                    </p>
+                                                    <div className="bg-gradient-to-br from-blue-50/50 to-indigo-50/30 dark:from-blue-500/5 dark:to-indigo-500/5 p-6 rounded-[32px] border border-blue-100/50 dark:border-blue-500/10 shadow-inner relative overflow-hidden">
+                                                        <div className="absolute top-0 right-0 p-4 opacity-5">
+                                                            <Sparkles size={40} className="text-blue-500" />
+                                                        </div>
+                                                        <p className="text-sm font-bold text-gray-800 dark:text-gray-200 leading-relaxed whitespace-pre-wrap relative z-10">
                                                             {expandedApp.studentRemark || 'No specific message from the staff at the moment.'}
                                                         </p>
 
@@ -635,16 +680,16 @@ const StudentUniversityApplicationView: React.FC<StudentUniversityApplicationVie
                                                                         <Folder size={18} />
                                                                     </div>
                                                                     <div>
-                                                                        <p className="text-xs font-black text-gray-900 dark:text-white uppercase tracking-widest">Action Required</p>
-                                                                        <p className="text-[11px] text-gray-500 dark:text-gray-400 font-medium">Please upload the requested documents</p>
+                                                                        <p className="text-xs font-black text-gray-900 dark:text-white uppercase tracking-widest">Required</p>
+                                                                        <p className="text-[11px] text-gray-500 dark:text-gray-400 font-bold uppercase tracking-tighter">Upload Missing Docs</p>
                                                                     </div>
                                                                 </div>
                                                                 <button
                                                                     onClick={() => onNavigateToDocuments?.()}
-                                                                    className="w-full sm:w-auto px-6 py-3 bg-lyceum-blue hover:bg-blue-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                                                                    className="w-full sm:w-auto px-6 py-3 bg-lyceum-blue hover:bg-blue-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20 transition-all hover:scale-[1.05] active:scale-[0.95]"
                                                                 >
                                                                     <Plus size={16} />
-                                                                    Upload Documents
+                                                                    Update Docs
                                                                 </button>
                                                             </div>
                                                         )}
@@ -655,25 +700,49 @@ const StudentUniversityApplicationView: React.FC<StudentUniversityApplicationVie
                                     </div>
 
                                     <div className="lg:col-span-4 space-y-6">
-                                        <div className="bg-gradient-to-br from-gray-900 to-gray-800 dark:from-black dark:to-gray-900 rounded-[40px] p-10 text-white shadow-2xl shadow-black/20 border border-white/5">
-                                            <h4 className="text-[12px] font-black uppercase tracking-widest text-gray-400 mb-8">Financial Overview</h4>
-                                            <div className="space-y-8">
-                                                <div className="flex justify-between items-center">
-                                                    <span className="text-base font-medium text-gray-400">Application Fee</span>
-                                                    <span className="text-2xl font-black">${expandedApp.applicationFee || '0'}</span>
+                                        <div className="bg-gradient-to-br from-gray-900 via-gray-800 to-black dark:from-black dark:via-gray-900 dark:to-black rounded-[40px] p-8 sm:p-10 text-white shadow-2xl shadow-blue-500/10 border border-white/5 relative overflow-hidden group/finance">
+                                            <div className="absolute top-0 right-0 p-12 opacity-10 blur-2xl bg-blue-500 rounded-full scale-150 group-hover/finance:scale-[2] transition-transform duration-1000" />
+
+                                            <h4 className="text-[12px] font-black uppercase tracking-[0.2em] text-gray-500 mb-10 flex items-center gap-3 relative z-10">
+                                                <div className="w-8 h-8 rounded-xl bg-white/5 flex items-center justify-center text-emerald-400">
+                                                    <Landmark size={16} />
                                                 </div>
-                                                <div className="flex justify-between items-center">
-                                                    <span className="text-base font-medium text-gray-400">Enrollment Deposit</span>
-                                                    <span className="text-2xl font-black text-emerald-400">${expandedApp.enrollmentDeposit || '0'}</span>
+                                                Financial Overview
+                                            </h4>
+
+                                            <div className="space-y-10 relative z-10">
+                                                <div className="flex justify-between items-end group/row">
+                                                    <div className="space-y-1">
+                                                        <span className="text-[10px] font-black tracking-widest text-gray-500 uppercase flex items-center gap-2 transition-colors group-hover/row:text-gray-400">
+                                                            <CreditCard size={12} /> Application Fee
+                                                        </span>
+                                                        <span className="text-3xl font-black tracking-tight">${expandedApp.applicationFee || '0'}</span>
+                                                    </div>
+                                                    <div className="w-12 h-1 bg-white/5 rounded-full overflow-hidden">
+                                                        <div className="w-1/2 h-full bg-blue-500" />
+                                                    </div>
                                                 </div>
-                                                <div className="pt-6 border-t border-white/10 flex justify-between items-center">
-                                                    <span className="text-sm font-bold text-gray-400">ACK Number</span>
+
+                                                <div className="flex justify-between items-end group/row">
+                                                    <div className="space-y-1">
+                                                        <span className="text-[10px] font-black tracking-widest text-gray-500 uppercase flex items-center gap-2 transition-colors group-hover/row:text-gray-400">
+                                                            <Landmark size={12} /> Enrollment Deposit
+                                                        </span>
+                                                        <span className="text-3xl font-black text-emerald-400 tracking-tight">${expandedApp.enrollmentDeposit || '0'}</span>
+                                                    </div>
+                                                    <div className="w-12 h-1 bg-white/5 rounded-full overflow-hidden">
+                                                        <div className="w-3/4 h-full bg-emerald-500" />
+                                                    </div>
+                                                </div>
+
+                                                <div className="pt-8 border-t border-white/5 flex flex-col gap-4">
+                                                    <p className="text-[10px] font-black tracking-widest text-gray-600 uppercase">Verification Reference</p>
                                                     <button
                                                         onClick={() => navigator.clipboard.writeText(expandedApp.ackNumber)}
-                                                        className="flex items-center gap-3 px-4 py-2 bg-white/10 hover:bg-white/20 rounded-2xl transition-all font-black text-sm tracking-widest"
+                                                        className="flex items-center justify-between w-full px-6 py-4 bg-white/5 hover:bg-white/10 rounded-2xl transition-all group/ack border border-white/5 shadow-inner"
                                                     >
-                                                        {expandedApp.ackNumber}
-                                                        <Copy size={14} />
+                                                        <span className="font-black text-sm tracking-[0.2em] text-blue-100">{expandedApp.ackNumber}</span>
+                                                        <Copy size={16} className="text-gray-500 group-hover/ack:text-white transition-colors" />
                                                     </button>
                                                 </div>
                                             </div>
