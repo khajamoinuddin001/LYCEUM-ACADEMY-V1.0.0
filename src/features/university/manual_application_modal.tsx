@@ -17,6 +17,7 @@ const ManualApplicationModal: React.FC<ManualApplicationModalProps> = ({ isOpen,
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const [universityCourses, setUniversityCourses] = useState<UniversityCourse[]>([]);
     const [isUniDropdownOpen, setIsUniDropdownOpen] = useState(false);
+    const [isCourseDropdownOpen, setIsCourseDropdownOpen] = useState(false);
 
     const [selectedStudent, setSelectedStudent] = useState<Contact | null>(null);
     const [formData, setFormData] = useState({
@@ -39,6 +40,7 @@ const ManualApplicationModal: React.FC<ManualApplicationModalProps> = ({ isOpen,
                 status: 'Applied'
             });
             setIsUniDropdownOpen(false);
+            setIsCourseDropdownOpen(false);
             fetchUniversityCourses();
         }
     }, [isOpen]);
@@ -120,23 +122,41 @@ const ManualApplicationModal: React.FC<ManualApplicationModalProps> = ({ isOpen,
         (s.email && s.email.toLowerCase().includes(searchTerm.toLowerCase()))
     );
 
-    const expandedUniversities = universityCourses.flatMap(uc => {
-        if (!uc.courseName) return [{ uc, singleCourseName: '' }];
-        return uc.courseName.split(',').map(c => ({ uc, singleCourseName: c.trim() })).filter(item => item.singleCourseName);
-    });
+    const uniqueUniversities = Array.from(new Set(universityCourses.map(uc => uc.universityName)))
+        .map(name => universityCourses.find(uc => uc.universityName === name)!);
 
-    const filteredUniversities = expandedUniversities.filter(item =>
-        item.uc.universityName.toLowerCase().includes(formData.universityName.toLowerCase()) ||
-        item.singleCourseName.toLowerCase().includes(formData.universityName.toLowerCase())
+    const filteredUniversities = uniqueUniversities.filter(uc =>
+        uc.universityName.toLowerCase().includes(formData.universityName.toLowerCase())
     );
 
-    const handleUniversitySelect = (item: { uc: UniversityCourse, singleCourseName: string }) => {
+    const selectedUniCourses = universityCourses.filter(uc =>
+        uc.universityName.toLowerCase() === formData.universityName.toLowerCase()
+    );
+
+    const uniqueCourses: string[] = Array.from(new Set(selectedUniCourses.flatMap(uc =>
+        (uc.courseName || '').split(',').map(c => c.trim()).filter(Boolean)
+    )));
+
+    const filteredCourses = uniqueCourses.filter((course: string) =>
+        course.toLowerCase().includes(formData.course.toLowerCase())
+    );
+
+    const handleUniversitySelect = (uc: UniversityCourse) => {
         setFormData({
             ...formData,
-            universityName: item.uc.universityName,
-            course: item.singleCourseName
+            universityName: uc.universityName,
+            course: '' // Reset course when university changes
         });
         setIsUniDropdownOpen(false);
+        setIsCourseDropdownOpen(true);
+    };
+
+    const handleCourseSelect = (courseName: string) => {
+        setFormData({
+            ...formData,
+            course: courseName
+        });
+        setIsCourseDropdownOpen(false);
     };
 
     return (
@@ -261,19 +281,16 @@ const ManualApplicationModal: React.FC<ManualApplicationModalProps> = ({ isOpen,
                                         {filteredUniversities.length === 0 ? (
                                             <div className="p-4 text-center text-sm text-gray-500">No universities found</div>
                                         ) : (
-                                            filteredUniversities.map((item, idx) => (
+                                            filteredUniversities.map((uc) => (
                                                 <button
-                                                    key={`${item.uc.id}-${idx}`}
+                                                    key={uc.id}
                                                     type="button"
                                                     className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-left gap-3"
-                                                    onClick={() => handleUniversitySelect(item)}
+                                                    onClick={() => handleUniversitySelect(uc)}
                                                 >
                                                     <div className="overflow-hidden flex-1">
-                                                        <p className="text-sm font-bold text-gray-900 dark:text-white truncate">{item.uc.universityName}</p>
-                                                        <p className="text-xs text-lyceum-blue font-medium truncate">{item.singleCourseName}</p>
-                                                    </div>
-                                                    <div className="text-xs text-gray-400 shrink-0">
-                                                        {item.uc.country}
+                                                        <p className="text-sm font-bold text-gray-900 dark:text-white truncate">{uc.universityName}</p>
+                                                        <p className="text-xs text-gray-400 truncate">{uc.country}</p>
                                                     </div>
                                                 </button>
                                             ))
@@ -285,17 +302,39 @@ const ManualApplicationModal: React.FC<ManualApplicationModalProps> = ({ isOpen,
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             {/* Course Input */}
-                            <div className="space-y-2">
+                            <div className="space-y-2 relative">
                                 <label className="text-xs font-bold text-gray-500 uppercase tracking-widest flex items-center gap-2">
                                     <BookOpen size={14} /> Course Program <span className="text-red-500">*</span>
                                 </label>
-                                <input
-                                    type="text"
-                                    placeholder="e.g. MS in Computer Science"
-                                    value={formData.course}
-                                    onChange={(e) => setFormData({ ...formData, course: e.target.value })}
-                                    className="w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl px-4 py-3.5 text-sm font-bold text-gray-900 dark:text-white focus:border-lyceum-blue focus:ring-4 focus:ring-blue-500/10 outline-none transition-all placeholder:font-medium"
-                                />
+                                <div className="relative">
+                                    <input
+                                        type="text"
+                                        placeholder="e.g. MS in Computer Science"
+                                        value={formData.course}
+                                        onChange={(e) => {
+                                            setFormData({ ...formData, course: e.target.value });
+                                            setIsCourseDropdownOpen(true);
+                                        }}
+                                        onFocus={() => setIsCourseDropdownOpen(true)}
+                                        className="w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl px-4 py-3.5 text-sm font-bold text-gray-900 dark:text-white focus:border-lyceum-blue focus:ring-4 focus:ring-blue-500/10 outline-none transition-all placeholder:font-medium"
+                                    />
+                                    {isCourseDropdownOpen && filteredCourses.length > 0 && (
+                                        <div className="absolute z-10 w-full mt-2 bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 max-h-64 overflow-y-auto p-2 animate-in fade-in slide-in-from-top-2">
+                                            {filteredCourses.map((course, idx) => (
+                                                <button
+                                                    key={idx}
+                                                    type="button"
+                                                    className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-left gap-3"
+                                                    onClick={() => handleCourseSelect(course)}
+                                                >
+                                                    <div className="overflow-hidden flex-1">
+                                                        <p className="text-sm font-bold text-gray-900 dark:text-white truncate">{course}</p>
+                                                    </div>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
 
                             {/* Degree Dropdown */}
