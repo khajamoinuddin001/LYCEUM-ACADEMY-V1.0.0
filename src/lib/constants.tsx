@@ -144,30 +144,6 @@ export const ODOO_APPS: OdooApp[] = [
     iconColor: 'text-orange-600',
   },
   {
-    name: 'Documents',
-    icon: <Paperclip size={36} />,
-    bgColor: 'bg-green-100',
-    iconColor: 'text-green-600',
-  },
-  {
-    name: 'Visa Application',
-    icon: <FileText size={36} />,
-    bgColor: 'bg-orange-100',
-    iconColor: 'text-orange-600',
-  },
-  {
-    name: 'Quotations',
-    icon: <FileText size={36} />,
-    bgColor: 'bg-indigo-100',
-    iconColor: 'text-indigo-600',
-  },
-  {
-    name: 'My Profile',
-    icon: <UserCircle size={36} />,
-    bgColor: 'bg-purple-100',
-    iconColor: 'text-purple-600',
-  },
-  {
     name: 'University Manager',
     icon: <Cog size={36} />, // Using Cog for management, could be GraduationCap too
     bgColor: 'bg-indigo-100',
@@ -202,11 +178,7 @@ export const DEFAULT_PERMISSIONS: Record<UserRole, { [appName: string]: AppPermi
   'Student': {
     'LMS': readOnly,
     'Discuss': fullAccess,
-    'Visa Application': fullAccess,
-    'Documents': fullAccess,
     'Accounts': fullAccess,
-    'Quotations': fullAccess,
-    'My Profile': fullAccess,
   },
 };
 
