@@ -28,11 +28,16 @@ async function run() {
     try {
         await client.query("BEGIN");
 
-        // Find the master admin
-        const masterAdminRes = await client.query("SELECT * FROM users WHERE email = 'admin@lyceumacad.com'");
+        // Attempt to find the master admin (trying both possible emails)
+        let masterAdminRes = await client.query("SELECT * FROM users WHERE email = 'admin@lyceum.com'");
 
         if (masterAdminRes.rows.length === 0) {
-            console.log("❌ Could not find an account with the email 'admin@lyceumacad.com'!");
+            console.log("⚠️ Could not find 'admin@lyceum.com', trying fallback: 'admin@lyceumacad.com'...");
+            masterAdminRes = await client.query("SELECT * FROM users WHERE email = 'admin@lyceumacad.com'");
+        }
+
+        if (masterAdminRes.rows.length === 0) {
+            console.log("❌ Error: Could not find either 'admin@lyceum.com' or 'admin@lyceumacad.com'!");
             await client.query("ROLLBACK");
             return;
         }
