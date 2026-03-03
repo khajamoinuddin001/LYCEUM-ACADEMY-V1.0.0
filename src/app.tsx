@@ -75,6 +75,7 @@ import { TermsView, PrivacyView, LandingDocumentsView } from '@/features/shared/
 import StudentDocumentsView from '@/features/students/student_documents_view';
 import StudentUniversityApplicationView from '@/features/students/student_university_view';
 import UniversityManager from '@/features/admin/university_manager';
+import ActiveSessionsView from '@/features/admin/active_sessions_view';
 import MarketingView from '@/features/marketing/marketing_view';
 import {
   DndContext,
@@ -269,7 +270,7 @@ const DashboardLayout: React.FC = () => {
       const studentOnlyApps = ['Visa Application', 'Documents', 'Quotations', 'My Profile'];
       const availableApps = ODOO_APPS.filter(app => {
         if (studentOnlyApps.includes(app.name)) return false;
-        return currentUser.role === 'Admin' || app.name in (currentUser.permissions || {});
+        return app.name in (currentUser.permissions || {});
       });
 
       const savedOrder = localStorage.getItem(APPS_STORAGE_KEY);
@@ -625,8 +626,8 @@ const DashboardLayout: React.FC = () => {
     }
   };
 
-  const handleLogout = () => {
-    api.removeToken();
+  const handleLogout = async () => {
+    await api.logout();
     setStoredCurrentUser(null);
     setImpersonatingUser(null);
     setActiveApp('Apps');
@@ -737,6 +738,7 @@ const DashboardLayout: React.FC = () => {
 
   const handleAppSelect = (appName: string) => {
     setActiveApp(appName);
+    api.setCurrentPage(appName); // Track for session monitor
     setEditingContact(null);
     setContactViewMode('details');
     setLeadForQuotation(null);
@@ -748,6 +750,12 @@ const DashboardLayout: React.FC = () => {
       setSidebarOpen(false);
     }
   };
+
+  useEffect(() => {
+    if (activeApp) {
+      api.setCurrentPage(activeApp);
+    }
+  }, [activeApp]);
 
   const handleContactSelect = (contact: Contact) => {
     setEditingContact(contact);
@@ -2046,6 +2054,7 @@ const DashboardLayout: React.FC = () => {
       case 'Attendance': return <AttendanceView user={currentUser} users={users} onUpdateUser={handleUpdateUser} />;
       case 'Analytics': return <MarketingView />;
       case 'University Manager': return <UniversityManager user={currentUser} />;
+      case 'Live Session Monitor': return <ActiveSessionsView currentUser={{ id: currentUser.id, role: currentUser.role }} />;
       default: return <AppView appName={activeApp} onNavigateBack={() => handleAppSelect('Apps')} />;
     }
   }

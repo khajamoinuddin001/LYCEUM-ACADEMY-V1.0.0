@@ -304,6 +304,34 @@ router.post('/login', async (req, res) => {
 
     console.log(`✅ Successful login: ${email} (Role: ${user.role})`);
 
+    // Record session in active_sessions
+    try {
+      const crypto = await import('crypto');
+      const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+      const ipAddress = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown';
+      const deviceInfo = req.headers['user-agent'] || 'unknown';
+
+      // Archive any existing session for this user before deleting it
+      await query(`
+        INSERT INTO session_history (user_id, username, role, ip_address, device_info, last_page, login_time, end_time, reason)
+        SELECT user_id, username, role, ip_address, device_info, last_page, login_time, NOW(), 'New Login'
+        FROM active_sessions WHERE user_id = $1
+      `, [user.id]);
+
+      // Remove any existing sessions for this user (one session per user)
+      await query('DELETE FROM active_sessions WHERE user_id = $1', [user.id]);
+
+      // Insert new session
+      await query(`
+        INSERT INTO active_sessions (user_id, username, role, token_hash, ip_address, device_info, login_time, last_activity)
+        VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+        ON CONFLICT (token_hash) DO UPDATE SET last_activity = NOW()
+      `, [user.id, user.name, user.role, tokenHash, ipAddress, deviceInfo]);
+    } catch (sessionErr) {
+      console.error('Failed to record session:', sessionErr.message);
+      // Continue login even if session tracking fails
+    }
+
     // Format response
     const safeUser = {
       ...userWithoutPassword,
@@ -317,6 +345,35 @@ router.post('/login', async (req, res) => {
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ error: 'Login failed' });
+  }
+});
+
+// Logout
+router.post('/logout', authenticateToken, async (req, res) => {
+  try {
+    const { id: userId } = req.user;
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (token) {
+      const crypto = await import('crypto');
+      const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+
+      // Archive session
+      await query(`
+        INSERT INTO session_history (user_id, username, role, ip_address, device_info, last_page, login_time, end_time, reason)
+        SELECT user_id, username, role, ip_address, device_info, last_page, login_time, NOW(), 'Logout'
+        FROM active_sessions WHERE token_hash = $1
+      `, [tokenHash]);
+
+      // Remove from active sessions
+      await query('DELETE FROM active_sessions WHERE token_hash = $1', [tokenHash]);
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Logout error:', error);
+    res.status(500).json({ error: 'Logout failed' });
   }
 });
 

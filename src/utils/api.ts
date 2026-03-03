@@ -46,12 +46,19 @@ export function removeToken(): void {
   sessionStorage.removeItem('authToken');
 }
 
+// Current page tracking for Session Monitor
+let currentPageName: string | null = null;
+export function setCurrentPage(name: string | null): void {
+  currentPageName = name;
+}
+
 // API request helper
 export async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const token = getToken();
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
     ...(token && { 'Authorization': `Bearer ${token}` }),
+    ...(currentPageName && { 'X-Current-Page': currentPageName }),
     ...options.headers,
   };
 
@@ -87,6 +94,16 @@ export const login = async (email: string, password: string, remember: boolean =
   });
   setToken(data.token, remember);
   return data;
+};
+
+export const logout = async (): Promise<void> => {
+  try {
+    await apiRequest('/auth/logout', { method: 'POST' });
+  } catch (error) {
+    console.error('Logout API failed:', error);
+  } finally {
+    removeToken();
+  }
 };
 
 export const loginWithGoogle = async (googleToken: string, remember: boolean = true): Promise<{ user: User; token: string }> => {

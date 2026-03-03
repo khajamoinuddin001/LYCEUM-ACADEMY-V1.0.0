@@ -149,6 +149,12 @@ export const ODOO_APPS: OdooApp[] = [
     bgColor: 'bg-indigo-100',
     iconColor: 'text-indigo-600',
   },
+  {
+    name: 'Live Session Monitor',
+    icon: <UserCheck size={36} />,
+    bgColor: 'bg-green-100',
+    iconColor: 'text-green-600',
+  },
 ];
 
 export const STAFF_ROLES: UserRole[] = ['Admin', 'Staff'];

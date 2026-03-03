@@ -5569,6 +5569,144 @@ Strict Rules:
   }
 });
 
+
+// ==========================================
+// LIVE SESSION MONITOR — Admin Only
+// ==========================================
+
+// GET all active sessions
+router.get('/admin/active-sessions', authenticateToken, requireRole('Admin'), async (req, res) => {
+  try {
+    // Clean up stale sessions (inactive for more than 2 hours)
+    // Archive them first
+    await query(`
+      INSERT INTO session_history (user_id, username, role, ip_address, device_info, last_page, login_time, end_time, reason)
+      SELECT user_id, username, role, ip_address, device_info, last_page, login_time, NOW(), 'Timeout'
+      FROM active_sessions 
+      WHERE last_activity < NOW() - INTERVAL '2 hours'
+    `);
+
+    await query(`
+      DELETE FROM active_sessions 
+      WHERE last_activity < NOW() - INTERVAL '2 hours'
+    `);
+
+    const result = await query(`
+      SELECT id, user_id, username, role, ip_address, device_info, last_page, login_time, last_activity
+      FROM active_sessions
+      ORDER BY last_activity DESC
+    `);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Active sessions error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// DELETE (terminate) a user session
+router.delete('/admin/sessions/:userId', authenticateToken, requireRole('Admin'), async (req, res) => {
+  try {
+    const targetUserId = parseInt(req.params.userId);
+
+    // Prevent admin from terminating their own session
+    if (targetUserId === req.user.id) {
+      return res.status(400).json({ error: 'You cannot terminate your own session' });
+    }
+
+    // Get the session token_hash for this user
+    const sessionResult = await query(
+      'SELECT token_hash FROM active_sessions WHERE user_id = $1',
+      [targetUserId]
+    );
+
+    if (sessionResult.rows.length === 0) {
+      return res.status(404).json({ error: 'No active session found for this user' });
+    }
+
+    const { token_hash } = sessionResult.rows[0];
+
+    // Add token to blacklist
+    await query(
+      'INSERT INTO token_blacklist (token_hash, invalidated_at) VALUES ($1, NOW()) ON CONFLICT (token_hash) DO NOTHING',
+      [token_hash]
+    );
+
+    // Archive before deleting
+    await query(`
+      INSERT INTO session_history (user_id, username, role, ip_address, device_info, last_page, login_time, end_time, reason)
+      SELECT user_id, username, role, ip_address, device_info, last_page, login_time, NOW(), 'Terminated by Admin'
+      FROM active_sessions WHERE user_id = $1
+    `, [targetUserId]);
+
+    // Remove from active sessions
+    await query('DELETE FROM active_sessions WHERE user_id = $1', [targetUserId]);
+
+    console.log(`🔴 Session terminated for user ID: ${targetUserId} by admin ${req.user.email}`);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Terminate session error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// DELETE (terminate ALL except requester) — Panic Button
+router.delete('/admin/sessions', authenticateToken, requireRole('Admin'), async (req, res) => {
+  try {
+    const adminId = req.user.id;
+
+    // 1. Get all tokens to blacklist (except admin's)
+    const sessionsToKill = await query(
+      'SELECT token_hash, user_id, username, role, ip_address, device_info, last_page, login_time FROM active_sessions WHERE user_id != $1',
+      [adminId]
+    );
+
+    if (sessionsToKill.rows.length === 0) {
+      return res.json({ success: true, message: 'No other active sessions to terminate' });
+    }
+
+    const tokens = sessionsToKill.rows.map(s => s.token_hash);
+
+    // 2. Archive to history
+    await query(`
+      INSERT INTO session_history (user_id, username, role, ip_address, device_info, last_page, login_time, end_time, reason)
+      SELECT user_id, username, role, ip_address, device_info, last_page, login_time, NOW(), 'Bulk Termination (Panic Button)'
+      FROM active_sessions WHERE user_id != $1
+    `, [adminId]);
+
+    // 3. Blacklist all tokens
+    // PostgreSQL unnest can be used for bulk insert from array
+    await query(`
+      INSERT INTO token_blacklist (token_hash, invalidated_at)
+      SELECT unnest($1::text[]), NOW()
+      ON CONFLICT (token_hash) DO NOTHING
+    `, [tokens]);
+
+    // 4. Remove from active sessions
+    await query('DELETE FROM active_sessions WHERE user_id != $1', [adminId]);
+
+    console.warn(`🚨 PANIC BUTTON: Admin ${req.user.email} terminated ${sessionsToKill.rows.length} sessions.`);
+    res.json({ success: true, count: sessionsToKill.rows.length });
+  } catch (error) {
+    console.error('Panic button error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET session history (audit log)
+router.get('/admin/session-history', authenticateToken, requireRole('Admin'), async (req, res) => {
+  try {
+    const result = await query(`
+      SELECT * FROM session_history 
+      ORDER BY end_time DESC 
+      LIMIT 100
+    `);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Session history error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;
 // trigger reload 1770196752
 // trigger reload 1770196793

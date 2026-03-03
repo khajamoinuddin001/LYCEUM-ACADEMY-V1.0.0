@@ -61,7 +61,36 @@ export async function authenticateToken(req, res, next) {
     return res.status(403).json({ error: 'Invalid or expired token' });
   }
 
-  // console.log('authenticateToken - Token valid, user:', decoded);
+  // Check if token has been blacklisted (silently terminated session)
+  try {
+    const { query } = await import('./database.js');
+    const crypto = await import('crypto');
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+
+    const blacklisted = await query('SELECT id FROM token_blacklist WHERE token_hash = $1', [tokenHash]);
+    if (blacklisted.rows.length > 0) {
+      // Silent termination — just return 401 like a normal expired session
+      return res.status(401).json({ error: 'Session expired' });
+    }
+
+    // Token is valid — update last_activity and last_page in active_sessions
+    const currentPage = req.headers['x-current-page'];
+    if (currentPage) {
+      await query(
+        'UPDATE active_sessions SET last_activity = NOW(), last_page = $1 WHERE token_hash = $2',
+        [currentPage, tokenHash]
+      );
+    } else {
+      await query(
+        'UPDATE active_sessions SET last_activity = NOW() WHERE token_hash = $1',
+        [tokenHash]
+      );
+    }
+  } catch (error) {
+    console.error('Error checking token blacklist:', error);
+    // Don't block on DB errors — continue with the request
+  }
+
   req.user = decoded;
 
   // Fetch latest permissions from DB
@@ -76,7 +105,6 @@ export async function authenticateToken(req, res, next) {
       req.user.permissions = typeof userDoc.permissions === 'string'
         ? JSON.parse(userDoc.permissions)
         : (userDoc.permissions || {});
-      // console.log('authenticateToken - User permissions loaded:', req.user.permissions);
     }
   } catch (error) {
     console.error('Error fetching user permissions:', error);

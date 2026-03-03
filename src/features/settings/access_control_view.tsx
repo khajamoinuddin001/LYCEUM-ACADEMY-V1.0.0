@@ -6,6 +6,7 @@ import { ODOO_APPS, STAFF_ROLES } from '@/lib/constants';
 
 interface ManageAppsModalProps {
     user: User;
+    currentUser: User;
     onClose: () => void;
     onSave: (userId: number, permissions: { [key: string]: AppPermissions }) => void;
 }
@@ -35,7 +36,7 @@ const ToggleSwitch: React.FC<{
 );
 
 
-const ManageAppsModal: React.FC<ManageAppsModalProps> = ({ user, onClose, onSave }) => {
+const ManageAppsModal: React.FC<ManageAppsModalProps> = ({ user, currentUser, onClose, onSave }) => {
     const [permissions, setPermissions] = useState<{ [key: string]: AppPermissions }>(user.permissions || {});
     const [isSaving, setIsSaving] = useState(false);
 
@@ -121,7 +122,7 @@ const ManageAppsModal: React.FC<ManageAppsModalProps> = ({ user, onClose, onSave
                 {/* Scrollable content */}
                 <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4 md:py-6">
                     <div className="grid grid-cols-1 gap-4">
-                        {ODOO_APPS.map((app) => {
+                        {ODOO_APPS.filter(app => !!currentUser.permissions?.[app.name]?.read).map((app) => {
                             const currentPerms = permissions[app.name] || {};
                             const hasRead = !!currentPerms.read;
                             const hasFullAccess = hasRead && currentPerms.create && currentPerms.update && currentPerms.delete;
@@ -508,6 +509,7 @@ const AccessControlView: React.FC<AccessControlViewProps> = ({ users, activityLo
                 modalUser && (
                     <ManageAppsModal
                         user={modalUser}
+                        currentUser={currentUser}
                         onClose={() => setModalUser(null)}
                         onSave={onUpdateUserPermissions}
                     />

@@ -1,0 +1,500 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import { getToken } from '@/utils/api';
+
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5002/api';
+
+interface ActiveSession {
+    id: number;
+    user_id: number;
+    username: string;
+    role: string;
+    ip_address: string;
+    device_info: string;
+    last_page: string;
+    login_time: string;
+    last_activity: string;
+}
+
+interface SessionHistory extends ActiveSession {
+    end_time: string;
+    reason: string;
+}
+
+function getDeviceIcon(ua: string) {
+    const info = ua.toLowerCase();
+    if (info.includes('iphone') || info.includes('android')) {
+        return <span className="text-gray-400" title={ua}>📱</span>;
+    }
+    if (info.includes('ipad') || info.includes('tablet')) {
+        return <span className="text-gray-400" title={ua}> tablet</span>;
+    }
+    return <span className="text-gray-400" title={ua}>💻</span>;
+}
+
+function getBrowserName(ua: string) {
+    const info = ua.toLowerCase();
+    if (info.includes('chrome')) return 'Chrome';
+    if (info.includes('safari') && !info.includes('chrome')) return 'Safari';
+    if (info.includes('firefox')) return 'Firefox';
+    if (info.includes('edg')) return 'Edge';
+    return 'Browser';
+}
+
+function getRoleBadge(role: string) {
+    const base = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold';
+    switch (role) {
+        case 'Admin':
+            return `${base} bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300`;
+        case 'Staff':
+            return `${base} bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300`;
+        case 'Student':
+            return `${base} bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300`;
+        default:
+            return `${base} bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300`;
+    }
+}
+
+function timeAgo(dateStr: string): string {
+    const diff = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
+    if (diff < 60) return `${diff}s ago`;
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    return `${Math.floor(diff / 86400)}d ago`;
+}
+
+function formatDateTime(dateStr: string): string {
+    return new Date(dateStr).toLocaleString('en-IN', {
+        day: '2-digit', month: 'short', year: 'numeric',
+        hour: '2-digit', minute: '2-digit', hour12: true
+    });
+}
+
+function calculateDuration(loginTime: string): string {
+    const diff = Math.floor((Date.now() - new Date(loginTime).getTime()) / 1000);
+    const h = Math.floor(diff / 3600);
+    const m = Math.floor((diff % 3600) / 60);
+    if (h > 0) return `${h}h ${m}m`;
+    return `${m}m`;
+}
+
+interface Props {
+    currentUser: { id: number; role: string };
+}
+
+const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
+    const [sessions, setSessions] = useState<ActiveSession[]>([]);
+    const [history, setHistory] = useState<SessionHistory[]>([]);
+    const [view, setView] = useState<'active' | 'history'>('active');
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const [terminating, setTerminating] = useState<number | null>(null);
+    const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
+    const [search, setSearch] = useState('');
+    const [roleFilter, setRoleFilter] = useState<string>('All');
+    const [panicking, setPanicking] = useState(false);
+
+    const fetchHistory = useCallback(async () => {
+        try {
+            const token = getToken();
+            const res = await fetch(`${API_BASE}/admin/session-history`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (res.ok) setHistory(await res.json());
+        } catch (e) {
+            console.error('Failed to fetch history:', e);
+        }
+    }, []);
+
+    const fetchSessions = useCallback(async () => {
+        try {
+            const token = getToken();
+            if (!token) {
+                setError('No authentication token found. Please login again.');
+                setLoading(false);
+                return;
+            }
+
+            const res = await fetch(`${API_BASE}/admin/active-sessions`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (!res.ok) throw new Error(await res.text());
+            const data = await res.json();
+            setSessions(data);
+            setLastRefresh(new Date());
+            setError(null);
+        } catch (e: any) {
+            setError('Failed to load sessions. Check your connection.');
+        } finally {
+            setLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        if (view === 'active') {
+            fetchSessions();
+            const interval = setInterval(fetchSessions, 30000);
+            return () => clearInterval(interval);
+        } else {
+            fetchHistory();
+        }
+    }, [fetchSessions, fetchHistory, view]);
+
+    const handleTerminate = async (userId: number, username: string) => {
+        if (!confirm(`Terminate session for ${username}?`)) return;
+        setTerminating(userId);
+        try {
+            const token = getToken();
+            const res = await fetch(`${API_BASE}/admin/sessions/${userId}`, {
+                method: 'DELETE',
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (!res.ok) {
+                const data = await res.json();
+                alert(data.error || 'Failed to terminate session');
+                return;
+            }
+            setSessions(prev => prev.filter(s => s.user_id !== userId));
+        } catch {
+            alert('Network error. Please try again.');
+        } finally {
+            setTerminating(null);
+        }
+    };
+
+    const handleForceLogoutAll = async () => {
+        const othersCount = sessions.length - 1;
+        if (othersCount <= 0) {
+            alert("No other active sessions to terminate.");
+            return;
+        }
+
+        const msg = `🚨 PANIC BUTTON\n\nThis will instantly terminate ALL ${othersCount} other active sessions.\n\nEveryone except you will be kicked out. ARE YOU SURE?`;
+        if (!confirm(msg)) return;
+
+        setPanicking(true);
+        try {
+            const token = getToken();
+            const res = await fetch(`${API_BASE}/admin/sessions`, {
+                method: 'DELETE',
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (!res.ok) throw new Error(await res.text());
+
+            const data = await res.json();
+            alert(`Successfully terminated ${data.count || othersCount} sessions.`);
+            setSessions(prev => prev.filter(s => s.user_id === currentUser.id));
+        } catch (e: any) {
+            alert('Failed to execute panic logout: ' + e.message);
+        } finally {
+            setPanicking(false);
+        }
+    };
+
+    const filtered = sessions.filter(s => {
+        const matchSearch = s.username.toLowerCase().includes(search.toLowerCase()) ||
+            s.role.toLowerCase().includes(search.toLowerCase()) ||
+            (s.ip_address || '').includes(search);
+        const matchRole = roleFilter === 'All' || s.role === roleFilter;
+        return matchSearch && matchRole;
+    });
+
+    const counts = {
+        total: sessions.length,
+        Admin: sessions.filter(s => s.role === 'Admin').length,
+        Staff: sessions.filter(s => s.role === 'Staff').length,
+        Student: sessions.filter(s => s.role === 'Student').length,
+    };
+
+    if (currentUser.role !== 'Admin') {
+        return (
+            <div className="flex items-center justify-center h-full">
+                <div className="text-center px-8 py-16">
+                    <div className="text-5xl mb-4">🔒</div>
+                    <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100">Access Restricted</h2>
+                    <p className="text-gray-500 dark:text-gray-400 mt-2">Only Admins can view live sessions.</p>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="h-full flex flex-col bg-gray-50 dark:bg-gray-950 p-6 overflow-auto">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                <div>
+                    <h1 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight flex items-center gap-2">
+                        <span className="relative flex h-3 w-3">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+                        </span>
+                        Live Session Monitor
+                    </h1>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                        Auto-refreshes every 30s · Last updated: {lastRefresh.toLocaleTimeString()}
+                    </p>
+                </div>
+                <div className="flex items-center gap-3">
+                    <button
+                        onClick={fetchSessions}
+                        className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all shadow-sm"
+                    >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        Refresh
+                    </button>
+                    {view === 'active' && (
+                        <button
+                            onClick={handleForceLogoutAll}
+                            disabled={panicking}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all shadow-md active:scale-95 ${panicking
+                                ? 'bg-gray-400 cursor-not-allowed text-white'
+                                : 'bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-700 hover:to-orange-700 text-white animate-pulse-subtle'
+                                }`}
+                        >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            </svg>
+                            {panicking ? 'Terminating All...' : 'Force Logout All (Panic)'}
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            {/* Stats cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                {[
+                    { label: 'Total Online', value: counts.total, color: 'from-blue-500 to-indigo-600', icon: '👥' },
+                    { label: 'Admins', value: counts.Admin, color: 'from-purple-500 to-purple-700', icon: '🛡️' },
+                    { label: 'Staff', value: counts.Staff, color: 'from-blue-400 to-cyan-600', icon: '💼' },
+                    { label: 'Students', value: counts.Student, color: 'from-emerald-400 to-teal-600', icon: '🎓' },
+                ].map(stat => (
+                    <div key={stat.label} className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 p-4 flex items-center gap-4">
+                        <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${stat.color} flex items-center justify-center text-xl shadow-md`}>
+                            {stat.icon}
+                        </div>
+                        <div>
+                            <div className="text-2xl font-black text-gray-900 dark:text-white">{stat.value}</div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400 font-medium">{stat.label}</div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            {/* Filters */}
+            <div className="flex flex-col sm:flex-row gap-3 mb-5">
+                <div className="relative flex-1">
+                    <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                    <input
+                        type="text"
+                        placeholder="Search by name, role, or IP..."
+                        value={search}
+                        onChange={e => setSearch(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm text-gray-700 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                    />
+                </div>
+                <div className="flex gap-2">
+                    {['Active', 'History'].map(v => (
+                        <button
+                            key={v}
+                            onClick={() => setView(v.toLowerCase() as any)}
+                            className={`px-4 py-2.5 rounded-xl text-sm font-bold border transition-all ${view === v.toLowerCase()
+                                ? 'bg-indigo-600 text-white border-indigo-600 shadow-md'
+                                : 'bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-indigo-300'
+                                }`}
+                        >
+                            {v === 'Active' ? '🟢 Live Sessions' : '📋 Audit Log'}
+                        </button>
+                    ))}
+                </div>
+                <div className="w-px h-8 bg-gray-200 dark:bg-gray-800 mx-1 hidden sm:block self-center" />
+                <div className="flex gap-2">
+                    {['All', 'Admin', 'Staff', 'Student'].map(role => (
+                        <button
+                            key={role}
+                            onClick={() => setRoleFilter(role)}
+                            className={`px-4 py-2.5 rounded-xl text-sm font-medium border transition-all ${roleFilter === role
+                                ? 'bg-blue-600 text-white border-blue-600 shadow-md'
+                                : 'bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-blue-300'
+                                }`}
+                        >
+                            {role}
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            {/* Table */}
+            <div className="flex-1 bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
+                {loading ? (
+                    <div className="flex items-center justify-center py-24">
+                        <div className="flex flex-col items-center gap-3">
+                            <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">Loading sessions...</p>
+                        </div>
+                    </div>
+                ) : error ? (
+                    <div className="flex items-center justify-center py-24">
+                        <div className="text-center">
+                            <div className="text-4xl mb-3">⚠️</div>
+                            <p className="text-gray-600 dark:text-gray-400">{error}</p>
+                            <button onClick={fetchSessions} className="mt-4 text-blue-500 text-sm underline">Try again</button>
+                        </div>
+                    </div>
+                ) : filtered.length === 0 ? (
+                    <div className="flex items-center justify-center py-24">
+                        <div className="text-center">
+                            <div className="text-5xl mb-3">💤</div>
+                            <p className="text-gray-600 dark:text-gray-400 font-medium">
+                                {sessions.length === 0 ? 'No active sessions right now.' : 'No sessions match your filter.'}
+                            </p>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="overflow-x-auto">
+                        <table className="w-full">
+                            <thead>
+                                <tr className="border-b border-gray-100 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-800/50">
+                                    <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider px-6 py-4">User</th>
+                                    <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider px-6 py-4">Current Page</th>
+                                    <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider px-6 py-4">Device / IP</th>
+                                    <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider px-6 py-4">{view === 'active' ? 'Online For' : 'Session Span'}</th>
+                                    <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider px-6 py-4 text-center">{view === 'active' ? 'Status / Last Seen' : 'End Reason'}</th>
+                                    <th className="text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider px-6 py-4">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
+                                {(view === 'active' ? filtered : history).map(session => {
+                                    const isMe = session.user_id === currentUser.id;
+                                    const h = session as SessionHistory;
+                                    return (
+                                        <tr
+                                            key={session.id}
+                                            className={`transition-colors hover:bg-gray-50/60 dark:hover:bg-gray-800/40 ${isMe && view === 'active' ? 'bg-blue-50/40 dark:bg-blue-900/10' : ''}`}
+                                        >
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-400 to-indigo-600 flex items-center justify-center text-white font-bold text-sm shadow-sm flex-shrink-0">
+                                                        {session.username.charAt(0).toUpperCase()}
+                                                    </div>
+                                                    <div>
+                                                        <div className="font-semibold text-gray-900 dark:text-white text-sm">
+                                                            {session.username}
+                                                            {isMe && view === 'active' && <span className="ml-2 text-xs text-blue-500 font-normal">(you)</span>}
+                                                        </div>
+                                                        <div className="flex items-center gap-1.5 mt-0.5">
+                                                            <span className={getRoleBadge(session.role)}>{session.role}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="text-sm font-medium text-gray-700 dark:text-gray-200 flex items-center gap-2">
+                                                    <div className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+                                                    {session.last_page || (view === 'active' ? 'Apps' : 'Ended')}
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="flex flex-col">
+                                                    <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+                                                        {getDeviceIcon(session.device_info || '')}
+                                                        <span>{getBrowserName(session.device_info || '')}</span>
+                                                    </div>
+                                                    <span className="text-[10px] font-mono text-gray-400 uppercase">
+                                                        {session.ip_address || '—'}
+                                                    </span>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="text-xs text-gray-600 dark:text-gray-400">
+                                                    {view === 'active' ? (
+                                                        <div className="flex flex-col">
+                                                            <span className="text-sm font-bold text-gray-900 dark:text-white">
+                                                                {calculateDuration(session.login_time)}
+                                                            </span>
+                                                            <span className="text-[10px] text-gray-400">Since {new Date(session.login_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                                        </div>
+                                                    ) : (
+                                                        <>
+                                                            <div>{formatDateTime(session.login_time)}</div>
+                                                            {h.end_time && (
+                                                                <div className="text-gray-400 mt-1">
+                                                                    to {formatDateTime(h.end_time)}
+                                                                </div>
+                                                            )}
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                {view === 'active' ? (
+                                                    <div className="flex items-center justify-center gap-2">
+                                                        <span className="relative flex h-2 w-2">
+                                                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                                                            <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                                                        </span>
+                                                        <span className="text-xs text-gray-500">{timeAgo(session.last_activity)}</span>
+                                                    </div>
+                                                ) : (
+                                                    <div className="text-center">
+                                                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${h.reason === 'Logout' ? 'bg-gray-100 text-gray-600' :
+                                                            h.reason === 'Terminated by Admin' ? 'bg-red-100 text-red-600' :
+                                                                'bg-amber-100 text-amber-600'
+                                                            }`}>
+                                                            {h.reason || 'Closed'}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                            </td>
+                                            <td className="px-6 py-4 text-right">
+                                                {view === 'active' ? (
+                                                    isMe ? (
+                                                        <span className="text-xs text-gray-400 italic">Your session</span>
+                                                    ) : (
+                                                        <button
+                                                            onClick={() => handleTerminate(session.user_id, session.username)}
+                                                            disabled={terminating === session.user_id}
+                                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 rounded-lg text-xs font-semibold hover:bg-red-100 dark:hover:bg-red-900/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                                                        >
+                                                            {terminating === session.user_id ? (
+                                                                <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                                                </svg>
+                                                            ) : 'Exit Session'}
+                                                        </button>
+                                                    )
+                                                ) : (
+                                                    <span className="text-xs text-gray-400">—</span>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </div>
+
+            {/* Footer */}
+            <p className="text-center text-xs text-gray-400 dark:text-gray-600 mt-4">
+                Sessions inactive for more than 2 hours are automatically removed · {filtered.length} of {sessions.length} sessions shown
+            </p>
+            <style dangerouslySetInnerHTML={{
+                __html: `
+                @keyframes pulse-subtle {
+                    0%, 100% { opacity: 1; transform: scale(1); }
+                    50% { opacity: 0.9; transform: scale(1.02); }
+                }
+                .animate-pulse-subtle {
+                    animation: pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+                }
+            `}} />
+        </div>
+    );
+};
+
+export default ActiveSessionsView;

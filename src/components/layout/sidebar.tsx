@@ -67,6 +67,7 @@ const DEFAULT_STAFF_NAV = [
   { name: 'Accounting', icon: <FileText size={20} /> },
   { name: 'Tasks', icon: <ClipboardList size={20} /> },
   { name: 'Reception', icon: <ConciergeBell size={20} /> },
+  { name: 'Live Session Monitor', icon: <UserCheck size={20} /> },
 ];
 
 const DEFAULT_STUDENT_NAV = [
@@ -238,7 +239,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, activeApp, onAppSe
 
     const userPermissions = user.permissions || {};
     const visibleNavItems = navItems.filter(item =>
-      item && item.name && (item.name === 'Apps' || user.role === 'Admin' || (userPermissions && userPermissions[item.name]))
+      item && item.name && (item.name === 'Apps' || (userPermissions && userPermissions[item.name]))
     );
 
     return visibleNavItems.map((item, index) => (

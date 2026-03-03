@@ -565,6 +565,54 @@ export async function initDatabase() {
     await migrateColumn('password_reset_tokens', 'expiresAt', 'expires_at');
     await migrateColumn('password_reset_tokens', 'createdAt', 'created_at');
 
+    // Active Sessions table (for Live Session Monitor)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS active_sessions (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        username TEXT NOT NULL,
+        role TEXT NOT NULL,
+        token_hash TEXT NOT NULL UNIQUE,
+        ip_address TEXT,
+        device_info TEXT,
+        last_page TEXT,
+        login_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        last_activity TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await client.query('CREATE INDEX IF NOT EXISTS idx_active_sessions_user_id ON active_sessions(user_id)');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_active_sessions_token_hash ON active_sessions(token_hash)');
+
+    // Ensure new columns exist in existing table
+    await client.query('ALTER TABLE active_sessions ADD COLUMN IF NOT EXISTS device_info TEXT');
+    await client.query('ALTER TABLE active_sessions ADD COLUMN IF NOT EXISTS last_page TEXT');
+
+    // Session History table (Audit Log)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS session_history (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER,
+        username TEXT NOT NULL,
+        role TEXT NOT NULL,
+        ip_address TEXT,
+        device_info TEXT,
+        last_page TEXT,
+        login_time TIMESTAMP,
+        end_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        reason TEXT
+      )
+    `);
+
+    // Token Blacklist table (for silent session termination)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS token_blacklist (
+        id SERIAL PRIMARY KEY,
+        token_hash TEXT NOT NULL UNIQUE,
+        invalidated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await client.query('CREATE INDEX IF NOT EXISTS idx_token_blacklist_hash ON token_blacklist(token_hash)');
+
     await client.query("COMMIT");
     // ATTENDANCE & PAYROLL
     await client.query(`
