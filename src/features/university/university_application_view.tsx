@@ -704,6 +704,18 @@ const UniversityApplicationView: React.FC<UniversityApplicationViewProps> = ({ u
                                                     <button onClick={() => { setShowCredentials(true); setShowDocuments(false); }} className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-gray-100 hover:bg-emerald-500 hover:text-white dark:bg-gray-800 dark:hover:bg-emerald-500 text-xs font-bold text-gray-600 dark:text-gray-300 rounded-xl transition-all shadow-sm">
                                                         <Key size={13} /> Credentials
                                                     </button>
+                                                    {user?.role?.toLowerCase() === 'admin' && (
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleDeleteApplication(selectedApp.student, selectedApp.idx);
+                                                            }}
+                                                            className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-gray-100 hover:bg-red-500 hover:text-white dark:bg-gray-800 dark:hover:bg-red-500 text-xs font-bold text-gray-600 dark:text-gray-300 rounded-xl transition-all shadow-sm"
+                                                            title="Delete Application"
+                                                        >
+                                                            <Trash2 size={13} /> Delete
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </h2>
                                             <p className={`font-bold text-lyceum-blue uppercase tracking-widest transition-all duration-500 ${modalScrollAmount > 50 ? 'text-[10px]' : 'text-sm'}`}>
