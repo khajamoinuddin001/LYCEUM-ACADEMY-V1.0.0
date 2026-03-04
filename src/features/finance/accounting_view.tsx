@@ -151,7 +151,16 @@ const AccountingView: React.FC<AccountingViewProps> = ({
     // Recent transactions (last 20) with search and filter
     const recentTransactions = useMemo(() => {
         // 1. Start with regular transactions
-        let combined: AccountingTransaction[] = [...transactions];
+        let combined: AccountingTransaction[] = transactions.map(t => {
+            // For purchases, if there's a linked student (contactId), resolve their name for display
+            if (t.type === 'Purchase' && t.contactId) {
+                const contact = contacts.find(c => c.id === t.contactId);
+                if (contact) {
+                    return { ...t, customerName: contact.name };
+                }
+            }
+            return t;
+        });
 
         // 2. Convert AR Entries from Contacts into pseudo-transactions for display
         contacts.forEach(contact => {
