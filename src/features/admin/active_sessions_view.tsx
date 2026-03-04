@@ -218,7 +218,7 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
     }
 
     return (
-        <div className="h-full flex flex-col bg-gray-50 dark:bg-gray-950 p-6 overflow-auto">
+        <div className="h-full flex flex-col bg-gray-50 dark:bg-gray-950 p-6 overflow-hidden">
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
                 <div>
@@ -327,7 +327,7 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
             </div>
 
             {/* Table */}
-            <div className="flex-1 bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden">
+            <div className="flex-1 min-h-0 bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 overflow-hidden flex flex-col">
                 {loading ? (
                     <div className="flex items-center justify-center py-24">
                         <div className="flex flex-col items-center gap-3">
@@ -353,9 +353,9 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
                         </div>
                     </div>
                 ) : (
-                    <div className="overflow-x-auto">
-                        <table className="w-full">
-                            <thead>
+                    <div className="flex-1 overflow-auto">
+                        <table className="w-full border-separate border-spacing-0">
+                            <thead className="sticky top-0 z-10 shadow-sm">
                                 <tr className="border-b border-gray-100 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-800/50">
                                     <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider px-6 py-4">User</th>
                                     <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider px-6 py-4">Current Page</th>
