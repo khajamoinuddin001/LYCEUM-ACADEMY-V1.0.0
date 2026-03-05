@@ -83,6 +83,8 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
         confirmationNumber: '',
         securityQuestion: '',
         securityAnswer: '',
+        surname: '',
+        yearOfBirth: '',
         startDate: new Date().toISOString().split('T')[0],
         expiryDate: '',
         basicDsBox: '',
@@ -124,6 +126,8 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                     expiryDate: '',
                     securityQuestion: '',
                     securityAnswer: '',
+                    surname: '',
+                    yearOfBirth: '',
                     basicDsBox: '',
                     documentId: undefined,
                     documentName: '',
@@ -370,6 +374,8 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                 documentName: updatedOp.dsData?.documentName,
                 confirmationDocumentId: updatedOp.dsData?.confirmationDocumentId,
                 confirmationDocumentName: updatedOp.dsData?.confirmationDocumentName,
+                surname: updatedOp.dsData?.surname || '',
+                yearOfBirth: updatedOp.dsData?.yearOfBirth || '',
                 fillingDocuments: updatedOp.dsData?.fillingDocuments || [],
                 studentStatus: updatedOp.dsData?.studentStatus || 'pending',
                 adminStatus: updatedOp.dsData?.adminStatus || 'pending'
@@ -399,6 +405,8 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                 documentName: updatedOp.dsData?.documentName,
                 confirmationDocumentId: updatedOp.dsData?.confirmationDocumentId,
                 confirmationDocumentName: updatedOp.dsData?.confirmationDocumentName,
+                surname: updatedOp.dsData?.surname || '',
+                yearOfBirth: updatedOp.dsData?.yearOfBirth || '',
                 fillingDocuments: updatedOp.dsData?.fillingDocuments || [],
                 studentStatus: updatedOp.dsData?.studentStatus || 'pending',
                 adminStatus: updatedOp.dsData?.adminStatus || 'pending'
@@ -1312,6 +1320,33 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                                         </div>
                                     </div>
 
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Surname</label>
+                                            <input
+                                                type="text"
+                                                value={dsFormData.surname}
+                                                onChange={(e) => {
+                                                    const value = e.target.value.replace(/[^a-zA-Z]/g, '').toUpperCase().slice(0, 5);
+                                                    setDsFormData(prev => ({ ...prev, surname: value }));
+                                                }}
+                                                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:border-blue-500 outline-none transition-all text-sm font-medium"
+                                                placeholder="MAX 5 ALPHABETS (e.g. MOHAM)"
+                                                maxLength={5}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Year of Birth</label>
+                                            <input
+                                                type="text"
+                                                value={dsFormData.yearOfBirth}
+                                                onChange={(e) => setDsFormData(prev => ({ ...prev, yearOfBirth: e.target.value }))}
+                                                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:border-blue-500 outline-none transition-all text-sm font-medium"
+                                                placeholder="YYYY"
+                                            />
+                                        </div>
+                                    </div>
+
                                     <div className="pt-4 border-t border-slate-100">
                                         <h4 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
                                             <FileText size={16} className="text-blue-600" />
@@ -1636,55 +1671,82 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                                                         </div>
                                                     </div>
 
-                                                    <div className="pt-4 border-t border-slate-100">
-                                                        <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Basic DS (Internal Note)</label>
-                                                        <textarea
-                                                            rows={2}
-                                                            value={dep.basicDsBox}
-                                                            onChange={(e) => handleDependencyChange(index, 'basicDsBox', e.target.value)}
-                                                            className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:border-blue-500 outline-none transition-all text-sm font-medium resize-none mb-4 shadow-sm"
-                                                            placeholder="Internal notes..."
-                                                        />
-
-                                                        <div className="flex flex-wrap items-center gap-3">
+                                                    <div className="grid grid-cols-2 gap-4">
+                                                        <div>
+                                                            <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Surname</label>
                                                             <input
-                                                                type="file"
-                                                                id={`dep-doc-${index}`}
-                                                                className="hidden"
-                                                                onChange={(e) => handleDependencyFileUpload(index, e, 'internal')}
+                                                                type="text"
+                                                                value={dep.surname || ''}
+                                                                onChange={(e) => {
+                                                                    const value = e.target.value.replace(/[^a-zA-Z]/g, '').toUpperCase().slice(0, 5);
+                                                                    handleDependencyChange(index, 'surname', value);
+                                                                }}
+                                                                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:border-blue-500 outline-none transition-all text-sm font-medium"
+                                                                placeholder="MAX 5 ALPHABETS (e.g. MOHAM)"
+                                                                maxLength={5}
                                                             />
-                                                            <label
-                                                                htmlFor={`dep-doc-${index}`}
-                                                                className="flex items-center gap-2 bg-slate-100 text-slate-600 px-4 py-2 rounded-lg text-xs font-bold hover:bg-slate-200 transition-all cursor-pointer border border-slate-200"
-                                                            >
-                                                                <Upload size={14} />
-                                                                {dep.documentName ? 'Replace Internal' : 'Upload Internal'}
-                                                            </label>
-
-                                                            {dep.documentId && (
-                                                                <div className="flex items-center gap-3 bg-slate-50 px-3 py-2 rounded-xl border border-slate-100">
-                                                                    <FileText size={14} className="text-slate-400" />
-                                                                    <div className="flex flex-col">
-                                                                        <span className="text-xs font-bold text-slate-700 max-w-[150px] truncate">{dep.documentName}</span>
-                                                                        <div className="flex items-center gap-2 mt-0.5">
-                                                                            <button
-                                                                                onClick={() => handlePreviewFile(dep.documentId!)}
-                                                                                className="text-[10px] font-bold text-slate-500 hover:text-slate-800 transition-colors"
-                                                                            >
-                                                                                Preview
-                                                                            </button>
-                                                                            <button
-                                                                                onClick={() => handleDependencyFileDelete(index, 'internal')}
-                                                                                className="text-[10px] font-bold text-rose-500 hover:text-rose-700 transition-colors"
-                                                                            >
-                                                                                Delete
-                                                                            </button>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                            )}
+                                                        </div>
+                                                        <div>
+                                                            <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Year of Birth</label>
+                                                            <input
+                                                                type="text"
+                                                                value={dep.yearOfBirth || ''}
+                                                                onChange={(e) => handleDependencyChange(index, 'yearOfBirth', e.target.value)}
+                                                                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:border-blue-500 outline-none transition-all text-sm font-medium"
+                                                                placeholder="YYYY"
+                                                            />
                                                         </div>
                                                     </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="pt-4 border-t border-slate-100">
+                                                <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Basic DS (Internal Note)</label>
+                                                <textarea
+                                                    rows={2}
+                                                    value={dep.basicDsBox}
+                                                    onChange={(e) => handleDependencyChange(index, 'basicDsBox', e.target.value)}
+                                                    className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:border-blue-500 outline-none transition-all text-sm font-medium resize-none mb-4 shadow-sm"
+                                                    placeholder="Internal notes..."
+                                                />
+
+                                                <div className="flex flex-wrap items-center gap-3">
+                                                    <input
+                                                        type="file"
+                                                        id={`dep-doc-${index}`}
+                                                        className="hidden"
+                                                        onChange={(e) => handleDependencyFileUpload(index, e, 'internal')}
+                                                    />
+                                                    <label
+                                                        htmlFor={`dep-doc-${index}`}
+                                                        className="flex items-center gap-2 bg-slate-100 text-slate-600 px-4 py-2 rounded-lg text-xs font-bold hover:bg-slate-200 transition-all cursor-pointer border border-slate-200"
+                                                    >
+                                                        <Upload size={14} />
+                                                        {dep.documentName ? 'Replace Internal' : 'Upload Internal'}
+                                                    </label>
+
+                                                    {dep.documentId && (
+                                                        <div className="flex items-center gap-3 bg-slate-50 px-3 py-2 rounded-xl border border-slate-100">
+                                                            <FileText size={14} className="text-slate-400" />
+                                                            <div className="flex flex-col">
+                                                                <span className="text-xs font-bold text-slate-700 max-w-[150px] truncate">{dep.documentName}</span>
+                                                                <div className="flex items-center gap-2 mt-0.5">
+                                                                    <button
+                                                                        onClick={() => handlePreviewFile(dep.documentId!)}
+                                                                        className="text-[10px] font-bold text-slate-500 hover:text-slate-800 transition-colors"
+                                                                    >
+                                                                        Preview
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => handleDependencyFileDelete(index, 'internal')}
+                                                                        className="text-[10px] font-bold text-rose-500 hover:text-rose-700 transition-colors"
+                                                                    >
+                                                                        Delete
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
 
@@ -1889,28 +1951,29 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                                     </div>
                                 )}
                             </div>
-                        </div>
 
-                        <div className="pt-4 flex justify-end gap-4 border-t border-slate-100">
-                            <button
-                                onClick={() => setStep('detail')}
-                                className="px-6 py-2.5 text-slate-500 font-bold hover:bg-slate-50 rounded-lg transition-colors"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={handleSaveDs}
-                                disabled={isSubmitting}
-                                className="bg-blue-600 text-white px-10 py-2.5 rounded-lg font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 disabled:opacity-50"
-                            >
-                                {isSubmitting ? 'Saving...' : 'Save DS-160 Details'}
-                            </button>
+                            <div className="p-8 pt-0 flex justify-end gap-4 border-t border-slate-100 mt-8">
+                                <button
+                                    onClick={() => setStep('detail')}
+                                    className="px-6 py-2.5 text-slate-500 font-bold hover:bg-slate-50 rounded-lg transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleSaveDs}
+                                    disabled={isSubmitting}
+                                    className="bg-blue-600 text-white px-10 py-2.5 rounded-lg font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 disabled:opacity-50"
+                                >
+                                    {isSubmitting ? 'Saving...' : 'Save DS-160 Details'}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
         );
     }
+
     return (
         <div className="space-y-6">
             <button
@@ -1920,7 +1983,6 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                 <ArrowLeft size={18} />
                 Back to Operations
             </button>
-
             <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                 <div>
                     <div className="flex items-center gap-3 mb-2">
@@ -1952,6 +2014,8 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                                 confirmationNumber: activeOp?.dsData?.confirmationNumber || '',
                                 securityQuestion: activeOp?.dsData?.securityQuestion || '',
                                 securityAnswer: activeOp?.dsData?.securityAnswer || '',
+                                surname: activeOp?.dsData?.surname || '',
+                                yearOfBirth: activeOp?.dsData?.yearOfBirth || '',
                                 startDate: activeOp?.dsData?.startDate || new Date().toISOString().split('T')[0],
                                 expiryDate: activeOp?.dsData?.expiryDate || calculateExpiry(activeOp?.dsData?.startDate || new Date().toISOString().split('T')[0]),
                                 basicDsBox: activeOp?.dsData?.basicDsBox || '',
@@ -2051,6 +2115,8 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                                             confirmationNumber: activeOp?.dsData?.confirmationNumber || '',
                                             securityQuestion: activeOp?.dsData?.securityQuestion || '',
                                             securityAnswer: activeOp?.dsData?.securityAnswer || '',
+                                            surname: activeOp?.dsData?.surname || '',
+                                            yearOfBirth: activeOp?.dsData?.yearOfBirth || '',
                                             startDate: activeOp?.dsData?.startDate || new Date().toISOString().split('T')[0],
                                             expiryDate: activeOp?.dsData?.expiryDate || calculateExpiry(activeOp?.dsData?.startDate || new Date().toISOString().split('T')[0]),
                                             basicDsBox: activeOp?.dsData?.basicDsBox || '',

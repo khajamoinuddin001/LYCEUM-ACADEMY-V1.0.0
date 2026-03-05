@@ -651,6 +651,8 @@ export interface VisaOperation {
     confirmationDocumentName?: string;
     securityQuestion?: string;
     securityAnswer?: string;
+    surname?: string;
+    yearOfBirth?: string;
     startDate?: string;
     expiryDate?: string;
     basicDsBox?: string;
