@@ -729,7 +729,7 @@ const UniversityApplicationView: React.FC<UniversityApplicationViewProps> = ({ u
                                                     <button onClick={() => { setShowCredentials(true); setShowDocuments(false); }} className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-gray-100 hover:bg-emerald-500 hover:text-white dark:bg-gray-800 dark:hover:bg-emerald-500 text-xs font-bold text-gray-600 dark:text-gray-300 rounded-xl transition-all shadow-sm">
                                                         <Key size={13} /> Credentials
                                                     </button>
-                                                    {user?.role?.toLowerCase() === 'admin' && (
+                                                    {(user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase() === 'staff') && (
                                                         <button
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
