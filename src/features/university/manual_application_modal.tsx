@@ -118,7 +118,7 @@ const ManualApplicationModal: React.FC<ManualApplicationModalProps> = ({ isOpen,
     if (!isOpen) return null;
 
     const filteredStudents = students.filter(s =>
-        s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (s.name && s.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
         (s.email && s.email.toLowerCase().includes(searchTerm.toLowerCase()))
     );
 

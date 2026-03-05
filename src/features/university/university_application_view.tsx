@@ -328,8 +328,8 @@ const UniversityApplicationView: React.FC<UniversityApplicationViewProps> = ({ u
 
     const filteredApps = allApps.filter(item => {
         const matchesSearch =
-            item.student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            item.app.universityName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (item.student.name && item.student.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+            (item.app.universityName && item.app.universityName.toLowerCase().includes(searchTerm.toLowerCase())) ||
             (item.app.ackNumber && item.app.ackNumber.toLowerCase().includes(searchTerm.toLowerCase()));
 
         const matchesStatus = filterStatus === 'All' || item.app.status === filterStatus;
