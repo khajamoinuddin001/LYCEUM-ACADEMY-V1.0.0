@@ -660,8 +660,8 @@ const NewContactForm: React.FC<NewContactFormProps> = ({
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                                {transactions.filter(tx => tx.contactId === contact?.id && tx.type === 'Income').length > 0 ? (
-                                    transactions.filter(tx => tx.contactId === contact?.id && tx.type === 'Income').map(tx => (
+                                {transactions.filter(tx => tx.contactId === contact?.id && (tx.type === 'Income' || (user.role !== 'Student' && tx.type === 'Purchase'))).length > 0 ? (
+                                    transactions.filter(tx => tx.contactId === contact?.id && (tx.type === 'Income' || (user.role !== 'Student' && tx.type === 'Purchase'))).map(tx => (
                                         <tr key={tx.id} className="text-sm">
                                             <td className="px-6 py-4 whitespace-nowrap text-gray-500">{tx.date}</td>
                                             <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900 dark:text-gray-100">
@@ -675,11 +675,11 @@ const NewContactForm: React.FC<NewContactFormProps> = ({
                                             </td>
                                             <td className="px-6 py-4 text-gray-500 max-w-xs truncate">{tx.description}</td>
                                             <td className="px-6 py-4 whitespace-nowrap">
-                                                <span className={`px - 2 py - 0.5 rounded - full text - [10px] font - bold uppercase ${tx.status === 'Paid' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'} `}>
+                                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${tx.status === 'Paid' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'} `}>
                                                     {tx.status}
                                                 </span>
                                             </td>
-                                            <td className={`px - 6 py - 4 whitespace - nowrap text - right font - bold ${tx.amount > 0 ? 'text-green-600' : 'text-red-500'} `}>
+                                            <td className={`px-6 py-4 whitespace-nowrap text-right font-bold ${tx.type === 'Purchase' ? 'text-purple-600' : tx.amount > 0 ? 'text-green-600' : 'text-red-500'} `}>
                                                 ₹{Math.abs(tx.amount).toLocaleString('en-IN')}
                                             </td>
                                         </tr>
