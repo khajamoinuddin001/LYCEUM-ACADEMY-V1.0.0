@@ -94,13 +94,24 @@ const UniversityApplicationView: React.FC<UniversityApplicationViewProps> = ({ u
         try {
             const data = await api.getContacts();
 
-            // Deduplicate contacts by userId or email to match student portal logic
+            // Deduplicate contacts by userId or email, but prioritize keeping contacts that have university applications
             const uniqueContactsMap = new Map();
             data.forEach(c => {
                 const identifier = c.userId || c.email || c.id;
-                // Keep the first contact found for each user, matching .find() behavior in student portal
+                const hasApp = c.visaInformation?.universityApplication?.universities &&
+                    c.visaInformation.universityApplication.universities.length > 0 &&
+                    c.visaInformation.universityApplication.universities.some(u => u.universityName);
+
                 if (!uniqueContactsMap.has(identifier)) {
                     uniqueContactsMap.set(identifier, c);
+                } else if (hasApp) {
+                    const existing = uniqueContactsMap.get(identifier);
+                    const existingHasApp = existing.visaInformation?.universityApplication?.universities &&
+                        existing.visaInformation.universityApplication.universities.length > 0 &&
+                        existing.visaInformation.universityApplication.universities.some(u => u.universityName);
+                    if (!existingHasApp) {
+                        uniqueContactsMap.set(identifier, c);
+                    }
                 }
             });
             const uniqueContacts = Array.from(uniqueContactsMap.values());
@@ -136,7 +147,21 @@ const UniversityApplicationView: React.FC<UniversityApplicationViewProps> = ({ u
             const uniqueContactsMap = new Map();
             data.forEach(c => {
                 const identifier = c.userId || c.email || c.id;
-                if (!uniqueContactsMap.has(identifier)) uniqueContactsMap.set(identifier, c);
+                const hasApp = c.visaInformation?.universityApplication?.universities &&
+                    c.visaInformation.universityApplication.universities.length > 0 &&
+                    c.visaInformation.universityApplication.universities.some(u => u.universityName);
+
+                if (!uniqueContactsMap.has(identifier)) {
+                    uniqueContactsMap.set(identifier, c);
+                } else if (hasApp) {
+                    const existing = uniqueContactsMap.get(identifier);
+                    const existingHasApp = existing.visaInformation?.universityApplication?.universities &&
+                        existing.visaInformation.universityApplication.universities.length > 0 &&
+                        existing.visaInformation.universityApplication.universities.some(u => u.universityName);
+                    if (!existingHasApp) {
+                        uniqueContactsMap.set(identifier, c);
+                    }
+                }
             });
             const freshStudents = Array.from(uniqueContactsMap.values());
             setStudents(freshStudents);
