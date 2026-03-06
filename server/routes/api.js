@@ -4881,6 +4881,40 @@ router.get('/settings/office-location', authenticateToken, async (req, res) => {
   }
 });
 
+// MULTI-BRANCH GEOFENCING (Phase 6)
+router.get('/attendance/branches', authenticateToken, async (req, res) => {
+  try {
+    const result = await query('SELECT * FROM branches ORDER BY name ASC');
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/attendance/branches', authenticateToken, requireRole('Admin'), async (req, res) => {
+  try {
+    const { name, lat, lng, radius } = req.body;
+    const result = await query(`
+      INSERT INTO branches (name, lat, lng, radius)
+      VALUES ($1, $2, $3, $4)
+      ON CONFLICT (name) DO UPDATE SET lat = $2, lng = $3, radius = $4
+      RETURNING *
+    `, [name, lat, lng, radius || 50]);
+    res.json(result.rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete('/attendance/branches/:id', authenticateToken, requireRole('Admin'), async (req, res) => {
+  try {
+    await query('DELETE FROM branches WHERE id = $1', [req.params.id]);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Payment Settings
 router.get('/settings/payment', authenticateToken, async (req, res) => {
   try {
@@ -4961,18 +4995,34 @@ VALUES($1, $2)
 // Attendance routes
 router.post('/attendance/check-in', authenticateToken, async (req, res) => {
   try {
-    const { lat, lng } = req.body;
+    const { lat, lng, selfie, branch } = req.body;
 
-    // Check Geofence
-    const settingsRes = await query('SELECT value FROM system_settings WHERE key = $1', ['OFFICE_LOCATION']);
-    if (settingsRes.rows.length > 0) {
-      const office = settingsRes.rows[0].value;
+    // Check Geofence (Multi-branch support)
+    let geofenceTarget = null;
+
+    if (branch) {
+      const branchRes = await query('SELECT * FROM branches WHERE name = $1', [branch]);
+      if (branchRes.rows.length > 0) {
+        geofenceTarget = branchRes.rows[0];
+      }
+    }
+
+    if (!geofenceTarget) {
+      // Fallback to legacy OFFICE_LOCATION setting if no specific branch
+      const settingsRes = await query('SELECT value FROM system_settings WHERE key = $1', ['OFFICE_LOCATION']);
+      if (settingsRes.rows.length > 0) {
+        geofenceTarget = settingsRes.rows[0].value;
+      }
+    }
+
+    if (geofenceTarget) {
       if (!lat || !lng) {
         return res.status(400).json({ error: 'Location required to mark attendance' });
       }
-      const dist = getDistance(lat, lng, office.lat, office.lng);
-      if (dist > 50) {
-        return res.status(400).json({ error: `You are ${(dist - 50).toFixed(0)}m away from office.Must be within 50m.` });
+      const dist = getDistance(lat, lng, geofenceTarget.lat, geofenceTarget.lng);
+      const allowedRadius = geofenceTarget.radius || 50;
+      if (dist > allowedRadius) {
+        return res.status(400).json({ error: `You are ${(dist - allowedRadius).toFixed(0)}m away from ${branch || 'office'}. Must be within ${allowedRadius}m.` });
       }
     }
 
@@ -4984,28 +5034,48 @@ router.post('/attendance/check-in', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'Already checked in today' });
     }
 
-    // Determine status (Late/On Time)
-    // Fetch user shift start
-    const user = await query('SELECT shift_start FROM users WHERE id = $1', [req.user.id]);
-    const shiftStart = user.rows[0]?.shift_start; // "09:00"
+    // Determine status (Late/On Time) and Lateness minutes
+    // Fetch user shift start and salary info
+    const userResult = await query('SELECT shift_start, base_salary, joining_date FROM users WHERE id = $1', [req.user.id]);
+    const shiftStart = userResult.rows[0]?.shift_start; // e.g., "09:00"
+    const baseSalaryAtTime = userResult.rows[0]?.base_salary || 0;
+
     let status = 'Present';
+    let lateMinutes = 0;
 
     if (shiftStart) {
       const [h, m] = shiftStart.split(':').map(Number);
       const now = new Date();
       const shiftTime = new Date();
       shiftTime.setHours(h, m, 0, 0);
-      // Allow 15 min buffer?
-      shiftTime.setMinutes(shiftTime.getMinutes() + 15);
-      if (now > shiftTime) status = 'Late';
+
+      const diffMs = now.getTime() - shiftTime.getTime();
+      const diffMins = Math.floor(diffMs / 60000);
+
+      // 15 minutes grace period allowed
+      if (diffMins > 15) {
+        status = 'Late';
+        lateMinutes = diffMins; // We store the exact amount of late minutes
+      }
+    }
+
+    // Parse Selfie Data if provided
+    let selfieData = null;
+    let selfieMimeType = null;
+    if (selfie && selfie.startsWith('data:')) {
+      const matches = selfie.match(/^data:(image\/[a-zA-Z+]+);base64,(.+)$/);
+      if (matches && matches.length === 3) {
+        selfieMimeType = matches[1];
+        selfieData = Buffer.from(matches[2], 'base64');
+      }
     }
 
     await query(`
-      INSERT INTO attendance_logs(user_id, date, check_in, status)
-VALUES($1, $2, NOW(), $3)
-    `, [req.user.id, today, status]);
+      INSERT INTO attendance_logs(user_id, date, check_in, status, late_minutes, base_salary_at_time, selfie_data, selfie_mimetype, branch)
+      VALUES($1, $2, NOW(), $3, $4, $5, $6, $7, $8)
+    `, [req.user.id, today, status, lateMinutes, baseSalaryAtTime, selfieData, selfieMimeType, branch || null]);
 
-    res.json({ success: true, status });
+    res.json({ success: true, status, lateMinutes });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -5174,32 +5244,39 @@ SELECT * FROM leave_requests
 
     const report = users.rows.map(user => {
       const userLogs = logs.filter(l => l.user_id === user.id);
-      const presentDays = userLogs.length; // Simple count of check-ins
-      const lateDays = userLogs.filter(l => l.status === 'Late').length;
+      const presentDays = userLogs.length;
+
+      // Calculate Total Late Minutes (only where minutes > 15)
+      const totalLateMinutes = userLogs.reduce((acc, log) => {
+        // Only deduct if status is 'Late' and minutes > 15
+        if (log.status === 'Late' && log.late_minutes > 15) {
+          return acc + (log.late_minutes - 15);
+        }
+        return acc;
+      }, 0);
 
       // Calculate Working Days
-      // Total days in month - Sundays - Holidays
-      // Calculate Standard Working Days (Full Month) for Rate Calculation
       let standardSundays = 0;
       for (let d = 1; d <= endDay; d++) {
         const date = new Date(Number(year), Number(month) - 1, d);
         if (date.getDay() === 0) standardSundays++;
       }
+
       const standardWorkingDays = endDay - standardSundays - holidaysCount;
       const baseSalary = parseFloat(user.base_salary) || 0;
+      // User requested formula: (Base Salary / 30 / 8 / 60)
+      const payPerMinute = baseSalary / 30 / 8 / 60;
       const payPerDay = standardWorkingDays > 0 ? baseSalary / standardWorkingDays : 0;
 
       // Calculate Effective Working Days for User (Considering Join Date)
       const joinDate = user.joining_date ? new Date(user.joining_date) : null;
       let effectiveStartDay = 1;
 
-      // If user joined this month, start from join date
       if (joinDate && joinDate.getFullYear() === Number(year) && joinDate.getMonth() === Number(month) - 1) {
         effectiveStartDay = joinDate.getDate();
       }
-      // If user joined AFTER this month, they have 0 working days
+
       if (joinDate && (joinDate.getFullYear() > Number(year) || (joinDate.getFullYear() === Number(year) && joinDate.getMonth() > Number(month) - 1))) {
-        // Future joiner
         return { userId: user.id, name: user.name, baseSalary, workingDays: 0, presentDays: 0, lateDays: 0, finalSalary: 0 };
       }
 
@@ -5209,7 +5286,6 @@ SELECT * FROM leave_requests
         if (date.getDay() === 0) userSundays++;
       }
 
-      // Holidays falling in user's tenure
       const validHolidays = holidaysRes.rows.filter(h => {
         const hDate = new Date(h.date);
         return hDate.getDate() >= effectiveStartDay;
@@ -5218,23 +5294,51 @@ SELECT * FROM leave_requests
       const userLength = endDay - effectiveStartDay + 1;
       const workingDays = Math.max(0, userLength - userSundays - validHolidays);
 
-      // Calculate Paid Leave Days
-      const userLeaves = leaves.filter(l => l.user_id === user.id);
-      let paidLeaveDays = 0;
-      userLeaves.forEach(leave => {
+      // --- QUARTERLY LEAVE LOGIC ---
+      // 1 day per month accrued. Reset Jan 1, Apr 1, Jul 1, Oct 1.
+      const monthNum = Number(month);
+      const quarterStartMonth = Math.floor((monthNum - 1) / 3) * 3 + 1;
+      const accruedInQuarter = monthNum - quarterStartMonth + 1; // 1, 2, or 3 days
+
+      // Count leaves taken in this quarter BEFORE this month
+      const takenBeforeThisMonth = leaves.filter(l => {
+        if (l.user_id !== user.id) return false;
+        const lDate = new Date(l.start_date);
+        const lMonth = lDate.getMonth() + 1;
+        return lMonth >= quarterStartMonth && lMonth < monthNum;
+      }).reduce((acc, leave) => {
+        // Count days in quarter for this leave
+        // (Simplified: assuming leave doesn't cross months for now, or if it does, it's rare)
+        // For now, let's just count days within the quarter
+        return acc + Math.round((new Date(leave.end_date) - new Date(leave.start_date)) / (1000 * 3600 * 24)) + 1;
+      }, 0);
+
+      const availablePaidLeaves = Math.max(0, accruedInQuarter - takenBeforeThisMonth);
+
+      // Current month's approved leaves
+      const currentMonthLeaves = leaves.filter(l => {
+        if (l.user_id !== user.id) return false;
+        const lDate = new Date(l.start_date);
+        return (lDate.getMonth() + 1) === monthNum;
+      });
+
+      let paidLeaveDaysUsed = 0;
+      let unpaidLeaveDays = 0;
+
+      currentMonthLeaves.forEach(leave => {
         const lStart = new Date(leave.start_date);
         const lEnd = new Date(leave.end_date);
 
-        // Iterate days in leave
-        for (let d = new Date(lStart); d <= lEnd; d.setDate(d.getDate() + 1)) { // Create new Date object for iteration
-          // Check if date falls in current month and user tenure
+        for (let d = new Date(lStart); d <= lEnd; d.setDate(d.getDate() + 1)) {
           if (d.getMonth() === Number(month) - 1 && d.getFullYear() === Number(year) && d.getDate() >= effectiveStartDay && d.getDate() <= endDay) {
-            // Exclude Sundays (assuming leaves don't count on Sundays)
             if (d.getDay() !== 0) {
-              // Exclude Holidays? Usually yes.
               const isHoliday = holidaysRes.rows.some(h => new Date(h.date).toDateString() === d.toDateString());
               if (!isHoliday) {
-                paidLeaveDays++;
+                if (paidLeaveDaysUsed < availablePaidLeaves) {
+                  paidLeaveDaysUsed++;
+                } else {
+                  unpaidLeaveDays++;
+                }
               }
             }
           }
@@ -5242,16 +5346,15 @@ SELECT * FROM leave_requests
       });
 
       // Deductions
-      // Absent days = workingDays - presentDays - paidLeaveDays
-      // Logic: You should be present (workingDays). You were present X days. You were on paid leave Y days.
-      // Deficit = workingDays - (present + leave).
-      const absentDays = Math.max(0, workingDays - presentDays - paidLeaveDays);
-      const absentDeduction = absentDays * payPerDay;
+      // Absent days = workingDays - presentDays - paidLeaveDaysUsed - unpaidLeaveDays
+      // Wait, if they take unpaid leave, it's already an absent day.
+      const absentDays = Math.max(0, workingDays - presentDays - paidLeaveDaysUsed - unpaidLeaveDays);
+      const absentDeduction = (absentDays + unpaidLeaveDays) * payPerDay;
 
-      // Late deduction: 50 INR per late arrival
-      const lateDeduction = lateDays * 50;
+      // Late deduction: (late_minutes - 15) * (Base Salary / 30 / 8 / 60)
+      const lateDeduction = totalLateMinutes * payPerMinute;
 
-      const finalSalary = Math.round(Math.max(0, ((presentDays + paidLeaveDays) * payPerDay) - lateDeduction));
+      const finalSalary = Math.round(Math.max(0, (baseSalary - absentDeduction - lateDeduction)));
 
       return {
         userId: user.id,
@@ -5259,13 +5362,142 @@ SELECT * FROM leave_requests
         baseSalary,
         workingDays,
         presentDays,
-        paidLeaveDays, // Useful for frontend
-        lateDays,
+        paidLeaveDays: paidLeaveDaysUsed,
+        unpaidLeaveDays,
+        lateMinutes: totalLateMinutes,
+        lateDeduction: Math.round(lateDeduction * 100) / 100,
+        absentDeduction: Math.round(absentDeduction * 100) / 100,
         finalSalary
       };
     });
 
     res.json(report);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PAYSLIP STORAGE & RETRIEVAL
+router.get('/attendance/leaves/balance', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const now = new Date();
+    const month = now.getMonth() + 1;
+    const year = now.getFullYear();
+
+    const quarterStartMonth = Math.floor((month - 1) / 3) * 3 + 1;
+    const quarterEndDay = new Date(year, quarterStartMonth + 2, 0).getDate();
+    const quarterStartDate = `${year}-${String(quarterStartMonth).padStart(2, '0')}-01`;
+    const quarterEndDate = `${year}-${String(quarterStartMonth + 2).padStart(2, '0')}-${quarterEndDay}`;
+
+    // 1. Fetch user joining date and holidays
+    const userRes = await query('SELECT joining_date FROM users WHERE id = $1', [userId]);
+    const joiningDate = userRes.rows[0]?.joining_date ? new Date(userRes.rows[0].joining_date) : null;
+
+    const holidaysRes = await query('SELECT date FROM holidays WHERE date >= $1 AND date <= $2', [quarterStartDate, quarterEndDate]);
+    const holidayDates = holidaysRes.rows.map(h => new Date(h.date).toDateString());
+
+    // 2. Calculate Accrued (Earned) Leaves
+    // Logic: 1 day per month spent in the current quarter
+    let effectiveStartMonth = quarterStartMonth;
+    if (joiningDate && joiningDate.getFullYear() === year && joiningDate.getMonth() + 1 > quarterStartMonth) {
+      // If joined mid-quarter, only earn for months active
+      effectiveStartMonth = joiningDate.getMonth() + 1;
+    } else if (joiningDate && (joiningDate.getFullYear() > year || (joiningDate.getFullYear() === year && joiningDate.getMonth() + 1 > month))) {
+      // Joined in the future? 0 accrual
+      return res.json({ accrued: 0, used: 0, remaining: 0, quarter: Math.floor((month - 1) / 3) + 1 });
+    }
+
+    const accruedInQuarter = Math.max(0, month - effectiveStartMonth + 1);
+
+    // 3. Calculate Used Leaves (Excluding Sundays and Holidays)
+    const leavesRes = await query(`
+            SELECT start_date, end_date FROM leave_requests 
+            WHERE user_id = $1 AND status = 'Approved'
+            AND start_date <= $2 AND end_date >= $3
+        `, [userId, quarterEndDate, quarterStartDate]);
+
+    let usedInQuarter = 0;
+    leavesRes.rows.forEach(leave => {
+      const lStart = new Date(leave.start_date);
+      const lEnd = new Date(leave.end_date);
+
+      for (let d = new Date(lStart); d <= lEnd; d.setDate(d.getDate() + 1)) {
+        // Only count days WITHIN the current quarter
+        const dMonth = d.getMonth() + 1;
+        if (d.getFullYear() === year && dMonth >= quarterStartMonth && dMonth <= quarterStartMonth + 2) {
+          // Exclude Sundays (0)
+          if (d.getDay() !== 0) {
+            // Exclude Holidays
+            if (!holidayDates.includes(d.toDateString())) {
+              usedInQuarter++;
+            }
+          }
+        }
+      }
+    });
+
+    res.json({
+      accrued: accruedInQuarter,
+      used: usedInQuarter,
+      remaining: Math.max(0, accruedInQuarter - usedInQuarter),
+      quarter: Math.floor((month - 1) / 3) + 1
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/attendance/payslips', authenticateToken, requireRole('Admin'), async (req, res) => {
+  try {
+    const { userId, month, year, pdfData } = req.body;
+    if (!userId || !month || !year || !pdfData) {
+      return res.status(400).json({ error: 'Missing required payslip data' });
+    }
+
+    // PDF data should be base64
+    const buffer = Buffer.from(pdfData.split(',')[1] || pdfData, 'base64');
+
+    await query(`
+      INSERT INTO payslips(user_id, month, year, pdf_data)
+      VALUES($1, $2, $3, $4)
+      ON CONFLICT DO NOTHING
+    `, [userId, month, year, buffer]);
+
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/attendance/payslips/me', authenticateToken, async (req, res) => {
+  try {
+    const result = await query('SELECT id, month, year, created_at FROM payslips WHERE user_id = $1 ORDER BY year DESC, month DESC', [req.user.id]);
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/attendance/payslips/:id', authenticateToken, async (req, res) => {
+  try {
+    const payslipId = req.params.id;
+    const result = await query('SELECT pdf_data, month, year, user_id FROM payslips WHERE id = $1', [payslipId]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Payslip not found' });
+    }
+
+    const row = result.rows[0];
+
+    // RBAC: Staff only see their own, Admin sees all
+    if (req.user.role !== 'Admin' && row.user_id !== req.user.id) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=payslip_${row.month}_${row.year}.pdf`);
+    res.send(row.pdf_data);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

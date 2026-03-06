@@ -623,6 +623,11 @@ export async function initDatabase() {
         check_in TIMESTAMP,
         check_out TIMESTAMP,
         status TEXT,
+        selfie_data BYTEA,
+        selfie_mimetype TEXT,
+        late_minutes INTEGER DEFAULT 0,
+        base_salary_at_time NUMERIC,
+        branch TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -645,9 +650,24 @@ export async function initDatabase() {
         end_date DATE NOT NULL,
         reason TEXT,
         status TEXT CHECK(status IN ('Pending', 'Approved', 'Rejected')) DEFAULT 'Pending',
+        leave_type TEXT DEFAULT 'Paid',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    // BRANCHES (Phase 6: Geofencing)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS branches (
+        id SERIAL PRIMARY KEY,
+        name TEXT UNIQUE NOT NULL,
+        lat DOUBLE PRECISION NOT NULL,
+        lng DOUBLE PRECISION NOT NULL,
+        radius INTEGER DEFAULT 50, -- radius in meters
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // PAYSLIPS    await client.query(`      CREATE TABLE IF NOT EXISTS payslips (        id SERIAL PRIMARY KEY,        user_id INTEGER REFERENCES users(id),        month INTEGER NOT NULL,        year INTEGER NOT NULL,        pdf_data BYTEA,        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP      )    `);
 
     // Add columns to users if they don't exist
     const userColumns = ['joining_date', 'base_salary', 'shift_start', 'shift_end'];

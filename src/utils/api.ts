@@ -735,10 +735,10 @@ export const updateUser = async (userId: number, updates: Partial<User>): Promis
   return response.json();
 };
 // Attendance API
-export const checkIn = async (location?: { lat: number; lng: number }) => {
+export const checkIn = async (data?: { lat?: number; lng?: number; selfie?: string; branch?: string }) => {
   return await apiRequest('/attendance/check-in', {
     method: 'POST',
-    body: JSON.stringify(location || {})
+    body: JSON.stringify(data || {})
   });
 };
 
@@ -751,6 +751,10 @@ export const checkOut = async (location?: { lat: number; lng: number }) => {
 
 export const getAttendanceHistory = async () => {
   return await apiRequest('/attendance/me', { method: 'GET' });
+};
+
+export const getLeaveBalance = async () => {
+  return await apiRequest<{ accrued: number; used: number; remaining: number; quarter: number }>('/attendance/leaves/balance', { method: 'GET' });
 };
 
 export const getHolidays = async () => {
@@ -781,6 +785,28 @@ export const saveOfficeLocation = async (location: { lat: number; lng: number })
 
 export const getOfficeLocation = async () => {
   return await apiRequest<{ lat: number; lng: number } | null>('/settings/office-location', { method: 'GET' });
+};
+
+export const saveShiftRoster = async (roster: any) => {
+  return await apiRequest('/attendance/roster', {
+    method: 'POST',
+    body: JSON.stringify({ roster })
+  });
+};
+
+export const getBranches = async () => {
+  return await apiRequest<any[]>('/attendance/branches', { method: 'GET' });
+};
+
+export const saveBranch = async (branch: { name: string; lat: number; lng: number; radius?: number }) => {
+  return await apiRequest('/attendance/branches', {
+    method: 'POST',
+    body: JSON.stringify(branch)
+  });
+};
+
+export const deleteBranch = async (id: number) => {
+  return await apiRequest(`/attendance/branches/${id}`, { method: 'DELETE' });
 };
 
 export const getPaymentSettings = async () => {
