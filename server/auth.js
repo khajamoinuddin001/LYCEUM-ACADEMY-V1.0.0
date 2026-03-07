@@ -72,8 +72,8 @@ export async function authenticateToken(req, res, next) {
       return res.status(401).json({ error: 'Session expired' });
     }
 
-    // Fetch latest role and name from DB
-    const userResult = await query('SELECT name, role, permissions FROM users WHERE id = $1', [decoded.id]);
+    // Fetch latest role, name and email from DB
+    const userResult = await query('SELECT name, email, role, permissions FROM users WHERE id = $1', [decoded.id]);
     if (userResult.rows.length === 0) {
       return res.status(401).json({ error: 'User no longer exists' });
     }
@@ -82,6 +82,7 @@ export async function authenticateToken(req, res, next) {
     req.user = {
       ...decoded,
       name: dbUser.name,
+      email: dbUser.email,
       role: dbUser.role,
       permissions: typeof dbUser.permissions === 'string' ? JSON.parse(dbUser.permissions) : (dbUser.permissions || {})
     };

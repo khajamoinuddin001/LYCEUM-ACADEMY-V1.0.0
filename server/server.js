@@ -99,7 +99,7 @@ app.use((req, res, next) => {
     // User Info
     let userInfo = 'Anonymous';
     if (req.user) {
-      userInfo = req.user.name || req.user.email || req.user.id || 'Unknown User';
+      userInfo = req.user.email || req.user.name || req.user.id || 'Unknown User';
       userInfo += ` (${req.user.role || 'No Role'})`;
     }
     const colorUserInfo = gray(`[${userInfo}]`);
