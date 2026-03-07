@@ -1200,32 +1200,50 @@ router.post('/contacts/:id/merge', authenticateToken, async (req, res) => {
     // Update all related records to point to primary contact
     const recordsUpdated = {};
 
-    // Update visitors
+    // ✅ Update visitors (by contact_id FK)
     const visitorsResult = await query('UPDATE visitors SET contact_id = $1 WHERE contact_id = $2 RETURNING id', [primaryId, targetContactId]);
     recordsUpdated.visitors = visitorsResult.rows.length;
 
-    // Update transactions
+    // ✅ Update financial transactions (by contact_id FK)
     const transactionsResult = await query('UPDATE transactions SET contact_id = $1 WHERE contact_id = $2 RETURNING id', [primaryId, targetContactId]);
     recordsUpdated.transactions = transactionsResult.rows.length;
 
-    // Update leads - leads table uses contact name, not contact_id
-    const leadsResult = await query('UPDATE leads SET contact = $1 WHERE contact = $2 OR email = $3 OR phone = $4 RETURNING id',
-      [mergedData.name, target.name, target.email, target.phone]);
-    recordsUpdated.leads = leadsResult.rows.length;
+    // ✅ Update visa operations (by contact_id FK)
+    const visaOpsResult = await query('UPDATE visa_operations SET contact_id = $1 WHERE contact_id = $2 RETURNING id', [primaryId, targetContactId]);
+    recordsUpdated.visaOps = visaOpsResult.rows.length;
 
-    // Update tasks (Fix for foreign key constraint)
+    // ✅ Update tasks (by contact_id FK)
     const tasksResult = await query('UPDATE tasks SET contact_id = $1 WHERE contact_id = $2 RETURNING id', [primaryId, targetContactId]);
     recordsUpdated.tasks = tasksResult.rows.length;
 
-    // Update recurring tasks (Fix for foreign key constraint)
+    // ✅ Update recurring tasks (by contact_id FK)
     const recurringTasksResult = await query('UPDATE recurring_tasks SET contact_id = $1 WHERE contact_id = $2 RETURNING task_id', [primaryId, targetContactId]);
     recordsUpdated.recurringTasks = recurringTasksResult.rows.length;
 
-    // Update tickets (Fix for missing data)
+    // ✅ Update support tickets (by contact_id FK)
     const ticketsResult = await query('UPDATE tickets SET contact_id = $1 WHERE contact_id = $2 RETURNING ticket_id', [primaryId, targetContactId]);
     recordsUpdated.tickets = ticketsResult.rows.length;
 
-    // If target had a user link, update user to point to primary contact
+    // ✅ Update CRM leads — leads use text name + email/phone (no FK)
+    // Match by ANY identifier from the target contact to catch all associated leads
+    const leadsResult = await query(`
+      UPDATE leads 
+      SET contact = $1, email = COALESCE(email, $4), phone = COALESCE(phone, $5)
+      WHERE contact = $2 OR email = $3 OR phone = $5
+      RETURNING id
+    `, [mergedData.name, target.name, target.email, mergedData.email, target.phone]);
+    recordsUpdated.leads = leadsResult.rows.length;
+
+    // ✅ Update website visits (by user_id if target contact had a user)
+    if (target.user_id) {
+      const websiteVisitsResult = await query(
+        'UPDATE website_visits SET user_id = $1 WHERE user_id = $2 RETURNING id',
+        [mergedData.user_id || primary.user_id, target.user_id]
+      );
+      recordsUpdated.websiteVisits = websiteVisitsResult.rows.length;
+    }
+
+    // ✅ If target had a user link, update user name to match merged contact
     if (target.user_id && !primary.user_id) {
       await query('UPDATE users SET name = $1 WHERE id = $2', [mergedData.name, target.user_id]);
       console.log(`✅ Updated user ${target.user_id} to link with primary contact`);
@@ -1234,7 +1252,7 @@ router.post('/contacts/:id/merge', authenticateToken, async (req, res) => {
     // Delete target contact
     await query('DELETE FROM contacts WHERE id = $1', [targetContactId]);
 
-    console.log(`✅ Merge complete: ${recordsUpdated.visitors} visitors, ${recordsUpdated.transactions} transactions, ${recordsUpdated.leads} leads, ${recordsUpdated.tasks} tasks, ${recordsUpdated.recurringTasks} recurring tasks, ${recordsUpdated.tickets} tickets updated`);
+    console.log(`✅ Merge complete: ${recordsUpdated.visitors} visitors, ${recordsUpdated.transactions} transactions, ${recordsUpdated.leads} leads (w/ quotations), ${recordsUpdated.visaOps} visa ops, ${recordsUpdated.tasks} tasks, ${recordsUpdated.recurringTasks} recurring tasks, ${recordsUpdated.tickets} tickets, ${recordsUpdated.websiteVisits || 0} website visits migrated`);
 
     // Fetch and return merged contact
     const finalResult = await query('SELECT * FROM contacts WHERE id = $1', [primaryId]);
