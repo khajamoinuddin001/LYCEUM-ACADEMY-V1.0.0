@@ -69,45 +69,43 @@ export async function authenticateToken(req, res, next) {
 
     const blacklisted = await query('SELECT id FROM token_blacklist WHERE token_hash = $1', [tokenHash]);
     if (blacklisted.rows.length > 0) {
-      // Silent termination — just return 401 like a normal expired session
       return res.status(401).json({ error: 'Session expired' });
     }
 
-    // Token is valid — update last_activity and last_page in active_sessions
-    const currentPage = req.headers['x-current-page'];
-    if (currentPage) {
-      await query(
-        'UPDATE active_sessions SET last_activity = NOW(), last_page = $1 WHERE token_hash = $2',
-        [currentPage, tokenHash]
-      );
-    } else {
-      await query(
-        'UPDATE active_sessions SET last_activity = NOW() WHERE token_hash = $1',
-        [tokenHash]
-      );
+    // Fetch latest role and name from DB
+    const userResult = await query('SELECT name, role, permissions FROM users WHERE id = $1', [decoded.id]);
+    if (userResult.rows.length === 0) {
+      return res.status(401).json({ error: 'User no longer exists' });
     }
-  } catch (error) {
-    console.error('Error checking token blacklist:', error);
-    // Don't block on DB errors — continue with the request
-  }
 
-  req.user = decoded;
+    const dbUser = userResult.rows[0];
+    req.user = {
+      ...decoded,
+      name: dbUser.name,
+      role: dbUser.role,
+      permissions: typeof dbUser.permissions === 'string' ? JSON.parse(dbUser.permissions) : (dbUser.permissions || {})
+    };
 
-  // Fetch latest permissions from DB
-  try {
-    const { query } = await import('./database.js');
-    const result = await query('SELECT role, permissions FROM users WHERE id = $1', [decoded.id]);
-    if (result.rows.length > 0) {
-      const userDoc = result.rows[0];
-      req.user.role = userDoc.role;
-      req.user.name = userDoc.name;
-      // Ensure permissions are an object
-      req.user.permissions = typeof userDoc.permissions === 'string'
-        ? JSON.parse(userDoc.permissions)
-        : (userDoc.permissions || {});
-    }
+    // Session Monitoring: Auto-rehydrate or update session
+    const ipAddress = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown';
+    const deviceInfo = req.headers['user-agent'] || 'unknown';
+    const currentPage = req.headers['x-current-page'] || 'Apps';
+    const loginTime = decoded.iat ? new Date(decoded.iat * 1000) : new Date();
+
+    await query(`
+      INSERT INTO active_sessions (user_id, username, role, token_hash, ip_address, device_info, last_page, login_time, last_activity)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+      ON CONFLICT (token_hash) DO UPDATE SET 
+        last_activity = NOW(),
+        last_page = $7,
+        ip_address = $5,
+        device_info = $6
+    `, [req.user.id, req.user.name, req.user.role, tokenHash, ipAddress, deviceInfo, currentPage, loginTime]);
+
   } catch (error) {
-    console.error('Error fetching user permissions:', error);
+    console.error('Auth middleware DB error:', error);
+    // Continue with JWT info if DB fails
+    req.user = decoded;
   }
 
   next();
