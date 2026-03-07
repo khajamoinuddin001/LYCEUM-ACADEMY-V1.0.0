@@ -125,7 +125,12 @@ const DashboardLayout: React.FC = () => {
   const [impersonatingUser, setImpersonatingUser] = useLocalStorage<User | null>('impersonatingUser', null);
   const [isLoading, setIsLoading] = useState(true);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-  const [activeApp, setActiveApp] = useState('Apps');
+  // Read page from URL hash on first load for reload persistence
+  const getInitialPage = () => {
+    const hash = decodeURIComponent(window.location.hash.replace('#', '')); // decode %20 -> space
+    return hash || 'Apps';
+  };
+  const [activeApp, setActiveApp] = useState(getInitialPage);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isQuickCreateOpen, setIsQuickCreateOpen] = useState(false);
   const [isTransactionModalOpen, setIsTransactionModalOpen] = useState(false);
@@ -739,6 +744,8 @@ const DashboardLayout: React.FC = () => {
 
   const handleAppSelect = (appName: string) => {
     setActiveApp(appName);
+    // Update URL hash so page is preserved on reload
+    window.history.pushState(null, '', `#${appName}`);
     api.setCurrentPage(appName); // Track for session monitor
     setEditingContact(null);
     setContactViewMode('details');
@@ -751,6 +758,16 @@ const DashboardLayout: React.FC = () => {
       setSidebarOpen(false);
     }
   };
+
+  // Listen for browser back/forward navigation via hash changes
+  useEffect(() => {
+    const handleHashChange = () => {
+      const page = decodeURIComponent(window.location.hash.replace('#', '')) || 'Apps';
+      setActiveApp(page);
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
 
   useEffect(() => {
     if (activeApp) {
