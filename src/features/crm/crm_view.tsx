@@ -84,7 +84,7 @@ const LeadCard: React.FC<{ lead: CrmLead; onSelect: (lead: CrmLead) => void; onD
                     onClick={() => onSelect(lead)}
                     className="font-semibold text-gray-800 dark:text-gray-100 mb-2 cursor-pointer hover:underline pr-6"
                 >
-                    {lead.title}
+                    {lead.title?.replace(/'s Opportunity$/i, '')}
                 </h3>
                 <div className="space-y-1 text-sm text-gray-600 dark:text-gray-300">
                     <div className="flex items-center">

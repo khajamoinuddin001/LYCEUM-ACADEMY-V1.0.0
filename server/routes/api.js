@@ -1,6 +1,8 @@
 import express from 'express';
+import fetch from 'node-fetch';
 import { query, getClient } from '../database.js';
 import { authenticateToken, requireRole } from '../auth.js';
+import { evaluateAutomation } from '../automation.js';
 
 const router = express.Router();
 
@@ -276,7 +278,17 @@ router.post('/documents', authenticateToken, async (req, res) => {
         RETURNING id, contact_id, name, type, size, uploaded_at, is_private, category
       `, [contactId, file.originalname, file.mimetype, file.size, file.buffer, isPrivate, category]);
 
-      res.json(result.rows[0]);
+      const newDoc = result.rows[0];
+
+      // AUTOMATION HOOK
+      evaluateAutomation('Document Uploaded', {
+        contact_id: contactId,
+        document_name: file.originalname,
+        category,
+        document_id: newDoc.id
+      });
+
+      res.json(newDoc);
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -429,6 +441,9 @@ router.post('/users', authenticateToken, requireRole('Admin'), async (req, res) 
     if (user && typeof user.permissions === 'string') {
       user.permissions = JSON.parse(user.permissions);
     }
+    // Automation Trigger
+    evaluateAutomation('User Created', user);
+
     res.json(user);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -840,7 +855,17 @@ RETURNING *
       contact.avatarUrl || null,
       JSON.stringify(contact.metadata || {})
     ]);
-    res.json(transformContact(result.rows[0]));
+    const newContact = transformContact(result.rows[0]);
+
+    // Automation Trigger
+    evaluateAutomation('Contact Created', {
+      ...newContact,
+      contact_name: newContact.name,
+      contact_email: newContact.email,
+      contact_phone: newContact.phone
+    });
+
+    res.json(newContact);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -1994,7 +2019,7 @@ router.put('/visa-operations/:id/ds-160/status', authenticateToken, async (req, 
       }
     }
 
-    res.json({
+    const payload = {
       ...op,
       cgiData: op.cgi_data,
       slotBookingData: op.slot_booking_data,
@@ -2005,7 +2030,16 @@ router.put('/visa-operations/:id/ds-160/status', authenticateToken, async (req, 
       contactId: op.contact_id,
       userId: op.user_id,
       createdAt: op.created_at
+    };
+
+    // Automation Trigger
+    evaluateAutomation('Visa Status Changed', {
+      ...payload,
+      contact: op.name,
+      status: op.admin_status || op.student_status
     });
+
+    res.json(payload);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -2069,6 +2103,15 @@ router.post('/visa-operations', authenticateToken, async (req, res) => {
     if (!newOp) {
       throw new Error('Failed to generate unique VOP number after retries');
     }
+
+    // AUTOMATION HOOK
+    evaluateAutomation('Visa Operation Created', {
+      ...newOp,
+      vop_number: newOp.vop_number,
+      contact_name: newOp.name,
+      country: newOp.country,
+      visa_status: newOp.admin_status || newOp.student_status
+    });
 
     res.json({
       ...newOp,
@@ -2207,6 +2250,19 @@ router.post('/leads', authenticateToken, async (req, res) => {
 
     // Sync Recurring Task
     await syncRecurringTaskForLead(newLead.id);
+
+    // AUTOMATION HOOK
+    const transformedLead = transformLead(newLead);
+    evaluateAutomation('Lead Created', {
+      ...transformedLead,
+      contact_name: transformedLead.name,
+      first_name: transformedLead.name.split(' ')[0],
+      contact_email: transformedLead.email,
+      contact_phone: transformedLead.phone,
+      company_name: transformedLead.company,
+      lead_source: transformedLead.source,
+      lead_stage: transformedLead.stage
+    });
 
     res.json(transformLead(newLead));
   } catch (error) {
@@ -2356,6 +2412,20 @@ title = $1, company = $2, value = $3, contact = $4, stage = $5,
 
     // Sync Recurring Task
     await syncRecurringTaskForLead(updatedLead.id);
+
+    // AUTOMATION HOOK
+    if (lead.stage && lead.stage !== currentLead.stage) {
+      const transformedLeadData = transformLead(updatedLead);
+      evaluateAutomation('Status Changed', {
+        ...transformedLeadData,
+        contact_name: transformedLeadData.name,
+        contact_email: transformedLeadData.email,
+        contact_phone: transformedLeadData.phone,
+        lead_stage: transformedLeadData.stage,
+        old_stage: currentLead.stage,
+        new_stage: lead.stage
+      });
+    }
 
     res.json(transformLead(updatedLead));
   } catch (error) {
@@ -2742,6 +2812,25 @@ RETURNING *
     ]);
     const newTransaction = result.rows[0];
 
+    // AUTOMATION HOOK
+    evaluateAutomation('Transaction Created', {
+      ...newTransaction,
+      transaction_id: newTransaction.id,
+      amount: newTransaction.amount,
+      status: newTransaction.status,
+      date: newTransaction.date
+    });
+
+    if (newTransaction.status === 'Paid') {
+      evaluateAutomation('Payment Received', {
+        ...newTransaction,
+        transaction_id: newTransaction.id,
+        amount: newTransaction.amount,
+        status: newTransaction.status,
+        date: newTransaction.date
+      });
+    }
+
     // Automatic AR Deduction for Invoices (and Income if linked to contact)
     // First, robustly determine contact ID
     let targetContactId = newTransaction.contact_id;
@@ -2920,6 +3009,11 @@ contact_id = $1, customer_name = $2, date = $3, description = $4, type = $5, sta
     const result = await query('SELECT * FROM transactions WHERE TRIM(id) = $1', [transactionId]);
     const updated = result.rows[0];
     if (!updated) throw new Error("Transaction could not be refreshed after update");
+
+    // AUTOMATION HOOK
+    if (updated.status === 'Paid' && existingTx.status !== 'Paid') {
+      evaluateAutomation('Payment Received', updated);
+    }
     res.json({
       ...updated,
       lineItems: updated.line_items,
@@ -3507,6 +3601,11 @@ VALUES($1, $2)
   `, [req.params.id, newAssignee]);
     }
 
+    // AUTOMATION HOOK
+    if (newStatus === 'done' && previousStatus !== 'done') {
+      evaluateAutomation('Task Completed', updated.rows[0]);
+    }
+
     res.json(transformTask(updated.rows[0]));
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -3700,7 +3799,21 @@ VALUES($1, $2, $3, $4, $5)
       WHERE t.id = $1
   `, [newTicket.id]);
 
-    res.json(transformTicket(finalResult.rows[0]));
+    const transformedTicket = transformTicket(finalResult.rows[0]);
+
+    // Automation Trigger
+    evaluateAutomation('Ticket Created', {
+      ...transformedTicket,
+      ticket_id: transformedTicket.ticket_id || transformedTicket.id,
+      contact_name: transformedTicket.contact_name,
+      contact_email: transformedTicket.contact_email,
+      staff_name: transformedTicket.assigned_to_name,
+      status: transformedTicket.status,
+      priority: transformedTicket.priority,
+      subject: transformedTicket.subject
+    });
+
+    res.json(transformedTicket);
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Error creating ticket:', error);
@@ -3913,7 +4026,21 @@ RETURNING *
       WHERE t.id = $1
   `, [req.params.id]);
 
-    res.json(transformTicket(finalResult.rows[0]));
+    const updatedTicket = transformTicket(finalResult.rows[0]);
+
+    // Automation Trigger
+    evaluateAutomation('Ticket Updated', {
+      ...updatedTicket,
+      ticket_id: updatedTicket.ticket_id || updatedTicket.id,
+      contact_name: updatedTicket.contact_name,
+      contact_email: updatedTicket.contact_email,
+      status: updatedTicket.status,
+      priority: updatedTicket.priority,
+      staff_name: updatedTicket.assigned_to_name,
+      subject: updatedTicket.subject
+    });
+
+    res.json(updatedTicket);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -4290,7 +4417,16 @@ RETURNING *
       JSON.stringify(course.modules || []),
       JSON.stringify(course.discussions || [])
     ]);
-    res.json(result.rows[0]);
+    const newCourse = result.rows[0];
+
+    // Automation Trigger
+    evaluateAutomation('LMS Course Created', {
+      ...newCourse,
+      course_name: newCourse.title,
+      course_price: newCourse.price
+    });
+
+    res.json(newCourse);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -4524,6 +4660,32 @@ VALUES($1, $2, 'Reception', $3)
       ]
     );
     const v = result.rows[0];
+
+    // Build payload for automation
+    let clientEmail = null;
+    if (contactId) {
+      const contactResult = await query('SELECT email FROM contacts WHERE id = $1', [contactId]);
+      if (contactResult.rows.length > 0) {
+        clientEmail = contactResult.rows[0].email;
+      }
+    }
+
+    const payload = {
+      ...v,
+      client_email: clientEmail || v.company,
+      visitor_name: v.name,
+      visitor_phone: v.company,
+      staff_email: v.staff_email,
+      staff_name: v.staff_name,
+      contact: v.name,
+      visit_purpose: v.purpose || '',
+      visit_department: v.host || '',
+      status: v.status,
+      visit_number: v.daily_sequence_number
+    };
+
+    evaluateAutomation('Visit Created', payload);
+
     res.json({
       ...v,
       scheduledCheckIn: v.scheduled_check_in,
@@ -4651,6 +4813,37 @@ name = $1,
 
     const result = await query('SELECT * FROM visitors WHERE id = $1', [req.params.id]);
     const v = result.rows[0];
+    // Build payload for automation
+    let clientEmail = null;
+    if (v.contact_id) {
+      const contactResult = await query('SELECT email FROM contacts WHERE id = $1', [v.contact_id]);
+      if (contactResult.rows.length > 0) {
+        clientEmail = contactResult.rows[0].email;
+      }
+    }
+
+    const latestSegment = Array.isArray(v.visit_segments) && v.visit_segments.length > 0
+      ? v.visit_segments[v.visit_segments.length - 1]
+      : {};
+
+    const payload = {
+      ...v,
+      client_email: clientEmail || v.company,
+      visitor_name: v.name,
+      visitor_phone: v.company,
+      staff_email: v.staff_email,
+      staff_name: v.staff_name,
+      contact: v.name,
+      visit_purpose: v.purpose || latestSegment.purpose,
+      visit_action: latestSegment.action || '',
+      visit_department: v.host || latestSegment.department || '',
+      status: v.status,
+      visit_number: v.daily_sequence_number
+    };
+
+    // Trigger automation
+    evaluateAutomation('Visit Updated', payload);
+
     res.json({
       ...v,
       scheduledCheckIn: v.scheduled_check_in,
@@ -5766,8 +5959,6 @@ Strict Rules:
       { role: 'user', content: message }
     ];
 
-    const fetch = (await import('node-fetch')).default;
-
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -5936,6 +6127,196 @@ router.get('/admin/session-history', authenticateToken, requireRole('Admin'), as
   } catch (error) {
     console.error('Session history error:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// --- AUTOMATION RULES CRUD ---
+router.get('/automation-rules', authenticateToken, requireRole('Admin'), async (req, res) => {
+  try {
+    const result = await query('SELECT * FROM automation_rules ORDER BY id DESC');
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/automation-rules', authenticateToken, requireRole('Admin'), async (req, res) => {
+  try {
+    const { name, trigger_event, conditions, action_send_email, email_template_id, email_recipient, action_create_task, task_template, action_send_whatsapp, whatsapp_template, is_active } = req.body;
+    const result = await query(`
+      INSERT INTO automation_rules (
+        name, trigger_event, conditions, action_send_email, email_template_id, 
+        email_recipient, action_create_task, task_template, action_send_whatsapp, 
+        whatsapp_template, is_active
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *
+    `, [
+      name, trigger_event, JSON.stringify(conditions || []), action_send_email || false,
+      email_template_id || null, email_recipient || 'client', action_create_task || false,
+      JSON.stringify(task_template || {}), action_send_whatsapp || false,
+      whatsapp_template || null, is_active !== false
+    ]);
+    res.json(result.rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.put('/automation-rules/:id', authenticateToken, requireRole('Admin'), async (req, res) => {
+  try {
+    const { name, trigger_event, conditions, action_send_email, email_template_id, email_recipient, action_create_task, task_template, action_send_whatsapp, whatsapp_template, is_active } = req.body;
+    const result = await query(`
+      UPDATE automation_rules SET 
+        name = $1, trigger_event = $2, conditions = $3, action_send_email = $4, 
+        email_template_id = $5, email_recipient = $6, action_create_task = $7, 
+        task_template = $8, action_send_whatsapp = $9, whatsapp_template = $10, 
+        is_active = $11
+      WHERE id = $12 RETURNING *
+    `, [
+      name, trigger_event, JSON.stringify(conditions || []), action_send_email,
+      email_template_id || null, email_recipient, action_create_task,
+      JSON.stringify(task_template || {}), action_send_whatsapp,
+      whatsapp_template, is_active !== false, req.params.id
+    ]);
+    res.json(result.rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete('/automation-rules/:id', authenticateToken, requireRole('Admin'), async (req, res) => {
+  try {
+    await query('DELETE FROM automation_rules WHERE id = $1', [req.params.id]);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// --- EMAIL TEMPLATES CRUD ---
+router.get('/email-templates', authenticateToken, requireRole('Admin'), async (req, res) => {
+  try {
+    const result = await query('SELECT * FROM email_templates ORDER BY id DESC');
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/email-templates', authenticateToken, requireRole('Admin'), async (req, res) => {
+  try {
+    const { name, subject, body, from_address } = req.body;
+    const result = await query(`
+      INSERT INTO email_templates (name, subject, body, from_address)
+      VALUES ($1, $2, $3, $4) RETURNING *
+    `, [name, subject, body, from_address || null]);
+    res.json(result.rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.put('/email-templates/:id', authenticateToken, requireRole('Admin'), async (req, res) => {
+  try {
+    const { name, subject, body, from_address } = req.body;
+    const result = await query(`
+      UPDATE email_templates
+      SET name = $1, subject = $2, body = $3, from_address = $4
+      WHERE id = $5 RETURNING *
+    `, [name, subject, body, from_address || null, req.params.id]);
+    res.json(result.rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete('/email-templates/:id', authenticateToken, requireRole('Admin'), async (req, res) => {
+  try {
+    await query('DELETE FROM email_templates WHERE id = $1', [req.params.id]);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(400).json({ error: 'Cannot delete template. It might be in use by an automation rule.' });
+  }
+});
+
+// --- AUTOMATION LOGS ---
+router.get('/automation-logs', authenticateToken, requireRole('Admin'), async (req, res) => {
+  try {
+    const result = await query(`
+      SELECT l.*, r.name as rule_name 
+      FROM automation_logs l
+      LEFT JOIN automation_rules r ON l.rule_id = r.id
+      ORDER BY l.created_at DESC
+      LIMIT 100
+    `);
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// AI Draft Generation for Email Templates
+router.post('/automation/generate-draft', authenticateToken, requireRole('Admin', 'Staff'), async (req, res) => {
+  try {
+    const { prompt, context } = req.body;
+    const apiKey = (process.env.OPENROUTER_API_KEY || '').trim();
+
+    if (!apiKey) {
+      return res.status(500).json({ error: 'OPENROUTER_API_KEY is not configured.' });
+    }
+
+    const systemPrompt = `You are an expert CRM automation copywriter. Draft a professional email based on the user's request.
+Keep it concise. Use ONLY the following variable tags for personalization:
+- {{contact_name}} (Full name of the contact)
+- {{first_name}} (First name only)
+- {{contact_email}} (Contact's email address)
+- {{company_name}} (Name of the lead's company)
+- {{lead_source}} (Where the lead came from)
+- {{lead_stage}} (Current stage of the lead)
+
+Return your response in JSON format: { "subject": "...", "body": "..." }`;
+
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        'HTTP-Referer': 'https://lyceumacademy.com',
+        'X-Title': 'Lyceum Academy Automation'
+      },
+      body: JSON.stringify({
+        model: 'stepfun/step-3.5-flash:free',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: `Draft an email for: ${prompt}. Context: ${context || 'General CRM'}` }
+        ],
+        response_format: { type: 'json_object' }
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('AI Gateway Error Response:', errorText);
+      throw new Error(`AI Gateway Error: ${errorText}`);
+    }
+
+    const data = await response.json();
+    const contentString = data.choices[0].message.content;
+
+    try {
+      const content = JSON.parse(contentString);
+      res.json(content);
+    } catch (parseErr) {
+      console.error('Failed to parse AI response JSON:', contentString);
+      // Fallback: If not JSON, try to extract subject/body or just return it as body
+      res.json({
+        subject: "Automated Draft",
+        body: contentString
+      });
+    }
+  } catch (error) {
+    console.error('AI Draft full error:', error);
+    res.status(500).json({ error: 'Failed to generate AI draft: ' + error.message });
   }
 });
 

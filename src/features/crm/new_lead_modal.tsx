@@ -153,7 +153,7 @@ const NewLeadModal: React.FC<NewLeadModalProps> = ({ isOpen, onClose, onSave, le
         assignedTo: formData.assignedTo,
         notes: formData.notes,
         // Auto-fill Title and Company to satisfy DB constraints
-        title: `${formData.contact.trim()}'s Opportunity`,
+        title: formData.contact.trim(),
         company: 'N/A',
         id: isEditing ? lead.id : undefined,
       } as any;

@@ -1765,3 +1765,59 @@ export const chatWithAssistant = async (message: string, history: any[]): Promis
     body: JSON.stringify({ message, history }),
   });
 };
+
+// Automation & Email Templates
+export const getAutomationRules = async (): Promise<any[]> => {
+  return apiRequest<any[]>('/automation-rules');
+};
+
+export const createAutomationRule = async (rule: any): Promise<any> => {
+  return apiRequest<any>('/automation-rules', {
+    method: 'POST',
+    body: JSON.stringify(rule)
+  });
+};
+
+export const updateAutomationRule = async (id: number, updates: any): Promise<any> => {
+  return apiRequest<any>(`/automation-rules/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(updates)
+  });
+};
+
+export const deleteAutomationRule = async (id: number): Promise<void> => {
+  return apiRequest(`/automation-rules/${id}`, { method: 'DELETE' });
+};
+
+export const getEmailTemplates = async (): Promise<any[]> => {
+  return apiRequest<any[]>('/email-templates');
+};
+
+export const createEmailTemplate = async (template: any): Promise<any> => {
+  return apiRequest<any>('/email-templates', {
+    method: 'POST',
+    body: JSON.stringify(template)
+  });
+};
+
+export const updateEmailTemplate = async (id: number, updates: any): Promise<any> => {
+  return apiRequest<any>(`/email-templates/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(updates)
+  });
+};
+
+export const deleteEmailTemplate = async (id: number): Promise<void> => {
+  return apiRequest(`/email-templates/${id}`, { method: 'DELETE' });
+};
+
+export const getAutomationLogs = async (): Promise<any[]> => {
+  return apiRequest<any[]>('/automation-logs');
+};
+
+export const generateAutomationDraft = async (prompt: string, context?: string): Promise<{ subject: string; body: string }> => {
+  return apiRequest<{ subject: string; body: string }>('/automation/generate-draft', {
+    method: 'POST',
+    body: JSON.stringify({ prompt, context })
+  });
+};

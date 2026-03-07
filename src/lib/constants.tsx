@@ -29,7 +29,9 @@ import {
   UserCircle,
   GraduationCap,
   Target,
-  TrendingUp
+  TrendingUp,
+  Sparkles,
+  Zap
 } from '@/components/common/icons';
 
 export const ODOO_APPS: OdooApp[] = [
@@ -154,6 +156,12 @@ export const ODOO_APPS: OdooApp[] = [
     icon: <UserCheck size={36} />,
     bgColor: 'bg-green-100',
     iconColor: 'text-green-600',
+  },
+  {
+    name: 'Automation Engine',
+    icon: <Zap size={36} fill="currentColor" className="filter drop-shadow-sm" />,
+    bgColor: 'bg-emerald-500',
+    iconColor: 'text-white',
   },
 ];
 

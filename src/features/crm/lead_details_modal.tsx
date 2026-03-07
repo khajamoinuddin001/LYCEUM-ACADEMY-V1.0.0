@@ -125,7 +125,7 @@ const LeadDetailsModal: React.FC<LeadDetailsModalProps> = ({ lead, onClose, onEd
                     <div className="flex items-start justify-between">
                         <div>
                             <p className="text-sm font-medium text-lyceum-blue uppercase tracking-widest">{lead.stage}</p>
-                            <h2 id="lead-details-title" className="text-2xl font-black text-gray-900 dark:text-white tracking-tight">{lead.title}</h2>
+                            <h2 id="lead-details-title" className="text-2xl font-black text-gray-900 dark:text-white tracking-tight">{lead.title?.replace(/'s Opportunity$/i, '')}</h2>
                         </div>
                         <button onClick={handleClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors" aria-label="Close">
                             <X size={24} />

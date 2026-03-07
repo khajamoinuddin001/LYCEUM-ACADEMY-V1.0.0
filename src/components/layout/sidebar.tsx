@@ -79,7 +79,8 @@ const DEFAULT_STUDENT_NAV = [
 ];
 
 const getAppMetadata = (name: string): OdooApp | undefined => {
-  return ALL_ODOO_APPS.find(app => app.name === name);
+  const targetName = name === 'Automation' ? 'Automation Engine' : name;
+  return ALL_ODOO_APPS.find(app => app.name === targetName);
 };
 
 const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, activeApp, onAppSelect, isMobile, user, onLogout }) => {

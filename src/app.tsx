@@ -77,6 +77,7 @@ import StudentUniversityApplicationView from '@/features/students/student_univer
 import UniversityManager from '@/features/admin/university_manager';
 import ActiveSessionsView from '@/features/admin/active_sessions_view';
 import MarketingView from '@/features/marketing/marketing_view';
+import AutomationView from '@/features/automation/automation_view';
 import {
   DndContext,
   closestCenter,
@@ -1912,6 +1913,7 @@ const DashboardLayout: React.FC = () => {
     }
 
     switch (activeApp) {
+      case 'Automation Engine': return <AutomationView />;
       case 'Apps': return <AppsGridView onAppSelect={handleAppSelect} user={currentUser} apps={gridApps} />;
       case 'dashboard': return <Dashboard onNavigateBack={() => handleAppSelect('Apps')} transactions={transactions} user={currentUser} tasks={tasks} onAppSelect={handleAppSelect} paymentActivityLog={paymentActivityLog} contacts={contacts} leads={leads} />;
       case 'Department Dashboard': return <DepartmentDashboard user={currentUser} tickets={tickets} onTicketSelect={(ticketId) => { setSelectedTicketId(ticketId); setActiveApp('Tickets'); }} />;

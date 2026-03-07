@@ -897,6 +897,69 @@ export async function initDatabase() {
       END $$;
     `);
 
+    // EMAIL TEMPLATES
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS email_templates (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        body TEXT NOT NULL,
+        from_address TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Insert Default Email Templates if none exist
+    const templatesCount = await client.query('SELECT COUNT(*) FROM email_templates');
+    if (parseInt(templatesCount.rows[0].count, 10) === 0) {
+      console.log('📡 Inserting default email templates');
+      await client.query(`
+        INSERT INTO email_templates (name, subject, body) VALUES 
+        ('Payment Receipt', 'Payment Receipt for {{amount}}', 'Dear {{client_name}},<br><br>We have received your payment of {{amount}} on {{date}}.<br><br>Thank you!'),
+        ('Application Confirmation', 'Application Received for {{service}}', 'Dear {{client_name}},<br><br>Your application for {{service}} has been successfully submitted on {{date}}.<br><br>We will review it and get back to you soon.'),
+        ('Document Request', 'Action Required: Missing Documents', 'Dear {{client_name}},<br><br>Please upload the required {{document_name}} to proceed with your application.<br><br>Regards,'),
+        ('Status Update', 'Update on your {{service}} Application', 'Dear {{client_name}},<br><br>The status of your application has changed to: <strong>{{status}}</strong>.<br><br>Regards,')
+      `);
+    }
+
+    // AUTOMATION RULES
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS automation_rules (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        trigger_event TEXT NOT NULL,
+        conditions JSONB DEFAULT '[]',
+        action_send_email BOOLEAN DEFAULT false,
+        email_template_id INTEGER REFERENCES email_templates(id) ON DELETE SET NULL,
+        email_recipient TEXT,
+        action_send_whatsapp BOOLEAN DEFAULT false,
+        whatsapp_template TEXT,
+        action_create_task BOOLEAN DEFAULT false,
+        task_template JSONB DEFAULT '{}',
+        is_active BOOLEAN DEFAULT true,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Migration for WhatsApp fields if they don't exist
+    await client.query('ALTER TABLE automation_rules ADD COLUMN IF NOT EXISTS action_send_whatsapp BOOLEAN DEFAULT false');
+    await client.query('ALTER TABLE automation_rules ADD COLUMN IF NOT EXISTS whatsapp_template TEXT');
+
+    // AUTOMATION LOGS
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS automation_logs (
+        id SERIAL PRIMARY KEY,
+        rule_id INTEGER REFERENCES automation_rules(id) ON DELETE SET NULL,
+        trigger_event TEXT NOT NULL,
+        action_type TEXT NOT NULL, -- 'email', 'task', or 'whatsapp'
+        recipient TEXT,
+        subject TEXT,
+        status TEXT NOT NULL, -- 'success' or 'failed'
+        error_message TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     console.log("✅ Database initialized successfully");
   } catch (err) {
     if (client) await client.query("ROLLBACK");

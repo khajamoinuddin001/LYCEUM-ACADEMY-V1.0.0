@@ -111,5 +111,7 @@ export {
   Navigation,
   History,
   School,
-  Globe2
+  Globe2,
+  Zap,
+  Cpu
 } from 'lucide-react';
