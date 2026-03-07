@@ -2255,8 +2255,8 @@ router.post('/leads', authenticateToken, async (req, res) => {
     const transformedLead = transformLead(newLead);
     evaluateAutomation('Lead Created', {
       ...transformedLead,
-      contact_name: transformedLead.name,
-      first_name: transformedLead.name.split(' ')[0],
+      contact_name: transformedLead.contact || 'Customer',
+      first_name: (transformedLead.contact || 'Customer').split(' ')[0],
       contact_email: transformedLead.email,
       contact_phone: transformedLead.phone,
       company_name: transformedLead.company,
