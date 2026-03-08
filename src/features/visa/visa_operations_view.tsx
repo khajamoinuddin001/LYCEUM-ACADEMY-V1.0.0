@@ -114,6 +114,15 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
     const [listSearchQuery, setListSearchQuery] = useState('');
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
+    const [filterType, setFilterType] = useState<'all' | 'slots_not_booked' | 'ds160_not_submitted'>('all');
+
+    const slotsNotBookedCount = useMemo(() => {
+        return operations.filter(op => !op.slotBookingData?.vacDate && !op.slotBookingData?.viDate).length;
+    }, [operations]);
+
+    const ds160NotSubmittedCount = useMemo(() => {
+        return operations.filter(op => !op.dsData?.confirmationDocumentId).length;
+    }, [operations]);
 
     const handleAddDependency = () => {
         setDsFormData(prev => ({
@@ -258,9 +267,16 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                 if (endDate && opDate > endDate) matchesDate = false;
             }
 
-            return matchesSearch && matchesDate;
+            let matchesFilterType = true;
+            if (filterType === 'slots_not_booked') {
+                matchesFilterType = !op.slotBookingData?.vacDate && !op.slotBookingData?.viDate;
+            } else if (filterType === 'ds160_not_submitted') {
+                matchesFilterType = !op.dsData?.confirmationDocumentId;
+            }
+
+            return matchesSearch && matchesDate && matchesFilterType;
         });
-    }, [existingOperations, listSearchQuery, startDate, endDate]);
+    }, [operations, listSearchQuery, startDate, endDate, filterType]);
 
     const filteredContacts = useMemo(() => {
         if (!searchTerm.trim()) return contacts;
@@ -512,6 +528,49 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                         <Plus size={20} />
                         New Operation
                     </button>
+                </div>
+
+                {/* Information Hub */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div
+                        onClick={() => setFilterType(filterType === 'slots_not_booked' ? 'all' : 'slots_not_booked')}
+                        className={`p-6 rounded-2xl border transition-all duration-300 cursor-pointer flex items-center justify-between group relative overflow-hidden ${filterType === 'slots_not_booked' ? 'bg-amber-50 border-amber-300 shadow-md ring-2 ring-amber-500/20 transform scale-[1.01]' : 'bg-white border-slate-200 hover:border-amber-200 hover:bg-amber-50/30 hover:shadow-sm hover:-translate-y-0.5'}`}
+                    >
+                        <div className="relative z-10">
+                            <p className={`text-xs font-bold uppercase tracking-wider mb-1 transition-colors ${filterType === 'slots_not_booked' ? 'text-amber-800' : 'text-slate-500 group-hover:text-amber-700'}`}>Slots Not Booked</p>
+                            <h3 className={`text-3xl font-black transition-colors ${filterType === 'slots_not_booked' ? 'text-amber-600' : 'text-slate-800 group-hover:text-amber-600'}`}>{slotsNotBookedCount}</h3>
+                        </div>
+                        <div className={`p-4 rounded-xl relative z-10 transition-colors ${filterType === 'slots_not_booked' ? 'bg-amber-100 text-amber-600 shadow-inner' : 'bg-slate-50 text-slate-400 group-hover:bg-amber-100 group-hover:text-amber-600'}`}>
+                            <Calendar size={28} />
+                        </div>
+                        {filterType === 'slots_not_booked' && (
+                            <div className="absolute top-3 right-3 flex h-3 w-3">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
+                            </div>
+                        )}
+                        <div className={`absolute -right-10 -bottom-10 w-32 h-32 rounded-full transition-all duration-500 blur-2xl z-0 ${filterType === 'slots_not_booked' ? 'bg-amber-400/20 opacity-100' : 'bg-amber-400/0 opacity-0 group-hover:bg-amber-400/10 group-hover:opacity-100'}`}></div>
+                    </div>
+
+                    <div
+                        onClick={() => setFilterType(filterType === 'ds160_not_submitted' ? 'all' : 'ds160_not_submitted')}
+                        className={`p-6 rounded-2xl border transition-all duration-300 cursor-pointer flex items-center justify-between group relative overflow-hidden ${filterType === 'ds160_not_submitted' ? 'bg-rose-50 border-rose-300 shadow-md ring-2 ring-rose-500/20 transform scale-[1.01]' : 'bg-white border-slate-200 hover:border-rose-200 hover:bg-rose-50/30 hover:shadow-sm hover:-translate-y-0.5'}`}
+                    >
+                        <div className="relative z-10">
+                            <p className={`text-xs font-bold uppercase tracking-wider mb-1 transition-colors ${filterType === 'ds160_not_submitted' ? 'text-rose-800' : 'text-slate-500 group-hover:text-rose-700'}`}>DS-160 Not Submitted</p>
+                            <h3 className={`text-3xl font-black transition-colors ${filterType === 'ds160_not_submitted' ? 'text-rose-600' : 'text-slate-800 group-hover:text-rose-600'}`}>{ds160NotSubmittedCount}</h3>
+                        </div>
+                        <div className={`p-4 rounded-xl relative z-10 transition-colors ${filterType === 'ds160_not_submitted' ? 'bg-rose-100 text-rose-600 shadow-inner' : 'bg-slate-50 text-slate-400 group-hover:bg-rose-100 group-hover:text-rose-600'}`}>
+                            <FileText size={28} />
+                        </div>
+                        {filterType === 'ds160_not_submitted' && (
+                            <div className="absolute top-3 right-3 flex h-3 w-3">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-500"></span>
+                            </div>
+                        )}
+                        <div className={`absolute -right-10 -bottom-10 w-32 h-32 rounded-full transition-all duration-500 blur-2xl z-0 ${filterType === 'ds160_not_submitted' ? 'bg-rose-400/20 opacity-100' : 'bg-rose-400/0 opacity-0 group-hover:bg-rose-400/10 group-hover:opacity-100'}`}></div>
+                    </div>
                 </div>
 
                 <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 flex flex-col lg:flex-row gap-4 items-center">
