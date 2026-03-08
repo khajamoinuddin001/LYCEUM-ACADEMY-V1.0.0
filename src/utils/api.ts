@@ -258,6 +258,12 @@ export const downloadDocument = async (documentId: number, filename: string): Pr
   document.body.removeChild(a);
 };
 
+export const deleteDocument = async (documentId: number): Promise<void> => {
+  return apiRequest(`/documents/${documentId}`, {
+    method: 'DELETE',
+  });
+};
+
 export const downloadVisaOperationItem = async (itemId: number, filename: string): Promise<void> => {
   const token = getToken();
   const headers: HeadersInit = {
@@ -283,11 +289,6 @@ export const downloadVisaOperationItem = async (itemId: number, filename: string
   document.body.removeChild(a);
 };
 
-export const deleteDocument = async (documentId: number): Promise<void> => {
-  return apiRequest(`/documents/${documentId}`, {
-    method: 'DELETE',
-  });
-};
 
 // Contacts
 export const getContacts = async (): Promise<Contact[]> => {

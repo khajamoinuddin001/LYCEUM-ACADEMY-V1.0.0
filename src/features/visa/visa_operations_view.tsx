@@ -28,7 +28,7 @@ import {
     KeyRound,
     Trash2
 } from 'lucide-react';
-import { createVisaOperation, updateVisaOperationCgi, updateVisaOperationSlotBooking, updateVisaOperationDs160, uploadDs160Document, deleteDs160Document, updateDs160Status, downloadDocument, downloadVisaOperationItem, getToken, API_BASE_URL, uploadDs160DependencyDocument, deleteDs160DependencyDocument, deleteVisaOperation } from '@/utils/api';
+import { createVisaOperation, updateVisaOperationCgi, updateVisaOperationSlotBooking, updateVisaOperationDs160, uploadDs160Document, deleteDs160Document, updateDs160Status, downloadDocument, downloadVisaOperationItem, getToken, API_BASE_URL, uploadDs160DependencyDocument, deleteDs160DependencyDocument, deleteVisaOperation, uploadDocument, deleteDocument } from '@/utils/api';
 import type { Contact, VisaOperation, User } from '@/types';
 
 interface VisaOperationsViewProps {
@@ -73,7 +73,9 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
         bookedBy: '',
         vacPreferred: [] as string[],
         viPreferred: [] as string[],
-        preferencesLocked: false
+        preferencesLocked: false,
+        appointmentConfirmationDocId: undefined as number | undefined,
+        appointmentConfirmationDocName: ''
     });
     const [interviewFormData, setInterviewFormData] = useState({
         visaOutcome: '',
@@ -252,6 +254,73 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
         }
     };
 
+    const handleSlotFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !activeOp) return;
+
+        setIsSubmitting(true);
+        try {
+            const response = await uploadDocument(activeOp.contactId, file, false, 'Appointment Confirmation');
+
+            const updatedOp = {
+                ...activeOp,
+                slotBookingData: {
+                    ...activeOp.slotBookingData,
+                    appointmentConfirmationDocId: response.id,
+                    appointmentConfirmationDocName: response.name
+                }
+            };
+
+            setActiveOp(updatedOp);
+            setOperations(prev => prev.map(op => op.id === updatedOp.id ? updatedOp : op));
+            setSlotFormData(prev => ({
+                ...prev,
+                appointmentConfirmationDocId: response.id,
+                appointmentConfirmationDocName: response.name
+            }));
+            alert('Appointment confirmation document uploaded successfully!');
+        } catch (error) {
+            console.error('Failed to upload document:', error);
+            alert('Failed to upload document. Please try again.');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleSlotFileDelete = async () => {
+        if (!activeOp || !slotFormData.appointmentConfirmationDocId) return;
+
+        if (!window.confirm('Are you sure you want to delete this document?')) return;
+
+        setIsSubmitting(true);
+        try {
+            await deleteDocument(slotFormData.appointmentConfirmationDocId);
+
+            const updatedOp = {
+                ...activeOp,
+                slotBookingData: {
+                    ...activeOp.slotBookingData,
+                    appointmentConfirmationDocId: undefined,
+                    appointmentConfirmationDocName: ''
+                }
+            };
+
+            setActiveOp(updatedOp);
+            setOperations(prev => prev.map(op => op.id === updatedOp.id ? updatedOp : op));
+            setSlotFormData(prev => ({
+                ...prev,
+                appointmentConfirmationDocId: undefined,
+                appointmentConfirmationDocName: ''
+            }));
+            alert('Appointment confirmation document deleted!');
+        } catch (error) {
+            console.error('Failed to delete document:', error);
+            alert('Failed to delete document. Please try again.');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
     const filteredOperations = useMemo(() => {
         return operations.filter(op => {
             const matchesSearch =
@@ -342,7 +411,11 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
         setIsSubmitting(true);
         try {
             const updatedOp = await updateVisaOperationSlotBooking(activeOp.id, {
-                slotBookingData: slotFormData,
+                slotBookingData: {
+                    ...slotFormData,
+                    appointmentConfirmationDocId: slotFormData.appointmentConfirmationDocId,
+                    appointmentConfirmationDocName: slotFormData.appointmentConfirmationDocName
+                },
                 visaInterviewData: interviewFormData,
                 status: interviewFormData.visaOutcome ? `Visa ${interviewFormData.visaOutcome}` : activeOp.status
             });
@@ -1169,6 +1242,58 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                                                 />
                                             </div>
                                         </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="space-y-6">
+                                <h3 className="text-lg font-bold text-slate-800 border-b border-slate-100 pb-2">Appointment Confirmation</h3>
+                                <div className="p-6 bg-slate-50/50 border border-slate-100 rounded-3xl space-y-4">
+                                    <p className="text-sm text-slate-600 font-medium mb-4">Upload the final appointment confirmation document to make it available in the student's portal.</p>
+
+                                    <div className="flex items-center gap-4">
+                                        <input
+                                            type="file"
+                                            id="slot-document-upload"
+                                            className="hidden"
+                                            onChange={handleSlotFileUpload}
+                                        />
+                                        <label
+                                            htmlFor="slot-document-upload"
+                                            className="flex items-center gap-2 bg-blue-600 text-white px-6 py-2.5 rounded-lg font-bold hover:bg-blue-700 transition-all cursor-pointer shadow-lg shadow-blue-600/20"
+                                        >
+                                            <Upload size={20} />
+                                            {slotFormData.appointmentConfirmationDocName ? 'Replace Document' : 'Upload Document'}
+                                        </label>
+
+                                        {slotFormData.appointmentConfirmationDocName && (
+                                            <div className="flex items-center gap-3">
+                                                <span className="text-sm text-slate-600 font-medium truncate max-w-xs">{slotFormData.appointmentConfirmationDocName}</span>
+                                                <div className="flex items-center gap-2">
+                                                    <button
+                                                        onClick={() => handlePreviewFile(slotFormData.appointmentConfirmationDocId!)}
+                                                        className="flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:text-blue-800 transition-colors bg-blue-50 px-2 py-1 rounded-md border border-blue-100"
+                                                    >
+                                                        <Eye size={12} />
+                                                        Preview
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleDownloadFile(slotFormData.appointmentConfirmationDocId!, slotFormData.appointmentConfirmationDocName!)}
+                                                        className="flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:text-blue-800 transition-colors bg-blue-50 px-2 py-1 rounded-md border border-blue-100"
+                                                    >
+                                                        <Download size={12} />
+                                                        Download
+                                                    </button>
+                                                    <button
+                                                        onClick={handleSlotFileDelete}
+                                                        className="flex items-center gap-1 text-[10px] font-bold text-rose-600 hover:text-rose-800 transition-colors bg-rose-50 px-2 py-1 rounded-md border border-rose-100"
+                                                    >
+                                                        <Trash2 size={12} />
+                                                        Delete
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -2130,7 +2255,9 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                                 bookedBy: activeOp?.slotBookingData?.bookedBy || '',
                                 vacPreferred: activeOp?.slotBookingData?.vacPreferred || [],
                                 viPreferred: activeOp?.slotBookingData?.viPreferred || [],
-                                preferencesLocked: activeOp?.slotBookingData?.preferencesLocked || false
+                                preferencesLocked: activeOp?.slotBookingData?.preferencesLocked || false,
+                                appointmentConfirmationDocId: activeOp?.slotBookingData?.appointmentConfirmationDocId,
+                                appointmentConfirmationDocName: activeOp?.slotBookingData?.appointmentConfirmationDocName || ''
                             });
                             setInterviewFormData({
                                 visaOutcome: activeOp?.visaInterviewData?.visaOutcome || '',
@@ -2281,6 +2408,31 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                                                 </div>
                                             </div>
                                         </div>
+                                        {activeOp.slotBookingData.appointmentConfirmationDocId && (
+                                            <div className="space-y-2 pt-4 border-t border-blue-100/50">
+                                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Confirmation Document</span>
+                                                <div className="flex items-center gap-3 bg-white/50 p-2 rounded-xl border border-blue-100">
+                                                    <FileText size={16} className="text-blue-500" />
+                                                    <span className="text-xs font-bold text-slate-700 truncate max-w-[150px]">{activeOp.slotBookingData.appointmentConfirmationDocName}</span>
+                                                    <div className="ml-auto flex items-center gap-1">
+                                                        <button
+                                                            onClick={() => handlePreviewFile(activeOp.slotBookingData!.appointmentConfirmationDocId!)}
+                                                            className="p-1 text-blue-600 hover:bg-blue-100 rounded-md transition-colors"
+                                                            title="Preview"
+                                                        >
+                                                            <Eye size={14} />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleDownloadFile(activeOp.slotBookingData!.appointmentConfirmationDocId!, activeOp.slotBookingData!.appointmentConfirmationDocName!)}
+                                                            className="p-1 text-blue-600 hover:bg-blue-100 rounded-md transition-colors"
+                                                            title="Download"
+                                                        >
+                                                            <Download size={14} />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                     <div className="flex flex-col">
                                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Booked Details</span>
