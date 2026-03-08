@@ -7,11 +7,13 @@ import {
     Check, Bookmark, FileText, Search as SearchIcon,
     Award, Copy, ArrowRight, User as UserIcon, Mail,
     Phone, Briefcase, Trash2, Edit3, MoreVertical,
-    AlertCircle, CheckCircle, BookOpen, Languages, Folder, Key, Plus, Sparkles, Settings, Save
+    AlertCircle, CheckCircle, BookOpen, Languages, Folder, Key, Plus, Sparkles, Settings, Save,
+    ClipboardList
 } from 'lucide-react';
 import ContactDocumentsView from '../students/contact_documents_view';
 import ApplicationCredentialsView from '../students/application_credentials_view';
 import ManualApplicationModal from './manual_application_modal';
+import TaskModal from '../tasks/task_modal';
 
 interface UniversityApplicationViewProps {
     user: any;
@@ -94,6 +96,9 @@ const UniversityApplicationView: React.FC<UniversityApplicationViewProps> = ({ u
     const modalScrollRef = useRef<HTMLDivElement>(null);
     const [editingDateAppIdx, setEditingDateAppIdx] = useState<{ studentId: string, appIdx: number } | null>(null);
     const [newDateValue, setNewDateValue] = useState('');
+    const [originalContacts, setOriginalContacts] = useState<Contact[]>([]);
+    const [showTaskModal, setShowTaskModal] = useState(false);
+    const [prefilledTask, setPrefilledTask] = useState<any>(null);
 
     useEffect(() => {
         fetchStudents();
@@ -103,6 +108,7 @@ const UniversityApplicationView: React.FC<UniversityApplicationViewProps> = ({ u
         if (!silent) setLoading(true);
         try {
             const data = await api.getContacts();
+            setOriginalContacts(data);
 
             // Deduplicate contacts by userId or email, but prioritize keeping contacts that have university applications
             const uniqueContactsMap = new Map();
@@ -258,6 +264,17 @@ const UniversityApplicationView: React.FC<UniversityApplicationViewProps> = ({ u
             setUpdating(false);
         }
     };
+
+    const handleSaveTask = async (task: any) => {
+        try {
+            await api.saveTask(task);
+            fetchStudents(true); // Refresh data
+        } catch (error) {
+            console.error('Failed to save task:', error);
+            alert('Failed to save task');
+        }
+    };
+
     const handleDeferApplication = async (student: Contact, appIdx: number) => {
         if (window.confirm('Are you sure you want to defer this application?\n\nThis will close the current application and create a duplicate with the same details.')) {
             setUpdating(true);
@@ -805,6 +822,20 @@ const UniversityApplicationView: React.FC<UniversityApplicationViewProps> = ({ u
                                                     <button onClick={() => { setShowCredentials(true); setShowDocuments(false); }} className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-gray-100 hover:bg-emerald-500 hover:text-white dark:bg-gray-800 dark:hover:bg-emerald-500 text-xs font-bold text-gray-600 dark:text-gray-300 rounded-xl transition-all shadow-sm">
                                                         <Key size={13} /> Credentials
                                                     </button>
+                                                    <button onClick={(e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        console.log("Create Task clicked! showing modal...");
+                                                        setPrefilledTask({
+                                                            contactId: selectedApp.student.id,
+                                                            title: `Task for ${selectedApp.app.universityName} - ${selectedApp.app.course}`,
+                                                            description: `Regarding application ACK: ${selectedApp.app.ackNumber || 'N/A'}`
+                                                        });
+                                                        setShowTaskModal(true);
+                                                        console.log("showTaskModal is set to true");
+                                                    }} className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-gray-100 hover:bg-lyceum-blue hover:text-white dark:bg-gray-800 dark:hover:bg-lyceum-blue text-xs font-bold text-gray-600 dark:text-gray-300 rounded-xl transition-all shadow-sm">
+                                                        <ClipboardList size={13} /> Create Task
+                                                    </button>
                                                     {(user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase() === 'staff') && (
                                                         <button
                                                             onClick={(e) => {
@@ -1273,6 +1304,15 @@ const UniversityApplicationView: React.FC<UniversityApplicationViewProps> = ({ u
                 onSuccess={() => {
                     fetchStudents();
                 }}
+            />
+
+            <TaskModal
+                isOpen={showTaskModal}
+                onClose={() => { setShowTaskModal(false); setPrefilledTask(null); }}
+                onSave={handleSaveTask}
+                editTask={prefilledTask}
+                currentUserId={user.id}
+                contacts={originalContacts}
             />
         </div >
     );
