@@ -18,7 +18,14 @@ const TRIGGERS = [
     'Visa Status Changed',
     'User Created',
     'Transaction Created',
-    'LMS Course Created'
+    'LMS Course Created',
+    'Application Marked Applied',
+    'Application Review Started',
+    'Application Marked On Hold',
+    'Application Acceptance Received',
+    'Application I20 Received',
+    'Application Rejected',
+    'Application Deferred'
 ];
 
 const OPERATORS = [

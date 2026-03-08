@@ -941,10 +941,15 @@ router.put('/contacts/:id', authenticateToken, async (req, res) => {
   try {
     const contact = req.body;
 
-    // Get the old contact data to check if name changed
-    const oldContactResult = await query('SELECT name, email, user_id FROM contacts WHERE id = $1', [req.params.id]);
-    const oldContact = oldContactResult.rows[0];
-    const nameChanged = oldContact && oldContact.name !== contact.name;
+    // Fetch full existing contact for automation comparison
+    const oldContactFullRes = await query('SELECT * FROM contacts WHERE id = $1', [req.params.id]);
+    const oldContact = transformContact(oldContactFullRes.rows[0]);
+
+    if (!oldContact) {
+      return res.status(404).json({ error: 'Contact not found' });
+    }
+
+    const nameChanged = oldContact.name !== contact.name;
 
     // Update the contact
     await query(`
@@ -1035,7 +1040,53 @@ name = $1, email = $2, phone = $3, department = $4, major = $5, notes = $6,
     }
 
     const result = await query('SELECT * FROM contacts WHERE id = $1', [req.params.id]);
-    res.json(transformContact(result.rows[0]));
+    const updatedContact = transformContact(result.rows[0]);
+
+    // --- UNIVERSITY APPLICATION AUTOMATION TRIGGERS ---
+    try {
+      const oldApps = oldContact.visaInformation?.universityApplication?.universities || [];
+      const newApps = updatedContact.visaInformation?.universityApplication?.universities || [];
+
+      // Check each application for status changes
+      newApps.forEach((newApp, i) => {
+        const oldApp = oldApps[i];
+        if (oldApp && oldApp.status !== newApp.status) {
+          console.log(`🤖 [Automation] Detected status change for ${updatedContact.name}: ${oldApp.status} -> ${newApp.status}`);
+
+          // Map status to Trigger Event
+          let trigger = null;
+          switch (newApp.status) {
+            case 'Applied': trigger = 'Application Marked Applied'; break;
+            case 'In Review': trigger = 'Application Review Started'; break;
+            case 'On Hold': trigger = 'Application Marked On Hold'; break;
+            case 'Offer Received':
+            case 'Received Acceptance': trigger = 'Application Acceptance Received'; break;
+            case 'Received I20': trigger = 'Application I20 Received'; break;
+            case 'Rejected': trigger = 'Application Rejected'; break;
+            case 'Application Deferred': trigger = 'Application Deferred'; break;
+          }
+
+          if (trigger) {
+            evaluateAutomation(trigger, {
+              ...updatedContact,
+              ...newApp,
+              contact_name: updatedContact.name,
+              contact_email: updatedContact.email,
+              contact_phone: updatedContact.phone,
+              university_name: newApp.universityName,
+              course_name: newApp.course,
+              ack_number: newApp.ackNumber,
+              old_status: oldApp.status,
+              new_status: newApp.status
+            });
+          }
+        }
+      });
+    } catch (autoErr) {
+      console.error('❌ [Automation] Error triggering university events:', autoErr);
+    }
+
+    res.json(updatedContact);
   } catch (error) {
     console.error('Error updating contact:', error);
     res.status(500).json({ error: error.message });
