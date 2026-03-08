@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Contact, UniversityCourse } from '@/types';
 import * as api from '@/utils/api';
-import { X, Search as SearchIcon, Building2, BookOpen, HelpCircle, Save, Loader2, User, GraduationCap } from 'lucide-react';
+import { X, Search as SearchIcon, Building2, BookOpen, HelpCircle, Save, Loader2, User, GraduationCap, Calendar } from 'lucide-react';
 
 interface ManualApplicationModalProps {
     isOpen: boolean;
@@ -45,7 +45,8 @@ const ManualApplicationModal: React.FC<ManualApplicationModalProps> = ({ isOpen,
                 logoUrl: '',
                 country: '',
                 applicationFee: '',
-                enrollmentDeposit: ''
+                enrollmentDeposit: '',
+                intake: ''
             });
             setIsUniDropdownOpen(false);
             setIsCourseDropdownOpen(false);
@@ -107,6 +108,7 @@ const ManualApplicationModal: React.FC<ManualApplicationModalProps> = ({ isOpen,
                 status: formData.status,
                 ackNumber: newAck,
                 applicationSubmissionDate: new Date().toISOString(),
+                intake: formData.intake || '',
                 logoUrl: formData.logoUrl || null,
                 country: formData.country || '',
                 applicationFee: formData.applicationFee || null,
@@ -144,6 +146,13 @@ const ManualApplicationModal: React.FC<ManualApplicationModalProps> = ({ isOpen,
         uc.universityName.toLowerCase() === formData.universityName.toLowerCase()
     );
 
+    // Get available intakes for the currently selected university name
+    const availableIntakes = Array.from(new Set(
+        universityCourses
+            .filter(uc => uc.universityName === formData.universityName && uc.intake)
+            .flatMap(uc => uc.intake.split(',').map(i => i.trim()).filter(Boolean))
+    ));
+
     const uniqueCourses: string[] = Array.from(new Set(selectedUniCourses.flatMap(uc =>
         (uc.courseName || '').split(',').map(c => c.trim()).filter(Boolean)
     )));
@@ -160,7 +169,8 @@ const ManualApplicationModal: React.FC<ManualApplicationModalProps> = ({ isOpen,
             logoUrl: uc.logoUrl || '',
             country: uc.country || '',
             applicationFee: uc.applicationFee || '',
-            enrollmentDeposit: uc.enrollmentDeposit || ''
+            enrollmentDeposit: uc.enrollmentDeposit || '',
+            intake: (uc.intake && !uc.intake.includes(',')) ? uc.intake : '' // Only auto-select if it's a single value
         });
         setIsUniDropdownOpen(false);
         setIsCourseDropdownOpen(true);
@@ -352,6 +362,37 @@ const ManualApplicationModal: React.FC<ManualApplicationModalProps> = ({ isOpen,
                                 </div>
                             </div>
 
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {/* Intake Selection */}
+                            <div className="space-y-2 relative">
+                                <label className="text-xs font-bold text-gray-500 uppercase tracking-widest flex items-center gap-2">
+                                    <Calendar size={14} /> Intake <span className="text-red-500">*</span>
+                                </label>
+                                <select
+                                    required
+                                    value={formData.intake}
+                                    onChange={(e) => setFormData({ ...formData, intake: e.target.value })}
+                                    className="w-full bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl px-4 py-3.5 text-sm font-bold text-gray-900 dark:text-white focus:border-lyceum-blue focus:ring-4 focus:ring-blue-500/10 outline-none transition-all appearance-none cursor-pointer"
+                                >
+                                    <option value="" disabled>Select Intake</option>
+                                    {availableIntakes.length > 0 ? (
+                                        availableIntakes.map((intake, idx) => (
+                                            <option key={idx} value={intake}>{intake}</option>
+                                        ))
+                                    ) : (
+                                        <>
+                                            <option value="Fall 2024">Fall 2024</option>
+                                            <option value="Spring 2025">Spring 2025</option>
+                                            <option value="Fall 2025">Fall 2025</option>
+                                            <option value="Spring 2026">Spring 2026</option>
+                                            <option value="Fall 2026">Fall 2026</option>
+                                        </>
+                                    )}
+                                </select>
+                            </div>
+
                             {/* Degree Dropdown */}
                             <div className="space-y-2">
                                 <label className="text-xs font-bold text-gray-500 uppercase tracking-widest flex items-center gap-2">
@@ -364,6 +405,9 @@ const ManualApplicationModal: React.FC<ManualApplicationModalProps> = ({ isOpen,
                                 >
                                     <option value="Bachelor's">Bachelor's</option>
                                     <option value="Master's">Master's</option>
+                                    <option value="Ph.D.">Ph.D.</option>
+                                    <option value="Diploma">Diploma</option>
+                                    <option value="Certificate">Certificate</option>
                                 </select>
                             </div>
 
@@ -380,7 +424,9 @@ const ManualApplicationModal: React.FC<ManualApplicationModalProps> = ({ isOpen,
                                     <option value="Shortlisted">Shortlisted</option>
                                     <option value="Applied">Applied</option>
                                     <option value="In Review">In Review</option>
+                                    <option value="On Hold">On Hold</option>
                                     <option value="Offer Received">Offer Received</option>
+                                    <option value="Received Acceptance">Received Acceptance</option>
                                     <option value="Rejected">Rejected</option>
                                 </select>
                             </div>

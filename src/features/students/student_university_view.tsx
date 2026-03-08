@@ -386,7 +386,8 @@ const StudentUniversityApplicationView: React.FC<StudentUniversityApplicationVie
             'Applied': 'bg-blue-50/80 text-blue-600 border-blue-200/50 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20 ring-blue-500/20',
             'In Review': 'bg-violet-50/80 text-violet-600 border-violet-200/50 dark:bg-violet-500/10 dark:text-violet-400 dark:border-violet-500/20 ring-violet-500/20',
             'On Hold': 'bg-amber-50/80 text-amber-600 border-amber-200/50 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20 ring-amber-500/20',
-            'Offer Received': 'bg-emerald-50/80 text-emerald-600 border-emerald-200/50 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20 ring-emerald-500/20'
+            'Offer Received': 'bg-emerald-50/80 text-emerald-600 border-emerald-200/50 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20 ring-emerald-500/20',
+            'Application Deferred': 'bg-slate-100/80 text-slate-500 border-slate-300/50 dark:bg-slate-800/50 dark:text-slate-400 dark:border-slate-700/50 ring-slate-400/20'
         };
         const currentStatusColor = statusColors[app.status as keyof typeof statusColors] || statusColors['Shortlisted'];
 
@@ -439,9 +440,11 @@ const StudentUniversityApplicationView: React.FC<StudentUniversityApplicationVie
                                     <School size={14} />
                                     {app.course}
                                 </p>
-                                {app.country && (
-                                    <p className="text-xs font-medium text-gray-400 flex items-center gap-1 mt-0.5">
-                                        <Globe2 size={11} />{app.country}{app.intake ? ` · ${app.intake}` : ''}
+                                {(app.country || app.intake || app.applicationSubmissionDate) && (
+                                    <p className="text-xs font-medium text-gray-400 flex flex-wrap items-center gap-2 mt-1">
+                                        {app.country && <span className="flex items-center gap-1"><Globe2 size={11} />{app.country}</span>}
+                                        {app.intake && <span className="flex items-center gap-1">{app.country && '·'} <Calendar size={11} />{app.intake}</span>}
+                                        {app.applicationSubmissionDate && <span className="flex items-center gap-1">{(app.country || app.intake) && '·'} <Clock size={11} />{Math.floor((new Date().getTime() - new Date(app.applicationSubmissionDate).getTime()) / (1000 * 60 * 60 * 24))} Days Passed</span>}
                                     </p>
                                 )}
                             </div>
@@ -451,29 +454,30 @@ const StudentUniversityApplicationView: React.FC<StudentUniversityApplicationVie
 
                     <div className="relative pt-6 pb-2">
                         <div className="absolute top-[38px] left-4 right-4 h-0.5 bg-gray-200/50 dark:bg-gray-700/50 rounded-full" />
-                        <div className="absolute top-[38px] left-4 h-0.5 bg-lyceum-blue rounded-full transition-all duration-700 shadow-[0_0_10px_rgba(59,130,246,0.5)]" style={{ width: ['Offer Received', 'Received Acceptance', 'Received I20'].includes(app.status) ? '100%' : ['In Review', 'On Hold'].includes(app.status) ? '66%' : app.status === 'Applied' ? '33%' : '0%' }} />
+                        <div className="absolute top-[38px] left-4 h-0.5 bg-lyceum-blue rounded-full transition-all duration-700 shadow-[0_0_10px_rgba(59,130,246,0.5)]" style={{ width: ['Offer Received', 'Received Acceptance', 'Received I20'].includes(app.status === 'Application Deferred' ? app.previousStatus : app.status) ? '100%' : ['In Review', 'On Hold'].includes(app.status === 'Application Deferred' ? app.previousStatus : app.status) ? '66%' : (app.status === 'Application Deferred' ? app.previousStatus : app.status) === 'Applied' ? '33%' : '0%' }} />
 
                         <div className="flex justify-between relative z-10 w-full space-x-1">
                             {[
                                 { status: 'Shortlisted', icon: <Bookmark size={12} /> },
                                 { status: 'Applied', icon: <FileText size={12} /> },
                                 {
-                                    status: app.status === 'On Hold' ? 'On Hold' : 'In Review',
-                                    icon: app.status === 'On Hold' ? <AlertCircle size={12} /> : <Search size={12} />
+                                    status: (app.status === 'Application Deferred' ? app.previousStatus : app.status) === 'On Hold' ? 'On Hold' : 'In Review',
+                                    icon: (app.status === 'Application Deferred' ? app.previousStatus : app.status) === 'On Hold' ? <AlertCircle size={12} /> : <Search size={12} />
                                 },
                                 { status: 'Offer Received', icon: <Award size={12} /> }
                             ].map((stage, i) => {
-                                const isPassed = (['Offer Received', 'Received Acceptance', 'Received I20'].includes(app.status)) || (['In Review', 'On Hold'].includes(app.status) && i <= 2) || (app.status === 'Applied' && i <= 1) || (app.status === 'Shortlisted' && i === 0);
-                                const isCurrent = stage.status === 'Offer Received' ? ['Offer Received', 'Received Acceptance', 'Received I20'].includes(app.status) : app.status === stage.status;
+                                const displayStatus = app.status === 'Application Deferred' ? app.previousStatus : app.status;
+                                const isPassed = (['Offer Received', 'Received Acceptance', 'Received I20'].includes(displayStatus)) || (['In Review', 'On Hold'].includes(displayStatus) && i <= 2) || (displayStatus === 'Applied' && i <= 1) || (displayStatus === 'Shortlisted' && i === 0);
+                                const isCurrent = stage.status === 'Offer Received' ? ['Offer Received', 'Received Acceptance', 'Received I20'].includes(displayStatus) : displayStatus === stage.status;
                                 return (
                                     <div key={stage.status} className="flex flex-col items-center gap-2">
                                         <div className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all duration-500 ${isPassed
-                                            ? (isCurrent && app.status === 'On Hold' ? 'bg-amber-600' : 'bg-lyceum-blue') + ' text-white shadow-lg shadow-blue-500/30 ring-4 ring-blue-50 dark:ring-blue-900/20'
+                                            ? (isCurrent && displayStatus === 'On Hold' ? 'bg-amber-600' : 'bg-lyceum-blue') + ' text-white shadow-lg shadow-blue-500/30 ring-4 ring-blue-50 dark:ring-blue-900/20'
                                             : 'bg-white dark:bg-gray-800 text-gray-400 border-2 border-gray-100 dark:border-gray-700'
                                             } ${isCurrent ? 'scale-110' : 'scale-100'}`}>
                                             {isPassed ? <Check size={14} className="animate-in zoom-in" /> : stage.icon}
                                         </div>
-                                        <span className={`text-[11px] font-bold tracking-wide uppercase transition-colors duration-300 ${isCurrent ? (app.status === 'On Hold' ? 'text-amber-600' : 'text-gray-900 dark:text-gray-100') : isPassed ? 'text-gray-500 dark:text-gray-400' : 'text-gray-300 dark:text-gray-600'
+                                        <span className={`text-[11px] font-bold tracking-wide uppercase transition-colors duration-300 ${isCurrent ? (displayStatus === 'On Hold' ? 'text-amber-600' : 'text-gray-900 dark:text-gray-100') : isPassed ? 'text-gray-500 dark:text-gray-400' : 'text-gray-300 dark:text-gray-600'
                                             }`}>{stage.status}</span>
                                     </div>
                                 );
@@ -566,6 +570,16 @@ const StudentUniversityApplicationView: React.FC<StudentUniversityApplicationVie
                                             <div className="w-2 h-2 rounded-full bg-blue-300 animate-pulse" />
                                             {expandedApp.ackNumber}
                                         </span>
+                                        {expandedApp.intake && (
+                                            <span className="px-4 py-1.5 bg-amber-500/20 backdrop-blur-md rounded-xl text-xs font-black uppercase tracking-widest leading-none flex items-center gap-2 border border-amber-300/30 text-amber-100">
+                                                <Calendar size={12} /> {expandedApp.intake}
+                                            </span>
+                                        )}
+                                        {expandedApp.applicationSubmissionDate && (
+                                            <span className="px-4 py-1.5 bg-emerald-500/20 backdrop-blur-md rounded-xl text-xs font-black uppercase tracking-widest leading-none flex items-center gap-2 border border-emerald-300/30 text-emerald-100" title="Days since application start">
+                                                <Clock size={12} /> {Math.floor((new Date().getTime() - new Date(expandedApp.applicationSubmissionDate).getTime()) / (1000 * 60 * 60 * 24))} Days Passed
+                                            </span>
+                                        )}
                                         {['Received Acceptance', 'Received I20'].includes(expandedApp.status) && (
                                             <button
                                                 onClick={() => onNavigateToDocuments?.()}
@@ -575,7 +589,7 @@ const StudentUniversityApplicationView: React.FC<StudentUniversityApplicationVie
                                                 {expandedApp.status === 'Received Acceptance' ? 'See Acceptance' : 'See I20'}
                                             </button>
                                         )}
-                                        <span className={`px-4 py-1.5 backdrop-blur-md border rounded-xl text-xs font-black uppercase tracking-widest leading-none ${expandedApp.status === 'On Hold' ? 'bg-amber-500/30 border-amber-500/30' : 'bg-green-500/30 border-green-500/30'}`}>
+                                        <span className={`px-4 py-1.5 backdrop-blur-md border rounded-xl text-xs font-black uppercase tracking-widest leading-none ${expandedApp.status === 'On Hold' ? 'bg-amber-500/30 border-amber-500/30 text-amber-100' : expandedApp.status === 'Application Deferred' ? 'bg-gray-500/30 border-gray-500/30 text-gray-200' : 'bg-green-500/30 border-green-500/30 text-green-100'}`}>
                                             {expandedApp.status}
                                         </span>
                                     </div>
@@ -605,36 +619,53 @@ const StudentUniversityApplicationView: React.FC<StudentUniversityApplicationVie
                                     <div className="lg:col-span-12">
                                         <h3 className="text-[14px] font-black uppercase tracking-[0.2em] text-gray-400 mb-10 flex items-center gap-4">
                                             Application Progress Pipeline
+                                            {expandedApp.status === 'Application Deferred' && (
+                                                <div className="flex items-center gap-2 px-3 py-1 bg-red-500/10 border border-red-500/20 rounded-lg">
+                                                    <Clock size={12} className="text-red-500" />
+                                                    <span className="text-[10px] font-black uppercase tracking-widest text-red-600 dark:text-red-400">Application Deferred</span>
+                                                </div>
+                                            )}
                                             <div className="h-px flex-1 bg-gray-200 dark:bg-gray-800" />
                                         </h3>
 
                                         <div className="relative pt-12 pb-16 px-4">
-                                            {/* Background Track */}
-                                            <div className="absolute top-[68px] left-12 right-12 h-2 bg-gray-100 dark:bg-gray-800/80 rounded-full" />
+                                            <div className="absolute top-[68px] left-[64px] right-[64px] h-2">
+                                                {/* Background Track */}
+                                                <div className="absolute inset-0 bg-gray-100 dark:bg-gray-800/80 rounded-full" />
 
-                                            {/* Active Progress Line */}
-                                            <div className="absolute top-[68px] left-12 h-2 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full transition-all duration-1000 shadow-[0_0_20px_rgba(59,130,246,0.5)]"
-                                                style={{ width: `calc(${['Offer Received', 'Received Acceptance', 'Received I20'].includes(expandedApp.status) ? '100%' : ['In Review', 'On Hold'].includes(expandedApp.status) ? '66.6%' : expandedApp.status === 'Applied' ? '33.3%' : '0%'} - 24px)` }}
-                                            />
+                                                {/* Active Progress Line */}
+                                                <div className="absolute inset-y-0 left-0 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full transition-all duration-1000 shadow-[0_0_20px_rgba(59,130,246,0.5)]"
+                                                    style={{ width: ['Offer Received', 'Received Acceptance', 'Received I20'].includes(expandedApp.status === 'Application Deferred' ? expandedApp.previousStatus : expandedApp.status) ? '100%' : ['In Review', 'On Hold'].includes(expandedApp.status === 'Application Deferred' ? expandedApp.previousStatus : expandedApp.status) ? '66.6%' : (expandedApp.status === 'Application Deferred' ? expandedApp.previousStatus : expandedApp.status) === 'Applied' ? '33.3%' : '0%' }}
+                                                />
+                                            </div>
 
                                             <div className="flex justify-between relative z-10">
                                                 {[
                                                     { status: 'Shortlisted', icon: <Bookmark size={20} />, desc: 'Initial selection made' },
                                                     { status: 'Applied', icon: <FileText size={20} />, desc: 'Docs submitted to portal' },
                                                     {
-                                                        status: expandedApp.status === 'On Hold' ? 'On Hold' : 'In Review',
-                                                        icon: expandedApp.status === 'On Hold' ? <AlertCircle size={20} /> : <Search size={20} />,
-                                                        desc: expandedApp.status === 'On Hold' ? 'Application is paused' : 'University is evaluating'
+                                                        status: (expandedApp.status === 'Application Deferred' ? expandedApp.previousStatus : expandedApp.status) === 'On Hold' ? 'On Hold' : 'In Review',
+                                                        icon: (expandedApp.status === 'Application Deferred' ? expandedApp.previousStatus : expandedApp.status) === 'On Hold' ? <AlertCircle size={20} /> : <Search size={20} />,
+                                                        desc: (expandedApp.status === 'Application Deferred' ? expandedApp.previousStatus : expandedApp.status) === 'On Hold' ? 'Application is paused' : 'University is evaluating'
                                                     },
-                                                    { status: 'Offer Received', icon: <Award size={20} />, desc: 'Admission letter issued' }
+                                                    {
+                                                        status: (expandedApp.status === 'Application Deferred' ? expandedApp.previousStatus : expandedApp.status) === 'Received Acceptance' ? 'Acceptance Received' :
+                                                            (expandedApp.status === 'Application Deferred' ? expandedApp.previousStatus : expandedApp.status) === 'Received I20' ? 'I20 Received' : 'Offer Received',
+                                                        icon: <Award size={20} />,
+                                                        desc: (expandedApp.status === 'Application Deferred' ? expandedApp.previousStatus : expandedApp.status) === 'Received Acceptance' ? 'Admission confirmed' :
+                                                            (expandedApp.status === 'Application Deferred' ? expandedApp.previousStatus : expandedApp.status) === 'Received I20' ? 'I20 document issued' : 'Admission letter issued'
+                                                    }
                                                 ].map((stage, i) => {
-                                                    const isPassed = (['Offer Received', 'Received Acceptance', 'Received I20'].includes(expandedApp.status)) || (['In Review', 'On Hold'].includes(expandedApp.status) && i <= 2) || (expandedApp.status === 'Applied' && i <= 1) || (expandedApp.status === 'Shortlisted' && i === 0);
-                                                    const isCurrent = stage.status === 'Offer Received' ? ['Offer Received', 'Received Acceptance', 'Received I20'].includes(expandedApp.status) : expandedApp.status === stage.status;
+                                                    const displayStatus = expandedApp.status === 'Application Deferred' ? expandedApp.previousStatus : expandedApp.status;
+                                                    const isPassed = (['Offer Received', 'Received Acceptance', 'Received I20'].includes(displayStatus)) || (['In Review', 'On Hold'].includes(displayStatus) && i <= 2) || (displayStatus === 'Applied' && i <= 1) || (displayStatus === 'Shortlisted' && i === 0);
+                                                    const isCurrent = (i === 3 && ['Offer Received', 'Received Acceptance', 'Received I20'].includes(displayStatus)) ||
+                                                        (i === 2 && (displayStatus === 'In Review' || displayStatus === 'On Hold')) ||
+                                                        displayStatus === stage.status;
 
                                                     return (
-                                                        <div key={stage.status} className="flex flex-col items-center gap-6 w-32 sm:w-48 group/stage">
+                                                        <div key={stage.status} className="flex flex-col items-center gap-6 w-32 sm:w-32 group/stage">
                                                             <div className={`relative w-16 h-16 sm:w-20 sm:h-20 rounded-[28px] flex items-center justify-center transition-all duration-700 ${isPassed
-                                                                ? (isCurrent && expandedApp.status === 'On Hold' ? 'bg-gradient-to-br from-amber-500 to-orange-600' : 'bg-gradient-to-br from-blue-500 to-indigo-600') + ' text-white shadow-[0_15px_40px_-10px_rgba(59,130,246,0.6)] ring-8 ring-blue-500/10 dark:ring-blue-400/5'
+                                                                ? (isCurrent && displayStatus === 'On Hold' ? 'bg-gradient-to-br from-amber-500 to-orange-600' : 'bg-gradient-to-br from-blue-500 to-indigo-600') + ' text-white shadow-[0_15px_40px_-10px_rgba(59,130,246,0.6)] ring-8 ring-blue-500/10 dark:ring-blue-400/5'
                                                                 : 'bg-white dark:bg-gray-800 text-gray-400 border-2 border-gray-100 dark:border-gray-700 shadow-sm'
                                                                 } ${isCurrent ? 'scale-110 active-stage-glow' : 'scale-95 group-hover/stage:scale-100'}`}>
                                                                 {isPassed ? <Check size={32} className="animate-in zoom-in duration-500" /> : React.cloneElement(stage.icon as React.ReactElement, { size: 24 })}
@@ -889,7 +920,14 @@ const StudentUniversityApplicationView: React.FC<StudentUniversityApplicationVie
                                             </div>
                                         ) : (
                                             <div className="flex flex-col gap-6">
-                                                {myApplications.filter(app => app.universityName).map((app, idx) => renderApplicationCard(app, idx))}
+                                                {myApplications
+                                                    .filter(app => app.universityName)
+                                                    .sort((a, b) => {
+                                                        if (a.status === 'Application Deferred' && b.status !== 'Application Deferred') return 1;
+                                                        if (a.status !== 'Application Deferred' && b.status === 'Application Deferred') return -1;
+                                                        return 0;
+                                                    })
+                                                    .map((app, idx) => renderApplicationCard(app, idx))}
                                             </div>
                                         )}
                                     </div>

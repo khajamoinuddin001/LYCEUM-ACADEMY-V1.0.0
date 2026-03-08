@@ -258,6 +258,61 @@ const UniversityApplicationView: React.FC<UniversityApplicationViewProps> = ({ u
             setUpdating(false);
         }
     };
+    const handleDeferApplication = async (student: Contact, appIdx: number) => {
+        if (window.confirm('Are you sure you want to defer this application?\n\nThis will close the current application and create a duplicate with the same details.')) {
+            setUpdating(true);
+            try {
+                // Generate new ACK synchronously to wait for it safely before saving
+                let newAck = `ACK-DEFERRED-${Date.now()}`;
+                try {
+                    const nextAckRes = await api.getNextAckNumber();
+                    if (nextAckRes && nextAckRes.ackNumber) {
+                        newAck = nextAckRes.ackNumber;
+                    }
+                } catch (ackError) {
+                    console.error('Failed to get next ACK number, using fallback:', ackError);
+                }
+
+                const updatedStudent = { ...student };
+                if (updatedStudent.visaInformation?.universityApplication?.universities) {
+                    const currentApp = updatedStudent.visaInformation.universityApplication.universities[appIdx];
+
+                    // Clone application details before modifying the original
+                    const duplicateApp = {
+                        ...currentApp,
+                        ackNumber: newAck,
+                        status: 'Shortlisted',
+                        applicationSubmissionDate: new Date().toISOString(),
+                        remarks: `[${new Date().toLocaleString()}] Application deferred from original ACK: ${currentApp.ackNumber || 'Unknown'} by ${user.name}`
+                    };
+
+                    // Update original application to Deferred
+                    const existingRemarks = currentApp.remarks || '';
+                    const timestamp = new Date().toLocaleString();
+                    currentApp.previousStatus = currentApp.status;
+                    currentApp.status = 'Application Deferred';
+                    currentApp.remarks = `${existingRemarks}\n[${timestamp}] Application deferred to new ACK: ${newAck} by ${user.name}`;
+
+                    updatedStudent.visaInformation.universityApplication.universities.push(duplicateApp);
+
+                    await api.saveContact(updatedStudent, false);
+
+                    // Update UI state
+                    setStudents(prev => prev.map(s => s.id === student.id ? updatedStudent : s));
+                    setSelectedApp({
+                        student: updatedStudent,
+                        app: currentApp,
+                        idx: appIdx
+                    });
+                }
+            } catch (error) {
+                console.error('Failed to defer application:', error);
+                alert('Failed to defer application. Please try again.');
+            } finally {
+                setUpdating(false);
+            }
+        }
+    };
 
     const handleDeleteApplication = async (student: Contact, appIdx: number) => {
         if (window.confirm('Are you sure you want to permanently delete this application? This action cannot be undone.')) {
@@ -370,6 +425,10 @@ const UniversityApplicationView: React.FC<UniversityApplicationViewProps> = ({ u
         const matchesStatus = filterStatus === 'All' || item.app.status === filterStatus;
 
         return matchesSearch && matchesStatus;
+    }).sort((a, b) => {
+        const ackA = a.app.ackNumber || '';
+        const ackB = b.app.ackNumber || '';
+        return ackB.localeCompare(ackA, undefined, { numeric: true, sensitivity: 'base' });
     });
 
     const getStatusColor = (status: string) => {
@@ -379,7 +438,8 @@ const UniversityApplicationView: React.FC<UniversityApplicationViewProps> = ({ u
             'In Review': 'bg-violet-100 text-violet-600 border-violet-200 dark:bg-violet-500/10 dark:text-violet-400 dark:border-violet-500/20',
             'Offer Received': 'bg-emerald-100 text-emerald-600 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20',
             'On Hold': 'bg-amber-100 text-amber-600 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20',
-            'Rejected': 'bg-red-100 text-red-600 border-red-200 dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/20'
+            'Rejected': 'bg-red-100 text-red-600 border-red-200 dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/20',
+            'Application Deferred': 'bg-slate-200 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
         };
         return colors[status] || colors['Shortlisted'];
     };
@@ -424,6 +484,7 @@ const UniversityApplicationView: React.FC<UniversityApplicationViewProps> = ({ u
                             <option value="Offer Received">Offer Received</option>
                             <option value="On Hold">On Hold</option>
                             <option value="Rejected">Rejected</option>
+                            <option value="Application Deferred">Application Deferred</option>
                         </select>
                     </div>
 
@@ -732,8 +793,8 @@ const UniversityApplicationView: React.FC<UniversityApplicationViewProps> = ({ u
                                             })()}
                                         </div>
                                         <div>
-                                            <div className={`flex items-center gap-3 text-[11px] font-black tracking-widest uppercase transition-all duration-500 overflow-hidden ${modalScrollAmount > 50 ? 'opacity-0 max-h-0 mb-0' : 'opacity-100 max-h-16 mb-2'}`}>
-                                                <span className="text-lyceum-blue bg-blue-100 dark:bg-blue-500/20 px-3 py-1 rounded-xl">{selectedApp.app.ackNumber || 'NO-ACK'}</span>
+                                            <div className={`flex flex-wrap items-center gap-2 text-[11px] font-black tracking-widest uppercase transition-all duration-500 overflow-hidden ${modalScrollAmount > 50 ? 'opacity-0 max-h-0 mb-0' : 'opacity-100 max-h-16 mb-2'}`}>
+                                                <span className="text-lyceum-blue bg-blue-100 dark:bg-blue-500/20 px-3 py-1 border border-blue-200/50 dark:border-blue-500/30 rounded-xl">{selectedApp.app.ackNumber || 'NO-ACK'}</span>
                                             </div>
                                             <h2 className={`font-black text-gray-900 dark:text-white leading-tight tracking-tight flex flex-wrap items-center gap-3 transition-all duration-500 ${modalScrollAmount > 50 ? 'text-xl sm:text-2xl mb-0' : 'text-2xl md:text-3xl lg:text-4xl mb-1'}`}>
                                                 {selectedApp.app.universityName}
@@ -798,36 +859,68 @@ const UniversityApplicationView: React.FC<UniversityApplicationViewProps> = ({ u
                                             {/* Timeline & Progress */}
                                             <div className="xl:col-span-8 space-y-8">
                                                 <div className="bg-white dark:bg-[#1e2330]/50 rounded-[40px] p-10 border border-gray-100 dark:border-gray-800/60 shadow-lg">
-                                                    <h4 className="text-[11px] font-black uppercase tracking-widest text-gray-400 mb-8">Application Progress</h4>
+                                                    <h4 className="text-[11px] font-black uppercase tracking-[0.2em] text-lyceum-blue mb-10 flex items-center justify-between">
+                                                        <span>Application Progress</span>
+                                                        <div className="flex items-center gap-3">
+                                                            {selectedApp.app.status === 'Application Deferred' && (
+                                                                <div className="flex items-center gap-2 px-3 py-1.5 bg-red-500/10 border border-red-500/20 rounded-xl">
+                                                                    <Clock size={12} className="text-red-500" />
+                                                                    <span className="text-[10px] font-black uppercase tracking-widest text-red-600 dark:text-red-400">Application Deferred</span>
+                                                                </div>
+                                                            )}
+                                                            {selectedApp.app.intake && (
+                                                                <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+                                                                    <Calendar size={12} className="text-amber-600 dark:text-amber-400" />
+                                                                    <span className="text-[10px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-400">{selectedApp.app.intake}</span>
+                                                                </div>
+                                                            )}
+                                                            {selectedApp.app.applicationSubmissionDate && (
+                                                                <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
+                                                                    <Clock size={12} className="text-emerald-500" />
+                                                                    <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400">
+                                                                        {Math.floor((new Date().getTime() - new Date(selectedApp.app.applicationSubmissionDate).getTime()) / (1000 * 60 * 60 * 24))} Days
+                                                                    </span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </h4>
 
-                                                    <div className="relative pt-4 pb-12">
-                                                        <div className="absolute top-[32px] left-6 right-6 h-1 bg-gray-50 dark:bg-gray-900 rounded-full" />
-                                                        <div className="absolute top-[32px] left-6 h-1 bg-lyceum-blue rounded-full transition-all duration-1000"
-                                                            style={{ width: ['Offer Received', 'Received Acceptance', 'Received I20'].includes(selectedApp.app.status) ? '100%' : ['In Review', 'On Hold'].includes(selectedApp.app.status) ? '66%' : selectedApp.app.status === 'Applied' ? '33%' : '0%' }}
-                                                        />
+                                                    <div className="relative pt-6 pb-4">
+                                                        <div className="absolute top-[38px] left-12 right-12 h-1.5 bg-gray-50 dark:bg-gray-900 rounded-full overflow-hidden">
+                                                            <div className="h-full bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full transition-all duration-1000 ease-out shadow-[0_0_15px_rgba(59,130,246,0.5)]"
+                                                                style={{ width: ['Offer Received', 'Received Acceptance', 'Received I20'].includes(selectedApp.app.status === 'Application Deferred' ? selectedApp.app.previousStatus : selectedApp.app.status) ? '100%' : ['In Review', 'On Hold'].includes(selectedApp.app.status === 'Application Deferred' ? selectedApp.app.previousStatus : selectedApp.app.status) ? '66.6%' : (selectedApp.app.status === 'Application Deferred' ? selectedApp.app.previousStatus : selectedApp.app.status) === 'Applied' ? '33.3%' : '0%' }}
+                                                            />
+                                                        </div>
 
-                                                        <div className="flex justify-between relative z-10">
+                                                        <div className="flex justify-between relative z-10 px-6">
                                                             {[
                                                                 { status: 'Shortlisted', icon: <Bookmark size={14} /> },
                                                                 { status: 'Applied', icon: <FileText size={14} /> },
                                                                 {
-                                                                    status: selectedApp.app.status === 'On Hold' ? 'On Hold' : 'In Review',
-                                                                    icon: selectedApp.app.status === 'On Hold' ? <AlertCircle size={14} /> : <SearchIcon size={14} />
+                                                                    status: (selectedApp.app.status === 'Application Deferred' ? selectedApp.app.previousStatus : selectedApp.app.status) === 'On Hold' ? 'On Hold' : 'In Review',
+                                                                    icon: (selectedApp.app.status === 'Application Deferred' ? selectedApp.app.previousStatus : selectedApp.app.status) === 'On Hold' ? <AlertCircle size={14} /> : <SearchIcon size={14} />
                                                                 },
-                                                                { status: 'Offer Received', icon: <Award size={14} /> }
+                                                                {
+                                                                    status: (selectedApp.app.status === 'Application Deferred' ? selectedApp.app.previousStatus : selectedApp.app.status) === 'Received Acceptance' ? 'Acceptance Received' :
+                                                                        (selectedApp.app.status === 'Application Deferred' ? selectedApp.app.previousStatus : selectedApp.app.status) === 'Received I20' ? 'I20 Received' : 'Offer Received',
+                                                                    icon: <Award size={14} />
+                                                                }
                                                             ].map((stage, i) => {
-                                                                const isPassed = (['Offer Received', 'Received Acceptance', 'Received I20'].includes(selectedApp.app.status)) || (['In Review', 'On Hold'].includes(selectedApp.app.status) && i <= 2) || (selectedApp.app.status === 'Applied' && i <= 1) || (selectedApp.app.status === 'Shortlisted' && i === 0);
-                                                                const isCurrent = stage.status === 'Offer Received' ? ['Offer Received', 'Received Acceptance', 'Received I20'].includes(selectedApp.app.status) : selectedApp.app.status === stage.status;
+                                                                const displayStatus = selectedApp.app.status === 'Application Deferred' ? selectedApp.app.previousStatus : selectedApp.app.status;
+                                                                const isPassed = (['Offer Received', 'Received Acceptance', 'Received I20'].includes(displayStatus)) || (['In Review', 'On Hold'].includes(displayStatus) && i <= 2) || (displayStatus === 'Applied' && i <= 1) || (displayStatus === 'Shortlisted' && i === 0);
+                                                                const isCurrent = (i === 3 && ['Offer Received', 'Received Acceptance', 'Received I20'].includes(displayStatus)) ||
+                                                                    (i === 2 && (displayStatus === 'In Review' || displayStatus === 'On Hold')) ||
+                                                                    displayStatus === stage.status;
 
                                                                 return (
-                                                                    <div key={stage.status} className="flex flex-col items-center gap-3">
-                                                                        <div className={`w-10 h-10 rounded-[14px] flex items-center justify-center transition-all duration-500 ${isPassed
-                                                                            ? (isCurrent && selectedApp.app.status === 'On Hold' ? 'bg-amber-600' : 'bg-lyceum-blue') + ' text-white shadow-lg shadow-blue-500/20'
-                                                                            : 'bg-white dark:bg-gray-700 text-gray-300 border border-gray-100 dark:border-gray-600'
-                                                                            } ${isCurrent ? 'scale-110 shadow-xl' : ''}`}>
-                                                                            {isCurrent ? <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" /> : stage.icon}
+                                                                    <div key={stage.status} className="w-12 flex flex-col items-center gap-4">
+                                                                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-700 ${isPassed
+                                                                            ? (isCurrent && selectedApp.app.status === 'On Hold' ? 'bg-amber-600' : 'bg-gradient-to-br from-blue-500 to-indigo-600') + ' text-white shadow-xl shadow-blue-500/30'
+                                                                            : 'bg-white dark:bg-gray-800 text-gray-400 border border-gray-100 dark:border-gray-700'
+                                                                            } ${isCurrent ? 'scale-110 ring-4 ring-blue-500/10' : ''}`}>
+                                                                            {isCurrent ? <div className="w-2 h-2 rounded-full bg-white animate-pulse shadow-[0_0_8px_white]" /> : stage.icon}
                                                                         </div>
-                                                                        <span className={`text-[10px] font-black tracking-widest uppercase ${isCurrent ? (selectedApp.app.status === 'On Hold' ? 'text-amber-600' : 'text-gray-900 dark:text-gray-100') : 'text-gray-400'}`}>{stage.status}</span>
+                                                                        <span className={`text-[10px] font-black tracking-widest uppercase transition-colors duration-300 ${isCurrent ? (displayStatus === 'On Hold' ? 'text-amber-600' : 'text-lyceum-blue') : 'text-gray-400'}`}>{stage.status}</span>
                                                                     </div>
                                                                 );
                                                             })}
@@ -1095,47 +1188,60 @@ const UniversityApplicationView: React.FC<UniversityApplicationViewProps> = ({ u
                                                     <div className="space-y-3">
                                                         <button
                                                             onClick={() => handleUpdateStatus(selectedApp.student, selectedApp.idx, 'Applied')}
-                                                            disabled={updating || selectedApp.app.status === 'Applied'}
+                                                            disabled={updating || selectedApp.app.status === 'Applied' || selectedApp.app.status === 'Application Deferred'}
                                                             className="w-full py-3.5 bg-blue-600 hover:bg-blue-500 text-white font-black rounded-2xl text-xs tracking-widest uppercase transition-all flex items-center justify-center gap-2 group disabled:opacity-50"
                                                         >
                                                             <FileText size={16} /> Mark as Applied
                                                         </button>
                                                         <button
                                                             onClick={() => handleUpdateStatus(selectedApp.student, selectedApp.idx, 'In Review')}
-                                                            disabled={updating || selectedApp.app.status === 'In Review'}
+                                                            disabled={updating || selectedApp.app.status === 'In Review' || selectedApp.app.status === 'Application Deferred'}
                                                             className="w-full py-3.5 bg-violet-600 hover:bg-violet-500 text-white font-black rounded-2xl text-xs tracking-widest uppercase transition-all flex items-center justify-center gap-2 group disabled:opacity-50"
                                                         >
                                                             <SearchIcon size={16} /> Start Review
                                                         </button>
                                                         <button
                                                             onClick={() => handleUpdateStatus(selectedApp.student, selectedApp.idx, 'On Hold')}
-                                                            disabled={updating || selectedApp.app.status === 'On Hold'}
+                                                            disabled={updating || selectedApp.app.status === 'On Hold' || selectedApp.app.status === 'Application Deferred'}
                                                             className="w-full py-3.5 bg-amber-600 hover:bg-amber-500 text-white font-black rounded-2xl text-xs tracking-widest uppercase transition-all flex items-center justify-center gap-2 group disabled:opacity-50"
                                                         >
                                                             <AlertCircle size={16} /> Mark On Hold
                                                         </button>
                                                         <button
                                                             onClick={() => handleUpdateStatus(selectedApp.student, selectedApp.idx, 'Received Acceptance')}
-                                                            disabled={updating || selectedApp.app.status === 'Received Acceptance'}
+                                                            disabled={updating || selectedApp.app.status === 'Received Acceptance' || selectedApp.app.status === 'Application Deferred'}
                                                             className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-2xl text-xs tracking-widest uppercase transition-all flex items-center justify-center gap-2 group disabled:opacity-50"
                                                         >
                                                             <Award size={16} /> Received Acceptance
                                                         </button>
                                                         <button
                                                             onClick={() => handleUpdateStatus(selectedApp.student, selectedApp.idx, 'Received I20')}
-                                                            disabled={updating || selectedApp.app.status === 'Received I20'}
+                                                            disabled={updating || selectedApp.app.status === 'Received I20' || selectedApp.app.status === 'Application Deferred'}
                                                             className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-2xl text-xs tracking-widest uppercase transition-all flex items-center justify-center gap-2 group disabled:opacity-50"
                                                         >
                                                             <Award size={16} /> Received I20
                                                         </button>
                                                         <button
                                                             onClick={() => handleUpdateStatus(selectedApp.student, selectedApp.idx, 'Rejected')}
-                                                            disabled={updating || selectedApp.app.status === 'Rejected'}
+                                                            disabled={updating || selectedApp.app.status === 'Rejected' || selectedApp.app.status === 'Application Deferred'}
                                                             className="w-full py-3.5 bg-red-600 hover:bg-red-500 text-white font-black rounded-2xl text-xs tracking-widest uppercase transition-all flex items-center justify-center gap-2 group disabled:opacity-50"
                                                         >
                                                             <X size={16} /> Reject App
                                                         </button>
                                                     </div>
+
+                                                    {selectedApp.app.status !== 'Application Deferred' && (
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleDeferApplication(selectedApp.student, selectedApp.idx);
+                                                            }}
+                                                            disabled={updating}
+                                                            className="w-full mt-4 py-3.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white font-black rounded-2xl text-[10px] tracking-[0.2em] uppercase transition-all flex items-center justify-center gap-2 group border border-slate-700 hover:border-slate-600 shadow-sm"
+                                                        >
+                                                            <Clock size={14} className="transition-transform group-hover:-rotate-90" /> Defer Application
+                                                        </button>
+                                                    )}
                                                 </div>
 
                                                 <div className="bg-[#1e2330]/50 p-8 border border-gray-800/60 rounded-[40px] shadow-lg">
@@ -1159,8 +1265,7 @@ const UniversityApplicationView: React.FC<UniversityApplicationViewProps> = ({ u
                         </div>
                     </div>
                 </div>
-            )
-            }
+            )}
 
             <ManualApplicationModal
                 isOpen={showApplyModal}
@@ -1169,7 +1274,7 @@ const UniversityApplicationView: React.FC<UniversityApplicationViewProps> = ({ u
                     fetchStudents();
                 }}
             />
-        </div>
+        </div >
     );
 };
 

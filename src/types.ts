@@ -129,6 +129,13 @@ export interface UniversityApplicationDetails {
   applicationSubmissionDate?: string;
   status?: string;
   remarks?: string;
+  ackNumber?: string;
+  intake?: string;
+  country?: string;
+  logoUrl?: string;
+  applicationFee?: string;
+  enrollmentDeposit?: string;
+  previousStatus?: string;
 }
 
 export interface WorkDetail {
