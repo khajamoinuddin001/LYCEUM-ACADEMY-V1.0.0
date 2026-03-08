@@ -4862,6 +4862,19 @@ name = $1,
     // Trigger automation
     evaluateAutomation('Visit Updated', payload);
 
+    // Also fire 'Visit Checkout' if the visitor is being checked out
+    const isCheckingOut = visitor.status === 'Checked Out' || visitor.checkOut;
+    if (isCheckingOut) {
+      const checkoutPayload = {
+        ...payload,
+        checkout_time: v.check_out || new Date().toISOString(),
+        visit_duration_minutes: v.check_in && v.check_out
+          ? Math.round((new Date(v.check_out) - new Date(v.check_in)) / 60000)
+          : null
+      };
+      evaluateAutomation('Visit Checkout', checkoutPayload);
+    }
+
     res.json({
       ...v,
       scheduledCheckIn: v.scheduled_check_in,

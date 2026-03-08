@@ -10,6 +10,7 @@ const TRIGGERS = [
     'Task Completed',
     'Visit Created',
     'Visit Updated',
+    'Visit Checkout',
     'Contact Created',
     'Ticket Created',
     'Ticket Updated',
