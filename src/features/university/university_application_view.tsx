@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Contact } from '@/types';
+import { Contact, UniversityCourse } from '@/types';
 import * as api from '@/utils/api';
 import {
     GraduationCap, Search, School, Globe2, Calendar,
@@ -31,6 +31,7 @@ const DEFAULT_MESSAGES = [
 const UniversityApplicationView: React.FC<UniversityApplicationViewProps> = ({ user }) => {
     const [predefinedMessages, setPredefinedMessages] = useState<any[]>(DEFAULT_MESSAGES);
     const [isLoadingMessages, setIsLoadingMessages] = useState(true);
+    const [universityCourses, setUniversityCourses] = useState<UniversityCourse[]>([]);
 
     useEffect(() => {
         const fetchGlobalMessages = async () => {
@@ -45,7 +46,16 @@ const UniversityApplicationView: React.FC<UniversityApplicationViewProps> = ({ u
                 setIsLoadingMessages(false);
             }
         };
+        const fetchUniversityCourses = async () => {
+            try {
+                const data = await api.getUniversityCourses();
+                setUniversityCourses(data);
+            } catch (error) {
+                console.error('Failed to fetch university courses:', error);
+            }
+        };
         fetchGlobalMessages();
+        fetchUniversityCourses();
     }, []);
 
     const saveGlobalMessages = async (messages: any[]) => {
@@ -368,6 +378,7 @@ const UniversityApplicationView: React.FC<UniversityApplicationViewProps> = ({ u
             'Applied': 'bg-blue-100 text-blue-600 border-blue-200 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20',
             'In Review': 'bg-violet-100 text-violet-600 border-violet-200 dark:bg-violet-500/10 dark:text-violet-400 dark:border-violet-500/20',
             'Offer Received': 'bg-emerald-100 text-emerald-600 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20',
+            'On Hold': 'bg-amber-100 text-amber-600 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20',
             'Rejected': 'bg-red-100 text-red-600 border-red-200 dark:bg-red-500/10 dark:text-red-400 dark:border-red-500/20'
         };
         return colors[status] || colors['Shortlisted'];
@@ -411,6 +422,7 @@ const UniversityApplicationView: React.FC<UniversityApplicationViewProps> = ({ u
                             <option value="Applied">Applied</option>
                             <option value="In Review">In Review</option>
                             <option value="Offer Received">Offer Received</option>
+                            <option value="On Hold">On Hold</option>
                             <option value="Rejected">Rejected</option>
                         </select>
                     </div>
@@ -708,13 +720,16 @@ const UniversityApplicationView: React.FC<UniversityApplicationViewProps> = ({ u
                                 <div className="relative max-w-7xl mx-auto flex items-center justify-between h-full px-8 lg:px-12">
                                     <div className="flex items-center gap-6 md:gap-8 transition-all duration-500">
                                         <div className={`transition-all duration-500 rounded-[32px] bg-white shadow-2xl flex items-center justify-center shrink-0 overflow-hidden border border-gray-100 dark:border-white/5 ${modalScrollAmount > 50 ? 'w-14 h-14 p-2' : 'w-24 h-24 md:w-28 md:h-28 p-4'}`}>
-                                            {selectedApp.app.logoUrl ? (
-                                                <img src={`${api.API_BASE_URL}${selectedApp.app.logoUrl}`} alt="" className="w-full h-full object-contain" />
-                                            ) : (
-                                                <span className={`font-black text-gray-400 transition-all duration-500 ${modalScrollAmount > 50 ? 'text-xl' : 'text-4xl'}`}>
-                                                    {selectedApp.app.universityName.charAt(0)}
-                                                </span>
-                                            )}
+                                            {(() => {
+                                                const lUrl = selectedApp.app.logoUrl || universityCourses.find(uc => uc.universityName === selectedApp.app.universityName)?.logoUrl;
+                                                return lUrl ? (
+                                                    <img src={`${api.API_BASE_URL}${lUrl}`} alt="" className="w-full h-full object-contain" />
+                                                ) : (
+                                                    <span className={`font-black text-gray-400 transition-all duration-500 ${modalScrollAmount > 50 ? 'text-xl' : 'text-4xl'}`}>
+                                                        {selectedApp.app.universityName.charAt(0)}
+                                                    </span>
+                                                );
+                                            })()}
                                         </div>
                                         <div>
                                             <div className={`flex items-center gap-3 text-[11px] font-black tracking-widest uppercase transition-all duration-500 overflow-hidden ${modalScrollAmount > 50 ? 'opacity-0 max-h-0 mb-0' : 'opacity-100 max-h-16 mb-2'}`}>
@@ -1088,6 +1103,13 @@ const UniversityApplicationView: React.FC<UniversityApplicationViewProps> = ({ u
                                                             className="w-full py-3.5 bg-violet-600 hover:bg-violet-500 text-white font-black rounded-2xl text-xs tracking-widest uppercase transition-all flex items-center justify-center gap-2 group disabled:opacity-50"
                                                         >
                                                             <SearchIcon size={16} /> Start Review
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleUpdateStatus(selectedApp.student, selectedApp.idx, 'On Hold')}
+                                                            disabled={updating || selectedApp.app.status === 'On Hold'}
+                                                            className="w-full py-3.5 bg-amber-600 hover:bg-amber-500 text-white font-black rounded-2xl text-xs tracking-widest uppercase transition-all flex items-center justify-center gap-2 group disabled:opacity-50"
+                                                        >
+                                                            <AlertCircle size={16} /> Mark On Hold
                                                         </button>
                                                         <button
                                                             onClick={() => handleUpdateStatus(selectedApp.student, selectedApp.idx, 'Received Acceptance')}

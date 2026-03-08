@@ -24,7 +24,11 @@ const ManualApplicationModal: React.FC<ManualApplicationModalProps> = ({ isOpen,
         universityName: '',
         course: '',
         degree: "Master's",
-        status: 'Applied'
+        status: 'Applied',
+        logoUrl: '',
+        country: '',
+        applicationFee: '',
+        enrollmentDeposit: ''
     });
 
     useEffect(() => {
@@ -37,7 +41,11 @@ const ManualApplicationModal: React.FC<ManualApplicationModalProps> = ({ isOpen,
                 universityName: '',
                 course: '',
                 degree: "Master's",
-                status: 'Applied'
+                status: 'Applied',
+                logoUrl: '',
+                country: '',
+                applicationFee: '',
+                enrollmentDeposit: ''
             });
             setIsUniDropdownOpen(false);
             setIsCourseDropdownOpen(false);
@@ -99,7 +107,10 @@ const ManualApplicationModal: React.FC<ManualApplicationModalProps> = ({ isOpen,
                 status: formData.status,
                 ackNumber: newAck,
                 applicationSubmissionDate: new Date().toISOString(),
-                // Empty required arrays based on generic shape (if any backend validation needs them)
+                logoUrl: formData.logoUrl || null,
+                country: formData.country || '',
+                applicationFee: formData.applicationFee || null,
+                enrollmentDeposit: formData.enrollmentDeposit || null,
             };
 
             updatedContact.visaInformation.universityApplication.universities.push(newApp);
@@ -145,7 +156,11 @@ const ManualApplicationModal: React.FC<ManualApplicationModalProps> = ({ isOpen,
         setFormData({
             ...formData,
             universityName: uc.universityName,
-            course: '' // Reset course when university changes
+            course: '', // Reset course when university changes
+            logoUrl: uc.logoUrl || '',
+            country: uc.country || '',
+            applicationFee: uc.applicationFee || '',
+            enrollmentDeposit: uc.enrollmentDeposit || ''
         });
         setIsUniDropdownOpen(false);
         setIsCourseDropdownOpen(true);

@@ -37,6 +37,7 @@ const StudentUniversityApplicationView: React.FC<StudentUniversityApplicationVie
     });
 
     const [availableCourses, setAvailableCourses] = useState<UniversityCourse[]>([]);
+    const [universityRegistry, setUniversityRegistry] = useState<UniversityCourse[]>([]);
     const [selectedCountry, setSelectedCountry] = useState(savedState?.selectedCountry || '');
     const [myApplications, setMyApplications] = useState(student.visaInformation?.universityApplication?.universities || []);
 
@@ -103,6 +104,16 @@ const StudentUniversityApplicationView: React.FC<StudentUniversityApplicationVie
     };
 
     useEffect(() => {
+        const fetchRegistry = async () => {
+            try {
+                const data = await api.getUniversityCourses();
+                setUniversityRegistry(data);
+            } catch (error) {
+                console.error('Failed to fetch university registry:', error);
+            }
+        };
+        fetchRegistry();
+
         if (selectedCountry) {
             fetchCourses(selectedCountry);
         }
@@ -410,10 +421,14 @@ const StudentUniversityApplicationView: React.FC<StudentUniversityApplicationVie
                         <div className="flex gap-4 items-center">
                             {/* University logo or initial */}
                             <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-gray-100 to-gray-50 dark:from-gray-700/80 dark:to-gray-800/80 flex items-center justify-center text-gray-700 dark:text-gray-200 font-bold text-2xl shadow-[inset_0_2px_10px_rgba(0,0,0,0.02)] border border-white/50 dark:border-gray-600/30 group-hover:scale-105 transition-all duration-300 overflow-hidden">
-                                {app.logoUrl
-                                    ? <img src={`${api.API_BASE_URL}${app.logoUrl}`} alt={app.universityName} className="w-full h-full object-cover" />
-                                    : app.universityName.charAt(0)
-                                }
+                                {(() => {
+                                    const lUrl = app.logoUrl || universityRegistry.find(uc => uc.universityName === app.universityName)?.logoUrl;
+                                    return lUrl ? (
+                                        <img src={`${api.API_BASE_URL}${lUrl}`} alt={app.universityName} className="w-full h-full object-cover" />
+                                    ) : (
+                                        app.universityName.charAt(0)
+                                    );
+                                })()}
                             </div>
                             <div>
                                 <h3 className="font-extrabold text-gray-900 dark:text-white text-lg leading-tight line-clamp-1 group-hover:text-lyceum-blue transition-colors">
@@ -530,13 +545,16 @@ const StudentUniversityApplicationView: React.FC<StudentUniversityApplicationVie
                         <div className={`absolute inset-0 px-8 sm:px-12 flex items-end transition-all duration-500 ${scrollAmount > 50 ? 'justify-center sm:justify-end py-4' : 'justify-start py-12'}`}>
                             <div className={`flex items-center max-w-7xl mx-auto w-full transition-all duration-500 ${scrollAmount > 50 ? 'gap-4 scale-90 translate-x-24 sm:translate-x-32' : 'gap-6 sm:gap-10'}`}>
                                 <div className={`rounded-[32px] bg-white shadow-2xl flex items-center justify-center shrink-0 border-4 border-white/10 overflow-hidden transition-all duration-500 mb-0 ${scrollAmount > 50 ? 'w-12 h-12 sm:w-16 sm:h-16' : 'w-24 h-24 sm:w-40 sm:h-40'}`}>
-                                    {expandedApp.logoUrl ? (
-                                        <img src={`${api.API_BASE_URL}${expandedApp.logoUrl}`} alt="" className="w-full h-full object-cover" />
-                                    ) : (
-                                        <span className={`font-black text-gray-900 transition-all ${scrollAmount > 50 ? 'text-xl' : 'text-4xl'}`}>
-                                            {expandedApp.universityName.charAt(0)}
-                                        </span>
-                                    )}
+                                    {(() => {
+                                        const lUrl = expandedApp.logoUrl || universityRegistry.find(uc => uc.universityName === expandedApp.universityName)?.logoUrl;
+                                        return lUrl ? (
+                                            <img src={`${api.API_BASE_URL}${lUrl}`} alt="" className="w-full h-full object-cover" />
+                                        ) : (
+                                            <span className={`font-black text-gray-900 transition-all ${scrollAmount > 50 ? 'text-xl' : 'text-4xl'}`}>
+                                                {expandedApp.universityName.charAt(0)}
+                                            </span>
+                                        );
+                                    })()}
                                 </div>
                                 <div className={`transition-all duration-500 ${scrollAmount > 50 ? 'text-gray-900 dark:text-white pb-0' : 'text-white pb-2'}`}>
                                     <div className={`flex flex-wrap items-center gap-3 transition-all duration-500 ${scrollAmount > 50 ? 'mb-0 scale-75 origin-left opacity-0 h-0 w-0 pointer-events-none' : 'mb-4'}`}>
