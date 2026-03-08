@@ -803,28 +803,31 @@ const UniversityApplicationView: React.FC<UniversityApplicationViewProps> = ({ u
                                                     <div className="relative pt-4 pb-12">
                                                         <div className="absolute top-[32px] left-6 right-6 h-1 bg-gray-50 dark:bg-gray-900 rounded-full" />
                                                         <div className="absolute top-[32px] left-6 h-1 bg-lyceum-blue rounded-full transition-all duration-1000"
-                                                            style={{ width: ['Offer Received', 'Received Acceptance', 'Received I20'].includes(selectedApp.app.status) ? '100%' : selectedApp.app.status === 'In Review' ? '66%' : selectedApp.app.status === 'Applied' ? '33%' : '0%' }}
+                                                            style={{ width: ['Offer Received', 'Received Acceptance', 'Received I20'].includes(selectedApp.app.status) ? '100%' : ['In Review', 'On Hold'].includes(selectedApp.app.status) ? '66%' : selectedApp.app.status === 'Applied' ? '33%' : '0%' }}
                                                         />
 
                                                         <div className="flex justify-between relative z-10">
                                                             {[
                                                                 { status: 'Shortlisted', icon: <Bookmark size={14} /> },
                                                                 { status: 'Applied', icon: <FileText size={14} /> },
-                                                                { status: 'In Review', icon: <SearchIcon size={14} /> },
+                                                                {
+                                                                    status: selectedApp.app.status === 'On Hold' ? 'On Hold' : 'In Review',
+                                                                    icon: selectedApp.app.status === 'On Hold' ? <AlertCircle size={14} /> : <SearchIcon size={14} />
+                                                                },
                                                                 { status: 'Offer Received', icon: <Award size={14} /> }
                                                             ].map((stage, i) => {
-                                                                const isPassed = (['Offer Received', 'Received Acceptance', 'Received I20'].includes(selectedApp.app.status)) || (selectedApp.app.status === 'In Review' && i <= 2) || (selectedApp.app.status === 'Applied' && i <= 1) || (selectedApp.app.status === 'Shortlisted' && i === 0);
+                                                                const isPassed = (['Offer Received', 'Received Acceptance', 'Received I20'].includes(selectedApp.app.status)) || (['In Review', 'On Hold'].includes(selectedApp.app.status) && i <= 2) || (selectedApp.app.status === 'Applied' && i <= 1) || (selectedApp.app.status === 'Shortlisted' && i === 0);
                                                                 const isCurrent = stage.status === 'Offer Received' ? ['Offer Received', 'Received Acceptance', 'Received I20'].includes(selectedApp.app.status) : selectedApp.app.status === stage.status;
 
                                                                 return (
                                                                     <div key={stage.status} className="flex flex-col items-center gap-3">
                                                                         <div className={`w-10 h-10 rounded-[14px] flex items-center justify-center transition-all duration-500 ${isPassed
-                                                                            ? 'bg-lyceum-blue text-white shadow-lg shadow-blue-500/20'
+                                                                            ? (isCurrent && selectedApp.app.status === 'On Hold' ? 'bg-amber-600' : 'bg-lyceum-blue') + ' text-white shadow-lg shadow-blue-500/20'
                                                                             : 'bg-white dark:bg-gray-700 text-gray-300 border border-gray-100 dark:border-gray-600'
                                                                             } ${isCurrent ? 'scale-110 shadow-xl' : ''}`}>
                                                                             {isCurrent ? <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" /> : stage.icon}
                                                                         </div>
-                                                                        <span className={`text-[10px] font-black tracking-widest uppercase ${isCurrent ? 'text-gray-900 dark:text-gray-100' : 'text-gray-400'}`}>{stage.status}</span>
+                                                                        <span className={`text-[10px] font-black tracking-widest uppercase ${isCurrent ? (selectedApp.app.status === 'On Hold' ? 'text-amber-600' : 'text-gray-900 dark:text-gray-100') : 'text-gray-400'}`}>{stage.status}</span>
                                                                     </div>
                                                                 );
                                                             })}
