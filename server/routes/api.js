@@ -1074,8 +1074,13 @@ name = $1, email = $2, phone = $3, department = $4, major = $5, notes = $6,
               contact_email: updatedContact.email,
               contact_phone: updatedContact.phone,
               university_name: newApp.universityName,
-              course_name: newApp.course,
+              course_name: newApp.course, // Kept for backwards compatibility
+              program: newApp.course,
               ack_number: newApp.ackNumber,
+              intake: newApp.intake,
+              application_submission_date: newApp.applicationSubmissionDate,
+              student_portal_remark: newApp.studentPortalRemark,
+              application_status: newApp.status,
               old_status: oldApp.status,
               new_status: newApp.status
             });
