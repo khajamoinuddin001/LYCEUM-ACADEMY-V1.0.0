@@ -100,6 +100,9 @@ const UniversityApplicationView: React.FC<UniversityApplicationViewProps> = ({ u
     const [showTaskModal, setShowTaskModal] = useState(false);
     const [prefilledTask, setPrefilledTask] = useState<any>(null);
     const [activeTab, setActiveTab] = useState<'ongoing' | 'completed'>('ongoing');
+    const [editingInternalNote, setEditingInternalNote] = useState(false);
+    const [internalNoteInput, setInternalNoteInput] = useState('');
+    const [savingInternalNote, setSavingInternalNote] = useState(false);
 
     useEffect(() => {
         fetchStudents();
@@ -428,6 +431,33 @@ const UniversityApplicationView: React.FC<UniversityApplicationViewProps> = ({ u
         }
     };
 
+    const handleSaveInternalNote = async (newNote: string) => {
+        if (!selectedApp) return;
+        setSavingInternalNote(true);
+        try {
+            const updatedStudent = { ...selectedApp.student };
+            if (updatedStudent.visaInformation?.universityApplication?.universities) {
+                updatedStudent.visaInformation.universityApplication.universities[selectedApp.idx].internalNote = newNote;
+
+                await api.saveContact(updatedStudent, false);
+
+                // Update local state
+                setStudents(prev => prev.map(s => s.id === updatedStudent.id ? updatedStudent : s));
+                setSelectedApp({
+                    ...selectedApp,
+                    student: updatedStudent,
+                    app: updatedStudent.visaInformation.universityApplication.universities[selectedApp.idx]
+                });
+                setEditingInternalNote(false);
+            }
+        } catch (error) {
+            console.error('Failed to save internal note:', error);
+            alert('Failed to save internal note');
+        } finally {
+            setSavingInternalNote(false);
+        }
+    };
+
     const allApps = students.flatMap(student =>
         (student.visaInformation?.universityApplication?.universities || [])
             .filter(u => u.universityName)
@@ -444,7 +474,7 @@ const UniversityApplicationView: React.FC<UniversityApplicationViewProps> = ({ u
 
         // Check if application is completed
         const isCompleted = ['Received I20', 'Rejected', 'Application Deferred'].includes(item.app.status);
-        
+
         let matchesTab = false;
         if (activeTab === 'ongoing' && !isCompleted) matchesTab = true;
         if (activeTab === 'completed' && isCompleted) matchesTab = true;
@@ -481,26 +511,24 @@ const UniversityApplicationView: React.FC<UniversityApplicationViewProps> = ({ u
                         Application Management
                     </h1>
                     <p className="text-gray-500 dark:text-gray-400 mt-1 font-medium">Verify credentials and manage student admission statuses</p>
-                    
+
                     {/* Tabs */}
                     <div className="flex gap-4 mt-6 border-b border-gray-200 dark:border-gray-800">
                         <button
                             onClick={() => setActiveTab('ongoing')}
-                            className={`pb-3 font-bold text-sm transition-colors border-b-2 ${
-                                activeTab === 'ongoing'
-                                    ? 'border-lyceum-blue text-lyceum-blue'
-                                    : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-                            }`}
+                            className={`pb-3 font-bold text-sm transition-colors border-b-2 ${activeTab === 'ongoing'
+                                ? 'border-lyceum-blue text-lyceum-blue'
+                                : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                                }`}
                         >
                             Ongoing Applications
                         </button>
                         <button
                             onClick={() => setActiveTab('completed')}
-                            className={`pb-3 font-bold text-sm transition-colors border-b-2 ${
-                                activeTab === 'completed'
-                                    ? 'border-lyceum-blue text-lyceum-blue'
-                                    : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-                            }`}
+                            className={`pb-3 font-bold text-sm transition-colors border-b-2 ${activeTab === 'completed'
+                                ? 'border-lyceum-blue text-lyceum-blue'
+                                : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                                }`}
                         >
                             Completed Applications
                         </button>
@@ -1234,9 +1262,69 @@ const UniversityApplicationView: React.FC<UniversityApplicationViewProps> = ({ u
                                                     )}
                                                 </div>
 
+                                                {['admin', 'staff'].includes(user?.role?.toLowerCase()) && (
+                                                    <div className="bg-white dark:bg-[#1e2330]/50 rounded-[40px] p-10 border border-amber-100 dark:border-amber-900/40 shadow-lg flex flex-col relative overflow-hidden">
+                                                        <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/5 -mr-10 -mt-10 rounded-full blur-2xl pointer-events-none" />
+
+                                                        <div className="flex items-center justify-between mb-6">
+                                                            <h4 className="text-[11px] text-amber-600 dark:text-amber-500 font-bold uppercase tracking-widest flex items-center gap-2">
+                                                                <FileText size={14} />
+                                                                Internal Staff Notes
+                                                            </h4>
+                                                            <div className="flex items-center gap-2">
+                                                                {!editingInternalNote ? (
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            setEditingInternalNote(true);
+                                                                            setInternalNoteInput(selectedApp.app.internalNote || '');
+                                                                        }}
+                                                                        className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 dark:bg-amber-500/10 hover:bg-amber-100 dark:hover:bg-amber-500/20 text-amber-600 dark:text-amber-500 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
+                                                                    >
+                                                                        <Edit3 size={12} />
+                                                                        Edit
+                                                                    </button>
+                                                                ) : (
+                                                                    <div className="flex items-center gap-4">
+                                                                        <button
+                                                                            onClick={() => setEditingInternalNote(false)}
+                                                                            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-[10px] font-bold uppercase tracking-widest transition-colors"
+                                                                        >
+                                                                            Cancel
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => handleSaveInternalNote(internalNoteInput)}
+                                                                            disabled={savingInternalNote}
+                                                                            className="text-amber-600 hover:text-amber-700 bg-amber-50 dark:bg-amber-500/10 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center gap-1 transition-colors disabled:opacity-50"
+                                                                        >
+                                                                            {savingInternalNote ? <div className="w-3 h-3 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" /> : <Save size={12} />}
+                                                                            Save Note
+                                                                        </button>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
+
+                                                        {!editingInternalNote ? (
+                                                            <div className="p-5 bg-amber-50/50 dark:bg-amber-500/5 rounded-2xl border border-amber-100/50 dark:border-amber-500/10 min-h-[80px] text-sm text-gray-700 dark:text-gray-300 font-medium whitespace-pre-wrap">
+                                                                {selectedApp.app.internalNote || (
+                                                                    <span className="text-gray-400 italic">No internal staff notes documented yet.</span>
+                                                                )}
+                                                            </div>
+                                                        ) : (
+                                                            <textarea
+                                                                value={internalNoteInput}
+                                                                onChange={(e) => setInternalNoteInput(e.target.value)}
+                                                                className="w-full p-4 bg-white dark:bg-gray-800 border-2 border-amber-200 dark:border-amber-700/50 focus:border-amber-400 rounded-2xl text-sm text-gray-900 dark:text-gray-100 min-h-[120px] outline-none transition-all custom-scrollbar resize-y"
+                                                                placeholder="Type private notes visible only to staff here..."
+                                                                autoFocus
+                                                            />
+                                                        )}
+                                                    </div>
+                                                )}
+
                                                 <div className="bg-white dark:bg-[#1e2330]/50 rounded-[40px] p-10 border border-gray-100 dark:border-gray-800/60 shadow-lg flex flex-col">
                                                     <div className="flex justify-between items-center mb-6">
-                                                        <h4 className="text-[11px] font-black uppercase tracking-widest text-gray-400">Internal Remarks</h4>
+                                                        <h4 className="text-[11px] font-black uppercase tracking-widest text-gray-400">System Logs</h4>
                                                     </div>
                                                     <div className="p-5 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700 max-h-[250px] overflow-y-auto text-[13px] text-gray-600 dark:text-gray-400 whitespace-pre-wrap font-medium custom-scrollbar">
                                                         {selectedApp.app.remarks || "No operational logs yet."}
