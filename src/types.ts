@@ -32,7 +32,7 @@ export interface Channel {
   members?: number[];
 }
 
-export type TodoStatus = 'todo' | 'inProgress' | 'done';
+export type TodoStatus = 'todo' | 'inProgress' | 'done' | 'paused';
 export type TaskPriority = 'Low' | 'Medium' | 'High';
 
 export type ActivityType = 'Call' | 'Meeting' | 'Start Application' | 'Email' | 'To-Do' | 'Upload Document' | 'Request Signature' | 'Grant Approval' | 'Other';

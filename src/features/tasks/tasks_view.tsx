@@ -75,6 +75,7 @@ const statusColors: Record<TodoStatus, string> = {
     todo: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400',
     inProgress: 'bg-lyceum-blue/10 text-lyceum-blue dark:bg-lyceum-blue/20 dark:text-blue-400',
     done: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+    paused: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
 };
 
 const TasksView: React.FC<TasksViewProps> = ({
@@ -114,13 +115,19 @@ const TasksView: React.FC<TasksViewProps> = ({
     const [contactSearch, setContactSearch] = useState('');
     const [isContactDropdownOpen, setIsContactDropdownOpen] = useState(false);
 
+    // Advanced Filters State
+    const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+    const [advancedStudent, setAdvancedStudent] = useState('');
+    const [advancedStatus, setAdvancedStatus] = useState<'All' | 'Active' | 'Paused'>('All');
+    const [advancedStaff, setAdvancedStaff] = useState<string>('All');
+
     const isAdmin = user.role === 'Admin';
 
     useEffect(() => {
-        if (isAdmin) {
+        if (isAdmin || user.role === 'Staff') {
             getStaffMembers().then(setStaff).catch(console.error);
         }
-    }, [isAdmin]);
+    }, [isAdmin, user.role]);
 
     const fetchRecurringTasks = async () => {
         if (!isAdmin) return;
@@ -251,6 +258,17 @@ const TasksView: React.FC<TasksViewProps> = ({
                 ? new Date(t.completedAt).toLocaleDateString('en-CA')
                 : t.dueDate;
 
+            // Advanced Filters Logic
+            const matchAdvStudent = !advancedStudent || (t.contactName?.toLowerCase() || '').includes(advancedStudent.toLowerCase());
+            const matchAdvStaff = advancedStaff === 'All' ? true : t.assignedTo === Number(advancedStaff);
+            
+            let matchAdvStatus = true;
+            if (advancedStatus === 'Active') {
+                matchAdvStatus = (t.status === 'todo' || t.status === 'inProgress');
+            } else if (advancedStatus === 'Paused') {
+                matchAdvStatus = (t.status === 'paused' as TodoStatus);
+            }
+
             if (startDate || endDate) {
                 if (!taskDateStr) {
                     matchesDate = false;
@@ -285,9 +303,25 @@ const TasksView: React.FC<TasksViewProps> = ({
                 ? matchesStatus
                 : t.status !== 'done' && matchesStatus;
 
-            return matchesSearch && shouldShowTask && matchesPriority && matchesDate && matchesType;
+            return matchesSearch && shouldShowTask && matchesPriority && matchesDate && matchesType && matchAdvStudent && matchAdvStaff && matchAdvStatus;
         });
-    }, [tasks, searchQuery, statusFilter, priorityFilter, activeTab, user.id, startDate, endDate, taskTypeFilter]);
+    }, [tasks, searchQuery, statusFilter, priorityFilter, activeTab, user.id, startDate, endDate, taskTypeFilter, advancedStudent, advancedStaff, advancedStatus]);
+
+    const filteredRecurringTasks = useMemo(() => {
+        return recurringTasks.filter(rt => {
+            const matchAdvStudent = !advancedStudent || (rt.contactName?.toLowerCase() || '').includes(advancedStudent.toLowerCase());
+            const matchAdvStaff = advancedStaff === 'All' ? true : rt.assignedTo === Number(advancedStaff);
+            
+            let matchAdvStatus = true;
+            if (advancedStatus === 'Active') {
+                matchAdvStatus = rt.isActive === true;
+            } else if (advancedStatus === 'Paused') {
+                matchAdvStatus = rt.isActive === false;
+            }
+
+            return matchAdvStudent && matchAdvStaff && matchAdvStatus;
+        });
+    }, [recurringTasks, advancedStudent, advancedStaff, advancedStatus]);
 
     return (
         <>
@@ -306,28 +340,118 @@ const TasksView: React.FC<TasksViewProps> = ({
                     </button>
                 </header>
 
-                <div className="flex gap-2 p-1 bg-gray-100/50 dark:bg-gray-800/50 rounded-xl w-fit border border-gray-100 dark:border-gray-700">
-                    <button
-                        onClick={() => setMainView('tasks')}
-                        className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${mainView === 'tasks'
-                            ? 'bg-white dark:bg-gray-700 text-lyceum-blue shadow-md'
-                            : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-                            }`}
-                    >
-                        All Tasks
-                    </button>
-                    {isAdmin && (
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div className="flex gap-2 p-1 bg-gray-100/50 dark:bg-gray-800/50 rounded-xl w-fit border border-gray-100 dark:border-gray-700">
                         <button
-                            onClick={() => setMainView('recurring')}
-                            className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${mainView === 'recurring'
+                            onClick={() => setMainView('tasks')}
+                            className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${mainView === 'tasks'
                                 ? 'bg-white dark:bg-gray-700 text-lyceum-blue shadow-md'
                                 : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
                                 }`}
                         >
-                            Recurring Tasks
+                            All Tasks
                         </button>
-                    )}
+                        {isAdmin && (
+                            <button
+                                onClick={() => setMainView('recurring')}
+                                className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${mainView === 'recurring'
+                                    ? 'bg-white dark:bg-gray-700 text-lyceum-blue shadow-md'
+                                    : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                                    }`}
+                            >
+                                Recurring Tasks
+                            </button>
+                        )}
+                    </div>
+                
+                    <button
+                        onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+                            showAdvancedFilters 
+                            ? 'bg-lyceum-blue/10 text-lyceum-blue dark:bg-lyceum-blue/20 border-lyceum-blue/20' 
+                            : 'bg-white text-gray-600 hover:bg-gray-50 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700 border-gray-200 dark:border-gray-700'
+                        } border shadow-sm`}
+                    >
+                        <Filter size={16} />
+                        Advanced Filters
+                        {(advancedStudent || advancedStatus !== 'All' || advancedStaff !== 'All') && (
+                            <span className="w-2 h-2 rounded-full bg-red-500 ml-1"></span>
+                        )}
+                    </button>
                 </div>
+
+                {/* Advanced Filters Panel */}
+                {showAdvancedFilters && (
+                    <div className="bg-white dark:bg-gray-800 p-5 rounded-xl shadow-sm border-2 border-lyceum-blue/20 dark:border-lyceum-blue/30 animate-fade-in relative overflow-hidden">
+                        <div className="absolute top-0 left-0 w-1 h-full bg-lyceum-blue rounded-l-xl"></div>
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-sm font-bold text-gray-800 dark:text-gray-200 flex items-center gap-2">
+                                <Filter size={16} className="text-lyceum-blue" />
+                                Custom Filters Combination
+                            </h3>
+                            <button 
+                                onClick={() => {
+                                    setAdvancedStudent('');
+                                    setAdvancedStatus('All');
+                                    setAdvancedStaff('All');
+                                }}
+                                className="text-xs font-bold text-gray-500 hover:text-red-500 transition-colors bg-gray-50 hover:bg-red-50 dark:bg-gray-900 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700"
+                            >
+                                Clear All Filters
+                            </button>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                            <div>
+                                <label className="block text-[10px] uppercase font-bold text-gray-500 tracking-wider mb-2">Student Name</label>
+                                <div className="relative">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
+                                    <input
+                                        type="text"
+                                        placeholder="Search by student contact name..."
+                                        value={advancedStudent}
+                                        onChange={(e) => setAdvancedStudent(e.target.value)}
+                                        className="w-full pl-9 pr-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:border-lyceum-blue focus:ring-2 focus:ring-lyceum-blue/20 dark:text-white transition-all shadow-sm"
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] uppercase font-bold text-gray-500 tracking-wider mb-2">Task Status</label>
+                                <div className="relative">
+                                    <select
+                                        value={advancedStatus}
+                                        onChange={(e) => setAdvancedStatus(e.target.value as any)}
+                                        className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:border-lyceum-blue focus:ring-2 focus:ring-lyceum-blue/20 dark:text-white transition-all cursor-pointer font-medium appearance-none shadow-sm"
+                                    >
+                                        <option value="All">All Statuses</option>
+                                        <option value="Active">Active Tasks</option>
+                                        <option value="Paused">Paused Tasks</option>
+                                    </select>
+                                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M6 9l6 6 6-6"/></svg>
+                                    </div>
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] uppercase font-bold text-gray-500 tracking-wider mb-2">Assigned Staff</label>
+                                <div className="relative">
+                                    <select
+                                        value={advancedStaff}
+                                        onChange={(e) => setAdvancedStaff(e.target.value)}
+                                        className="w-full px-4 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm outline-none focus:border-lyceum-blue focus:ring-2 focus:ring-lyceum-blue/20 dark:text-white transition-all cursor-pointer font-medium appearance-none shadow-sm"
+                                    >
+                                        <option value="All">Any Staff Member</option>
+                                        {staff.map(s => (
+                                            <option key={s.id} value={s.id.toString()}>{s.name} ({s.role})</option>
+                                        ))}
+                                    </select>
+                                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M6 9l6 6 6-6"/></svg>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {mainView === 'tasks' ? (
                     <>
@@ -526,6 +650,7 @@ const TasksView: React.FC<TasksViewProps> = ({
                                                                 <option value="todo">To Do</option>
                                                                 <option value="inProgress">In Progress</option>
                                                                 <option value="done">Completed</option>
+                                                                <option value="paused">Paused</option>
                                                             </select>
                                                         </td>
                                                         {isAdmin && adminFilterUser === 'all' && (
@@ -588,14 +713,14 @@ const TasksView: React.FC<TasksViewProps> = ({
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                                        {recurringTasks.length === 0 ? (
+                                        {filteredRecurringTasks.length === 0 ? (
                                             <tr>
-                                                <td colSpan={6} className="px-6 py-20 text-center text-gray-500">
-                                                    No recurring tasks found. They are auto-generated from CRM leads in 'New', 'Qualified', or 'Proposal' stages.
+                                                <td colSpan={7} className="px-6 py-20 text-center text-gray-500">
+                                                    No recurring tasks found matching the criteria.
                                                 </td>
                                             </tr>
                                         ) : (
-                                            recurringTasks.map((rt) => (
+                                            filteredRecurringTasks.map((rt) => (
                                                 <tr key={rt.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-700/30 transition-colors">
                                                     <td className="px-6 py-4">
                                                         <span
