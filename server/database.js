@@ -191,6 +191,9 @@ export async function initDatabase() {
       )
     `);
 
+    // Create tickets sequence
+    await client.query('CREATE SEQUENCE IF NOT EXISTS ticket_seq START 1');
+
     // Ticket Attachments table
     await client.query(`
       CREATE TABLE IF NOT EXISTS ticket_attachments (

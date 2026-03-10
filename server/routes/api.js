@@ -3806,15 +3806,10 @@ router.post('/tickets', authenticateToken, upload.array('attachments', 5), async
     await client.query('BEGIN');
     const { contactId, subject, description, priority, category } = req.body;
 
-    // Generate unique ticket ID
-    let ticketId;
-    let isUnique = false;
-    while (!isUnique) {
-      const randomNum = Math.floor(Math.random() * 900000) + 100000;
-      ticketId = `TKT - ${randomNum} `;
-      const existing = await client.query('SELECT id FROM tickets WHERE ticket_id = $1', [ticketId]);
-      if (existing.rows.length === 0) isUnique = true;
-    }
+    // Generate unique sequential ticket ID
+    const seqResult = await client.query("SELECT nextval('ticket_seq')");
+    const nextNum = seqResult.rows[0].nextval;
+    const ticketId = `TKT-${String(nextNum).padStart(7, '0')}`;
 
     // Get contact's assigned counselor(s)
     const contactResult = await client.query('SELECT counselor_assigned, counselor_assigned_2 FROM contacts WHERE id = $1', [contactId]);
