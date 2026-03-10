@@ -99,6 +99,7 @@ const UniversityApplicationView: React.FC<UniversityApplicationViewProps> = ({ u
     const [originalContacts, setOriginalContacts] = useState<Contact[]>([]);
     const [showTaskModal, setShowTaskModal] = useState(false);
     const [prefilledTask, setPrefilledTask] = useState<any>(null);
+    const [activeTab, setActiveTab] = useState<'ongoing' | 'completed'>('ongoing');
 
     useEffect(() => {
         fetchStudents();
@@ -441,7 +442,14 @@ const UniversityApplicationView: React.FC<UniversityApplicationViewProps> = ({ u
 
         const matchesStatus = filterStatus === 'All' || item.app.status === filterStatus;
 
-        return matchesSearch && matchesStatus;
+        // Check if application is completed
+        const isCompleted = ['Received I20', 'Rejected', 'Application Deferred'].includes(item.app.status);
+        
+        let matchesTab = false;
+        if (activeTab === 'ongoing' && !isCompleted) matchesTab = true;
+        if (activeTab === 'completed' && isCompleted) matchesTab = true;
+
+        return matchesSearch && matchesStatus && matchesTab;
     }).sort((a, b) => {
         const ackA = a.app.ackNumber || '';
         const ackB = b.app.ackNumber || '';
@@ -473,9 +481,33 @@ const UniversityApplicationView: React.FC<UniversityApplicationViewProps> = ({ u
                         Application Management
                     </h1>
                     <p className="text-gray-500 dark:text-gray-400 mt-1 font-medium">Verify credentials and manage student admission statuses</p>
+                    
+                    {/* Tabs */}
+                    <div className="flex gap-4 mt-6 border-b border-gray-200 dark:border-gray-800">
+                        <button
+                            onClick={() => setActiveTab('ongoing')}
+                            className={`pb-3 font-bold text-sm transition-colors border-b-2 ${
+                                activeTab === 'ongoing'
+                                    ? 'border-lyceum-blue text-lyceum-blue'
+                                    : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                            }`}
+                        >
+                            Ongoing Applications
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('completed')}
+                            className={`pb-3 font-bold text-sm transition-colors border-b-2 ${
+                                activeTab === 'completed'
+                                    ? 'border-lyceum-blue text-lyceum-blue'
+                                    : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                            }`}
+                        >
+                            Completed Applications
+                        </button>
+                    </div>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 mt-auto mb-2">
                     <div className="relative group">
                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-lyceum-blue transition-colors" size={20} />
                         <input
