@@ -3804,6 +3804,8 @@ router.post('/tickets', authenticateToken, upload.array('attachments', 5), async
   const client = await getClient();
   try {
     await client.query('BEGIN');
+    console.log("==== TICKET CREATION REQUEST BODY ====");
+    console.log(req.body);
     const { contactId, subject, description, priority, category } = req.body;
 
     // Generate unique sequential ticket ID

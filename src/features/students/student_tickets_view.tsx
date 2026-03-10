@@ -168,7 +168,7 @@ interface CreateTicketModalProps {
 
 const CreateTicketModal: React.FC<CreateTicketModalProps> = ({ student, onClose, onSuccess }) => {
     const [subject, setSubject] = useState('');
-    const [category, setCategory] = useState('General Enquiry');
+    const [category, setCategory] = useState('University related');
     const [description, setDescription] = useState('');
     const [attachments, setAttachments] = useState<File[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -265,7 +265,7 @@ const CreateTicketModal: React.FC<CreateTicketModalProps> = ({ student, onClose,
                             <option value="University related">University related</option>
                             <option value="Embassy related">Embassy related</option>
                             <option value="Staff related">Staff related</option>
-                            <option value="General enquiry">General enquiry</option>
+                            <option value="General Enquiry">General Enquiry</option>
                             <option value="Finance">Finance</option>
                             <option value="Sales">Sales</option>
                             <option value="Others">Others</option>
