@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { HelpCircle, Sparkles, MailPlus, Flag, PlusCircle, StickyNote, Video as VideoIcon, CheckCircle2, VideoOff, Camera, Plus, Trash2, ChevronDown, Upload } from '@/components/common/icons';
+import { IndianRupee, FileText } from 'lucide-react';
 import type { Contact, FileStatus, User, ContactActivity, ContactActivityAction, RecordedSession, AccountingTransaction, TodoTask } from '@/types';
 import { summarizeText } from '@/utils/gemini';
 import VideoRecordingModal from '@/features/shared/video_recording_modal';
@@ -231,6 +232,19 @@ const NewContactForm: React.FC<NewContactFormProps> = ({
     const fileInputRef = useRef<HTMLInputElement>(null);
     const isNew = !contact;
     const canWrite = user.role === 'Admin' || (isNew ? user.permissions?.['Contacts']?.create : user.permissions?.['Contacts']?.update);
+
+    const arEntries = (contact as any)?.metadata?.accountsReceivable || [];
+    const totalAgreedAmount = arEntries.reduce((sum: number, entry: any) => {
+        const remaining = parseFloat(entry.remainingAmount) || 0;
+        const paid = parseFloat(entry.paidAmount) || 0;
+        return sum + remaining + paid;
+    }, 0);
+
+    const paidAmount = transactions ? transactions
+        .filter((tx) => tx.contactId === contact?.id && (tx.type === 'Income' || tx.type === 'Invoice' || tx.type === 'Purchase') && tx.status === 'Paid')
+        .reduce((sum, tx) => sum + Math.abs(tx.amount), 0) : 0;
+
+    const quotationBalance = Math.max(0, totalAgreedAmount - paidAmount);
 
     const handleAddLogNote = async () => {
         if (!logNoteText.trim() || !contact) return;
@@ -648,6 +662,44 @@ const NewContactForm: React.FC<NewContactFormProps> = ({
                 </>
             ) : currentTab === 'finance' ? (
                 <div className="p-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                        <div
+                            onClick={onNavigateToCRM}
+                            className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 cursor-pointer hover:shadow-md hover:border-lyceum-blue transition-all group"
+                        >
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-sm font-semibold text-gray-600 dark:text-gray-400 group-hover:text-lyceum-blue transition-colors">Overall Quotation Amount</p>
+                                    <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1 flex items-center">
+                                        <IndianRupee size={20} className="mr-1" />
+                                        {totalAgreedAmount.toLocaleString('en-IN')}
+                                    </p>
+                                </div>
+                                <div className="p-3 bg-blue-50 dark:bg-blue-900/20 text-lyceum-blue rounded-xl group-hover:scale-110 transition-transform">
+                                    <FileText size={24} />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div
+                            onClick={onNavigateToCRM}
+                            className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 cursor-pointer hover:shadow-md hover:border-orange-500 transition-all group"
+                        >
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-sm font-semibold text-gray-600 dark:text-gray-400 group-hover:text-orange-500 transition-colors">Balance</p>
+                                    <p className="text-2xl font-bold text-orange-600 dark:text-orange-400 mt-1 flex items-center">
+                                        <IndianRupee size={20} className="mr-1" />
+                                        {quotationBalance.toLocaleString('en-IN')}
+                                    </p>
+                                </div>
+                                <div className="p-3 bg-orange-50 dark:bg-orange-900/20 text-orange-600 rounded-xl group-hover:scale-110 transition-transform">
+                                    <IndianRupee size={24} />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
                         <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                             <thead className="bg-gray-100 dark:bg-gray-700">
