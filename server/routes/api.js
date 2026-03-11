@@ -554,6 +554,7 @@ const transformContact = (dbContact) => {
     pan: dbContact.pan,
     tags: dbContact.tags,
     visaType: dbContact.visa_type,
+    degree: dbContact.degree,
     countryOfApplication: dbContact.country_of_application,
     source: dbContact.source,
     contactType: dbContact.contact_type,
@@ -808,9 +809,9 @@ router.post('/contacts', authenticateToken, async (req, res) => {
     user_id, name, contact_id, email, phone, department, major, notes, file_status,
     agent_assigned, checklist, activity_log, recorded_sessions, documents, visa_information,
     lms_progress, lms_notes, gpa, advisor, courses, street1, street2, city, state, zip,
-    country, gstin, pan, tags, visa_type, country_of_application, source, contact_type,
+    country, gstin, pan, tags, visa_type, degree, country_of_application, source, contact_type,
     stream, intake, counselor_assigned, counselor_assigned_2, application_email, application_password, avatar_url, metadata
-  ) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41)
+  ) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37, $38, $39, $40, $41, $42)
 RETURNING *
   `, [
       contact.userId || null,
@@ -843,6 +844,7 @@ RETURNING *
       contact.pan || null,
       contact.tags || null,
       contact.visaType || null,
+      contact.degree || null,
       contact.countryOfApplication || null,
       contact.source || null,
       contact.contactType || null,
@@ -959,10 +961,10 @@ name = $1, email = $2, phone = $3, department = $4, major = $5, notes = $6,
   recorded_sessions = $11, documents = $12, visa_information = $13, lms_progress = $14,
   lms_notes = $15, gpa = $16, advisor = $17, courses = $18, street1 = $19, street2 = $20,
   city = $21, state = $22, zip = $23, country = $24, gstin = $25, pan = $26, tags = $27,
-  visa_type = $28, country_of_application = $29, source = $30, contact_type = $31,
-      stream = $32, intake = $33, counselor_assigned = $34, counselor_assigned_2 = $35, application_email = $36,
-      application_password = $37, metadata = $38
-      WHERE id = $39
+  visa_type = $28, degree = $32, country_of_application = $29, source = $30, contact_type = $31,
+      stream = $33, intake = $34, counselor_assigned = $35, counselor_assigned_2 = $36, application_email = $37,
+      application_password = $38, metadata = $39
+      WHERE id = $40
   `, [
       contact.name,
       contact.email,
@@ -995,6 +997,7 @@ name = $1, email = $2, phone = $3, department = $4, major = $5, notes = $6,
       contact.countryOfApplication,
       contact.source,
       contact.contactType,
+      contact.degree,
       contact.stream,
       contact.intake,
       contact.counselorAssigned,

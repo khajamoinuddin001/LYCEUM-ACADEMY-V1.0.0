@@ -27,6 +27,9 @@ const statusConfig: { [key in TodoStatus]: { icon: React.ReactNode } } = {
     done: {
         icon: <CheckCircle2 size={16} className="text-green-600" />,
     },
+    paused: {
+        icon: <Circle size={16} className="text-orange-500" />
+    }
 };
 
 const activityIconConfig: { [key in PaymentActivityLog['type']]: { icon: React.ReactNode; color: string } } = {

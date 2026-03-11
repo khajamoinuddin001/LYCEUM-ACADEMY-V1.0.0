@@ -367,6 +367,7 @@ export interface Contact {
   pan?: string;
   tags?: string;
   visaType?: string;
+  degree?: string;
   countryOfApplication?: string;
   source?: string;
   contactType?: string;

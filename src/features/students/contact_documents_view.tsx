@@ -164,29 +164,84 @@ const ContactDocumentsView: React.FC<ContactDocumentsViewProps> = ({ contact, on
   const [previewData, setPreviewData] = useState<{ url: string; filename: string; type: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const categories = [
-    'Passport',
-    'Educational Documents',
-    "Financial Document & Affidavit of Support / CA Report & ITR's",
-    'Gap Justification',
-    'Acceptance',
-    'I20',
-    'DS-160',
-    'SEVIS confirmation',
-    'Appointment Confirmation',
-    'University Affidavit Forms',
-    'Other'
-  ];
+  const getCategories = () => {
+    if (contact.visaType === 'Student Visa') {
+        if (contact.degree === "Bachelor's") {
+            return [
+                'Passport',
+                'Aadhar Card',
+                'Pan Card',
+                'SSC Memo',
+                'IELTS/PTE/TOEFL Score',
+                "LOR's",
+                'MOI',
+                'SOP (Statement of Purpose)',
+                'CV (Curriculum Vitae)',
+                'Affidavit of Support',
+                'Bank Statement',
+                'Gap Justification',
+                'Others'
+            ];
+        } else if (contact.degree === "Master's") {
+            return [
+                'Passport',
+                'Aadhar Card',
+                'Pan Card',
+                'SSC Memo',
+                'Inter Memo',
+                'Individual Memos',
+                'Provisional Certificate',
+                'Consolidated Marks Memo (CMM)',
+                'Original Degree (OD)',
+                'IELTS/PTE/TOEFL Score',
+                "LOR's",
+                'MOI',
+                'SOP (Statement of Purpose)',
+                'CV (Curriculum Vitae)',
+                'Affidavit of Support',
+                'Bank Statement',
+                'Gap Justification',
+                'Others'
+            ];
+        }
+    } else if (contact.visaType === 'Visit Visa') {
+        return [
+            'Passport',
+            'Aadhar Card',
+            'Pan Card',
+            'Business Documents',
+            'Financial Documents',
+            'Marriage Certificate',
+            'Educational Documents'
+        ];
+    }
 
-  const privateCategories = [
-    'Acceptance',
-    'I20',
-    'DS-160',
-    'SEVIS confirmation',
-    'Appointment Confirmation',
-    'University Affidavit Forms',
-    'Others'
-  ];
+    // Default categories if nothing matches
+    return [
+        'Passport',
+        'Educational Documents',
+        "Financial Document & Affidavit of Support / CA Report & ITR's",
+        'Gap Justification',
+        'Acceptance',
+        'I20',
+        'DS-160',
+        'SEVIS confirmation',
+        'Appointment Confirmation',
+        'University Affidavit Forms',
+        'Other'
+    ];
+  };
+
+  const categories = getCategories();
+
+  // Ensure selectedCategory is valid when categories change
+  useEffect(() => {
+    if (!categories.includes(selectedCategory)) {
+        setSelectedCategory(categories[0] || 'Passport');
+    }
+  }, [contact.visaType, contact.degree]);
+
+  const privateCategories = categories;
 
   const isStaffOrAdmin = user?.role === 'Admin' || user?.role === 'Staff';
 
@@ -196,8 +251,9 @@ const ContactDocumentsView: React.FC<ContactDocumentsViewProps> = ({ contact, on
 
   // Group common documents by category
   const groupedDocs = categories.reduce((acc, cat) => {
-    if (cat === 'Other') {
-      acc[cat] = commonDocs.filter(d => d.category === 'Other' || !d.category || !categories.includes(d.category));
+    const isOther = cat === 'Other' || cat === 'Others';
+    if (isOther) {
+      acc[cat] = commonDocs.filter(d => d.category === 'Other' || d.category === 'Others' || !d.category || !categories.includes(d.category));
     } else {
       acc[cat] = commonDocs.filter(d => d.category === cat);
     }

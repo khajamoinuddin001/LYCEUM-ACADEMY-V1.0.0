@@ -187,7 +187,7 @@ const initialFormState = {
     avatarUrl: undefined as string | undefined,
     street1: '', street2: '', city: '', country: '', zip: '', state: '',
     gstin: '', referenceNumber: '', pan: '',
-    phone: '', email: '', tags: '', visaType: '', countryOfApplication: '', source: '', contactType: '',
+    phone: '', email: '', tags: '', visaType: '', degree: '', countryOfApplication: '', source: '', contactType: '',
     majors: '', stream: '', course: '', intake: '',
     counselorAssigned: '', counselorAssigned2: '', agentAssigned: '', applicationEmail: '', applicationPassword: '', fileStatus: '',
     notes: '',
@@ -290,6 +290,7 @@ const NewContactForm: React.FC<NewContactFormProps> = ({
                 pan: contact.pan || '',
                 tags: contact.tags || '',
                 visaType: contact.visaType || '',
+                degree: contact.degree || '',
                 countryOfApplication: contact.countryOfApplication || '',
                 source: contact.source || '',
                 contactType: contact.contactType || '',
@@ -381,6 +382,7 @@ const NewContactForm: React.FC<NewContactFormProps> = ({
             pan: formData.pan,
             tags: formData.tags,
             visaType: formData.visaType,
+            degree: formData.degree,
             countryOfApplication: formData.countryOfApplication,
             source: formData.source,
             contactType: formData.contactType,
@@ -596,7 +598,34 @@ const NewContactForm: React.FC<NewContactFormProps> = ({
                             <FormRow label="Phone"><FormInput name="phone" value={formData.phone} onChange={handleChange} disabled={!canWrite} /></FormRow>
                             <FormRow label="Email"><FormInput name="email" value={formData.email} onChange={handleChange} disabled={!canWrite} /></FormRow>
                             <FormRow label="Tags"><FormInput name="tags" value={formData.tags} onChange={handleChange} placeholder='e.g. "B2B", "VIP", "Consulting", ...' disabled={!canWrite} /></FormRow>
-                            <FormRow label="Visa Type"><FormInput name="visaType" value={formData.visaType} onChange={handleChange} disabled={!canWrite} /></FormRow>
+                            <FormRow label="Visa Type">
+                                <select
+                                    name="visaType"
+                                    value={formData.visaType}
+                                    onChange={handleChange}
+                                    disabled={!canWrite}
+                                    className="w-full bg-transparent text-gray-800 dark:text-gray-200 text-sm focus:outline-none dark:bg-gray-800 disabled:opacity-70 disabled:cursor-not-allowed"
+                                >
+                                    <option value="">Select Visa Type</option>
+                                    <option value="Student Visa">Student Visa</option>
+                                    <option value="Visit Visa">Visit Visa</option>
+                                </select>
+                            </FormRow>
+                            {formData.visaType === 'Student Visa' && (
+                                <FormRow label="Degree">
+                                    <select
+                                        name="degree"
+                                        value={formData.degree}
+                                        onChange={handleChange}
+                                        disabled={!canWrite}
+                                        className="w-full bg-transparent text-gray-800 dark:text-gray-200 text-sm focus:outline-none dark:bg-gray-800 disabled:opacity-70 disabled:cursor-not-allowed"
+                                    >
+                                        <option value="">Select Degree</option>
+                                        <option value="Bachelor's">Bachelor's</option>
+                                        <option value="Master's">Master's</option>
+                                    </select>
+                                </FormRow>
+                            )}
                             <FormRow label="Country"><FormInput name="countryOfApplication" value={formData.countryOfApplication} onChange={handleChange} disabled={!canWrite} /></FormRow>
                             <FormRow label="Source"><FormInput name="source" value={formData.source} onChange={handleChange} disabled={!canWrite} /></FormRow>
                             <FormRow label="Type"><FormInput name="contactType" value={formData.contactType} onChange={handleChange} disabled={!canWrite} /></FormRow>

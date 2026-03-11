@@ -101,6 +101,7 @@ export async function initDatabase() {
         pan TEXT,
         tags TEXT,
         visa_type TEXT,
+        degree TEXT,
         country_of_application TEXT,
         source TEXT,
         contact_type TEXT,
@@ -124,6 +125,7 @@ export async function initDatabase() {
     await migrateColumn('contacts', 'lmsProgress', 'lms_progress');
     await migrateColumn('contacts', 'lmsNotes', 'lms_notes');
     await migrateColumn('contacts', 'visaType', 'visa_type');
+    await migrateColumn('contacts', 'degree', 'degree');
     await migrateColumn('contacts', 'countryOfApplication', 'country_of_application');
     await migrateColumn('contacts', 'contactType', 'contact_type');
     await migrateColumn('contacts', 'counselorAssigned', 'counselor_assigned');
@@ -135,6 +137,7 @@ export async function initDatabase() {
     await client.query('ALTER TABLE contacts ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT \'{}\'');
     await client.query('ALTER TABLE contacts ADD COLUMN IF NOT EXISTS counselor_assigned_2 TEXT');
     await client.query('ALTER TABLE contacts ADD COLUMN IF NOT EXISTS avatar_url TEXT');
+    await client.query('ALTER TABLE contacts ADD COLUMN IF NOT EXISTS degree TEXT');
 
     // LEADS
     await client.query(`
