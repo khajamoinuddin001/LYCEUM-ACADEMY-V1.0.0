@@ -214,3 +214,80 @@ export const DEFAULT_CHECKLIST: ChecklistItem[] = [
 ];
 
 export const INITIAL_QUOTATION_TEMPLATES: QuotationTemplate[] = [];
+
+export const VISA_DOCUMENT_CATEGORIES = {
+    VISIT: [
+        'Passport',
+        'Aadhar Card',
+        'Pan Card',
+        'Business Documents',
+        'Financial Documents',
+        'Marriage Certificate',
+        'Educational Documents'
+    ],
+    BACHELORS: [
+        'Passport',
+        'Aadhar Card',
+        'Pan Card',
+        'SSC Memo',
+        'IELTS/PTE/TOEFL Score',
+        "LOR's",
+        'MOI',
+        'SOP (Statement of Purpose)',
+        'CV (Curriculum Vitae)',
+        'Affidavit of Support',
+        'Bank Statement',
+        'Gap Justification',
+        'Others'
+    ],
+    MASTERS: [
+        'Passport',
+        'Aadhar Card',
+        'Pan Card',
+        'SSC Memo',
+        'Inter Memo',
+        'Individual Memos',
+        'Provisional Certificate',
+        'Consolidated Marks Memo (CMM)',
+        'Original Degree (OD)',
+        'IELTS/PTE/TOEFL Score',
+        "LOR's",
+        'MOI',
+        'SOP (Statement of Purpose)',
+        'CV (Curriculum Vitae)',
+        'Affidavit of Support',
+        'Bank Statement',
+        'Gap Justification',
+        'Others'
+    ],
+    DEFAULT: [
+        'Passport',
+        'Educational Documents',
+        "Financial Document & Affidavit of Support / CA Report & ITR's",
+        'Gap Justification',
+        'Acceptance',
+        'I20',
+        'DS-160',
+        'SEVIS confirmation',
+        'Appointment Confirmation',
+        'University Affidavit Forms',
+        'Other'
+    ]
+};
+
+export const ALL_DOCUMENT_CATEGORIES = Array.from(new Set([
+    ...VISA_DOCUMENT_CATEGORIES.VISIT,
+    ...VISA_DOCUMENT_CATEGORIES.BACHELORS,
+    ...VISA_DOCUMENT_CATEGORIES.MASTERS,
+    ...VISA_DOCUMENT_CATEGORIES.DEFAULT
+])).sort();
+
+export const getDocumentCategories = (visaType?: string, degree?: string) => {
+    if (visaType === 'Student Visa') {
+        if (degree === "Bachelor's") return VISA_DOCUMENT_CATEGORIES.BACHELORS;
+        if (degree === "Master's") return VISA_DOCUMENT_CATEGORIES.MASTERS;
+    } else if (visaType === 'Visit Visa') {
+        return VISA_DOCUMENT_CATEGORIES.VISIT;
+    }
+    return VISA_DOCUMENT_CATEGORIES.DEFAULT;
+};

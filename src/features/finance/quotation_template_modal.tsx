@@ -9,10 +9,9 @@ interface QuotationTemplateModalProps {
   userRole?: string;
 }
 
-const DOCUMENT_CATEGORIES = [
-  'Passport', 'Educational Documents', 'Financial Document & Affidavit of Support / CA Report & ITR\'s',
-  'Gap Justification', 'Acceptance', 'I20', 'DS-160', 'SEVIS confirmation', 'Appointment Confirmation', 'University Affidavit Forms', 'Other'
-];
+import { ALL_DOCUMENT_CATEGORIES } from '@/lib/constants';
+
+const DOCUMENT_CATEGORIES = ALL_DOCUMENT_CATEGORIES;
 
 const QuotationTemplateModal: React.FC<QuotationTemplateModalProps> = ({ template, onClose, onSave, userRole }) => {
   const [isAnimatingOut, setIsAnimatingOut] = useState(false);

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import type { Contact, Document as Doc, User } from '@/types';
 import { Paperclip, Upload, Download, ArrowLeft, Sparkles, Trash2, Eye, X } from '@/components/common/icons';
 import * as api from '@/utils/api';
+import { getDocumentCategories } from '@/lib/constants';
 
 interface ContactDocumentsViewProps {
   contact: Contact;
@@ -164,75 +165,7 @@ const ContactDocumentsView: React.FC<ContactDocumentsViewProps> = ({ contact, on
   const [previewData, setPreviewData] = useState<{ url: string; filename: string; type: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const getCategories = () => {
-    if (contact.visaType === 'Student Visa') {
-        if (contact.degree === "Bachelor's") {
-            return [
-                'Passport',
-                'Aadhar Card',
-                'Pan Card',
-                'SSC Memo',
-                'IELTS/PTE/TOEFL Score',
-                "LOR's",
-                'MOI',
-                'SOP (Statement of Purpose)',
-                'CV (Curriculum Vitae)',
-                'Affidavit of Support',
-                'Bank Statement',
-                'Gap Justification',
-                'Others'
-            ];
-        } else if (contact.degree === "Master's") {
-            return [
-                'Passport',
-                'Aadhar Card',
-                'Pan Card',
-                'SSC Memo',
-                'Inter Memo',
-                'Individual Memos',
-                'Provisional Certificate',
-                'Consolidated Marks Memo (CMM)',
-                'Original Degree (OD)',
-                'IELTS/PTE/TOEFL Score',
-                "LOR's",
-                'MOI',
-                'SOP (Statement of Purpose)',
-                'CV (Curriculum Vitae)',
-                'Affidavit of Support',
-                'Bank Statement',
-                'Gap Justification',
-                'Others'
-            ];
-        }
-    } else if (contact.visaType === 'Visit Visa') {
-        return [
-            'Passport',
-            'Aadhar Card',
-            'Pan Card',
-            'Business Documents',
-            'Financial Documents',
-            'Marriage Certificate',
-            'Educational Documents'
-        ];
-    }
-
-    // Default categories if nothing matches
-    return [
-        'Passport',
-        'Educational Documents',
-        "Financial Document & Affidavit of Support / CA Report & ITR's",
-        'Gap Justification',
-        'Acceptance',
-        'I20',
-        'DS-160',
-        'SEVIS confirmation',
-        'Appointment Confirmation',
-        'University Affidavit Forms',
-        'Other'
-    ];
-  };
-
-  const categories = getCategories();
+  const categories = getDocumentCategories(contact.visaType, contact.degree);
 
   // Ensure selectedCategory is valid when categories change
   useEffect(() => {

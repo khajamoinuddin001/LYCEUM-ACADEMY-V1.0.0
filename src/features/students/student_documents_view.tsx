@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { Contact, Document as Doc, User } from '@/types';
-import { Paperclip, Upload, Download, ArrowLeft, Trash2, Eye, FileText, Clock, HardDrive, GraduationCap, Banknote, CalendarClock, MoreHorizontal, Plus, X, Lock } from '@/components/common/icons';
+import { Paperclip, Upload, Download, ArrowLeft, Trash2, Eye, FileText, Clock, HardDrive, GraduationCap, Banknote, CalendarClock, MoreHorizontal, Plus, X, Lock, CheckCircle, FileBadge } from '@/components/common/icons';
+import { getDocumentCategories } from '@/lib/constants';
 import * as api from '@/utils/api';
 
 interface StudentDocumentsViewProps {
@@ -193,19 +194,34 @@ const StudentDocumentsView: React.FC<StudentDocumentsViewProps> = ({ student, on
         return locked;
     }, [student, isLockEnforced]);
 
-    const categories = [
-        { name: 'Passport', icon: <FileText size={18} /> },
-        { name: 'Educational Documents', icon: <GraduationCap size={18} /> },
-        { name: "Financial Document & Affidavit of Support / CA Report & ITR's", icon: <Banknote size={18} />, shortName: 'Financial' },
-        { name: 'Gap Justification', icon: <CalendarClock size={18} /> },
-        { name: 'Acceptance', icon: <FileText size={18} /> },
-        { name: 'I20', icon: <FileText size={18} /> },
-        { name: 'DS-160', icon: <FileText size={18} /> },
-        { name: 'SEVIS confirmation', icon: <FileText size={18} /> },
-        { name: 'Appointment Confirmation', icon: <FileText size={18} /> },
-        { name: 'University Affidavit Forms', icon: <FileText size={18} /> },
-        { name: 'Other', icon: <MoreHorizontal size={18} /> }
-    ];
+    const getCategoryIcon = (name: string) => {
+        const n = name.toLowerCase();
+        if (n.includes('passport')) return <FileText size={18} />;
+        if (n.includes('educational') || n.includes('memo') || n.includes('degree') || n.includes('ssc')) return <GraduationCap size={18} />;
+        if (n.includes('financial') || n.includes('bank') || n.includes('affidavit')) return <Banknote size={18} />;
+        if (n.includes('gap')) return <CalendarClock size={18} />;
+        if (n.includes('ielts') || n.includes('score')) return <CheckCircle size={18} />;
+        if (n.includes('lor') || n.includes('moi') || n.includes('sop') || n.includes('cv')) return <FileBadge size={18} />;
+        return <FileText size={18} />;
+    };
+
+    const categories = getDocumentCategories(student.visaType, student.degree).map(name => {
+        let shortName = undefined;
+        if (name === "Financial Document & Affidavit of Support / CA Report & ITR's") {
+            shortName = 'Financial';
+        }
+
+        return {
+            name,
+            icon: getCategoryIcon(name),
+            shortName
+        };
+    });
+
+    // Add "Other" if not present
+    if (!categories.find(c => c.name === 'Other' || c.name === 'Others')) {
+        categories.push({ name: 'Others', icon: <MoreHorizontal size={18} />, shortName: 'Other' });
+    }
 
     useEffect(() => {
         const unlocked = categories.filter(c => !lockedCategories.has(c.name));
