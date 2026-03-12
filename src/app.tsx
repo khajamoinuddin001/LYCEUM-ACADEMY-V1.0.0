@@ -73,6 +73,8 @@ import DepartmentDashboard from '@/features/dashboard/department_dashboard';
 import AttendanceView from '@/features/hr/attendance_view';
 import { TermsView, PrivacyView, LandingDocumentsView } from '@/features/shared/legal_views';
 import StudentDocumentsView from '@/features/students/student_documents_view';
+import StudentDocumentManagerView from '@/features/students/student_document_manager_view';
+import StaffDocumentManagerView from '@/features/students/staff_document_manager_view';
 import StudentUniversityApplicationView from '@/features/students/student_university_view';
 import UniversityManager from '@/features/admin/university_manager';
 import ActiveSessionsView from '@/features/admin/active_sessions_view';
@@ -2074,6 +2076,7 @@ const DashboardLayout: React.FC = () => {
       case 'Analytics': return <MarketingView />;
       case 'University Manager': return <UniversityManager user={currentUser} />;
       case 'Live Session Monitor': return <ActiveSessionsView currentUser={{ id: currentUser.id, role: currentUser.role }} />;
+      case 'Document manager': return <StaffDocumentManagerView />;
       default: return <AppView appName={activeApp} onNavigateBack={() => handleAppSelect('Apps')} />;
     }
   }
@@ -2277,6 +2280,15 @@ const DashboardLayout: React.FC = () => {
                       onNavigateBack={() => handleAppSelect('Apps')}
                     />
                   ) : <div>Loading...</div>;
+                }
+
+                // Student Document Manager Page
+                if (activeApp === 'Document manager') {
+                  const studentContact = contacts.find(c =>
+                    c.userId === currentUser.id ||
+                    (c.email && currentUser.email && c.email.toLowerCase() === currentUser.email.toLowerCase())
+                  );
+                  return <StudentDocumentManagerView contact={studentContact ?? null} />;
                 }
 
                 // Student Visa Application Page

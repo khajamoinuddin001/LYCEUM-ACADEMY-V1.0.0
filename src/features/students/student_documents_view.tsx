@@ -327,7 +327,7 @@ const StudentDocumentsView: React.FC<StudentDocumentsViewProps> = ({ student, on
                         </button>
                         <h1 className="text-4xl font-black text-gray-900 dark:text-gray-100 flex items-center gap-4">
                             <span className="p-3 bg-lyceum-blue rounded-2xl text-white shadow-lg shadow-lyceum-blue/30">
-                                <HardDrive size={32} />
+                                <Paperclip size={32} />
                             </span>
                             My Documents
                         </h1>
@@ -348,47 +348,8 @@ const StudentDocumentsView: React.FC<StudentDocumentsViewProps> = ({ student, on
                             </div>
                         )}
                         <p className="text-lg text-gray-500 dark:text-gray-400 mt-4 max-w-2xl font-medium">
-                            Upload and manage your academic certificates, passport copies, and financial records in one secure place.
+                            Access and download your academic certificates, passport copies, and financial records.
                         </p>
-                    </div>
-
-                    <div className="flex flex-col items-center gap-4 min-w-[300px]">
-                        <div className="w-full text-center">
-                            <p className="text-sm font-black text-gray-400 uppercase tracking-widest mb-3">Upload Category</p>
-                            <div className="bg-gray-50 dark:bg-gray-900/50 p-1.5 rounded-2xl border border-gray-100 dark:border-gray-700 flex flex-wrap gap-1 justify-center">
-                                {categories.filter(cat => !lockedCategories.has(cat.name)).map(cat => (
-                                    <button
-                                        key={cat.name}
-                                        onClick={() => setSelectedCategory(cat.name)}
-                                        className={`px-4 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 ${selectedCategory === cat.name
-                                            ? 'bg-lyceum-blue text-white shadow-md shadow-lyceum-blue/20 scale-105'
-                                            : 'text-gray-500 hover:bg-white dark:hover:bg-gray-800 hover:text-lyceum-blue'
-                                            }`}
-                                        title={cat.name}
-                                    >
-                                        {cat.icon}
-                                        <span className={cat.shortName ? 'hidden xl:inline' : ''}>{cat.shortName || cat.name.split(' ')[0]}</span>
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-
-                        <input
-                            type="file"
-                            ref={fileInputRef}
-                            onChange={handleFileSelect}
-                            className="hidden"
-                            id="student-doc-upload-view"
-                        />
-                        <label
-                            htmlFor={!lockedCategories.has(selectedCategory) ? "student-doc-upload-view" : undefined}
-                            className={`w-full inline-flex items-center justify-center px-8 py-4 bg-lyceum-blue text-white rounded-2xl shadow-xl shadow-lyceum-blue/30 hover:bg-lyceum-blue-dark hover:shadow-2xl hover:shadow-lyceum-blue/40 transition-all duration-300 ${uploading || lockedCategories.has(selectedCategory) ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer active:scale-95'}`}
-                        >
-                            <Upload size={22} className="mr-3" />
-                            <span className="text-lg font-black">
-                                {lockedCategories.has(selectedCategory) ? 'Category Locked' : uploading ? 'Uploading...' : `Upload to ${selectedCategory.split(' ')[0]}`}
-                            </span>
-                        </label>
                     </div>
                 </div>
             </div>
@@ -467,15 +428,6 @@ const StudentDocumentsView: React.FC<StudentDocumentsViewProps> = ({ student, on
                                             {cat.icon}
                                         </div>
                                         <p className="text-gray-400 font-bold">No documents in this category yet</p>
-                                        <button
-                                            onClick={() => {
-                                                setSelectedCategory(cat.name);
-                                                fileInputRef.current?.click();
-                                            }}
-                                            className="mt-4 text-sm font-black text-lyceum-blue hover:underline p-2"
-                                        >
-                                            Click to upload
-                                        </button>
                                     </div>
                                 )}
                             </div>
@@ -488,20 +440,11 @@ const StudentDocumentsView: React.FC<StudentDocumentsViewProps> = ({ student, on
                         <div className="w-32 h-32 bg-lyceum-blue/5 rounded-full flex items-center justify-center animate-pulse">
                             <FileText size={64} className="text-lyceum-blue/20" />
                         </div>
-                        <div className="absolute -bottom-2 -right-2 w-12 h-12 bg-lyceum-blue rounded-2xl flex items-center justify-center text-white shadow-xl">
-                            <Plus size={24} />
-                        </div>
                     </div>
                     <h3 className="text-3xl font-black text-gray-900 dark:text-gray-100">Your library is empty</h3>
                     <p className="text-gray-500 dark:text-gray-400 mt-4 max-w-sm mx-auto text-lg font-medium">
-                        Start building your profile by uploading your documents. Select a category above to get started.
+                        Your document library is currently empty.
                     </p>
-                    <button
-                        onClick={() => fileInputRef.current?.click()}
-                        className="mt-10 px-10 py-4 bg-lyceum-blue text-white rounded-2xl font-black shadow-xl shadow-lyceum-blue/30 hover:bg-lyceum-blue-dark transition-all transform hover:scale-105 active:scale-95"
-                    >
-                        Upload My First Document
-                    </button>
                 </div>
             )}
 

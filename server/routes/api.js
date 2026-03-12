@@ -621,7 +621,265 @@ router.delete('/documents/:id', authenticateToken, async (req, res) => {
   }
 });
 
+// ============================================================
+// DOCUMENT SUBMISSION ROUTES (for Document Manager workflow)
+// ============================================================
+
+// POST /document-submissions - Upload a new submission (Student only)
+router.post('/document-submissions', authenticateToken, async (req, res) => {
+  try {
+    upload.single('file')(req, res, async (err) => {
+      if (err) return res.status(400).json({ error: err.message });
+
+      const file = req.file;
+      if (!file) return res.status(400).json({ error: 'No file uploaded' });
+
+      // Get contact for this user
+      const contactRes = await query('SELECT id FROM contacts WHERE user_id = $1', [req.user.id]);
+      if (contactRes.rows.length === 0) {
+        return res.status(404).json({ error: 'Contact record not found for this user' });
+      }
+      const contactId = contactRes.rows[0].id;
+      const category = req.body.category || null;
+
+      const result = await query(`
+        INSERT INTO document_submissions (contact_id, user_id, filename, content_type, file_data, file_size, category, status)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')
+        RETURNING id, contact_id, user_id, filename, content_type, file_size, category, status, created_at
+      `, [contactId, req.user.id, file.originalname, file.mimetype, file.buffer, file.size, category]);
+
+      res.json(result.rows[0]);
+    });
+  } catch (error) {
+    console.error('Error uploading submission:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /document-submissions - List submissions
+// Students see only their own; Staff/Admin see all
+router.get('/document-submissions', authenticateToken, async (req, res) => {
+  try {
+    let result;
+    if (req.user.role === 'Student') {
+      result = await query(`
+        SELECT ds.id, ds.contact_id, ds.filename, ds.content_type, ds.file_size, ds.category,
+               ds.status, ds.rejection_reason, ds.created_at, ds.reviewed_at,
+               u.name as reviewed_by_name
+        FROM document_submissions ds
+        LEFT JOIN users u ON ds.reviewed_by = u.id
+        WHERE ds.user_id = $1
+        ORDER BY ds.created_at DESC
+      `, [req.user.id]);
+    } else {
+      result = await query(`
+        SELECT ds.id, ds.contact_id, ds.filename, ds.content_type, ds.file_size, ds.category,
+               ds.status, ds.rejection_reason, ds.created_at, ds.reviewed_at,
+               sub_user.name as student_name, sub_user.email as student_email,
+               u.name as reviewed_by_name, c.contact_id as contact_ref
+        FROM document_submissions ds
+        LEFT JOIN users sub_user ON ds.user_id = sub_user.id
+        LEFT JOIN users u ON ds.reviewed_by = u.id
+        LEFT JOIN contacts c ON ds.contact_id = c.id
+        ORDER BY ds.created_at DESC
+      `);
+    }
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching submissions:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /document-submissions/:id/file - Preview/download a submission file
+router.get('/document-submissions/:id/file', authenticateToken, async (req, res) => {
+  try {
+    const subId = parseInt(req.params.id);
+    const result = await query('SELECT * FROM document_submissions WHERE id = $1', [subId]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Submission not found' });
+
+    const doc = result.rows[0];
+
+    // Students can only access their own submissions
+    if (req.user.role === 'Student' && doc.user_id !== req.user.id) {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+
+    const isPreview = req.query.preview === 'true';
+    res.setHeader('Content-Type', doc.content_type || 'application/octet-stream');
+    res.setHeader('Content-Disposition', `${isPreview ? 'inline' : 'attachment'}; filename="${doc.filename}"`);
+    res.send(doc.file_data);
+  } catch (error) {
+    console.error('Error serving submission file:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// DELETE /document-submissions/:id - Delete a pending submission (Student or Staff/Admin)
+router.delete('/document-submissions/:id', authenticateToken, async (req, res) => {
+  try {
+    const subId = parseInt(req.params.id);
+    const result = await query('SELECT * FROM document_submissions WHERE id = $1', [subId]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Submission not found' });
+
+    const sub = result.rows[0];
+
+    // Students can only delete their own pending submissions
+    if (req.user.role === 'Student') {
+      if (sub.user_id !== req.user.id) return res.status(403).json({ error: 'Unauthorized' });
+      if (sub.status !== 'pending') return res.status(400).json({ error: 'Cannot delete a reviewed submission' });
+    }
+
+    await query('DELETE FROM document_submissions WHERE id = $1', [subId]);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting submission:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ─── Naming Convention Helpers ────────────────────────────────────────────────
+/**
+ * Short aliases for long or special-character category names.
+ * Format: StudentName_Category_YYYYMMDD_HHMMSS_SubmissionID.ext (IST timezone)
+ */
+const CATEGORY_ALIASES = {
+  "IELTS/PTE/TOEFL Score":             "score",
+  "LOR's":                             "lors",
+  "SOP (Statement of Purpose)":        "sop",
+  "CV (Curriculum Vitae)":             "cv",
+  "Affidavit of Support":              "aos",
+  "Individual Memos":                  "memos",
+  "Provisional Certificate":           "pc",
+  "Consolidated Marks Memo (CMM)":     "cmm",
+  "Original Degree (OD)":              "od",
+};
+
+const buildApprovedFilename = (contactName, category, submissionId, originalFilename) => {
+  // 1. Sanitize student name: strip special chars, collapse whitespace
+  const sanitizedName = (contactName || 'Unknown')
+    .normalize('NFD')                         // decompose accents
+    .replace(/[\u0300-\u036f]/g, '')          // strip accent marks
+    .replace(/[^a-zA-Z0-9\s]/g, '')          // remove all non-alphanumeric
+    .trim()
+    .replace(/\s+/g, '');                     // remove spaces → PascalCase run-on
+
+  // 2. Normalize category using alias map, or auto-normalize
+  const catKey = (category || 'document').trim();
+  const catNorm = CATEGORY_ALIASES[catKey] !== undefined
+    ? CATEGORY_ALIASES[catKey]
+    : catKey
+        .replace(/[^a-zA-Z0-9\s]/g, '_')     // special chars → underscore
+        .replace(/\s+/g, '_')
+        .replace(/_+/g, '_')
+        .replace(/^_|_$/g, '')
+        .toLowerCase();
+
+  // 3. IST timestamp (UTC+05:30)
+  const now = new Date();
+  const istMs = now.getTime() + (5.5 * 60 * 60 * 1000);
+  const ist = new Date(istMs);
+  const pad = n => String(n).padStart(2, '0');
+  const dateStr = `${ist.getUTCFullYear()}${pad(ist.getUTCMonth() + 1)}${pad(ist.getUTCDate())}`;
+  const timeStr = `${pad(ist.getUTCHours())}${pad(ist.getUTCMinutes())}${pad(ist.getUTCSeconds())}`;
+
+  // 4. Preserve original extension
+  const dotIdx = (originalFilename || '').lastIndexOf('.');
+  const ext = dotIdx >= 0 ? originalFilename.slice(dotIdx).toLowerCase() : '';
+
+  return `${sanitizedName}_${catNorm}_${dateStr}_${timeStr}_${submissionId}${ext}`;
+};
+// ──────────────────────────────────────────────────────────────────────────────
+
+// POST /document-submissions/:id/approve - Approve a submission (Staff/Admin only)
+router.post('/document-submissions/:id/approve', authenticateToken, requireRole('Admin', 'Staff'), async (req, res) => {
+  try {
+    const subId = parseInt(req.params.id);
+    const subResult = await query('SELECT * FROM document_submissions WHERE id = $1', [subId]);
+    if (subResult.rows.length === 0) return res.status(404).json({ error: 'Submission not found' });
+
+    const sub = subResult.rows[0];
+
+    // Fetch student's contact name for the filename
+    const contactResult = await query('SELECT name FROM contacts WHERE id = $1', [sub.contact_id]);
+    const contactName = contactResult.rows[0]?.name || 'Unknown';
+
+    // Build the standardized approved filename
+    const approvedFilename = buildApprovedFilename(contactName, sub.category, subId, sub.filename);
+
+    // Copy file into the main documents table with the new standardized name
+    const docResult = await query(`
+      INSERT INTO documents (contact_id, name, type, size, content, is_private, category)
+      VALUES ($1, $2, $3, $4, $5, false, $6)
+      RETURNING id, contact_id, name, type, size, uploaded_at, category
+    `, [sub.contact_id, approvedFilename, sub.content_type, sub.file_size, sub.file_data, sub.category]);
+
+    // Update submission status
+    await query(`
+      UPDATE document_submissions
+      SET status = 'approved', reviewed_at = NOW(), reviewed_by = $1
+      WHERE id = $2
+    `, [req.user.id, subId]);
+
+    // Create in-app notification for student
+    await query(`
+      INSERT INTO notifications (title, description, recipient_user_ids, link_to)
+      SELECT
+        'Document Approved ✅',
+        $1,
+        to_jsonb(ARRAY[user_id]),
+        '{"app": "Document manager"}'::jsonb
+      FROM document_submissions WHERE id = $2
+    `, [`Your document "${sub.filename}" has been approved and saved as "${approvedFilename}".`, subId]);
+
+    res.json({ success: true, document: docResult.rows[0], approvedFilename });
+  } catch (error) {
+    console.error('Error approving submission:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
+// POST /document-submissions/:id/reject - Reject a submission (Staff/Admin only)
+router.post('/document-submissions/:id/reject', authenticateToken, requireRole('Admin', 'Staff'), async (req, res) => {
+  try {
+    const subId = parseInt(req.params.id);
+    const { reason } = req.body;
+    if (!reason || !reason.trim()) {
+      return res.status(400).json({ error: 'A rejection reason is required' });
+    }
+
+    const subResult = await query('SELECT * FROM document_submissions WHERE id = $1', [subId]);
+    if (subResult.rows.length === 0) return res.status(404).json({ error: 'Submission not found' });
+
+    const sub = subResult.rows[0];
+
+    await query(`
+      UPDATE document_submissions
+      SET status = 'rejected', rejection_reason = $1, reviewed_at = NOW(), reviewed_by = $2
+      WHERE id = $3
+    `, [reason.trim(), req.user.id, subId]);
+
+    // Create in-app notification for student
+    await query(`
+      INSERT INTO notifications (title, description, recipient_user_ids, link_to)
+      SELECT
+        'Document Rejected ❌',
+        $1,
+        to_jsonb(ARRAY[user_id]),
+        '{"app": "Document manager"}'::jsonb
+      FROM document_submissions WHERE id = $2
+    `, [`Your document "${sub.filename}" was rejected. Reason: ${reason.trim()}`, subId]);
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error rejecting submission:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Serve avatar from DB
+
 router.get('/contacts/:id/avatar', async (req, res) => {
   try {
     const { id } = req.params;

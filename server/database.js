@@ -620,6 +620,46 @@ export async function initDatabase() {
     await client.query('CREATE INDEX IF NOT EXISTS idx_token_blacklist_hash ON token_blacklist(token_hash)');
 
     await client.query("COMMIT");
+
+    // Document Submissions table (for approval workflow)
+    // Drop and recreate to fix any broken prior state (table has no user data yet)
+    try {
+      // Check if table has the required columns; if not, drop and recreate
+      const colCheck = await client.query(`
+        SELECT column_name FROM information_schema.columns
+        WHERE table_name = 'document_submissions' AND column_name = 'contact_id'
+      `);
+      if (colCheck.rows.length === 0) {
+        // Table exists but is missing contact_id – drop it so we can create it properly
+        console.log('📡 [Migration] Dropping broken document_submissions table and recreating...');
+        await client.query('DROP TABLE IF EXISTS document_submissions CASCADE');
+      }
+    } catch (_) { /* table didn't exist at all, that's fine */ }
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS document_submissions (
+        id SERIAL PRIMARY KEY,
+        contact_id INTEGER REFERENCES contacts(id) ON DELETE CASCADE,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        filename TEXT NOT NULL,
+        content_type TEXT,
+        file_data BYTEA,
+        file_size INTEGER,
+        category TEXT,
+        status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+        rejection_reason TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        reviewed_at TIMESTAMP,
+        reviewed_by INTEGER REFERENCES users(id)
+      )
+    `);
+
+    // Indexes are performance-only; wrap in try/catch so they never crash startup
+    try { await client.query('CREATE INDEX IF NOT EXISTS idx_doc_submissions_contact_id ON document_submissions(contact_id)'); } catch (_) {}
+    try { await client.query('CREATE INDEX IF NOT EXISTS idx_doc_submissions_user_id ON document_submissions(user_id)'); } catch (_) {}
+    try { await client.query('CREATE INDEX IF NOT EXISTS idx_doc_submissions_status ON document_submissions(status)'); } catch (_) {}
+
+
     // ATTENDANCE & PAYROLL
     await client.query(`
       CREATE TABLE IF NOT EXISTS attendance_logs (

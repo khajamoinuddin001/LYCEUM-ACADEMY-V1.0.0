@@ -1,5 +1,5 @@
 import React from 'react';
-import { BookOpen, FileText, User, Paperclip, Receipt, CheckCircle2, MessagesSquare, GraduationCap } from 'lucide-react';
+import { BookOpen, FileText, User, FileUp, Paperclip, Receipt, CheckCircle2, MessagesSquare, GraduationCap } from 'lucide-react';
 
 import { useDraggable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
@@ -113,8 +113,15 @@ const StudentAppsView: React.FC<StudentAppsViewProps> = ({ onAppSelect }) => {
             name: 'Documents',
             icon: <Paperclip size={48} />,
             description: 'Access your uploaded documents and files',
-            bgColor: 'bg-green-100 dark:bg-green-900/20',
-            iconColor: 'text-green-600 dark:text-green-400',
+            bgColor: 'bg-emerald-100 dark:bg-emerald-900/20',
+            iconColor: 'text-emerald-600 dark:text-emerald-400',
+        },
+        {
+            name: 'Document manager',
+            icon: <FileUp size={48} strokeWidth={1.8} />,
+            description: 'Manage and organize your portal documents',
+            bgColor: 'bg-gradient-to-br from-sky-400 to-blue-500',
+            iconColor: 'text-white',
         },
         {
             name: 'Tasks',

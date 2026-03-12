@@ -31,7 +31,8 @@ import {
   Target,
   TrendingUp,
   Sparkles,
-  Zap
+  Zap,
+  FileUp
 } from '@/components/common/icons';
 
 export const ODOO_APPS: OdooApp[] = [
@@ -158,6 +159,12 @@ export const ODOO_APPS: OdooApp[] = [
     iconColor: 'text-green-600',
   },
   {
+    name: 'Document manager',
+    icon: <FileUp size={36} strokeWidth={1.8} />,
+    bgColor: 'bg-gradient-to-br from-sky-400 to-blue-500',
+    iconColor: 'text-white',
+  },
+  {
     name: 'Automation Engine',
     icon: <Zap size={36} fill="currentColor" className="filter drop-shadow-sm" />,
     bgColor: 'bg-emerald-500',
@@ -175,7 +182,7 @@ const adminPermissions = ODOO_APPS.reduce((acc, app) => {
   return acc;
 }, {} as { [appName: string]: AppPermissions });
 
-const employeeFullAccessApps = new Set(['Contacts', 'CRM', 'Calendar', 'Discuss', 'Tasks', 'Tickets', 'Reception', 'Sales', 'Analytics', 'LMS', 'Visitor Display', 'Department Dashboard', 'Attendance', 'University Application', 'University Manager']);
+const employeeFullAccessApps = new Set(['Contacts', 'CRM', 'Calendar', 'Discuss', 'Tasks', 'Tickets', 'Reception', 'Sales', 'Analytics', 'LMS', 'Visitor Display', 'Department Dashboard', 'Attendance', 'University Application', 'University Manager', 'Document manager']);
 const employeeReadOnlyApps = new Set(['dashboard', 'Accounts']);
 const employeePermissions: { [appName: string]: AppPermissions } = ODOO_APPS.reduce((acc, app) => {
   if (employeeFullAccessApps.has(app.name)) {
@@ -193,6 +200,7 @@ export const DEFAULT_PERMISSIONS: Record<UserRole, { [appName: string]: AppPermi
     'LMS': readOnly,
     'Discuss': fullAccess,
     'Accounts': fullAccess,
+    'Document manager': fullAccess,
   },
 };
 
@@ -238,6 +246,13 @@ export const VISA_DOCUMENT_CATEGORIES = {
         'Affidavit of Support',
         'Bank Statement',
         'Gap Justification',
+        // Staff-upload-only (post-admission documents)
+        'Acceptance',
+        'I20',
+        'DS-160',
+        'SEVIS confirmation',
+        'Appointment Confirmation',
+        'University Affidavit Forms',
         'Others'
     ],
     MASTERS: [
@@ -258,6 +273,13 @@ export const VISA_DOCUMENT_CATEGORIES = {
         'Affidavit of Support',
         'Bank Statement',
         'Gap Justification',
+        // Staff-upload-only (post-admission documents)
+        'Acceptance',
+        'I20',
+        'DS-160',
+        'SEVIS confirmation',
+        'Appointment Confirmation',
+        'University Affidavit Forms',
         'Others'
     ],
     DEFAULT: [
@@ -282,6 +304,16 @@ export const ALL_DOCUMENT_CATEGORIES = Array.from(new Set([
     ...VISA_DOCUMENT_CATEGORIES.DEFAULT
 ])).sort();
 
+/** Categories that only Staff/Admin can upload — students can only view them */
+export const STAFF_ONLY_DOCUMENT_CATEGORIES = new Set([
+    'Acceptance',
+    'I20',
+    'DS-160',
+    'SEVIS confirmation',
+    'Appointment Confirmation',
+    'University Affidavit Forms',
+]);
+
 export const getDocumentCategories = (visaType?: string, degree?: string) => {
     if (visaType === 'Student Visa') {
         if (degree === "Bachelor's") return VISA_DOCUMENT_CATEGORIES.BACHELORS;
@@ -290,4 +322,11 @@ export const getDocumentCategories = (visaType?: string, degree?: string) => {
         return VISA_DOCUMENT_CATEGORIES.VISIT;
     }
     return VISA_DOCUMENT_CATEGORIES.DEFAULT;
+};
+
+/** Categories a student is allowed to upload to (excludes staff-only categories) */
+export const getStudentUploadCategories = (visaType?: string, degree?: string) => {
+    return getDocumentCategories(visaType, degree).filter(
+        cat => !STAFF_ONLY_DOCUMENT_CATEGORIES.has(cat)
+    );
 };

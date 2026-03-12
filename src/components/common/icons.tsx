@@ -113,5 +113,6 @@ export {
   School,
   Globe2,
   Zap,
-  Cpu
+  Cpu,
+  FileUp
 } from 'lucide-react';

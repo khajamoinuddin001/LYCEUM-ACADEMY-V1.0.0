@@ -264,6 +264,71 @@ export const deleteDocument = async (documentId: number): Promise<void> => {
   });
 };
 
+// Document Submission endpoints (Document Manager workflow)
+export const uploadDocumentSubmission = async (file: File, category: string | null = null): Promise<any> => {
+  const formData = new FormData();
+  formData.append('file', file);
+  if (category) formData.append('category', category);
+
+  const token = getToken();
+  const headers: HeadersInit = {
+    ...(token && { 'Authorization': `Bearer ${token}` }),
+  };
+
+  const response = await fetch(`${API_BASE_URL}/document-submissions`, {
+    method: 'POST',
+    headers,
+    body: formData,
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Failed to upload submission' }));
+    throw new Error(error.error || `HTTP ${response.status}`);
+  }
+  return response.json();
+};
+
+export const getDocumentSubmissions = async (): Promise<any[]> => {
+  return apiRequest('/document-submissions');
+};
+
+export const deleteDocumentSubmission = async (submissionId: number): Promise<void> => {
+  return apiRequest(`/document-submissions/${submissionId}`, { method: 'DELETE' });
+};
+
+export const approveDocumentSubmission = async (submissionId: number): Promise<any> => {
+  return apiRequest(`/document-submissions/${submissionId}/approve`, { method: 'POST' });
+};
+
+export const rejectDocumentSubmission = async (submissionId: number, reason: string): Promise<any> => {
+  return apiRequest(`/document-submissions/${submissionId}/reject`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  });
+};
+
+export const getDocumentSubmissionFileUrl = (submissionId: number, preview: boolean = false): string => {
+  const token = getToken();
+  return `${API_BASE_URL}/document-submissions/${submissionId}/file${preview ? '?preview=true' : ''}`;
+};
+
+export const downloadDocumentSubmission = async (submissionId: number, filename: string): Promise<void> => {
+  const token = getToken();
+  const headers: HeadersInit = {
+    ...(token && { 'Authorization': `Bearer ${token}` }),
+  };
+  const response = await fetch(`${API_BASE_URL}/document-submissions/${submissionId}/file`, { headers });
+  if (!response.ok) throw new Error('Failed to download');
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+};
+
 export const downloadVisaOperationItem = async (itemId: number, filename: string): Promise<void> => {
   const token = getToken();
   const headers: HeadersInit = {
