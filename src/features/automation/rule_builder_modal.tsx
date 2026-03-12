@@ -25,7 +25,9 @@ const TRIGGERS = [
     'Application Acceptance Received',
     'Application I20 Received',
     'Application Rejected',
-    'Application Deferred'
+    'Application Deferred',
+    'Document Approved',
+    'Document Rejected'
 ];
 
 const OPERATORS = [

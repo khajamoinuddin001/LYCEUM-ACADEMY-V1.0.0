@@ -833,6 +833,35 @@ router.post('/document-submissions/:id/approve', authenticateToken, requireRole(
     `, [`Your document "${sub.filename}" has been approved and saved as "${approvedFilename}".`, subId]);
 
     res.json({ success: true, document: docResult.rows[0], approvedFilename });
+
+    // --- TRIGGER AUTOMATION ---
+    try {
+      // Fetch full contact and staff info for automation payload
+      const fullDataResult = await query(`
+        SELECT 
+          c.name as client_name, c.email as client_email, c.phone, c.department, c.major, c.id as contact_id,
+          u.name as staff_name, u.email as staff_email
+        FROM contacts c
+        LEFT JOIN users u ON u.id = $1
+        WHERE c.id = $2
+      `, [req.user.id, sub.contact_id]);
+
+      if (fullDataResult.rows.length > 0) {
+        const data = fullDataResult.rows[0];
+        const payload = {
+          ...data,
+          document_name: sub.filename,
+          document_category: sub.category,
+          approved_filename: approvedFilename,
+          status: 'approved',
+          submission_id: subId
+        };
+        // Fire and forget (don't await to avoid blocking response)
+        evaluateAutomation('Document Approved', payload);
+      }
+    } catch (autoErr) {
+      console.error('🤖 [Automation] Trigger failed for Document Approved:', autoErr);
+    }
   } catch (error) {
     console.error('Error approving submission:', error);
     res.status(500).json({ error: error.message });
@@ -872,6 +901,33 @@ router.post('/document-submissions/:id/reject', authenticateToken, requireRole('
     `, [`Your document "${sub.filename}" was rejected. Reason: ${reason.trim()}`, subId]);
 
     res.json({ success: true });
+
+    // --- TRIGGER AUTOMATION ---
+    try {
+      const fullDataResult = await query(`
+        SELECT 
+          c.name as client_name, c.email as client_email, c.phone, c.department, c.major, c.id as contact_id,
+          u.name as staff_name, u.email as staff_email
+        FROM contacts c
+        LEFT JOIN users u ON u.id = $1
+        WHERE c.id = $2
+      `, [req.user.id, sub.contact_id]);
+
+      if (fullDataResult.rows.length > 0) {
+        const data = fullDataResult.rows[0];
+        const payload = {
+          ...data,
+          document_name: sub.filename,
+          document_category: sub.category,
+          rejection_reason: reason.trim(),
+          status: 'rejected',
+          submission_id: subId
+        };
+        evaluateAutomation('Document Rejected', payload);
+      }
+    } catch (autoErr) {
+      console.error('🤖 [Automation] Trigger failed for Document Rejected:', autoErr);
+    }
   } catch (error) {
     console.error('Error rejecting submission:', error);
     res.status(500).json({ error: error.message });
