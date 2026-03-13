@@ -447,7 +447,7 @@ export const saveQuotation = async (leadId: number, quotationData: Omit<Quotatio
   const isEditing = 'id' in quotationData && !!quotationData.id;
 
   if (isEditing) {
-    // Update existing quotation via Lead Update (keeping existing pattern for now)
+    // Update existing quotation via Lead Update
     const lead = await apiRequest<CrmLead>(`/leads/${leadId}`, { method: 'GET' });
     const quotations = lead.quotations || [];
     const updatedQuotations = quotations.map(q => q.id === quotationData.id ? { ...q, ...quotationData } : q);
@@ -456,6 +456,14 @@ export const saveQuotation = async (leadId: number, quotationData: Omit<Quotatio
       method: 'PUT',
       body: JSON.stringify({ ...lead, quotations: updatedQuotations }),
     });
+
+    // SYNC with Accounts Receivable
+    try {
+      await syncQuotationWithAccountsReceivable(leadId, (quotationData as Quotation).id);
+    } catch (e) {
+      console.error('Failed to sync AR after quotation update:', e);
+      // We don't block the UI if AR sync fails, but we log it
+    }
   } else {
     // Create NEW quotation via dedicated endpoint (Server generates ID)
     await apiRequest(`/leads/${leadId}/quotations`, {
@@ -464,6 +472,46 @@ export const saveQuotation = async (leadId: number, quotationData: Omit<Quotatio
     });
   }
   return getLeads();
+};
+
+// Sync quotation changes with any existing AR entry
+const syncQuotationWithAccountsReceivable = async (leadId: number, quotationId: string | number): Promise<void> => {
+  const lead = await apiRequest<CrmLead>(`/leads/${leadId}`, { method: 'GET' });
+  const contacts = await getContacts();
+  const contact = contacts.find(c => c.name === lead.contact || (lead.email && c.email === lead.email));
+
+  if (!contact) return;
+
+  const metadata = (contact as any).metadata || {};
+  const arList = metadata.accountsReceivable || [];
+  
+  const arIndex = arList.findIndex((ar: any) => String(ar.quotationId) === String(quotationId));
+  if (arIndex === -1) return;
+
+  const quotation = (lead.quotations || []).find(q => String(q.id) === String(quotationId));
+  if (!quotation) return;
+
+  // Update line items in AR to match the updated quotation
+  const updatedArList = [...arList];
+  updatedArList[arIndex] = {
+    ...updatedArList[arIndex],
+    lineItems: quotation.lineItems,
+    totalAmount: quotation.total,
+    remainingAmount: quotation.total - (updatedArList[arIndex].paidAmount || 0)
+  };
+
+  const updatedContact = {
+    ...contact,
+    metadata: {
+      ...metadata,
+      accountsReceivable: updatedArList
+    }
+  } as Contact;
+
+  await apiRequest(`/contacts/${contact.id}`, {
+    method: 'PUT',
+    body: JSON.stringify(updatedContact),
+  });
 };
 
 // Accept quotation (student action)

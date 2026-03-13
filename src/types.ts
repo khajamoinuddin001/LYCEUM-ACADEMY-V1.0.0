@@ -423,6 +423,7 @@ export interface Quotation {
 }
 
 export interface QuotationLineItem {
+  id?: string; // Unique identifier for tracking item-level payments
   description: string;
   price: number;
   quantity?: number;
@@ -431,6 +432,7 @@ export interface QuotationLineItem {
   unlockThresholdType?: 'Full' | 'Custom'; // Legacy: for backward compatibility
   unlockThresholdAmount?: number; // Legacy: for backward compatibility
   unlockStages?: UnlockStage[]; // New: support multiple stages
+  paidAmount?: number; // Tracks amount paid specifically towards this item
 }
 
 export interface UnlockStage {

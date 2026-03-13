@@ -5,11 +5,15 @@ import type { Contact } from '@/types';
 import QuickAddContactModal from './quick_add_contact_modal';
 
 interface LineItem {
+  id?: string;
   description: string;
   longDescription?: string;
   quantity: number;
   rate: number;
   amount: number;
+  linkedQuotationLineItemId?: string;
+  pendingBalance?: number;
+  originalPending?: number;
 }
 
 interface NewInvoiceModalProps {
@@ -141,7 +145,13 @@ const NewInvoiceModal: React.FC<NewInvoiceModalProps> = ({
 
     // Recalculate amount
     if (field === 'quantity' || field === 'rate') {
-      updated[index].amount = (updated[index].quantity || 0) * (updated[index].rate || 0);
+      const newAmount = (updated[index].quantity || 0) * (updated[index].rate || 0);
+      updated[index].amount = newAmount;
+      
+      // Dynamically recalculate pending balance if linked to an AR item
+      if (updated[index].originalPending !== undefined) {
+        updated[index].pendingBalance = Math.max(0, updated[index].originalPending! - newAmount);
+      }
     }
 
     setLineItems(updated);
@@ -372,7 +382,40 @@ const NewInvoiceModal: React.FC<NewInvoiceModalProps> = ({
                 </label>
                 <select
                   value={selectedAREntryId || ''}
-                  onChange={(e) => setSelectedAREntryId(e.target.value ? parseInt(e.target.value) : null)}
+                  onChange={(e) => {
+                    const arId = e.target.value ? parseInt(e.target.value) : null;
+                    setSelectedAREntryId(arId);
+                    if (arId) {
+                      const selectedAR = availableAREntries.find(ar => ar.id === arId);
+                      if (selectedAR && selectedAR.lineItems && selectedAR.lineItems.length > 0) {
+                        // Auto-populate line items from AR
+                        const newItems = selectedAR.lineItems.map((item: any) => {
+                          const itemTotalCost = (item.price || 0) * (item.quantity || 1);
+                          const paidSoFar = item.paidAmount || 0;
+                          const amountToPay = Math.max(0, itemTotalCost - paidSoFar);
+                          
+                          return {
+                            id: item.id || '', // Generate new ID locally, or keep original ID? Actually these are invoice lines, we don't need distinct IDs for them unless passed back. Just tracking linkedQuotationLineItemId
+                            description: item.description,
+                            longDescription: '', // Could add more details here if needed
+                            quantity: 1, // Defaulting to 1 for the remaining lump sum
+                            rate: amountToPay,
+                            amount: amountToPay,
+                            linkedQuotationLineItemId: item.id, // Crucial link for partial payments
+                            originalPending: amountToPay,
+                            pendingBalance: 0 // If they pay the full amountToPay, pending balance will be 0
+                          };
+                        }).filter((item: any) => (item.originalPending || 0) > 0); // Only add items that still need payment
+                        
+                        if (newItems.length > 0) {
+                           setLineItems(newItems);
+                        }
+                      }
+                    } else {
+                       // Reset if deselected
+                       setLineItems([{ description: '', quantity: 1, rate: 0, amount: 0 }]);
+                    }
+                  }}
                   className="w-full px-3 py-2 border border-blue-200 dark:border-blue-700 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
                 >
                   <option value="">-- No Link (General Income) --</option>
@@ -404,8 +447,17 @@ const NewInvoiceModal: React.FC<NewInvoiceModalProps> = ({
                 </button>
               </div>
 
+              {/* Column Headers */}
+              <div className="hidden sm:flex items-center gap-2 mb-2 px-1 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                <div className="flex-1">Item Details</div>
+                <div className="w-20 text-center">Qty</div>
+                <div className="w-28 text-right">Amount</div>
+                <div className="w-28 text-right">Pending Balance</div>
+                <div className="w-28 text-right">Total Amount</div>
+                <div className="w-8"></div>
+              </div>
 
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {lineItems.map((item, index) => (
                   <div key={index} className="flex gap-2 items-start">
                     <div className="flex-1 space-y-2">
@@ -499,25 +551,30 @@ const NewInvoiceModal: React.FC<NewInvoiceModalProps> = ({
                     />
                     <input
                       type="number"
-                      placeholder="Rate"
+                      placeholder="Amount"
                       value={item.rate}
                       onChange={(e) => updateLineItem(index, 'rate', parseFloat(e.target.value) || 0)}
                       className="w-28 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white text-right"
                       min="0"
                       step="0.01"
                     />
+                    <div className="w-28 px-3 py-2 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-500 dark:text-gray-400 text-right font-medium">
+                      ₹{(item.pendingBalance || 0).toFixed(2)}
+                    </div>
                     <div className="w-28 px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white text-right font-medium">
                       ₹{item.amount.toFixed(2)}
                     </div>
-                    {lineItems.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => removeLineItem(index)}
-                        className="p-2 text-red-600 hover:text-red-700 dark:text-red-400"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    )}
+                    <div className="w-8 flex justify-center items-center">
+                      {lineItems.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeLineItem(index)}
+                          className="p-2 text-red-600 hover:text-red-700 dark:text-red-400 rounded-md hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

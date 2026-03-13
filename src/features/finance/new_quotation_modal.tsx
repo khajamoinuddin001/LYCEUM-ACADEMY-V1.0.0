@@ -21,10 +21,12 @@ interface NewQuotationPageProps {
   onDeleteTemplate: (templateId: number) => void;
 }
 
+const generateId = () => Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
+
 const BLANK_QUOTATION: Omit<Quotation, 'id' | 'status' | 'date'> = {
   title: 'New Quotation',
   description: '',
-  lineItems: [{ description: '', price: 0, quantity: 1, linkedDocumentCategories: [], unlockThresholdType: 'Full', unlockThresholdAmount: 0 }],
+  lineItems: [{ id: generateId(), description: '', price: 0, quantity: 1, linkedDocumentCategories: [], unlockThresholdType: 'Full', unlockThresholdAmount: 0 }],
   total: 0,
   discount: 0,
 };
@@ -120,10 +122,12 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ lead, onCancel, onS
       description: template.description,
       lineItems: template.lineItems.map(item => ({
         ...item,
+        id: generateId(), // Always generate a fresh ID when copying from a template
         isDocumentUnlockEnabled: item.isDocumentUnlockEnabled || false,
         linkedDocumentCategories: item.linkedDocumentCategories || [],
         unlockThresholdType: item.unlockThresholdType || 'Full',
-        unlockThresholdAmount: item.unlockThresholdAmount || 0
+        unlockThresholdAmount: item.unlockThresholdAmount || 0,
+        unlockStages: item.unlockStages || []
       })),
       total: template.total,
     });
@@ -149,6 +153,7 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ lead, onCancel, onS
     setQuotation(q => ({
       ...q,
       lineItems: [...q.lineItems, {
+        id: generateId(),
         description: '',
         price: 0,
         quantity: 1,
@@ -171,7 +176,9 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ lead, onCancel, onS
   const handleSaveQuotation = () => {
     console.log('Save quotation clicked', { quotation, canWrite });
 
-    const finalLineItems = quotation.lineItems.filter(item => item.description.trim() && (Number(item.price) || 0) > 0);
+    const finalLineItems = quotation.lineItems
+      .filter(item => item.description.trim() && (Number(item.price) || 0) > 0)
+      .map(item => ({ ...item, id: item.id || generateId() })); // Format safety
 
     console.log('Filtered line items:', finalLineItems);
 

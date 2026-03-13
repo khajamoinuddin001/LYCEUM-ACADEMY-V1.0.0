@@ -3014,17 +3014,21 @@ const revertARDeductions = async (contactId, arDeductions) => {
 router.get('/transactions', authenticateToken, async (req, res) => {
   try {
     const result = await query('SELECT * FROM transactions ORDER BY date DESC, created_at DESC');
-    const transactions = result.rows.map(t => ({
-      ...t,
-      contactId: t.contact_id,
-      customerName: t.customer_name, // Map snake_case to camelCase
-      paymentMethod: t.payment_method,
-      dueDate: t.due_date,
-      additionalDiscount: t.additional_discount,
-      metadata: typeof t.metadata === 'string' ? JSON.parse(t.metadata) : (t.metadata || {}),
-      amount: Number(t.amount),
-      lineItems: t.line_items // Map snake_case to camelCase
-    }));
+    const transactions = result.rows.map(t => {
+      const metadata = typeof t.metadata === 'string' ? JSON.parse(t.metadata) : (t.metadata || {});
+      return {
+        ...t,
+        contactId: t.contact_id,
+        customerName: t.customer_name, // Map snake_case to camelCase
+        paymentMethod: t.payment_method,
+        dueDate: t.due_date,
+        additionalDiscount: t.additional_discount,
+        metadata: metadata,
+        linkedArId: t.linked_ar_id || metadata.linkedArId || null,
+        amount: Number(t.amount),
+        lineItems: t.line_items // Map snake_case to camelCase
+      };
+    });
     res.json(transactions);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -3182,6 +3186,9 @@ router.post('/transactions', authenticateToken, async (req, res) => {
       }
     }
 
+    const metadata = transaction.metadata || {};
+    if (transaction.linkedArId) metadata.linkedArId = transaction.linkedArId;
+
     const result = await query(`
       INSERT INTO transactions(id, contact_id, customer_name, date, description, type, status, amount, payment_method, due_date, additional_discount, metadata, line_items)
 VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
@@ -3198,7 +3205,7 @@ RETURNING *
       transaction.paymentMethod || null,
       transaction.dueDate || null,
       transaction.additionalDiscount || 0,
-      JSON.stringify(transaction.metadata || {}),
+      JSON.stringify(metadata),
       JSON.stringify(transaction.lineItems || [])
     ]);
     const newTransaction = result.rows[0];
@@ -3223,7 +3230,8 @@ RETURNING *
     }
 
     // Automatic AR Deduction for Invoices (and Income if linked to contact)
-    // First, robustly determine contact ID
+    // DISABLED: Frontend app.tsx handles precise line-item AR allocation now.
+    /*
     let targetContactId = newTransaction.contact_id;
 
     if (!targetContactId && newTransaction.customer_name) {
@@ -3314,6 +3322,7 @@ RETURNING *
         // Do not fail the transaction creation itself
       }
     }
+    */
 
     res.json({
       ...newTransaction,
@@ -3345,9 +3354,12 @@ router.put('/transactions/:id', authenticateToken, async (req, res) => {
     const contactId = existingTx.contact_id;
 
     // Revert previous deductions if any
+    // DISABLED: Handled by frontend
+    /*
     if (arDeductions.length > 0 && contactId) {
       await revertARDeductions(contactId, arDeductions);
     }
+    */
 
     // 2. Update Transaction
     // Ensure we keep existing metadata but clear old arDeductions until re-applied
@@ -3379,8 +3391,8 @@ contact_id = $1, customer_name = $2, date = $3, description = $4, type = $5, sta
     ]);
 
     // 3. Apply New AR Deductions (if Invoice/Income and linked to Contact)
-    // Only if status is arguably 'valid' for deduction? Usually creation implies deduction.
-    // For now, always apply if it's an Invoice/Income as per creation logic.
+    // DISABLED: Handled by precise line-item allocation on frontend
+    /*
     let newArDeductions = [];
     const targetContactId = transaction.contactId || existingTx.contact_id; // Use new or fallback to old? Usually new.
 
@@ -3396,6 +3408,7 @@ contact_id = $1, customer_name = $2, date = $3, description = $4, type = $5, sta
         ]);
       }
     }
+    */
 
     const result = await query('SELECT * FROM transactions WHERE TRIM(id) = $1', [transactionId]);
     const updated = result.rows[0];
@@ -3436,6 +3449,8 @@ router.delete('/transactions/:id', authenticateToken, async (req, res) => {
     const contactId = transaction.contact_id;
 
     // 2. Revert AR if deductions were tracked
+    // DISABLED: Reversions are robustly managed in frontend via handleDeleteTransaction mapping
+    /*
     if (arDeductions.length > 0 && contactId) {
       try {
         const contactRes = await query('SELECT metadata FROM contacts WHERE id = $1', [contactId]);
@@ -3474,6 +3489,7 @@ router.delete('/transactions/:id', authenticateToken, async (req, res) => {
         // We continue with deletion even if reversion fails to avoid blocking the user
       }
     }
+    */
 
     await query('DELETE FROM transactions WHERE TRIM(id) = $1', [transactionId]);
     res.json({ success: true });

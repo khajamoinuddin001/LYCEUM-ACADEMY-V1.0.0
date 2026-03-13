@@ -5,11 +5,15 @@ import type { Contact, AccountingTransaction } from '@/types';
 import QuickAddContactModal from './quick_add_contact_modal';
 
 interface LineItem {
+    id?: string;
     description: string;
     longDescription?: string;
     quantity: number;
     rate: number;
     amount: number;
+    linkedQuotationLineItemId?: string;
+    pendingBalance?: number;
+    originalPending?: number;
 }
 
 interface EditInvoiceModalProps {
@@ -59,6 +63,7 @@ const EditInvoiceModal: React.FC<EditInvoiceModalProps> = ({
     useEffect(() => {
         loadProducts();
         initializeForm();
+        setSelectedAREntryId((transaction as any).linkedArId || null);
         if (transaction.contactId) {
             const contact = contacts.find(c => c.id === transaction.contactId);
             if (contact) {
@@ -159,7 +164,13 @@ const EditInvoiceModal: React.FC<EditInvoiceModalProps> = ({
 
         // Recalculate amount
         if (field === 'quantity' || field === 'rate') {
-            updated[index].amount = (updated[index].quantity || 0) * (updated[index].rate || 0);
+            const newAmount = (updated[index].quantity || 0) * (updated[index].rate || 0);
+            updated[index].amount = newAmount;
+
+            // Dynamically recalculate pending balance if linked to an AR item
+            if (updated[index].originalPending !== undefined) {
+                updated[index].pendingBalance = Math.max(0, updated[index].originalPending! - newAmount);
+            }
         }
 
         setLineItems(updated);
@@ -215,7 +226,7 @@ const EditInvoiceModal: React.FC<EditInvoiceModalProps> = ({
     };
 
     const addLineItem = () => {
-        setLineItems([...lineItems, { description: '', longDescription: '', quantity: 1, rate: 0, amount: 0 }]);
+        setLineItems([...lineItems, { description: '', longDescription: '', quantity: 1, rate: 0, amount: 0, linkedQuotationLineItemId: '', pendingBalance: 0, originalPending: 0 }]);
     };
 
     const removeLineItem = (index: number) => {
@@ -402,7 +413,14 @@ const EditInvoiceModal: React.FC<EditInvoiceModalProps> = ({
                                 </label>
                                 <select
                                     value={selectedAREntryId || ''}
-                                    onChange={(e) => setSelectedAREntryId(e.target.value ? parseInt(e.target.value) : null)}
+                                    onChange={(e) => {
+                                        const arId = e.target.value ? parseInt(e.target.value) : null;
+                                        setSelectedAREntryId(arId);
+                                        if (arId) {
+                                            const selectedAR = availableAREntries.find(ar => ar.id === arId);
+                                            // Optional: Auto-populate items logic here if needed, but since it's Edit mode, we probably want to leave existing items intact unless user explicitly overrides.
+                                        }
+                                    }}
                                     className="w-full px-3 py-2 border border-blue-200 dark:border-blue-700 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
                                 >
                                     <option value="">-- No Link (General Income) --</option>
@@ -439,15 +457,29 @@ const EditInvoiceModal: React.FC<EditInvoiceModalProps> = ({
                         <div>
                             <div className="flex items-center justify-between mb-3">
                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                                    Description
+                                    Line Items
                                 </label>
-                                <div className="text-xs text-gray-500">
-                                    (Item Description / Qty / Rate)
-                                </div>
+                                <button
+                                    type="button"
+                                    onClick={addLineItem}
+                                    className="text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 flex items-center gap-1 font-medium"
+                                >
+                                    <Plus className="w-4 h-4" />
+                                    Add Item
+                                </button>
                             </div>
 
+                            {/* Column Headers */}
+                            <div className="hidden sm:flex items-center gap-2 mb-2 px-1 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                <div className="flex-1">Item Details</div>
+                                <div className="w-20 text-center">Qty</div>
+                                <div className="w-28 text-right">Amount</div>
+                                <div className="w-28 text-right">Pending Balance</div>
+                                <div className="w-28 text-right">Total Amount</div>
+                                <div className="w-8"></div>
+                            </div>
 
-                            <div className="space-y-4">
+                            <div className="space-y-3">
                                 {lineItems.map((item, index) => (
                                     <div key={index} className="flex flex-col gap-2 p-3 bg-gray-50 dark:bg-gray-700/30 rounded-lg border border-gray-100 dark:border-gray-700">
                                         <div className="flex gap-2 items-start">
@@ -522,16 +554,14 @@ const EditInvoiceModal: React.FC<EditInvoiceModalProps> = ({
                                                         onClick={() => setActiveDropdownIndex(null)}
                                                     />
                                                 )}
-                                                <textarea
+                                                <input
+                                                    type="text"
                                                     placeholder="Add extra details..."
                                                     value={item.longDescription || ''}
                                                     onChange={(e) => updateLineItem(index, 'longDescription', e.target.value)}
-                                                    className="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 focus:ring-1 focus:ring-blue-500 text-gray-600 dark:text-gray-400"
-                                                    rows={2}
+                                                    className="w-full px-2 py-1 text-xs border border-gray-200 dark:border-gray-700 rounded bg-gray-50 dark:bg-gray-800/50 focus:ring-1 focus:ring-blue-500 text-gray-600 dark:text-gray-400"
                                                 />
                                             </div>
-                                        </div>
-                                        <div className="flex items-center gap-2">
                                             <input
                                                 type="number"
                                                 placeholder="Qty"
@@ -541,39 +571,32 @@ const EditInvoiceModal: React.FC<EditInvoiceModalProps> = ({
                                                 min="0"
                                                 step="0.01"
                                             />
-                                            <span className="text-gray-400">×</span>
                                             <input
                                                 type="number"
-                                                placeholder="Rate"
+                                                placeholder="Amount"
                                                 value={item.rate}
                                                 onChange={(e) => updateLineItem(index, 'rate', parseFloat(e.target.value) || 0)}
                                                 className="w-28 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white text-right"
                                                 min="0"
                                                 step="0.01"
                                             />
-                                            <span className="text-gray-400">=</span>
-                                            <div className="w-28 px-3 py-2 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white text-right font-medium">
+                                            <div className="w-28 px-3 py-2 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-500 dark:text-gray-400 text-right font-medium">
+                                                ₹{(item.pendingBalance || 0).toFixed(2)}
+                                            </div>
+                                            <div className="w-28 px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white text-right font-medium">
                                                 ₹{item.amount.toFixed(2)}
                                             </div>
-                                            {lineItems.length > 1 && (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => removeLineItem(index)}
-                                                    className="p-2 text-red-600 hover:text-red-700 dark:text-red-400"
-                                                >
-                                                    <Trash2 className="w-4 h-4" />
-                                                </button>
-                                            )}
-                                            {index === lineItems.length - 1 && (
-                                                <button
-                                                    type="button"
-                                                    onClick={addLineItem}
-                                                    className="ml-auto flex items-center gap-1 text-sm bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 px-3 py-2 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
-                                                >
-                                                    <Plus className="w-4 h-4" />
-                                                    Add
-                                                </button>
-                                            )}
+                                            <div className="w-8 flex justify-center items-center">
+                                                {lineItems.length > 1 && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => removeLineItem(index)}
+                                                        className="p-2 text-red-600 hover:text-red-700 dark:text-red-400 rounded-md hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
+                                                )}
+                                            </div>
                                         </div>
 
                                     </div>

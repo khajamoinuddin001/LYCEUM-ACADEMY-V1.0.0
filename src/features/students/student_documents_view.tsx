@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { Contact, Document as Doc, User } from '@/types';
 import { Paperclip, Upload, Download, ArrowLeft, Trash2, Eye, FileText, Clock, HardDrive, GraduationCap, Banknote, CalendarClock, MoreHorizontal, Plus, X, Lock, CheckCircle, FileBadge } from '@/components/common/icons';
-import { getDocumentCategories } from '@/lib/constants';
+import { getDocumentCategories, STAFF_ONLY_DOCUMENT_CATEGORIES } from '@/lib/constants';
 import * as api from '@/utils/api';
 
 interface StudentDocumentsViewProps {
@@ -153,39 +153,43 @@ const StudentDocumentsView: React.FC<StudentDocumentsViewProps> = ({ student, on
 
     const lockedCategories = React.useMemo(() => {
         if (!isLockEnforced) return new Set<string>();
-        const locked = new Set<string>();
+        
+        // Protected Lock Strategy: All sensitive categories are locked by default
+        const locked = new Set<string>(STAFF_ONLY_DOCUMENT_CATEGORIES);
         const arList = (student.metadata as any)?.accountsReceivable || [];
 
         arList.forEach((ar: any) => {
-            const paidAmount = Number(ar.paidAmount) || 0;
             const lineItems = ar.lineItems || [];
 
             lineItems.forEach((item: any) => {
-                if (!item.isDocumentUnlockEnabled) return;
+                const itemCost = (Number(item.price || 0) * Number(item.quantity || 1));
+                const itemPaidAmount = Number(item.paidAmount) || 0; // The precisely allocated paid amount for this item
 
-                // Handle new multi-stage logic
-                if (item.unlockStages && item.unlockStages.length > 0) {
-                    item.unlockStages.forEach((stage: any) => {
-                        const requiredAmount = stage.type === 'Custom'
-                            ? (Number(stage.amount) || 0)
-                            : (Number(item.price || 0) * Number(item.quantity || 1));
+                if (item.isDocumentUnlockEnabled) {
+                    // Handle new multi-stage logic
+                    if (item.unlockStages && item.unlockStages.length > 0) {
+                        item.unlockStages.forEach((stage: any) => {
+                            const requiredAmount = stage.type === 'Custom'
+                                ? (Number(stage.amount) || 0)
+                                : itemCost;
 
-                        if (paidAmount < requiredAmount) {
-                            (stage.linkedDocumentCategories || []).forEach((cat: string) => locked.add(cat));
+                            if (itemPaidAmount >= requiredAmount) {
+                                (stage.linkedDocumentCategories || []).forEach((cat: string) => locked.delete(cat));
+                            }
+                        });
+                    } else {
+                        // Legacy single-stage logic
+                        const linkedCategories = item.linkedDocumentCategories || [];
+                        if (linkedCategories.length > 0) {
+                            const type = item.unlockThresholdType || 'Full';
+                            const requiredAmount = type === 'Custom'
+                                ? (Number(item.unlockThresholdAmount) || 0)
+                                : itemCost;
+
+                            if (itemPaidAmount >= requiredAmount) {
+                                linkedCategories.forEach((cat: string) => locked.delete(cat));
+                            }
                         }
-                    });
-                } else {
-                    // Legacy single-stage logic
-                    const linkedCategories = item.linkedDocumentCategories || [];
-                    if (linkedCategories.length === 0) return;
-
-                    const type = item.unlockThresholdType || 'Full';
-                    const requiredAmount = type === 'Custom'
-                        ? (Number(item.unlockThresholdAmount) || 0)
-                        : (Number(item.price || 0) * Number(item.quantity || 1));
-
-                    if (paidAmount < requiredAmount) {
-                        linkedCategories.forEach((cat: string) => locked.add(cat));
                     }
                 }
             });

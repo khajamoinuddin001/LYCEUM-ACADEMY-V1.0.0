@@ -173,10 +173,12 @@ const AccountingView: React.FC<AccountingViewProps> = ({
                 if (ar.status === 'Paid') status = 'Paid';
                 else if (ar.status === 'Overdue') status = 'Overdue';
 
+                const calculatedRemaining = Math.max(0, (Number(ar.totalAmount) || Number(ar.originalAmount) || 0) - (Number(ar.paidAmount) || 0));
+
                 const arTransaction: AccountingTransaction = {
                     id: `AR-${ar.id}`, // Unique ID prefix
                     date: ar.createdAt,
-                    amount: ar.remainingAmount, // Show remaining pending amount
+                    amount: calculatedRemaining, // Show foolproof remaining pending amount
                     type: 'Due',
                     // category: 'Sales', // Removed as it is not part of AccountingTransaction type
                     description: `Quotation #${ar.quotationRef} (Due)`,
@@ -626,7 +628,11 @@ const AccountingView: React.FC<AccountingViewProps> = ({
                                                 </span>
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap text-right">
-                                                {transaction.status === 'Pending' || transaction.status === 'Overdue' ? (
+                                                {transaction.type === 'Due' ? (
+                                                    <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
+                                                        {formatCurrency(transaction.amount)}
+                                                    </span>
+                                                ) : transaction.status === 'Pending' || transaction.status === 'Overdue' ? (
                                                     (() => {
                                                         const isOverdue = transaction.dueDate && new Date(transaction.dueDate) < new Date(new Date().setHours(0, 0, 0, 0));
                                                         return (
