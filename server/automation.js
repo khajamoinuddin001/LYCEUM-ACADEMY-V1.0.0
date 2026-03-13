@@ -167,53 +167,67 @@ export async function evaluateAutomation(triggerEvent, payload) {
 
                     // Action 1: Send Email
                     if (rule.action_send_email && rule.body) {
-                        let recipientEmail = null;
-                        if (rule.email_recipient === 'client' && payload.client_email) {
-                            recipientEmail = payload.client_email;
-                        } else if (rule.email_recipient === 'staff' && payload.staff_email) {
-                            recipientEmail = payload.staff_email;
-                        } else if (payload.email) { // generic fallback
-                            recipientEmail = payload.email;
+                        const recipientTypes = (rule.email_recipient || 'student').split(',');
+                        const recipientEmails = new Set();
+
+                        for (const type of recipientTypes) {
+                            if (type === 'student' || type === 'client') {
+                                const email = payload.client_email || payload.student_email || payload.email;
+                                if (email) recipientEmails.add(email);
+                            } else if (type === 'staff') {
+                                const email = payload.staff_email || payload.assigned_to_email;
+                                if (email) recipientEmails.add(email);
+                            } else if (type === 'admin') {
+                                try {
+                                    const admins = await query("SELECT email FROM users WHERE role = 'Admin'");
+                                    admins.rows.forEach(row => {
+                                        if (row.email) recipientEmails.add(row.email);
+                                    });
+                                } catch (adminErr) {
+                                    console.error('🤖 [Automation] Failed to fetch admin emails:', adminErr);
+                                }
+                            }
                         }
 
                         const compiledSubject = compileTemplate(rule.subject, payload);
+                        const compiledBody = compileTemplate(rule.body, payload);
 
-                        if (recipientEmail) {
-                            try {
-                                const compiledBody = compileTemplate(rule.body, payload);
+                        if (recipientEmails.size > 0) {
+                            for (const recipientEmail of recipientEmails) {
+                                try {
+                                    const { transporter, from } = createTransporter();
+                                    const mailOptions = {
+                                        from: rule.from_address || from,
+                                        to: recipientEmail,
+                                        subject: compiledSubject,
+                                        html: compiledBody
+                                    };
 
-                                const { transporter, from } = createTransporter();
-                                const mailOptions = {
-                                    from: rule.from_address || from,
-                                    to: recipientEmail,
-                                    subject: compiledSubject,
-                                    html: compiledBody
-                                };
+                                    await transporter.sendMail(mailOptions);
+                                    console.log(`🤖 [Automation] Action Executed: Email sent to ${recipientEmail}`);
 
-                                await transporter.sendMail(mailOptions);
-                                console.log(`🤖 [Automation] Action Executed: Email sent to ${recipientEmail}`);
-
-                                // Log Success
-                                await logAutomationAction({
-                                    rule_id: rule.id,
-                                    trigger_event: triggerEvent,
-                                    action_type: 'email',
-                                    recipient: recipientEmail,
-                                    subject: compiledSubject,
-                                    status: 'success'
-                                });
-                            } catch (emailErr) {
-                                console.error(`🤖 [Automation] Email failed for rule ${rule.id}:`, emailErr);
-                                // Log Failure
-                                await logAutomationAction({
-                                    rule_id: rule.id,
-                                    trigger_event: triggerEvent,
-                                    action_type: 'email',
-                                    recipient: recipientEmail,
-                                    subject: compiledSubject,
-                                    status: 'failed',
-                                    error_message: emailErr.message
-                                });
+                                    // Log Success
+                                    await logAutomationAction({
+                                        rule_id: rule.id,
+                                        trigger_event: triggerEvent,
+                                        action_type: 'email',
+                                        recipient: recipientEmail,
+                                        subject: compiledSubject,
+                                        status: 'success'
+                                    });
+                                } catch (emailErr) {
+                                    console.error(`🤖 [Automation] Email failed for rule ${rule.id} to ${recipientEmail}:`, emailErr);
+                                    // Log Failure
+                                    await logAutomationAction({
+                                        rule_id: rule.id,
+                                        trigger_event: triggerEvent,
+                                        action_type: 'email',
+                                        recipient: recipientEmail,
+                                        subject: compiledSubject,
+                                        status: 'failed',
+                                        error_message: emailErr.message
+                                    });
+                                }
                             }
                         } else {
                             console.log(`🤖 [Automation] Tried to send email but could not resolve recipient for rule ${rule.id}`);

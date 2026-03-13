@@ -77,7 +77,12 @@ const RuleBuilderModal: React.FC<RuleBuilderModalProps> = ({ isOpen, onClose, ru
                 conditions: typeof rule.conditions === 'string' ? JSON.parse(rule.conditions) : (rule.conditions || []),
                 action_send_email: rule.action_send_email,
                 email_template_id: rule.email_template_id?.toString() || '',
-                email_recipient: rule.email_recipient || 'client',
+                email_recipient: (() => {
+                    const r = rule.email_recipient || 'student';
+                    if (r === 'client') return 'student';
+                    if (r === 'both') return 'student,staff';
+                    return r;
+                })(),
                 action_create_task: rule.action_create_task,
                 task_template: typeof rule.task_template === 'string' ? JSON.parse(rule.task_template) : (rule.task_template || { title: '', description: '', assigned_to_role: 'Staff', due_days: 0, priority: 'Medium' }),
                 action_send_whatsapp: rule.action_send_whatsapp || false,
@@ -254,17 +259,31 @@ const RuleBuilderModal: React.FC<RuleBuilderModalProps> = ({ isOpen, onClose, ru
                                                 {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                                             </select>
                                         </div>
-                                        <div>
-                                            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Recipient</label>
-                                            <select
-                                                className="w-full px-3 py-2 border rounded-lg text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                                                value={formData.email_recipient}
-                                                onChange={e => setFormData({ ...formData, email_recipient: e.target.value })}
-                                            >
-                                                <option value="client">Client / Student</option>
-                                                <option value="staff">Assigned Staff Member</option>
-                                                <option value="both">Both Client & Staff</option>
-                                            </select>
+                                        <div className="col-span-2">
+                                            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">Recipients</label>
+                                            <div className="flex flex-wrap gap-4">
+                                                {[
+                                                    { id: 'admin', label: 'Admin' },
+                                                    { id: 'student', label: 'Student' },
+                                                    { id: 'staff', label: 'Assigned Staff' }
+                                                ].map(role => (
+                                                    <label key={role.id} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+                                                        <input
+                                                            type="checkbox"
+                                                            className="w-4 h-4 text-emerald-600 rounded"
+                                                            checked={formData.email_recipient.split(',').includes(role.id)}
+                                                            onChange={() => {
+                                                                const current = formData.email_recipient ? formData.email_recipient.split(',') : [];
+                                                                const updated = current.includes(role.id)
+                                                                    ? current.filter(r => r !== role.id)
+                                                                    : [...current, role.id];
+                                                                setFormData({ ...formData, email_recipient: updated.join(',') });
+                                                            }}
+                                                        />
+                                                        {role.label}
+                                                    </label>
+                                                ))}
+                                            </div>
                                         </div>
                                     </div>
                                 )}
