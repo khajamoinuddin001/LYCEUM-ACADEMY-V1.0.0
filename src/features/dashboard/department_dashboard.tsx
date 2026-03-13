@@ -306,10 +306,10 @@ const DepartmentDashboard: React.FC<DepartmentDashboardProps> = ({ user, tickets
                                                     {onViewVisits && (
                                                         <button
                                                             onClick={() => onViewVisits(v.contactId, v.name)}
-                                                            className="flex items-center gap-1 text-xs font-semibold text-lyceum-blue hover:text-lyceum-blue-dark px-2 py-1 rounded hover:bg-lyceum-blue/5"
+                                                            className="flex items-center gap-1 text-sm font-semibold text-lyceum-blue hover:text-white px-3 py-1.5 rounded bg-lyceum-blue/10 hover:bg-lyceum-blue shadow-sm hover:shadow transition-all active:scale-95 border border-lyceum-blue/20"
                                                         >
                                                             <ArrowRight size={14} />
-                                                            Details
+                                                            Visit
                                                         </button>
                                                     )}
                                                 </div>

@@ -1935,7 +1935,7 @@ const DashboardLayout: React.FC = () => {
       case 'Automation Engine': return <AutomationView />;
       case 'Apps': return <AppsGridView onAppSelect={handleAppSelect} user={currentUser} apps={gridApps} />;
       case 'dashboard': return <Dashboard onNavigateBack={() => handleAppSelect('Apps')} transactions={transactions} user={currentUser} tasks={tasks} onAppSelect={handleAppSelect} paymentActivityLog={paymentActivityLog} contacts={contacts} leads={leads} />;
-      case 'Department Dashboard': return <DepartmentDashboard user={currentUser} tickets={tickets} onTicketSelect={(ticketId) => { setSelectedTicketId(ticketId); setActiveApp('Tickets'); }} />;
+      case 'Department Dashboard': return <DepartmentDashboard user={currentUser} tickets={tickets} onTicketSelect={(ticketId) => { setSelectedTicketId(ticketId); setActiveApp('Tickets'); }} onViewVisits={handleViewContactVisits} />;
       case 'Discuss': return <DiscussView user={currentUser} users={users} isMobile={isMobile} channels={channels} setChannels={(value) => api.saveChannels(typeof value === 'function' ? value(channels) : value).then(setChannels)} onCreateGroup={handleCreateGroupChannel} />;
       case 'Tasks': return (
         <TasksView
