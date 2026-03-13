@@ -939,8 +939,37 @@ const DashboardLayout: React.FC = () => {
             const updatedContact = { ...contact, metadata: updatedMetadata };
             await api.saveContact(updatedContact, false);
             setContacts(prev => prev.map(c => c.id === contact.id ? updatedContact : c));
-            addNotification({ title: 'Success', description: 'Updated Approved Quotation status.', type: 'success' });
-            logActivity(`Updated AR transaction ${data.id} for contact ${contact.name}`);
+            
+            // Sync back to Lead Quotation if IDs are present
+            if (data.linkedLeadId && data.linkedQuotationId) {
+              try {
+                const lead = await api.getLead(data.linkedLeadId);
+                if (lead && lead.quotations) {
+                  const arEntry = updatedMetadata.accountsReceivable.find((ar: any) => ar.id === arId);
+                  const updatedQuotations = lead.quotations.map((q: any) => {
+                    if (String(q.id) === String(data.linkedQuotationId)) {
+                      // Calculate new total based on current paid amount + remaining amount
+                      const newTotal = (Number(arEntry.paidAmount) || 0) + (Number(arEntry.remainingAmount) || 0);
+                      return {
+                        ...q,
+                        lineItems: data.lineItems,
+                        additionalDiscount: data.additionalDiscount,
+                        total: newTotal
+                      };
+                    }
+                    return q;
+                  });
+                  const updatedLead = { ...lead, quotations: updatedQuotations };
+                  await api.saveLead(updatedLead, false);
+                  setLeads(prev => prev.map(l => l.id === lead.id ? updatedLead : l));
+                }
+              } catch (err) {
+                console.error('Failed to sync back to lead:', err);
+              }
+            }
+
+            addNotification({ title: 'Success', description: 'Updated Approved Quotation and synced with CRM.', type: 'success' });
+            logActivity(`Updated AR transaction ${data.id} and synced with Quotation for contact ${contact.name}`);
           }
           setIsTransactionModalOpen(false);
           setEditingTransaction(null);
@@ -974,7 +1003,22 @@ const DashboardLayout: React.FC = () => {
                   oldCoverage = oldPaymentAmount + oldDiscountAmount;
                 }
 
-                const coverageDiff = newCoverage - oldCoverage;
+                // Calculate diff based on status transitions
+                let coverageDiff = 0;
+                const wasPaid = oldTx?.status === 'Paid';
+                const isPaid = data.status === 'Paid';
+
+                if (!wasPaid && isPaid) {
+                  // Transition: Pending -> Paid (or new Paid)
+                  coverageDiff = newCoverage;
+                } else if (wasPaid && !isPaid) {
+                  // Transition: Paid -> Pending/Cancelled
+                  coverageDiff = -oldCoverage;
+                } else if (wasPaid && isPaid) {
+                  // Transition: Paid -> Paid (Amount updated)
+                  coverageDiff = newCoverage - oldCoverage;
+                }
+
                 const newPaidAmount = Math.max(0, (Number(ar.paidAmount) || 0) + coverageDiff);
                 const newRemainingAmount = Math.max(0, (Number(ar.totalAmount) || Number(ar.originalAmount) || 0) - newPaidAmount);
 
@@ -987,7 +1031,15 @@ const DashboardLayout: React.FC = () => {
                   }
 
                   if (linkedInvoiceItem) {
-                    const itemCoverageDiff = (linkedInvoiceItem.amount || 0) - oldInvoiceItemAmount;
+                    let itemCoverageDiff = 0;
+                    if (!wasPaid && isPaid) {
+                      itemCoverageDiff = linkedInvoiceItem.amount || 0;
+                    } else if (wasPaid && !isPaid) {
+                      itemCoverageDiff = -oldInvoiceItemAmount;
+                    } else if (wasPaid && isPaid) {
+                      itemCoverageDiff = (linkedInvoiceItem.amount || 0) - oldInvoiceItemAmount;
+                    }
+
                     return {
                       ...arItem,
                       paidAmount: Math.max(0, (Number(arItem.paidAmount) || 0) + itemCoverageDiff)

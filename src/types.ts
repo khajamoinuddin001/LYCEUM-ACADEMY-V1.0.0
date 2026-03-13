@@ -427,6 +427,7 @@ export interface QuotationLineItem {
   description: string;
   price: number;
   quantity?: number;
+  discount?: number; // Per-item discount
   isDocumentUnlockEnabled?: boolean;
   linkedDocumentCategories?: string[]; // Legacy: for backward compatibility
   unlockThresholdType?: 'Full' | 'Custom'; // Legacy: for backward compatibility
@@ -519,8 +520,11 @@ export interface AccountingTransaction {
     longDescription?: string;
     quantity: number;
     rate: number;
+    discount?: number;
     amount: number;
   }[];
+  linkedLeadId?: number;
+  linkedQuotationId?: number | string;
 }
 export type UserRole = 'Admin' | 'Staff' | 'Student';
 

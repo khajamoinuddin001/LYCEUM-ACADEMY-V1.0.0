@@ -10,6 +10,7 @@ interface LineItem {
     longDescription?: string;
     quantity: number;
     rate: number;
+    discount?: number;
     amount: number;
     linkedQuotationLineItemId?: string;
     pendingBalance?: number;
@@ -163,8 +164,11 @@ const EditInvoiceModal: React.FC<EditInvoiceModalProps> = ({
         updated[index] = { ...updated[index], [field]: value };
 
         // Recalculate amount
-        if (field === 'quantity' || field === 'rate') {
-            const newAmount = (updated[index].quantity || 0) * (updated[index].rate || 0);
+        if (field === 'quantity' || field === 'rate' || field === 'discount') {
+            const qty = updated[index].quantity || 0;
+            const rate = updated[index].rate || 0;
+            const disc = updated[index].discount || 0;
+            const newAmount = (qty * rate) - disc;
             updated[index].amount = newAmount;
 
             // Dynamically recalculate pending balance if linked to an AR item
@@ -264,7 +268,7 @@ const EditInvoiceModal: React.FC<EditInvoiceModalProps> = ({
                 description: lineItems
                     .filter(item => item.description.trim())
                     .map(item => {
-                        let desc = `${item.description} (${item.quantity} × ₹${item.rate})`;
+                        let desc = `${item.description} (${item.quantity} × ₹${item.rate}${item.discount ? ` - ₹${item.discount} disc` : ''})`;
                         if (item.longDescription?.trim()) {
                             desc += ` - ${item.longDescription.trim()}`;
                         }
@@ -470,11 +474,12 @@ const EditInvoiceModal: React.FC<EditInvoiceModalProps> = ({
                             </div>
 
                             {/* Column Headers */}
-                            <div className="hidden sm:flex items-center gap-2 mb-2 px-1 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                                <div className="flex-1">Item Details</div>
+                            <div className="hidden sm:flex items-center gap-2 mb-2 px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                <div className="flex-1">Item Detail</div>
                                 <div className="w-20 text-center">Qty</div>
-                                <div className="w-28 text-right">Amount</div>
-                                <div className="w-28 text-right">Pending Balance</div>
+                                <div className="w-24 text-right">Price</div>
+                                <div className="w-24 text-right">Discount</div>
+                                <div className="w-28 text-right">Pending</div>
                                 <div className="w-28 text-right">Total Amount</div>
                                 <div className="w-8"></div>
                             </div>
@@ -573,10 +578,19 @@ const EditInvoiceModal: React.FC<EditInvoiceModalProps> = ({
                                             />
                                             <input
                                                 type="number"
-                                                placeholder="Amount"
+                                                placeholder="Rate"
                                                 value={item.rate}
                                                 onChange={(e) => updateLineItem(index, 'rate', parseFloat(e.target.value) || 0)}
-                                                className="w-28 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white text-right"
+                                                className="w-24 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white text-right"
+                                                min="0"
+                                                step="0.01"
+                                            />
+                                            <input
+                                                type="number"
+                                                placeholder="Disc"
+                                                value={item.discount || 0}
+                                                onChange={(e) => updateLineItem(index, 'discount', parseFloat(e.target.value) || 0)}
+                                                className="w-24 px-3 py-2 border border-blue-200 dark:border-blue-900 bg-blue-50/30 dark:bg-blue-900/10 rounded-lg focus:ring-2 focus:ring-blue-500 dark:text-blue-200 text-right"
                                                 min="0"
                                                 step="0.01"
                                             />

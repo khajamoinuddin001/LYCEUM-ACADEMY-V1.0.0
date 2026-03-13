@@ -26,7 +26,7 @@ const generateId = () => Math.random().toString(36).substring(2, 9) + Date.now()
 const BLANK_QUOTATION: Omit<Quotation, 'id' | 'status' | 'date'> = {
   title: 'New Quotation',
   description: '',
-  lineItems: [{ id: generateId(), description: '', price: 0, quantity: 1, linkedDocumentCategories: [], unlockThresholdType: 'Full', unlockThresholdAmount: 0 }],
+  lineItems: [{ id: generateId(), description: '', price: 0, quantity: 1, discount: 0, linkedDocumentCategories: [], unlockThresholdType: 'Full', unlockThresholdAmount: 0 }],
   total: 0,
   discount: 0,
 };
@@ -108,8 +108,10 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ lead, onCancel, onS
 
   useEffect(() => {
     const subtotal = quotation.lineItems.reduce((sum, item) => sum + ((Number(item.price) || 0) * (Number(item.quantity) || 1)), 0);
-    const discount = Number(quotation.discount) || 0;
-    const newTotal = Math.max(0, subtotal - discount);
+    const itemDiscounts = quotation.lineItems.reduce((sum, item) => sum + (Number(item.discount) || 0), 0);
+    const additionalDiscount = Number(quotation.discount) || 0;
+    const totalDiscount = itemDiscounts + additionalDiscount;
+    const newTotal = Math.max(0, subtotal - totalDiscount);
 
     if (newTotal !== quotation.total || subtotal !== (quotation.subtotal || 0)) {
       setQuotation(q => ({ ...q, total: newTotal, subtotal }));
@@ -157,6 +159,7 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ lead, onCancel, onS
         description: '',
         price: 0,
         quantity: 1,
+        discount: 0,
         isDocumentUnlockEnabled: false,
         linkedDocumentCategories: [],
         unlockThresholdType: 'Full',
@@ -195,8 +198,9 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ lead, onCancel, onS
     }
 
     const subtotal = finalLineItems.reduce((sum, item) => sum + ((item.price || 0) * (item.quantity || 1)), 0);
-    const discount = Number(quotation.discount) || 0;
-    const finalTotal = Math.max(0, subtotal - discount);
+    const itemDiscounts = finalLineItems.reduce((sum, item) => sum + (Number(item.discount) || 0), 0);
+    const additionalDiscount = Number(quotation.discount) || 0;
+    const finalTotal = Math.max(0, subtotal - (itemDiscounts + additionalDiscount));
 
     // Generate ID if new
     let quotationToSave = {
@@ -204,7 +208,7 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ lead, onCancel, onS
       lineItems: finalLineItems,
       total: finalTotal,
       subtotal: subtotal,
-      discount: discount,
+      discount: additionalDiscount,
     };
 
     if (!isEditing && !quotationToSave.quotationNumber) {
@@ -374,9 +378,10 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ lead, onCancel, onS
               <thead>
                 <tr className="bg-gray-50 border-y border-gray-200">
                   <th className="py-2 px-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">DESCRIPTION</th>
-                  <th className="py-2 px-3 text-right text-[10px] font-bold text-gray-500 uppercase tracking-wider w-16">QTY</th>
-                  <th className="py-2 px-3 text-right text-[10px] font-bold text-gray-500 uppercase tracking-wider w-24">UNIT PRICE</th>
-                  <th className="py-2 px-3 text-right text-[10px] font-bold text-gray-500 uppercase tracking-wider w-32">AMOUNT</th>
+                  <th className="py-2 px-3 text-right text-[10px] font-bold text-gray-500 uppercase tracking-wider w-12">QTY</th>
+                  <th className="py-2 px-3 text-right text-[10px] font-bold text-gray-500 uppercase tracking-wider w-20">PRICE</th>
+                  <th className="py-2 px-3 text-right text-[10px] font-bold text-gray-500 uppercase tracking-wider w-20">DISC</th>
+                  <th className="py-2 px-3 text-right text-[10px] font-bold text-gray-500 uppercase tracking-wider w-24">TOTAL</th>
                 </tr>
               </thead>
               <tbody className="text-sm">
@@ -393,8 +398,11 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ lead, onCancel, onS
                     <td className="py-1.5 px-3 text-right align-top text-sm text-gray-900">
                       {formatCurrency(item.price)}
                     </td>
+                    <td className="py-1.5 px-3 text-right align-top text-sm text-red-600">
+                      {item.discount && item.discount > 0 ? `- ₹${item.discount.toLocaleString('en-IN')}` : '—'}
+                    </td>
                     <td className="py-1.5 px-3 text-right align-top font-bold text-sm text-gray-900">
-                      {formatCurrency((item.price || 0) * (item.quantity || 1))}
+                      {formatCurrency(((item.price || 0) * (item.quantity || 1)) - (item.discount || 0))}
                     </td>
                   </tr>
                 ))}
@@ -529,7 +537,19 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ lead, onCancel, onS
             </div>
 
             <div className="pt-2">
-              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Line Items</h3>
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">Line Items</h3>
+              </div>
+                 {/* Column Headers */}
+              <div className="hidden sm:flex items-center gap-2 mb-2 px-3 text-[10px] font-black uppercase tracking-widest text-gray-400">
+                <div className="flex-grow">Item Detail</div>
+                <div className="w-16 text-center">Qty</div>
+                <div className="w-24 text-center">Price</div>
+                <div className="w-20 text-center">Discount</div>
+                <div className="w-24 text-right pr-2">Total Amount</div>
+                <div className="w-[84px]"></div>
+              </div>
+
               <div className="space-y-4">
                 {quotation.lineItems.map((item, index) => (
                   <div key={index} className="p-3 shadow-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50/50 dark:bg-gray-800/30">
@@ -547,18 +567,29 @@ const NewQuotationPage: React.FC<NewQuotationPageProps> = ({ lead, onCancel, onS
                         placeholder="Qty"
                         value={item.quantity || 1}
                         onChange={(e) => handleLineItemChange(index, 'quantity', parseFloat(e.target.value) || 0)}
-                        className={inputClasses.replace('w-full', 'w-24')}
+                        className={inputClasses.replace('w-full', 'w-16')}
                         min="1"
                         disabled={!canWrite}
                       />
                       <input
                         type="number"
-                        placeholder="Unit Price"
+                        placeholder="Price"
                         value={item.price}
                         onChange={(e) => handleLineItemChange(index, 'price', parseFloat(e.target.value) || 0)}
-                        className={`${inputClasses} w-32`}
+                        className={`${inputClasses} w-24`}
                         disabled={!canWrite}
                       />
+                      <input
+                        type="number"
+                        placeholder="Disc"
+                        value={item.discount || 0}
+                        onChange={(e) => handleLineItemChange(index, 'discount', parseFloat(e.target.value) || 0)}
+                        className={`${inputClasses} w-20 text-red-600 placeholder-red-300`}
+                        disabled={!canWrite}
+                      />
+                      <div className="w-24 text-right px-2 font-bold text-gray-700 dark:text-gray-200">
+                        ₹{(((item.price || 0) * (item.quantity || 1)) - (item.discount || 0)).toLocaleString('en-IN')}
+                      </div>
                       {user.role === 'Admin' && (
                         <button
                           onClick={() => setExpandedSettingsIndex(expandedSettingsIndex === index ? null : index)}

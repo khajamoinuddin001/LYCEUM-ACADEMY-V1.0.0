@@ -14,6 +14,7 @@ interface LineItem {
     longDescription?: string;
     quantity: number;
     rate: number;
+    discount: number;
     amount: number;
 }
 
@@ -29,13 +30,15 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
             longDescription: item.longDescription || '',
             quantity: item.quantity || 1,
             rate: item.rate !== undefined ? item.rate : (item.price || 0),
-            amount: item.amount !== undefined ? item.amount : ((item.quantity || 1) * (item.rate !== undefined ? item.rate : (item.price || 0)))
+            discount: item.discount || 0,
+            amount: item.amount !== undefined ? item.amount : (((item.quantity || 1) * (item.rate !== undefined ? item.rate : (item.price || 0))) - (item.discount || 0))
         }))
         : [{
             description: transaction.description || '',
             longDescription: '',
             quantity: 1,
             rate: transaction.amount || 0,
+            discount: 0,
             amount: transaction.amount || 0
         }];
 
@@ -101,21 +104,22 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
     };
 
     // Calculate totals
-    const subtotal = lineItems.reduce((sum, item) => sum + item.amount, 0);
-    const total = Math.max(0, subtotal - (parseFloat(formData.additionalDiscount.toString()) || 0));
+    const subtotal = lineItems.reduce((sum, item) => sum + (item.quantity * item.rate), 0);
+    const totalItemDiscount = lineItems.reduce((sum, item) => sum + (Number(item.discount) || 0), 0);
+    const total = Math.max(0, (subtotal - totalItemDiscount) - (parseFloat(formData.additionalDiscount.toString()) || 0));
 
     const updateLineItem = (index: number, field: keyof LineItem, value: any) => {
         const updated = [...lineItems];
         updated[index] = { ...updated[index], [field]: value };
 
-        if (field === 'quantity' || field === 'rate') {
-            updated[index].amount = (updated[index].quantity || 0) * (updated[index].rate || 0);
+        if (field === 'quantity' || field === 'rate' || field === 'discount') {
+            updated[index].amount = ((updated[index].quantity || 0) * (updated[index].rate || 0)) - (updated[index].discount || 0);
         }
         setLineItems(updated);
     };
 
     const addLineItem = () => {
-        setLineItems([...lineItems, { description: '', longDescription: '', quantity: 1, rate: 0, amount: 0 }]);
+        setLineItems([...lineItems, { description: '', longDescription: '', quantity: 1, rate: 0, discount: 0, amount: 0 }]);
     };
 
     const removeLineItem = (index: number) => {
@@ -142,7 +146,7 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
             const updatedDescription = lineItems
                 .filter(item => item.description.trim())
                 .map(item => {
-                    let desc = `${item.description} (${item.quantity} × ₹${item.rate})`;
+                    let desc = `${item.description} (${item.quantity} × ₹${item.rate}${item.discount ? ` - ₹${item.discount} disc` : ''})`;
                     if (item.longDescription?.trim()) {
                         desc += ` - ${item.longDescription.trim()}`;
                     }
@@ -277,8 +281,8 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
                     </div>
 
                     {/* Line Items */}
-                    <div>
-                        <div className="flex items-center justify-between mb-3">
+                    <div className="space-y-4">
+                        <div className="flex items-center justify-between">
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                                 Line Items
                             </label>
@@ -292,7 +296,17 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
                             </button>
                         </div>
 
-                        <div className="space-y-2">
+                        {/* Column Headers */}
+                        <div className="hidden sm:flex items-center gap-2 mb-2 px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                            <div className="flex-1">Item Detail</div>
+                            <div className="w-20 text-center">Qty</div>
+                            <div className="w-28 text-right">Price</div>
+                            <div className="w-24 text-right">Discount</div>
+                            <div className="w-28 text-right">Total Amount</div>
+                            {lineItems.length > 1 && <div className="w-8"></div>}
+                        </div>
+
+                        <div className="space-y-4">
                             {lineItems.map((item, index) => (
                                 <div key={index} className="flex gap-2 items-start">
                                     <div className="flex-1 space-y-2">
@@ -329,8 +343,17 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
                                         min="0"
                                         step="0.01"
                                     />
+                                    <input
+                                        type="number"
+                                        placeholder="Disc"
+                                        value={item.discount}
+                                        onChange={(e) => updateLineItem(index, 'discount', parseFloat(e.target.value) || 0)}
+                                        className="w-24 px-3 py-2 border border-blue-200 dark:border-blue-900 bg-blue-50/30 dark:bg-blue-900/10 rounded-lg focus:ring-2 focus:ring-blue-500 dark:text-blue-200 text-right"
+                                        min="0"
+                                        step="0.01"
+                                    />
                                     <div className="w-28 px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white text-right font-medium">
-                                        ₹{((item.amount !== undefined ? item.amount : (item.quantity * item.rate)) || 0).toFixed(2)}
+                                        ₹{(item.amount || 0).toFixed(2)}
                                     </div>
                                     {lineItems.length > 1 && (
                                         <button

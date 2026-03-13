@@ -416,6 +416,10 @@ export const getLeads = async (): Promise<CrmLead[]> => {
   return apiRequest<CrmLead[]>('/leads');
 };
 
+export const getLead = async (id: number): Promise<CrmLead> => {
+  return apiRequest<CrmLead>(`/leads/${id}`);
+};
+
 export const saveLead = async (leadToSave: Omit<CrmLead, 'id' | 'stage'> & { id?: number }, isNew: boolean): Promise<CrmLead> => {
   if (isNew) {
     return apiRequest<CrmLead>('/leads', {

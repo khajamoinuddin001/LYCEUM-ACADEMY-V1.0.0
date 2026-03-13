@@ -189,7 +189,9 @@ const AccountingView: React.FC<AccountingViewProps> = ({
                     customerName: contact.name, // Map Name to Customer Name
                     invoiceNumber: ar.quotationRef,
                     lineItems: ar.lineItems,
-                    additionalDiscount: ar.additionalDiscount
+                    additionalDiscount: ar.additionalDiscount,
+                    linkedLeadId: ar.leadId,
+                    linkedQuotationId: ar.quotationId
                 };
                 combined.push(arTransaction);
             });
@@ -577,6 +579,9 @@ const AccountingView: React.FC<AccountingViewProps> = ({
                                         Due Date
                                     </th>
                                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+                                        Discount
+                                    </th>
+                                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
                                         Due Amount
                                     </th>
                                     <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
@@ -627,11 +632,29 @@ const AccountingView: React.FC<AccountingViewProps> = ({
                                                     {transaction.dueDate ? formatDate(transaction.dueDate) : '-'}
                                                 </span>
                                             </td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-right">
+                                             <td className="px-6 py-4 whitespace-nowrap text-right">
+                                                {(() => {
+                                                    const itemDiscount = (transaction.lineItems || []).reduce((acc: number, item: any) => acc + (Number(item.discount) || 0), 0);
+                                                    const totalDiscount = (Number(transaction.additionalDiscount) || 0) + itemDiscount;
+                                                    return totalDiscount > 0 ? (
+                                                        <span className="text-sm font-medium text-blue-600 dark:text-blue-400">
+                                                            {formatCurrency(totalDiscount)}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-sm text-gray-400 dark:text-gray-500">-</span>
+                                                    );
+                                                })()}
+                                             </td>
+                                             <td className="px-6 py-4 whitespace-nowrap text-right">
                                                 {transaction.type === 'Due' ? (
-                                                    <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
-                                                        {formatCurrency(transaction.amount)}
-                                                    </span>
+                                                    <div className="flex flex-col items-end">
+                                                        <span className="text-sm font-bold text-gray-900 dark:text-white">
+                                                            {formatCurrency(transaction.amount)}
+                                                        </span>
+                                                        {(transaction.lineItems?.length || 0) > 0 && (
+                                                            <span className="text-[10px] text-gray-400 uppercase">Balance</span>
+                                                        )}
+                                                    </div>
                                                 ) : transaction.status === 'Pending' || transaction.status === 'Overdue' ? (
                                                     (() => {
                                                         const isOverdue = transaction.dueDate && new Date(transaction.dueDate) < new Date(new Date().setHours(0, 0, 0, 0));
@@ -644,7 +667,7 @@ const AccountingView: React.FC<AccountingViewProps> = ({
                                                 ) : (
                                                     <span className="text-sm text-gray-500 dark:text-gray-400">-</span>
                                                 )}
-                                            </td>
+                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap text-center">
                                                 <div className="flex items-center justify-center gap-2">
                                                     <button

@@ -46,7 +46,37 @@ const formatDate = (iso: string) => new Date(iso).toLocaleString('en-GB', { day:
 
 // ——— Preview Modal ———
 const PreviewModal: React.FC<{ submission: Submission; onClose: () => void }> = ({ submission, onClose }) => {
-  const url = `${API_BASE_URL}/document-submissions/${submission.id}/file?preview=true`;
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    const fetchFile = async () => {
+      try {
+        setLoading(true);
+        const token = getToken();
+        const response = await fetch(`${API_BASE_URL}/document-submissions/${submission.id}/file?preview=true`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!response.ok) throw new Error(`Preview failed: ${response.statusText}`);
+        const blob = await response.blob();
+        if (!active) return;
+        const url = URL.createObjectURL(blob);
+        setPreviewUrl(url);
+      } catch (err: any) {
+        if (active) setError(err.message);
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    fetchFile();
+    return () => {
+      active = false;
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [submission.id]);
+
   const isImage = submission.content_type?.startsWith('image/');
   const isPdf = submission.content_type === 'application/pdf';
 
@@ -69,16 +99,24 @@ const PreviewModal: React.FC<{ submission: Submission; onClose: () => void }> = 
           </div>
         </div>
         <div className="flex-1 overflow-auto bg-gray-50 dark:bg-gray-950 flex items-center justify-center min-h-64">
-          {isImage ? (
-            <img src={url} alt={submission.filename} className="max-w-full max-h-[70vh] object-contain" />
-          ) : isPdf ? (
-            <iframe src={url} className="w-full h-[70vh]" title={submission.filename} />
+          {loading ? (
+            <div className="text-center p-12">
+              <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-4" />
+              <p className="text-gray-500">Loading preview...</p>
+            </div>
+          ) : error ? (
+            <div className="text-center p-16">
+              <AlertCircle size={48} className="mx-auto text-red-500 mb-4" />
+              <p className="text-gray-500">{error}</p>
+            </div>
+          ) : isImage && previewUrl ? (
+            <img src={previewUrl} alt={submission.filename} className="max-w-full max-h-[70vh] object-contain" />
+          ) : isPdf && previewUrl ? (
+            <iframe src={previewUrl} className="w-full h-[70vh]" title={submission.filename} />
           ) : (
             <div className="text-center p-16">
               <FileText size={64} className="mx-auto text-gray-300 mb-4" />
-              <p className="text-gray-500">Preview not available for this file type</p>
-              <button onClick={() => downloadDocumentSubmission(submission.id, submission.filename)}
-                className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">Download to view</button>
+              <p className="text-gray-500">Preview not available</p>
             </div>
           )}
         </div>

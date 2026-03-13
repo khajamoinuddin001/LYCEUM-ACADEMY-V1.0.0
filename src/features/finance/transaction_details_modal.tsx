@@ -172,7 +172,7 @@ const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = ({ trans
                     )}
 
                     {/* Description */}
-                    {transaction.description && (
+                    {transaction.description && !transaction.lineItems?.length && (
                         <div className="flex items-start gap-3">
                             <FileText className="w-5 h-5 text-gray-400 mt-0.5" />
                             <div className="flex-1">
@@ -181,6 +181,49 @@ const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = ({ trans
                                     {transaction.description}
                                 </p>
                             </div>
+                        </div>
+                    )}
+
+                    {/* Line Items Breakdown */}
+                    {transaction.lineItems && transaction.lineItems.length > 0 && (
+                        <div className="space-y-3">
+                            <div className="flex items-center gap-2 text-sm font-medium text-gray-500 dark:text-gray-400">
+                                <FileText className="w-4 h-4" />
+                                <span>Items Breakdown</span>
+                            </div>
+                            <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+                                <table className="w-full text-sm text-left">
+                                    <thead className="bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 text-xs uppercase">
+                                        <tr>
+                                            <th className="px-4 py-2 font-semibold">Item</th>
+                                            <th className="px-4 py-2 font-semibold text-center">Qty</th>
+                                            <th className="px-4 py-2 font-semibold text-right">Price</th>
+                                            <th className="px-4 py-2 font-semibold text-right text-blue-600 dark:text-blue-400">Disc</th>
+                                            <th className="px-4 py-2 font-semibold text-right">Total</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                                        {transaction.lineItems.map((item: any, idx) => (
+                                            <tr key={idx} className="text-gray-700 dark:text-gray-300">
+                                                <td className="px-4 py-2 font-medium">{item.description}</td>
+                                                <td className="px-4 py-2 text-center">{item.quantity}</td>
+                                                <td className="px-4 py-2 text-right">₹{item.rate || item.price || 0}</td>
+                                                <td className="px-4 py-2 text-right text-blue-600 dark:text-blue-400">₹{item.discount || 0}</td>
+                                                <td className="px-4 py-2 text-right font-semibold">₹{item.amount || (((item.quantity || 1) * (item.rate || item.price || 0)) - (item.discount || 0))}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+
+                    {transaction.description && transaction.lineItems?.length > 0 && (
+                        <div className="pt-2 border-t border-gray-100 dark:border-gray-800">
+                            <p className="text-xs text-gray-400 dark:text-gray-500 font-medium uppercase mb-1">Notes</p>
+                            <p className="text-sm text-gray-600 dark:text-gray-400 italic">
+                                {transaction.description}
+                            </p>
                         </div>
                     )}
                 </div>
