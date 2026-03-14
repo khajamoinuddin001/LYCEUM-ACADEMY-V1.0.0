@@ -419,10 +419,10 @@ const StudentUniversityApplicationView: React.FC<StudentUniversityApplicationVie
                         </div>
                     )}
 
-                    <div className="flex justify-between items-start mb-6">
+                    <div className="flex flex-col sm:flex-row justify-between items-start gap-6 sm:gap-4 mb-6">
                         <div className="flex gap-4 items-center">
                             {/* University logo or initial */}
-                            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-gray-100 to-gray-50 dark:from-gray-700/80 dark:to-gray-800/80 flex items-center justify-center text-gray-700 dark:text-gray-200 font-bold text-2xl shadow-[inset_0_2px_10px_rgba(0,0,0,0.02)] border border-white/50 dark:border-gray-600/30 group-hover:scale-105 transition-all duration-300 overflow-hidden">
+                            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-[18px] sm:rounded-2xl bg-gradient-to-br from-gray-100 to-gray-50 dark:from-gray-700/80 dark:to-gray-800/80 flex shrink-0 items-center justify-center text-gray-700 dark:text-gray-200 font-bold text-xl sm:text-2xl shadow-[inset_0_2px_10px_rgba(0,0,0,0.02)] border border-white/50 dark:border-gray-600/30 group-hover:scale-105 transition-all duration-300 overflow-hidden">
                                 {(() => {
                                     const lUrl = app.logoUrl || universityRegistry.find(uc => uc.universityName === app.universityName)?.logoUrl;
                                     return lUrl ? (
@@ -432,24 +432,24 @@ const StudentUniversityApplicationView: React.FC<StudentUniversityApplicationVie
                                     );
                                 })()}
                             </div>
-                            <div>
-                                <h3 className="font-extrabold text-gray-900 dark:text-white text-lg leading-tight line-clamp-1 group-hover:text-lyceum-blue transition-colors">
+                            <div className="min-w-0">
+                                <h3 className="font-extrabold text-gray-900 dark:text-white text-base sm:text-lg leading-tight line-clamp-1 group-hover:text-lyceum-blue transition-colors">
                                     {app.universityName}
                                 </h3>
-                                <p className="text-sm font-medium text-gray-500 dark:text-gray-400 flex items-center gap-1.5 mt-1 line-clamp-1">
+                                <p className="text-xs sm:text-sm font-medium text-gray-500 dark:text-gray-400 flex items-center gap-1.5 mt-1 line-clamp-1">
                                     <School size={14} />
                                     {app.course}
                                 </p>
                                 {(app.country || app.intake || app.applicationSubmissionDate) && (
-                                    <p className="text-xs font-medium text-gray-400 flex flex-wrap items-center gap-2 mt-1">
+                                    <p className="text-[10px] sm:text-xs font-medium text-gray-400 flex flex-wrap items-center gap-2 mt-1">
                                         {app.country && <span className="flex items-center gap-1"><Globe2 size={11} />{app.country}</span>}
                                         {app.intake && <span className="flex items-center gap-1">{app.country && '·'} <Calendar size={11} />{app.intake}</span>}
-                                        {app.applicationSubmissionDate && <span className="flex items-center gap-1">{(app.country || app.intake) && '·'} <Clock size={11} />{Math.floor((new Date().getTime() - new Date(app.applicationSubmissionDate).getTime()) / (1000 * 60 * 60 * 24))} Days Passed</span>}
+                                        {app.applicationSubmissionDate && <span className="flex items-center gap-1">{(app.country || app.intake) && '·'} <Clock size={11} />{Math.floor((new Date().getTime() - new Date(app.applicationSubmissionDate).getTime()) / (1000 * 60 * 60 * 24))}d</span>}
                                     </p>
                                 )}
                             </div>
                         </div>
-                        <ChevronRight size={18} className="text-gray-300 group-hover:text-lyceum-blue group-hover:translate-x-0.5 transition-all shrink-0" />
+                        <ChevronRight size={18} className="text-gray-300 group-hover:text-lyceum-blue group-hover:translate-x-0.5 transition-all shrink-0 hidden sm:block" />
                     </div>
 
                     <div className="relative pt-6 pb-2">
@@ -512,7 +512,7 @@ const StudentUniversityApplicationView: React.FC<StudentUniversityApplicationVie
     };
 
     return (
-        <div className="bg-[#fcfcfd] dark:bg-[#090b14] rounded-[40px] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.05)] dark:shadow-[0_20px_60px_-15px_rgba(0,0,0,0.3)] border border-gray-200/40 dark:border-gray-800/60 w-full mx-auto h-full flex flex-col overflow-hidden relative">
+        <div className="bg-[#fcfcfd] dark:bg-[#090b14] rounded-none sm:rounded-[40px] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.05)] dark:shadow-[0_20px_60px_-15px_rgba(0,0,0,0.3)] border-x-0 sm:border border-gray-200/40 dark:border-gray-800/60 w-full mx-auto h-full flex flex-col overflow-hidden relative">
             {/* Cinematic Background Effects */}
             <div className="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] bg-gradient-to-tl from-indigo-400/5 to-transparent dark:from-indigo-600/5 blur-[120px] rounded-full pointer-events-none" />
 
@@ -550,55 +550,41 @@ const StudentUniversityApplicationView: React.FC<StudentUniversityApplicationVie
                         </div>
 
                         {/* University Info */}
-                        <div className={`absolute inset-0 px-8 sm:px-12 flex items-end transition-all duration-500 ${scrollAmount > 50 ? 'justify-center sm:justify-end py-4' : 'justify-start py-12'}`}>
-                            <div className={`flex items-center max-w-7xl mx-auto w-full transition-all duration-500 ${scrollAmount > 50 ? 'gap-4 scale-90 translate-x-24 sm:translate-x-32' : 'gap-6 sm:gap-10'}`}>
-                                <div className={`rounded-[32px] bg-white shadow-2xl flex items-center justify-center shrink-0 border-4 border-white/10 overflow-hidden transition-all duration-500 mb-0 ${scrollAmount > 50 ? 'w-12 h-12 sm:w-16 sm:h-16' : 'w-24 h-24 sm:w-40 sm:h-40'}`}>
+                        <div className={`absolute inset-0 px-6 sm:px-12 flex items-end transition-all duration-500 ${scrollAmount > 50 ? 'justify-start sm:justify-end py-4' : 'justify-start py-8 sm:py-12'}`}>
+                            <div className={`flex items-center max-w-7xl mx-auto w-full transition-all duration-500 ${scrollAmount > 50 ? 'gap-3 sm:gap-4 scale-[0.85] sm:scale-90 translate-x-12 sm:translate-x-32' : 'gap-5 sm:gap-10'}`}>
+                                <div className={`rounded-[24px] sm:rounded-[32px] bg-white shadow-2xl flex shrink-0 items-center justify-center border-2 sm:border-4 border-white/10 overflow-hidden transition-all duration-500 mb-0 ${scrollAmount > 50 ? 'w-10 h-10 sm:w-16 sm:h-16' : 'w-20 h-20 sm:w-40 sm:h-40'}`}>
                                     {(() => {
                                         const lUrl = expandedApp.logoUrl || universityRegistry.find(uc => uc.universityName === expandedApp.universityName)?.logoUrl;
                                         return lUrl ? (
                                             <img src={`${api.API_BASE_URL}${lUrl}`} alt="" className="w-full h-full object-cover" />
                                         ) : (
-                                            <span className={`font-black text-gray-900 transition-all ${scrollAmount > 50 ? 'text-xl' : 'text-4xl'}`}>
+                                            <span className={`font-black text-gray-900 transition-all ${scrollAmount > 50 ? 'text-lg' : 'text-2xl sm:text-4xl'}`}>
                                                 {expandedApp.universityName.charAt(0)}
                                             </span>
                                         );
                                     })()}
                                 </div>
-                                <div className={`transition-all duration-500 ${scrollAmount > 50 ? 'text-gray-900 dark:text-white pb-0' : 'text-white pb-2'}`}>
-                                    <div className={`flex flex-wrap items-center gap-3 transition-all duration-500 ${scrollAmount > 50 ? 'mb-0 scale-75 origin-left opacity-0 h-0 w-0 pointer-events-none' : 'mb-4'}`}>
-                                        <span className="px-4 py-1.5 bg-white/20 backdrop-blur-md rounded-xl text-xs font-black uppercase tracking-widest leading-none flex items-center gap-2">
-                                            <div className="w-2 h-2 rounded-full bg-blue-300 animate-pulse" />
+                                <div className={`transition-all duration-500 min-w-0 ${scrollAmount > 50 ? 'text-gray-900 dark:text-white pb-0' : 'text-white pb-2'}`}>
+                                    <div className={`flex flex-wrap items-center gap-2 sm:gap-3 transition-all duration-500 ${scrollAmount > 50 ? 'mb-0 scale-75 origin-left opacity-0 h-0 w-0 pointer-events-none' : 'mb-3 sm:mb-4'}`}>
+                                        <span className="px-3 sm:px-4 py-1 sm:py-1.5 bg-white/20 backdrop-blur-md rounded-lg sm:rounded-xl text-[10px] font-black uppercase tracking-widest leading-none flex items-center gap-2">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-blue-300 animate-pulse" />
                                             {expandedApp.ackNumber}
                                         </span>
                                         {expandedApp.intake && (
-                                            <span className="px-4 py-1.5 bg-amber-500/20 backdrop-blur-md rounded-xl text-xs font-black uppercase tracking-widest leading-none flex items-center gap-2 border border-amber-300/30 text-amber-100">
+                                            <span className="px-3 sm:px-4 py-1 sm:py-1.5 bg-amber-500/20 backdrop-blur-md rounded-lg sm:rounded-xl text-[10px] font-black uppercase tracking-widest leading-none flex items-center gap-2 border border-amber-300/30 text-amber-100 hidden sm:flex">
                                                 <Calendar size={12} /> {expandedApp.intake}
                                             </span>
                                         )}
-                                        {expandedApp.applicationSubmissionDate && (
-                                            <span className="px-4 py-1.5 bg-emerald-500/20 backdrop-blur-md rounded-xl text-xs font-black uppercase tracking-widest leading-none flex items-center gap-2 border border-emerald-300/30 text-emerald-100" title="Days since application start">
-                                                <Clock size={12} /> {Math.floor((new Date().getTime() - new Date(expandedApp.applicationSubmissionDate).getTime()) / (1000 * 60 * 60 * 24))} Days Passed
-                                            </span>
-                                        )}
-                                        {['Received Acceptance', 'Received I20'].includes(expandedApp.status) && (
-                                            <button
-                                                onClick={() => onNavigateToDocuments?.()}
-                                                className="px-4 py-1.5 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-xl text-xs font-black uppercase tracking-widest leading-none flex items-center gap-2 transition-colors border border-white/20 border-dotted"
-                                            >
-                                                <FileText size={12} />
-                                                {expandedApp.status === 'Received Acceptance' ? 'See Acceptance' : 'See I20'}
-                                            </button>
-                                        )}
-                                        <span className={`px-4 py-1.5 backdrop-blur-md border rounded-xl text-xs font-black uppercase tracking-widest leading-none ${expandedApp.status === 'On Hold' ? 'bg-amber-500/30 border-amber-500/30 text-amber-100' : expandedApp.status === 'Application Deferred' ? 'bg-gray-500/30 border-gray-500/30 text-gray-200' : 'bg-green-500/30 border-green-500/30 text-green-100'}`}>
+                                        <span className={`px-3 sm:px-4 py-1 sm:py-1.5 backdrop-blur-md border rounded-lg sm:rounded-xl text-[10px] font-black uppercase tracking-widest leading-none ${expandedApp.status === 'On Hold' ? 'bg-amber-500/30 border-amber-500/30 text-amber-100' : expandedApp.status === 'Application Deferred' ? 'bg-gray-500/30 border-gray-500/30 text-gray-200' : 'bg-green-500/30 border-green-500/30 text-green-100'}`}>
                                             {expandedApp.status}
                                         </span>
                                     </div>
-                                    <h2 className={`font-black tracking-tight leading-tight transition-all duration-500 ${scrollAmount > 50 ? 'text-xl sm:text-2xl' : 'text-4xl sm:text-6xl'}`}>
+                                    <h2 className={`font-black tracking-tight leading-tight transition-all duration-500 truncate ${scrollAmount > 50 ? 'text-lg sm:text-2xl' : 'text-3xl sm:text-6xl'}`}>
                                         {expandedApp.universityName}
                                     </h2>
-                                    <p className={`font-bold transition-all duration-500 flex items-center gap-3 ${scrollAmount > 50 ? 'text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-0' : 'text-lg sm:text-xl text-blue-100/80 mt-2'}`}>
-                                        <School className={`shrink-0 transition-all ${scrollAmount > 50 ? 'w-4 h-4' : 'w-6 h-6'}`} />
-                                        {expandedApp.course}
+                                    <p className={`font-bold transition-all duration-500 flex items-center gap-2 sm:gap-3 ${scrollAmount > 50 ? 'text-[10px] sm:text-sm text-gray-500 dark:text-gray-400 mt-0' : 'text-base sm:text-xl text-blue-100/80 mt-1 sm:mt-2'}`}>
+                                        <School className={`shrink-0 transition-all ${scrollAmount > 50 ? 'w-3 h-3' : 'w-5 h-5 sm:w-6 sm:h-6'}`} />
+                                        <span className="truncate">{expandedApp.course}</span>
                                     </p>
                                 </div>
                             </div>
@@ -612,7 +598,7 @@ const StudentUniversityApplicationView: React.FC<StudentUniversityApplicationVie
                         className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar"
                     >
                         {/* Main Content Area */}
-                        <div className="w-full flex-grow p-8 sm:p-12 bg-lyceum-light dark:bg-gray-900">
+                        <div className="w-full flex-grow p-4 sm:p-12 bg-lyceum-light dark:bg-gray-900">
 
                             <div className="max-w-7xl mx-auto">
                                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
@@ -628,18 +614,29 @@ const StudentUniversityApplicationView: React.FC<StudentUniversityApplicationVie
                                             <div className="h-px flex-1 bg-gray-200 dark:bg-gray-800" />
                                         </h3>
 
-                                        <div className="relative pt-12 pb-16 px-4">
-                                            <div className="absolute top-[68px] left-[64px] right-[64px] h-2">
-                                                {/* Background Track */}
+                                        <div className="relative pt-6 sm:pt-12 pb-10 sm:pb-16 px-4">
+                                            {/* Pipeline Track */}
+                                            <div className="absolute top-[68px] left-[64px] right-[64px] h-2 hidden sm:block">
+                                                {/* Background Track (Desktop) */}
                                                 <div className="absolute inset-0 bg-gray-100 dark:bg-gray-800/80 rounded-full" />
 
-                                                {/* Active Progress Line */}
+                                                {/* Active Progress Line (Desktop) */}
                                                 <div className="absolute inset-y-0 left-0 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full transition-all duration-1000 shadow-[0_0_20px_rgba(59,130,246,0.5)]"
                                                     style={{ width: ['Offer Received', 'Received Acceptance', 'Received I20'].includes(expandedApp.status === 'Application Deferred' ? expandedApp.previousStatus : expandedApp.status) ? '100%' : ['In Review', 'On Hold'].includes(expandedApp.status === 'Application Deferred' ? expandedApp.previousStatus : expandedApp.status) ? '66.6%' : (expandedApp.status === 'Application Deferred' ? expandedApp.previousStatus : expandedApp.status) === 'Applied' ? '33.3%' : '0%' }}
                                                 />
                                             </div>
 
-                                            <div className="flex justify-between relative z-10">
+                                            {/* Vertical Track (Mobile) */}
+                                            <div className="absolute left-[44px] top-12 bottom-20 w-1.5 sm:hidden">
+                                                {/* Background Track (Mobile) */}
+                                                <div className="absolute inset-0 bg-gray-100 dark:bg-gray-800/80 rounded-full" />
+                                                {/* Active Progress Line (Mobile) */}
+                                                <div className="absolute inset-x-0 top-0 bg-gradient-to-b from-blue-500 to-indigo-600 rounded-full transition-all duration-1000 shadow-[0_0_20px_rgba(59,130,246,0.5)]"
+                                                    style={{ height: ['Offer Received', 'Received Acceptance', 'Received I20'].includes(expandedApp.status === 'Application Deferred' ? expandedApp.previousStatus : expandedApp.status) ? '100%' : ['In Review', 'On Hold'].includes(expandedApp.status === 'Application Deferred' ? expandedApp.previousStatus : expandedApp.status) ? '66.6%' : (expandedApp.status === 'Application Deferred' ? expandedApp.previousStatus : expandedApp.status) === 'Applied' ? '33.3%' : '0%' }}
+                                                />
+                                            </div>
+
+                                            <div className="flex flex-col sm:flex-row justify-between relative z-10 gap-8 sm:gap-0">
                                                 {[
                                                     { status: 'Shortlisted', icon: <Bookmark size={20} />, desc: 'Initial selection made' },
                                                     { status: 'Applied', icon: <FileText size={20} />, desc: 'Docs submitted to portal' },
@@ -663,20 +660,20 @@ const StudentUniversityApplicationView: React.FC<StudentUniversityApplicationVie
                                                         displayStatus === stage.status;
 
                                                     return (
-                                                        <div key={stage.status} className="flex flex-col items-center gap-6 w-32 sm:w-32 group/stage">
-                                                            <div className={`relative w-16 h-16 sm:w-20 sm:h-20 rounded-[28px] flex items-center justify-center transition-all duration-700 ${isPassed
+                                                        <div key={stage.status} className="flex flex-row sm:flex-col items-center sm:items-center gap-6 sm:gap-6 w-full sm:w-32 group/stage">
+                                                            <div className={`relative w-14 h-14 sm:w-20 sm:h-20 rounded-[22px] sm:rounded-[28px] flex shrink-0 items-center justify-center transition-all duration-700 ${isPassed
                                                                 ? (isCurrent && displayStatus === 'On Hold' ? 'bg-gradient-to-br from-amber-500 to-orange-600' : 'bg-gradient-to-br from-blue-500 to-indigo-600') + ' text-white shadow-[0_15px_40px_-10px_rgba(59,130,246,0.6)] ring-8 ring-blue-500/10 dark:ring-blue-400/5'
                                                                 : 'bg-white dark:bg-gray-800 text-gray-400 border-2 border-gray-100 dark:border-gray-700 shadow-sm'
                                                                 } ${isCurrent ? 'scale-110 active-stage-glow' : 'scale-95 group-hover/stage:scale-100'}`}>
-                                                                {isPassed ? <Check size={32} className="animate-in zoom-in duration-500" /> : React.cloneElement(stage.icon as React.ReactElement, { size: 24 })}
+                                                                {isPassed ? <Check size={28} className="animate-in zoom-in duration-500 sm:w-8 sm:h-8" /> : React.cloneElement(stage.icon as React.ReactElement, { size: 20 })}
 
                                                                 {isCurrent && (
                                                                     <div className="absolute -inset-2 bg-blue-500/20 blur-xl rounded-full animate-pulse pointer-events-none" />
                                                                 )}
                                                             </div>
-                                                            <div className="text-center transition-all duration-500">
-                                                                <p className={`text-xs font-black tracking-[0.15em] uppercase mb-2 transition-colors ${isCurrent ? 'text-gray-900 dark:text-white' : 'text-gray-400'}`}>{stage.status}</p>
-                                                                <p className={`text-[11px] font-bold leading-tight hidden sm:block uppercase tracking-wider transition-opacity duration-500 ${isCurrent ? 'text-gray-500 dark:text-gray-400 opacity-100' : 'text-gray-400 opacity-60'}`}>{stage.desc}</p>
+                                                            <div className="text-left sm:text-center transition-all duration-500">
+                                                                <p className={`text-[10px] sm:text-xs font-black tracking-[0.15em] uppercase mb-1 sm:mb-2 transition-colors ${isCurrent ? 'text-gray-900 dark:text-white' : 'text-gray-400'}`}>{stage.status}</p>
+                                                                <p className={`text-[11px] font-bold leading-tight sm:block uppercase tracking-wider transition-opacity duration-500 ${isCurrent ? 'text-gray-500 dark:text-gray-400 opacity-100' : 'text-gray-400 opacity-60'}`}>{stage.desc}</p>
                                                             </div>
                                                         </div>
                                                     );
@@ -861,8 +858,8 @@ const StudentUniversityApplicationView: React.FC<StudentUniversityApplicationVie
 
                         {/* STEP 0: Dashboard */}
                         {step === 0 && (
-                            <div className="space-y-10 max-w-7xl mx-auto animate-fade-in-up">
-                                <div className="relative overflow-hidden bg-gray-900 rounded-[40px] p-10 sm:p-14 border border-gray-800 shadow-2xl shadow-blue-900/20 group">
+                            <div className="space-y-6 sm:space-y-10 max-w-7xl mx-auto animate-fade-in-up">
+                                <div className="relative overflow-hidden bg-gray-900 rounded-[32px] sm:rounded-[40px] p-6 sm:p-14 border border-gray-800 shadow-2xl shadow-blue-900/20 group">
                                     <div className="absolute inset-0 bg-gradient-to-r from-blue-900/40 via-indigo-900/40 to-purple-900/40 mix-blend-multiply" />
                                     <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-overlay" />
 
@@ -896,8 +893,8 @@ const StudentUniversityApplicationView: React.FC<StudentUniversityApplicationVie
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-1 xl:grid-cols-12 gap-10">
-                                    <div className="xl:col-span-7 space-y-6">
+                                <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 sm:gap-10">
+                                    <div className="xl:col-span-7 space-y-4 sm:space-y-6">
                                         <h2 className="text-2xl font-black text-gray-900 dark:text-white flex items-center gap-3 tracking-tight">
                                             Shortlisted & Active Programs
                                             <span className="bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-400 text-sm font-black px-3 py-1 rounded-xl">
@@ -937,7 +934,7 @@ const StudentUniversityApplicationView: React.FC<StudentUniversityApplicationVie
                                         <div className="bg-white/70 dark:bg-gray-800/60 backdrop-blur-xl rounded-[40px] border border-gray-200/50 dark:border-gray-700/50 shadow-[0_8px_30px_rgb(0,0,0,0.04)] dark:shadow-[0_8px_30px_rgba(255,255,255,0.02)] overflow-hidden flex flex-col p-2">
 
                                             {/* Academics Block */}
-                                            <div className="relative p-6 sm:p-8 bg-gradient-to-br from-gray-50/50 to-white dark:from-gray-800/50 dark:to-gray-800 border border-gray-100 dark:border-gray-700/50 rounded-[32px] mb-2 group">
+                                            <div className="relative p-5 sm:p-8 bg-gradient-to-br from-gray-50/50 to-white dark:from-gray-800/50 dark:to-gray-800 border border-gray-100 dark:border-gray-700/50 rounded-[28px] sm:rounded-[32px] mb-2 group">
                                                 <div className="absolute top-0 right-0 p-8 opacity-[0.03] dark:opacity-[0.05] pointer-events-none group-hover:scale-110 transition-transform duration-700">
                                                     <GraduationCap size={120} />
                                                 </div>
@@ -987,14 +984,14 @@ const StudentUniversityApplicationView: React.FC<StudentUniversityApplicationVie
                                                 </div>
 
                                                 <div className="flex items-center justify-between mb-8 relative z-10">
-                                                    <div className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-gray-800 dark:text-gray-200">
+                                                    <div className="flex items-center gap-2 text-[10px] sm:text-xs font-black uppercase tracking-widest text-gray-800 dark:text-gray-200">
                                                         <div className="w-8 h-8 rounded-xl bg-white dark:bg-gray-700 shadow-sm border border-gray-100 dark:border-gray-600 flex items-center justify-center">
                                                             <Languages size={14} className="text-indigo-500" />
                                                         </div>
                                                         Linguistics
                                                     </div>
-                                                    <button onClick={() => { setIsEditingStep2(true); handleUpdateStep(2); }} className="w-10 h-10 flex items-center justify-center text-gray-400 hover:text-indigo-600 bg-white dark:bg-gray-700 rounded-xl shadow-sm border border-gray-100 dark:border-gray-600 transition-all hover:scale-105 active:scale-95">
-                                                        <Edit3 size={16} />
+                                                    <button onClick={() => { setIsEditingStep2(true); handleUpdateStep(2); }} className="w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center text-gray-400 hover:text-indigo-600 bg-white dark:bg-gray-700 rounded-xl shadow-sm border border-gray-100 dark:border-gray-600 transition-all hover:scale-105 active:scale-95">
+                                                        <Edit3 size={15} />
                                                     </button>
                                                 </div>
 
@@ -1324,8 +1321,8 @@ const StudentUniversityApplicationView: React.FC<StudentUniversityApplicationVie
                                                                     </div>
 
                                                                     {/* Bottom section: Requirements & Action */}
-                                                                    <div className="flex flex-col md:flex-row items-center justify-between gap-6 w-full pt-4 border-t border-gray-100 dark:border-gray-800">
-                                                                        <div className="flex flex-row flex-wrap items-center gap-4 md:gap-5 xl:gap-6">
+                                                                    <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-8 w-full pt-6 border-t border-gray-100 dark:border-gray-800">
+                                                                        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-x-8 gap-y-6 flex-1">
                                                                             <div className="flex flex-col">
                                                                                 <span className="text-[10px] font-black tracking-widest text-gray-400 uppercase mb-1">SSC</span>
                                                                                 <span className="font-bold text-gray-900 dark:text-white text-lg">{course.minSscPercent}%</span>
@@ -1341,9 +1338,9 @@ const StudentUniversityApplicationView: React.FC<StudentUniversityApplicationVie
                                                                                 </div>
                                                                             ) : null}
                                                                             {(course.acceptedExams?.length > 0 || course.requiredExam) && (
-                                                                                <div className="flex flex-col border-l border-gray-200 dark:border-gray-700 pl-4 md:pl-5 xl:pl-6">
+                                                                                <div className="flex flex-col sm:col-span-2 xl:col-span-1 border-gray-200 dark:border-gray-700">
                                                                                     <span className="text-[10px] font-black tracking-widest text-gray-400 uppercase mb-1">Language</span>
-                                                                                    <span className="font-bold text-gray-900 dark:text-white text-lg">
+                                                                                    <span className="font-bold text-gray-900 dark:text-white text-lg break-words">
                                                                                         {course.acceptedExams?.length > 0
                                                                                             ? course.acceptedExams.map(e => `${e.exam} ${e.score}`).join(', ')
                                                                                             : `${course.requiredExam} ${course.minExamScore}`}
@@ -1351,19 +1348,19 @@ const StudentUniversityApplicationView: React.FC<StudentUniversityApplicationVie
                                                                                 </div>
                                                                             )}
                                                                             {course.applicationFee && (
-                                                                                <div className="flex flex-col border-l border-gray-200 dark:border-gray-700 pl-4 md:pl-5 xl:pl-6">
+                                                                                <div className="flex flex-col border-gray-200 dark:border-gray-700">
                                                                                     <span className="text-[10px] font-black tracking-widest text-gray-400 uppercase mb-1">App Fee</span>
                                                                                     <span className="font-bold text-gray-900 dark:text-white text-lg">{course.applicationFee}</span>
                                                                                 </div>
                                                                             )}
                                                                             {course.enrollmentDeposit && (
-                                                                                <div className="flex flex-col border-l border-gray-200 dark:border-gray-700 pl-4 md:pl-5 xl:pl-6">
+                                                                                <div className="flex flex-col border-gray-200 dark:border-gray-700">
                                                                                     <span className="text-[10px] font-black tracking-widest text-gray-400 uppercase mb-1">Deposit</span>
                                                                                     <span className="font-bold text-gray-900 dark:text-white text-lg">{course.enrollmentDeposit}</span>
                                                                                 </div>
                                                                             )}
                                                                             {course.wesRequirement && (
-                                                                                <div className="flex flex-col border-l border-gray-200 dark:border-gray-700 pl-4 md:pl-5 xl:pl-6">
+                                                                                <div className="flex flex-col border-gray-200 dark:border-gray-700">
                                                                                     <span className="text-[10px] font-black tracking-widest text-gray-400 uppercase mb-1">WES</span>
                                                                                     <span className="font-bold text-gray-900 dark:text-white text-lg">{course.wesRequirement}</span>
                                                                                 </div>
@@ -1371,14 +1368,14 @@ const StudentUniversityApplicationView: React.FC<StudentUniversityApplicationVie
                                                                         </div>
 
                                                                         {/* Action */}
-                                                                        <div className="shrink-0 w-full md:w-auto mt-2 md:mt-0">
+                                                                        <div className="shrink-0">
                                                                             <button
                                                                                 disabled={isApplied}
                                                                                 onClick={() => handleToggleBasket(course, courseName)}
-                                                                                className={`w-full md:w-auto px-8 py-4 rounded-[20px] font-black flex items-center justify-center gap-3 transition-all duration-300 ${isApplied
+                                                                                className={`w-full lg:w-auto px-8 py-4 rounded-[20px] font-black flex items-center justify-center gap-3 transition-all duration-300 ${isApplied
                                                                                     ? 'bg-emerald-50 text-emerald-600 border border-emerald-100 dark:bg-emerald-900/20 dark:border-emerald-800/30 dark:text-emerald-400 cursor-not-allowed'
                                                                                     : basket.some(item => item.course.id === course.id && item.courseName === courseName)
-                                                                                        ? 'bg-lyceum-blue text-white shadow-lg'
+                                                                                        ? 'bg-lyceum-blue text-white shadow-lg shadow-blue-500/20'
                                                                                         : 'bg-gray-900 text-white hover:bg-lyceum-blue hover:scale-[1.02] shadow-[0_10px_30px_rgba(0,0,0,0.1)] dark:bg-white dark:text-gray-900 dark:hover:bg-lyceum-blue dark:hover:text-white'
                                                                                     }`}
                                                                             >
