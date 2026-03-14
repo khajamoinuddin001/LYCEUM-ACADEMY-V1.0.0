@@ -522,6 +522,8 @@ export interface AccountingTransaction {
     rate: number;
     discount?: number;
     amount: number;
+    received?: number;
+    pending?: number;
   }[];
   linkedLeadId?: number;
   linkedQuotationId?: number | string;

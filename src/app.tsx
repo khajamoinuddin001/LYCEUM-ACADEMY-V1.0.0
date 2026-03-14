@@ -1027,24 +1027,25 @@ const DashboardLayout: React.FC = () => {
                   let oldInvoiceItemAmount = 0;
                   if (oldTx && oldTx.lineItems) {
                     const oldItem = oldTx.lineItems.find((invItem: any) => (invItem as any).linkedQuotationLineItemId === arItem.id);
-                    if (oldItem) oldInvoiceItemAmount = oldItem.amount || 0;
+                    if (oldItem) oldInvoiceItemAmount = (oldItem as any).received || 0;
                   }
 
-                  if (linkedInvoiceItem) {
-                    let itemCoverageDiff = 0;
-                    if (!wasPaid && isPaid) {
-                      itemCoverageDiff = linkedInvoiceItem.amount || 0;
-                    } else if (wasPaid && !isPaid) {
-                      itemCoverageDiff = -oldInvoiceItemAmount;
-                    } else if (wasPaid && isPaid) {
-                      itemCoverageDiff = (linkedInvoiceItem.amount || 0) - oldInvoiceItemAmount;
+                    if (linkedInvoiceItem) {
+                      const itemReceived = linkedInvoiceItem.received || 0;
+                      let itemCoverageDiff = 0;
+                      if (!wasPaid && isPaid) {
+                        itemCoverageDiff = itemReceived;
+                      } else if (wasPaid && !isPaid) {
+                        itemCoverageDiff = -oldInvoiceItemAmount;
+                      } else if (wasPaid && isPaid) {
+                        itemCoverageDiff = itemReceived - oldInvoiceItemAmount;
+                      }
+
+                      return {
+                        ...arItem,
+                        paidAmount: Math.max(0, (Number(arItem.paidAmount) || 0) + itemCoverageDiff)
+                      };
                     }
-
-                    return {
-                      ...arItem,
-                      paidAmount: Math.max(0, (Number(arItem.paidAmount) || 0) + itemCoverageDiff)
-                    };
-                  }
                   return arItem;
                 });
 
@@ -1091,10 +1092,10 @@ const DashboardLayout: React.FC = () => {
 
                 const updatedArLineItems = (ar.lineItems || []).map((arItem: any) => {
                   const linkedInvoiceItem = (data.lineItems || []).find((invItem: any) => invItem.linkedQuotationLineItemId === arItem.id);
-                  if (linkedInvoiceItem && linkedInvoiceItem.amount > 0) {
+                  if (linkedInvoiceItem && (linkedInvoiceItem.received || 0) > 0) {
                     return {
                       ...arItem,
-                      paidAmount: (Number(arItem.paidAmount) || 0) + linkedInvoiceItem.amount
+                      paidAmount: (Number(arItem.paidAmount) || 0) + (linkedInvoiceItem.received || 0)
                     };
                   }
                   return arItem;

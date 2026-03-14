@@ -12,6 +12,9 @@ interface LineItem {
     rate: number;
     discount?: number;
     amount: number;
+    received: number;
+    pending: number;
+    paidSoFar?: number;
     linkedQuotationLineItemId?: string;
     pendingBalance?: number;
     originalPending?: number;
@@ -89,7 +92,12 @@ const EditInvoiceModal: React.FC<EditInvoiceModalProps> = ({
 
         // Initialize line items
         if (transaction.lineItems && transaction.lineItems.length > 0) {
-            setLineItems(transaction.lineItems);
+            setLineItems(transaction.lineItems.map(item => ({
+                ...item,
+                paidSoFar: (item as any).paidSoFar || 0,
+                received: (item as any).received || 0,
+                pending: (item as any).pending || (item.amount - ((item as any).received || 0))
+            })));
         } else {
             // Fallback for old transactions: Create single line item from description/amount
             setLineItems([{
@@ -97,7 +105,9 @@ const EditInvoiceModal: React.FC<EditInvoiceModalProps> = ({
                 longDescription: '',
                 quantity: 1,
                 rate: transaction.amount || 0,
-                amount: transaction.amount || 0
+                amount: transaction.amount || 0,
+                received: transaction.status === 'Paid' ? transaction.amount : 0,
+                pending: transaction.status === 'Paid' ? 0 : transaction.amount
             }]);
         }
     };
@@ -113,7 +123,9 @@ const EditInvoiceModal: React.FC<EditInvoiceModalProps> = ({
 
     // Calculate totals
     const subtotal = lineItems.reduce((sum, item) => sum + item.amount, 0);
+    const totalReceived = lineItems.reduce((sum, item) => sum + (item.received || 0), 0);
     const total = Math.max(0, subtotal - (parseFloat(formData.additionalDiscount.toString()) || 0));
+    const totalPending = Math.max(0, total - totalReceived);
 
     const handleCustomerNameChange = (name: string) => {
         // 1. Update name immediately
@@ -163,17 +175,24 @@ const EditInvoiceModal: React.FC<EditInvoiceModalProps> = ({
         const updated = [...lineItems];
         updated[index] = { ...updated[index], [field]: value };
 
-        // Recalculate amount
-        if (field === 'quantity' || field === 'rate' || field === 'discount') {
+        // Recalculate amount, received, pending
+        if (field === 'quantity' || field === 'rate' || field === 'discount' || field === 'received') {
             const qty = updated[index].quantity || 0;
             const rate = updated[index].rate || 0;
             const disc = updated[index].discount || 0;
-            const newAmount = (qty * rate) - disc;
-            updated[index].amount = newAmount;
+            const paid = updated[index].paidSoFar || 0;
+            const recv = updated[index].received || 0;
+
+            const itemTotal = (qty * rate) - disc;
+            // The 'Line Total' in this invoice should represent the remaining balance being billed
+            const remainingBalance = Math.max(0, itemTotal - paid);
+
+            updated[index].amount = remainingBalance;
+            updated[index].pending = Math.max(0, remainingBalance - recv);
 
             // Dynamically recalculate pending balance if linked to an AR item
             if (updated[index].originalPending !== undefined) {
-                updated[index].pendingBalance = Math.max(0, updated[index].originalPending! - newAmount);
+                updated[index].pendingBalance = Math.max(0, updated[index].originalPending! - recv);
             }
         }
 
@@ -230,7 +249,7 @@ const EditInvoiceModal: React.FC<EditInvoiceModalProps> = ({
     };
 
     const addLineItem = () => {
-        setLineItems([...lineItems, { description: '', longDescription: '', quantity: 1, rate: 0, amount: 0, linkedQuotationLineItemId: '', pendingBalance: 0, originalPending: 0 }]);
+        setLineItems([...lineItems, { description: '', longDescription: '', quantity: 1, rate: 0, amount: 0, received: 0, pending: 0, paidSoFar: 0, linkedQuotationLineItemId: '', pendingBalance: 0, originalPending: 0 }]);
     };
 
     const removeLineItem = (index: number) => {
@@ -260,7 +279,7 @@ const EditInvoiceModal: React.FC<EditInvoiceModalProps> = ({
                 date: formData.date,
                 dueDate: formData.dueDate || formData.date,
                 type: transaction.type, // Maintain original type
-                amount: total,
+                amount: totalReceived,
                 paymentMethod: formData.paymentMethod as any,
                 status: formData.status as any,
                 additionalDiscount: parseFloat(formData.additionalDiscount?.toString() || '0'),
@@ -268,7 +287,7 @@ const EditInvoiceModal: React.FC<EditInvoiceModalProps> = ({
                 description: lineItems
                     .filter(item => item.description.trim())
                     .map(item => {
-                        let desc = `${item.description} (${item.quantity} × ₹${item.rate}${item.discount ? ` - ₹${item.discount} disc` : ''})`;
+                        let desc = `${item.description} (${item.quantity} × ₹${item.rate}${item.discount ? ` - ₹${item.discount} disc` : ''}${item.received ? `, Recv: ₹${item.received}` : ''})`;
                         if (item.longDescription?.trim()) {
                             desc += ` - ${item.longDescription.trim()}`;
                         }
@@ -291,7 +310,7 @@ const EditInvoiceModal: React.FC<EditInvoiceModalProps> = ({
     return (
         <>
             <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto animate-fade-in">
+                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-6xl w-full max-h-[90vh] overflow-y-auto animate-fade-in">
                     <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex items-center justify-between">
                         <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
                             Edit {transaction.type}
@@ -474,25 +493,42 @@ const EditInvoiceModal: React.FC<EditInvoiceModalProps> = ({
                             </div>
 
                             {/* Column Headers */}
-                            <div className="hidden sm:flex items-center gap-2 mb-2 px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                                <div className="flex-1">Item Detail</div>
-                                <div className="w-20 text-center">Qty</div>
+                            <div className="hidden sm:flex items-center gap-2 mb-2 px-3 text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                                <div className="flex-1">Item Details</div>
+                                <div className="w-12 text-center">Qty</div>
                                 <div className="w-24 text-right">Price</div>
-                                <div className="w-24 text-right">Discount</div>
-                                <div className="w-28 text-right">Pending</div>
-                                <div className="w-28 text-right">Total Amount</div>
+                                <div className="w-20 text-right text-red-500">Disc</div>
+                                <div className="w-20 text-right text-green-600">Paid</div>
+                                <div className="w-24 text-right text-blue-600">Receive</div>
+                                <div className="w-32 text-right">Pending in Future</div>
+                                <div className="w-32 text-right">Pending Amount</div>
                                 <div className="w-8"></div>
                             </div>
 
                             <div className="space-y-3">
                                 {lineItems.map((item, index) => (
-                                    <div key={index} className="flex flex-col gap-2 p-3 bg-gray-50 dark:bg-gray-700/30 rounded-lg border border-gray-100 dark:border-gray-700">
-                                        <div className="flex gap-2 items-start">
-                                            {/* Description with Search */}
-                                            <div className="flex-1 space-y-2 relative">
+                                    <div key={index} className="flex flex-col gap-4 p-4 bg-gray-50 dark:bg-gray-700/30 rounded-lg border border-gray-200 dark:border-gray-700">
+                                        {/* Header with numbering and delete button for mobile */}
+                                        <div className="flex sm:hidden justify-between items-center pb-2 border-b border-gray-100 dark:border-gray-700">
+                                            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Item #{index + 1}</span>
+                                            {lineItems.length > 1 && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => removeLineItem(index)}
+                                                    className="p-1.5 text-red-600 hover:text-red-700 dark:text-red-400 rounded-md hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
+                                            )}
+                                        </div>
+
+                                        <div className="flex flex-col sm:flex-row gap-4 sm:gap-2 items-start">
+                                            {/* Item Details Column */}
+                                            <div className="w-full sm:flex-1 space-y-2 relative">
+                                                <label className="sm:hidden block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Item Details</label>
                                                 <input
                                                     type="text"
-                                                    placeholder="item 1 (1 × ₹17000)"
+                                                    placeholder="Item Description"
                                                     value={item.description}
                                                     onChange={(e) => updateLineItem(index, 'description', e.target.value)}
                                                     onFocus={() => setActiveDropdownIndex(index)}
@@ -501,7 +537,6 @@ const EditInvoiceModal: React.FC<EditInvoiceModalProps> = ({
                                                 />
                                                 {activeDropdownIndex === index && (
                                                     <div className="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl z-[60] max-h-60 overflow-y-auto">
-                                                        {/* Search Results */}
                                                         {products
                                                             .filter(p => p.name.toLowerCase().includes(item.description.toLowerCase()))
                                                             .map(product => (
@@ -520,44 +555,13 @@ const EditInvoiceModal: React.FC<EditInvoiceModalProps> = ({
                                                                             type="button"
                                                                             onClick={(e) => handleDeleteProductFromInventory(e, product.id)}
                                                                             className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors opacity-0 group-hover:opacity-100"
-                                                                            title="Delete from inventory"
                                                                         >
                                                                             <Trash2 size={14} />
                                                                         </button>
                                                                     </div>
                                                                 </div>
                                                             ))}
-
-                                                        {/* Add to Inventory Option */}
-                                                        {item.description.trim() && !products.find(p => p.name.toLowerCase() === item.description.toLowerCase()) && (
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => handleAddProductToInventory(index, item.description, item.rate)}
-                                                                disabled={addingProduct}
-                                                                className="w-full text-left px-4 py-3 bg-blue-50 dark:bg-blue-900/20 border-t border-blue-100 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/40 text-blue-700 dark:text-blue-300 transition-colors"
-                                                            >
-                                                                <div className="flex items-center gap-2 font-bold text-sm">
-                                                                    <Plus size={16} />
-                                                                    {addingProduct ? 'Adding...' : `Add "${item.description}" to Inventory`}
-                                                                </div>
-                                                                <p className="text-[10px] opacity-75 mt-0.5 ml-6">Saves with ₹{item.rate} base price</p>
-                                                            </button>
-                                                        )}
-
-                                                        {/* No Results */}
-                                                        {item.description.trim() && products.filter(p => p.name.toLowerCase().includes(item.description.toLowerCase())).length === 0 && !addingProduct && (
-                                                            <div className="p-4 text-center text-sm text-gray-500 italic border-t border-gray-100 dark:border-gray-700">
-                                                                No matching inventory items
-                                                            </div>
-                                                        )}
                                                     </div>
-                                                )}
-                                                {/* Click away detection overlay */}
-                                                {activeDropdownIndex === index && (
-                                                    <div
-                                                        className="fixed inset-0 z-[55]"
-                                                        onClick={() => setActiveDropdownIndex(null)}
-                                                    />
                                                 )}
                                                 <input
                                                     type="text"
@@ -567,40 +571,75 @@ const EditInvoiceModal: React.FC<EditInvoiceModalProps> = ({
                                                     className="w-full px-2 py-1 text-xs border border-gray-200 dark:border-gray-700 rounded bg-gray-50 dark:bg-gray-800/50 focus:ring-1 focus:ring-blue-500 text-gray-600 dark:text-gray-400"
                                                 />
                                             </div>
-                                            <input
-                                                type="number"
-                                                placeholder="Qty"
-                                                value={item.quantity}
-                                                onChange={(e) => updateLineItem(index, 'quantity', parseFloat(e.target.value) || 0)}
-                                                className="w-20 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white text-center"
-                                                min="0"
-                                                step="0.01"
-                                            />
-                                            <input
-                                                type="number"
-                                                placeholder="Rate"
-                                                value={item.rate}
-                                                onChange={(e) => updateLineItem(index, 'rate', parseFloat(e.target.value) || 0)}
-                                                className="w-24 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white text-right"
-                                                min="0"
-                                                step="0.01"
-                                            />
-                                            <input
-                                                type="number"
-                                                placeholder="Disc"
-                                                value={item.discount || 0}
-                                                onChange={(e) => updateLineItem(index, 'discount', parseFloat(e.target.value) || 0)}
-                                                className="w-24 px-3 py-2 border border-blue-200 dark:border-blue-900 bg-blue-50/30 dark:bg-blue-900/10 rounded-lg focus:ring-2 focus:ring-blue-500 dark:text-blue-200 text-right"
-                                                min="0"
-                                                step="0.01"
-                                            />
-                                            <div className="w-28 px-3 py-2 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-500 dark:text-gray-400 text-right font-medium">
-                                                ₹{(item.pendingBalance || 0).toFixed(2)}
+
+                                            {/* Numeric Inputs Grid */}
+                                            <div className="w-full sm:w-auto grid grid-cols-2 sm:flex sm:flex-row gap-3 sm:gap-2">
+                                                <div className="space-y-1">
+                                                    <label className="sm:hidden block text-[10px] font-bold text-gray-500 uppercase tracking-wider">Qty</label>
+                                                    <input
+                                                        type="number"
+                                                        value={item.quantity}
+                                                        onChange={(e) => updateLineItem(index, 'quantity', parseFloat(e.target.value) || 0)}
+                                                        className="w-full sm:w-12 px-2 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white text-center text-sm"
+                                                        min="0"
+                                                        step="0.01"
+                                                    />
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <label className="sm:hidden block text-[10px] font-bold text-gray-500 uppercase tracking-wider">Price</label>
+                                                    <input
+                                                        type="number"
+                                                        value={item.rate}
+                                                        onChange={(e) => updateLineItem(index, 'rate', parseFloat(e.target.value) || 0)}
+                                                        className="w-full sm:w-24 px-2 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white text-right text-sm"
+                                                        min="0"
+                                                        step="0.01"
+                                                    />
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <label className="sm:hidden block text-[10px] font-bold text-red-500 uppercase tracking-wider">Disc</label>
+                                                    <input
+                                                        type="number"
+                                                        value={item.discount || 0}
+                                                        onChange={(e) => updateLineItem(index, 'discount', parseFloat(e.target.value) || 0)}
+                                                        className="w-full sm:w-20 px-2 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-red-500 dark:bg-gray-700 text-red-600 font-medium text-right text-sm"
+                                                        min="0"
+                                                        step="0.01"
+                                                    />
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <label className="sm:hidden block text-[10px] font-bold text-green-600 uppercase tracking-wider">Paid</label>
+                                                    <div className="w-full sm:w-20 px-2 py-2 bg-green-50 dark:bg-green-900/10 border border-green-100 dark:border-green-800 rounded-lg text-green-700 dark:text-green-400 text-right font-bold text-sm">
+                                                        ₹{(item.paidSoFar || 0).toLocaleString('en-IN')}
+                                                    </div>
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <label className="sm:hidden block text-[10px] font-bold text-blue-600 uppercase tracking-wider">Receive</label>
+                                                    <input
+                                                        type="number"
+                                                        value={item.received || 0}
+                                                        onChange={(e) => updateLineItem(index, 'received', parseFloat(e.target.value) || 0)}
+                                                        className="w-full sm:w-24 px-2 py-2 border border-blue-300 dark:border-blue-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 text-blue-600 font-bold text-right text-sm"
+                                                        min="0"
+                                                        step="0.01"
+                                                    />
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <label className="sm:hidden block text-[10px] font-bold text-gray-500 uppercase tracking-wider">Future</label>
+                                                    <div className="w-full sm:w-32 px-2 py-2 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-gray-900 dark:text-white text-right font-bold text-sm">
+                                                        ₹{(item.pending || 0).toLocaleString('en-IN')}
+                                                    </div>
+                                                </div>
+                                                <div className="space-y-1 col-span-2 sm:col-auto">
+                                                    <label className="sm:hidden block text-[10px] font-bold text-gray-500 uppercase tracking-wider">Pending Amount</label>
+                                                    <div className="w-full sm:w-32 px-2 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white text-right font-bold text-sm">
+                                                        ₹{item.amount.toLocaleString('en-IN')}
+                                                    </div>
+                                                </div>
                                             </div>
-                                            <div className="w-28 px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white text-right font-medium">
-                                                ₹{item.amount.toFixed(2)}
-                                            </div>
-                                            <div className="w-8 flex justify-center items-center">
+
+                                            {/* Desktop Delete Button */}
+                                            <div className="hidden sm:flex w-8 justify-center items-center self-center pt-2">
                                                 {lineItems.length > 1 && (
                                                     <button
                                                         type="button"
@@ -612,7 +651,6 @@ const EditInvoiceModal: React.FC<EditInvoiceModalProps> = ({
                                                 )}
                                             </div>
                                         </div>
-
                                     </div>
                                 ))}
                             </div>
@@ -641,8 +679,16 @@ const EditInvoiceModal: React.FC<EditInvoiceModalProps> = ({
                                             />
                                         </div>
                                     </div>
+                                    <div className="flex justify-between items-center text-sm border-t border-gray-100 dark:border-gray-700 pt-2">
+                                        <span className="text-blue-600 dark:text-blue-400 font-medium">Total Received:</span>
+                                        <span className="font-bold text-blue-700 dark:text-blue-300">₹{totalReceived.toFixed(2)}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center text-sm">
+                                        <span className="text-gray-600 dark:text-gray-400 font-medium">Total Pending:</span>
+                                        <span className="font-bold text-red-600 dark:text-red-400">₹{totalPending.toFixed(2)}</span>
+                                    </div>
                                     <div className="flex justify-between text-lg font-bold border-t border-gray-200 dark:border-gray-700 pt-2">
-                                        <span className="text-gray-900 dark:text-white">Total:</span>
+                                        <span className="text-gray-900 dark:text-white">Invoice Total:</span>
                                         <span className="text-lyceum-blue">₹{total.toFixed(2)}</span>
                                     </div>
                                 </div>
