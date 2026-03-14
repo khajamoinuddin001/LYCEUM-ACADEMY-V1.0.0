@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import {
     TrendingUp, TrendingDown, DollarSign, PieChart, Wallet, Receipt, AlertCircle,
-    ShoppingCart, CreditCard, FileText, Trash2, X, ArrowRightLeft, Edit, Printer
+    ShoppingCart, CreditCard, FileText, Trash2, X, ArrowRightLeft, Edit, Printer,
+    Search, Calendar
 } from 'lucide-react';
 import type { AccountingTransaction, Contact, User } from '@/types';
 import * as api from '@/utils/api';
@@ -50,7 +51,7 @@ const AccountingView: React.FC<AccountingViewProps> = ({
     const [printingTransaction, setPrintingTransaction] = useState<AccountingTransaction | null>(null);
     const [viewingTransaction, setViewingTransaction] = useState<AccountingTransaction | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
-    const [typeFilter, setTypeFilter] = useState<'All' | 'Income' | 'Purchase' | 'Expense' | 'Transfer'>('All');
+    const [typeFilter, setTypeFilter] = useState<'All' | 'Quotations' | 'Invoices' | 'Purchases' | 'Expenses'>('All');
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
     const [viewMode, setViewMode] = useState<'dashboard' | 'reports' | 'receivable' | 'overdue'>('dashboard');
@@ -203,7 +204,15 @@ const AccountingView: React.FC<AccountingViewProps> = ({
 
         // Apply type filter
         if (typeFilter !== 'All') {
-            filtered = filtered.filter(t => t.type === typeFilter);
+            if (typeFilter === 'Quotations') {
+                filtered = filtered.filter(t => t.type === 'Due');
+            } else if (typeFilter === 'Invoices') {
+                filtered = filtered.filter(t => t.type === 'Invoice' || t.type === 'Income');
+            } else if (typeFilter === 'Purchases') {
+                filtered = filtered.filter(t => t.type === 'Purchase');
+            } else if (typeFilter === 'Expenses') {
+                filtered = filtered.filter(t => t.type === 'Expense');
+            }
         }
 
         // Apply date filter
@@ -506,53 +515,77 @@ const AccountingView: React.FC<AccountingViewProps> = ({
                             </h2>
                         </div>
 
-                        {/* Search and Filter */}
-                        <div className="flex gap-4">
+                        {/* Category-Based Filters */}
+                        <div className="flex flex-wrap gap-2 mb-6">
+                            {[
+                                { id: 'All', label: 'All Transactions', icon: <ArrowRightLeft size={16} />, color: 'blue' },
+                                { id: 'Quotations', label: 'Quotations', icon: <FileText size={16} />, color: 'orange' },
+                                { id: 'Invoices', label: 'Invoices', icon: <Receipt size={16} />, color: 'green' },
+                                { id: 'Purchases', label: 'Purchases', icon: <ShoppingCart size={16} />, color: 'purple' },
+                                { id: 'Expenses', label: 'Expenses', icon: <CreditCard size={16} />, color: 'red' },
+                            ].map((filter) => (
+                                <button
+                                    key={filter.id}
+                                    onClick={() => setTypeFilter(filter.id as any)}
+                                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all shadow-sm border ${
+                                        typeFilter === filter.id
+                                            ? filter.color === 'blue' ? 'bg-lyceum-blue text-white border-transparent scale-105 shadow-md' :
+                                              filter.color === 'orange' ? 'bg-orange-600 text-white border-transparent scale-105 shadow-md' :
+                                              filter.color === 'green' ? 'bg-green-600 text-white border-transparent scale-105 shadow-md' :
+                                              filter.color === 'purple' ? 'bg-purple-600 text-white border-transparent scale-105 shadow-md' :
+                                              'bg-red-600 text-white border-transparent scale-105 shadow-md'
+                                            : `bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-gray-100 dark:border-gray-700 ${
+                                                filter.color === 'blue' ? 'hover:border-lyceum-blue hover:text-lyceum-blue' :
+                                                filter.color === 'orange' ? 'hover:border-orange-400 hover:text-orange-600' :
+                                                filter.color === 'green' ? 'hover:border-green-400 hover:text-green-600' :
+                                                filter.color === 'purple' ? 'hover:border-purple-400 hover:text-purple-600' :
+                                                'hover:border-red-400 hover:text-red-600'
+                                              }`
+                                    }`}
+                                >
+                                    {filter.icon}
+                                    {filter.label}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Search and Date Filters */}
+                        <div className="flex flex-col lg:flex-row gap-4">
                             <div className="flex-1 relative">
                                 <input
                                     type="text"
                                     placeholder="Search by invoice, client, or description..."
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
-                                    className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-lyceum-blue text-gray-900 dark:text-gray-100"
+                                    className="w-full px-5 py-3 border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 rounded-2xl focus:outline-none focus:ring-2 focus:ring-lyceum-blue/20 focus:border-lyceum-blue text-sm text-gray-900 dark:text-gray-100 transition-all"
                                 />
-                                {searchQuery && (
+                                {searchQuery ? (
                                     <button
                                         onClick={() => setSearchQuery('')}
-                                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                                        className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
                                     >
                                         <X size={18} />
                                     </button>
+                                ) : (
+                                    <Search className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
                                 )}
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-900/50 px-4 py-2 rounded-2xl border border-gray-200 dark:border-gray-700">
+                                <Calendar size={16} className="text-gray-400" />
                                 <input
                                     type="date"
                                     value={startDate}
                                     onChange={(e) => setStartDate(e.target.value)}
-                                    className="px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-lyceum-blue text-gray-900 dark:text-gray-100"
-                                    placeholder="Start Date"
+                                    className="bg-transparent border-none focus:outline-none text-sm text-gray-900 dark:text-gray-100 p-0"
                                 />
-                                <span className="text-gray-500 dark:text-gray-400">-</span>
+                                <span className="text-gray-400 mx-1">to</span>
                                 <input
                                     type="date"
                                     value={endDate}
                                     onChange={(e) => setEndDate(e.target.value)}
-                                    className="px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-lyceum-blue text-gray-900 dark:text-gray-100"
-                                    placeholder="End Date"
+                                    className="bg-transparent border-none focus:outline-none text-sm text-gray-900 dark:text-gray-100 p-0"
                                 />
                             </div>
-                            <select
-                                value={typeFilter}
-                                onChange={(e) => setTypeFilter(e.target.value as any)}
-                                className="px-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-lyceum-blue text-gray-900 dark:text-gray-100"
-                            >
-                                <option value="All">All Types</option>
-                                <option value="Income">Income</option>
-                                <option value="Purchase">Purchase</option>
-                                <option value="Expense">Expense</option>
-                                <option value="Transfer">Transfer</option>
-                            </select>
                         </div>
                     </div>
 
