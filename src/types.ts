@@ -122,6 +122,13 @@ export interface Document {
   category?: string;
 }
 
+export interface StaffNote {
+  id: string;
+  text: string;
+  staffName: string;
+  timestamp: string;
+}
+
 export interface UniversityApplicationDetails {
   universityName?: string;
   course?: string;
@@ -136,6 +143,8 @@ export interface UniversityApplicationDetails {
   applicationFee?: string;
   enrollmentDeposit?: string;
   previousStatus?: string;
+  internalNote?: string; // Legacy
+  internalStaffNotes?: StaffNote[];
 }
 
 export interface WorkDetail {

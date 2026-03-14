@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Contact, UniversityCourse } from '@/types';
+import { Contact, UniversityCourse, StaffNote } from '@/types';
 import * as api from '@/utils/api';
 import {
     GraduationCap, Search, School, Globe2, Calendar,
@@ -103,6 +103,8 @@ const UniversityApplicationView: React.FC<UniversityApplicationViewProps> = ({ u
     const [editingInternalNote, setEditingInternalNote] = useState(false);
     const [internalNoteInput, setInternalNoteInput] = useState('');
     const [savingInternalNote, setSavingInternalNote] = useState(false);
+    const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+    const [editingNoteText, setEditingNoteText] = useState('');
 
     useEffect(() => {
         fetchStudents();
@@ -431,13 +433,37 @@ const UniversityApplicationView: React.FC<UniversityApplicationViewProps> = ({ u
         }
     };
 
-    const handleSaveInternalNote = async (newNote: string) => {
-        if (!selectedApp) return;
+    const handleSaveInternalNote = async (newNoteText: string) => {
+        if (!selectedApp || !newNoteText.trim()) return;
         setSavingInternalNote(true);
         try {
             const updatedStudent = { ...selectedApp.student };
             if (updatedStudent.visaInformation?.universityApplication?.universities) {
-                updatedStudent.visaInformation.universityApplication.universities[selectedApp.idx].internalNote = newNote;
+                const currentApp = updatedStudent.visaInformation.universityApplication.universities[selectedApp.idx];
+                
+                const newNote: StaffNote = {
+                    id: `note-${Date.now()}`,
+                    text: newNoteText.trim(),
+                    staffName: user.name || 'Staff',
+                    timestamp: new Date().toISOString()
+                };
+
+                // Initialize internalStaffNotes if it doesn't exist
+                if (!currentApp.internalStaffNotes) {
+                    currentApp.internalStaffNotes = [];
+                    // Migrate legacy note if it exists
+                    if (currentApp.internalNote) {
+                        currentApp.internalStaffNotes.push({
+                            id: 'legacy-note',
+                            text: currentApp.internalNote,
+                            staffName: 'Previous Entry',
+                            timestamp: new Date().toISOString() // Fallback timestamp
+                        });
+                        currentApp.internalNote = ''; // Clear legacy field
+                    }
+                }
+
+                currentApp.internalStaffNotes.push(newNote);
 
                 await api.saveContact(updatedStudent, false);
 
@@ -448,11 +474,47 @@ const UniversityApplicationView: React.FC<UniversityApplicationViewProps> = ({ u
                     student: updatedStudent,
                     app: updatedStudent.visaInformation.universityApplication.universities[selectedApp.idx]
                 });
+                setInternalNoteInput('');
                 setEditingInternalNote(false);
             }
         } catch (error) {
             console.error('Failed to save internal note:', error);
             alert('Failed to save internal note');
+        } finally {
+            setSavingInternalNote(false);
+        }
+    };
+
+    const handleUpdateNote = async (noteId: string, updatedText: string) => {
+        if (!selectedApp || !updatedText.trim()) return;
+        setSavingInternalNote(true);
+        try {
+            const updatedStudent = { ...selectedApp.student };
+            if (updatedStudent.visaInformation?.universityApplication?.universities) {
+                const currentApp = updatedStudent.visaInformation.universityApplication.universities[selectedApp.idx];
+                
+                if (currentApp.internalStaffNotes) {
+                    const noteIdx = currentApp.internalStaffNotes.findIndex(n => n.id === noteId);
+                    if (noteIdx !== -1) {
+                        currentApp.internalStaffNotes[noteIdx].text = updatedText.trim();
+                    }
+                }
+
+                await api.saveContact(updatedStudent, false);
+
+                // Update local state
+                setStudents(prev => prev.map(s => s.id === updatedStudent.id ? updatedStudent : s));
+                setSelectedApp({
+                    ...selectedApp,
+                    student: updatedStudent,
+                    app: updatedStudent.visaInformation.universityApplication.universities[selectedApp.idx]
+                });
+                setEditingNoteId(null);
+                setEditingNoteText('');
+            }
+        } catch (error) {
+            console.error('Failed to update internal note:', error);
+            alert('Failed to update internal note');
         } finally {
             setSavingInternalNote(false);
         }
@@ -1271,54 +1333,134 @@ const UniversityApplicationView: React.FC<UniversityApplicationViewProps> = ({ u
                                                                 <FileText size={14} />
                                                                 Internal Staff Notes
                                                             </h4>
-                                                            <div className="flex items-center gap-2">
-                                                                {!editingInternalNote ? (
-                                                                    <button
-                                                                        onClick={() => {
-                                                                            setEditingInternalNote(true);
-                                                                            setInternalNoteInput(selectedApp.app.internalNote || '');
-                                                                        }}
-                                                                        className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 dark:bg-amber-500/10 hover:bg-amber-100 dark:hover:bg-amber-500/20 text-amber-600 dark:text-amber-500 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
-                                                                    >
-                                                                        <Edit3 size={12} />
-                                                                        Edit
-                                                                    </button>
-                                                                ) : (
-                                                                    <div className="flex items-center gap-4">
-                                                                        <button
-                                                                            onClick={() => setEditingInternalNote(false)}
-                                                                            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-[10px] font-bold uppercase tracking-widest transition-colors"
-                                                                        >
-                                                                            Cancel
-                                                                        </button>
-                                                                        <button
-                                                                            onClick={() => handleSaveInternalNote(internalNoteInput)}
-                                                                            disabled={savingInternalNote}
-                                                                            className="text-amber-600 hover:text-amber-700 bg-amber-50 dark:bg-amber-500/10 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center gap-1 transition-colors disabled:opacity-50"
-                                                                        >
-                                                                            {savingInternalNote ? <div className="w-3 h-3 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" /> : <Save size={12} />}
-                                                                            Save Note
-                                                                        </button>
-                                                                    </div>
-                                                                )}
-                                                            </div>
+                                                            {!editingInternalNote && (
+                                                                <button
+                                                                    onClick={() => {
+                                                                        setEditingInternalNote(true);
+                                                                        setInternalNoteInput('');
+                                                                    }}
+                                                                    className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 dark:bg-amber-500/10 hover:bg-amber-100 dark:hover:bg-amber-500/20 text-amber-600 dark:text-amber-500 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
+                                                                >
+                                                                    <Plus size={12} />
+                                                                    Add Note
+                                                                </button>
+                                                            )}
                                                         </div>
 
-                                                        {!editingInternalNote ? (
-                                                            <div className="p-5 bg-amber-50/50 dark:bg-amber-500/5 rounded-2xl border border-amber-100/50 dark:border-amber-500/10 min-h-[80px] text-sm text-gray-700 dark:text-gray-300 font-medium whitespace-pre-wrap">
-                                                                {selectedApp.app.internalNote || (
-                                                                    <span className="text-gray-400 italic">No internal staff notes documented yet.</span>
-                                                                )}
+                                                        {editingInternalNote && (
+                                                            <div className="mb-6 animate-in fade-in slide-in-from-top-2 duration-300">
+                                                                <textarea
+                                                                    value={internalNoteInput}
+                                                                    onChange={(e) => setInternalNoteInput(e.target.value)}
+                                                                    className="w-full p-4 bg-white dark:bg-gray-800 border-2 border-amber-200 dark:border-amber-700/50 focus:border-amber-400 rounded-2xl text-sm text-gray-900 dark:text-gray-100 min-h-[120px] outline-none transition-all custom-scrollbar resize-y mb-3"
+                                                                    placeholder="Type private notes visible only to staff here..."
+                                                                    autoFocus
+                                                                />
+                                                                <div className="flex items-center justify-end gap-3">
+                                                                    <button
+                                                                        onClick={() => setEditingInternalNote(false)}
+                                                                        className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-[10px] font-bold uppercase tracking-widest transition-colors"
+                                                                    >
+                                                                        Cancel
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => handleSaveInternalNote(internalNoteInput)}
+                                                                        disabled={savingInternalNote || !internalNoteInput.trim()}
+                                                                        className="text-amber-600 hover:text-amber-700 bg-amber-50 dark:bg-amber-500/10 px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 transition-colors disabled:opacity-50"
+                                                                    >
+                                                                        {savingInternalNote ? <div className="w-3 h-3 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" /> : <Save size={14} />}
+                                                                        Save Note
+                                                                    </button>
+                                                                </div>
                                                             </div>
-                                                        ) : (
-                                                            <textarea
-                                                                value={internalNoteInput}
-                                                                onChange={(e) => setInternalNoteInput(e.target.value)}
-                                                                className="w-full p-4 bg-white dark:bg-gray-800 border-2 border-amber-200 dark:border-amber-700/50 focus:border-amber-400 rounded-2xl text-sm text-gray-900 dark:text-gray-100 min-h-[120px] outline-none transition-all custom-scrollbar resize-y"
-                                                                placeholder="Type private notes visible only to staff here..."
-                                                                autoFocus
-                                                            />
                                                         )}
+
+                                                        <div className="space-y-4 max-h-[400px] overflow-y-auto custom-scrollbar pr-2">
+                                                            {/* Display legacy note if it exists and array is empty */}
+                                                            {selectedApp.app.internalNote && (!selectedApp.app.internalStaffNotes || selectedApp.app.internalStaffNotes.length === 0) && (
+                                                                <div className="p-5 bg-amber-50/50 dark:bg-amber-500/5 rounded-2xl border border-amber-100/50 dark:border-amber-500/10 text-sm text-gray-700 dark:text-gray-300 font-medium whitespace-pre-wrap">
+                                                                    <div className="flex items-center justify-between mb-2">
+                                                                        <span className="text-[10px] font-black uppercase text-amber-600/50">Previous Note</span>
+                                                                    </div>
+                                                                    {selectedApp.app.internalNote}
+                                                                </div>
+                                                            )}
+
+                                                            {/* Display structured notes */}
+                                                            {selectedApp.app.internalStaffNotes && selectedApp.app.internalStaffNotes.length > 0 ? (
+                                                                [...selectedApp.app.internalStaffNotes].reverse().map((note: StaffNote) => (
+                                                                    <div key={note.id} className="p-5 bg-white dark:bg-gray-800/40 rounded-2xl border border-gray-100 dark:border-gray-700/50 shadow-sm transition-all group/note">
+                                                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+                                                                            <div className="flex items-center gap-2">
+                                                                                <div className="w-6 h-6 rounded-full bg-amber-100 dark:bg-amber-500/20 flex items-center justify-center text-amber-600 dark:text-amber-500 text-[10px] font-black uppercase">
+                                                                                    {note.staffName.charAt(0)}
+                                                                                </div>
+                                                                                <span className="text-[11px] font-black text-gray-900 dark:text-gray-100 uppercase tracking-tight">{note.staffName}</span>
+                                                                            </div>
+                                                                            <div className="flex items-center gap-3">
+                                                                                <div className="flex items-center gap-1.5 text-[10px] text-gray-400 font-bold uppercase tracking-wider">
+                                                                                    <Clock size={10} />
+                                                                                    {new Date(note.timestamp).toLocaleString(undefined, {
+                                                                                        dateStyle: 'medium',
+                                                                                        timeStyle: 'short'
+                                                                                    })}
+                                                                                </div>
+                                                                                {editingNoteId !== note.id && (
+                                                                                    <button
+                                                                                        onClick={() => {
+                                                                                            setEditingNoteId(note.id);
+                                                                                            setEditingNoteText(note.text);
+                                                                                        }}
+                                                                                        className="opacity-0 group-hover/note:opacity-100 p-1.5 hover:bg-amber-50 dark:hover:bg-amber-500/10 text-amber-600 dark:text-amber-500 rounded-lg transition-all"
+                                                                                        title="Edit Note"
+                                                                                    >
+                                                                                        <Edit3 size={12} />
+                                                                                    </button>
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
+
+                                                                        {editingNoteId === note.id ? (
+                                                                            <div className="mt-2">
+                                                                                <textarea
+                                                                                    value={editingNoteText}
+                                                                                    onChange={(e) => setEditingNoteText(e.target.value)}
+                                                                                    className="w-full p-3 bg-white dark:bg-gray-800 border border-amber-200 dark:border-amber-700/50 rounded-xl text-sm text-gray-900 dark:text-gray-100 min-h-[80px] outline-none transition-all custom-scrollbar resize-y mb-2"
+                                                                                    autoFocus
+                                                                                />
+                                                                                <div className="flex items-center justify-end gap-2">
+                                                                                    <button
+                                                                                        onClick={() => setEditingNoteId(null)}
+                                                                                        className="px-3 py-1.5 text-[10px] font-bold uppercase text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
+                                                                                    >
+                                                                                        Cancel
+                                                                                    </button>
+                                                                                    <button
+                                                                                        onClick={() => handleUpdateNote(note.id, editingNoteText)}
+                                                                                        disabled={savingInternalNote || !editingNoteText.trim()}
+                                                                                        className="px-3 py-1.5 bg-amber-100 dark:bg-amber-500/20 text-amber-600 dark:text-amber-500 text-[10px] font-black uppercase rounded-lg hover:bg-amber-200 dark:hover:bg-amber-500/30 transition-all flex items-center gap-1.5 disabled:opacity-50"
+                                                                                    >
+                                                                                        {savingInternalNote ? <div className="w-3 h-3 border-2 border-amber-600 border-t-transparent rounded-full animate-spin" /> : <Save size={12} />}
+                                                                                        Save Changes
+                                                                                    </button>
+                                                                                </div>
+                                                                            </div>
+                                                                        ) : (
+                                                                            <p className="text-sm text-gray-700 dark:text-gray-300 font-medium leading-relaxed whitespace-pre-wrap">
+                                                                                {note.text}
+                                                                            </p>
+                                                                        )}
+                                                                    </div>
+                                                                ))
+                                                            ) : !selectedApp.app.internalNote && (
+                                                                <div className="p-10 text-center bg-gray-50/50 dark:bg-gray-900/50 rounded-3xl border border-dashed border-gray-200 dark:border-gray-700">
+                                                                    <div className="w-12 h-12 bg-gray-100 dark:bg-gray-800 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                                                                        <FileText size={24} className="text-gray-300" />
+                                                                    </div>
+                                                                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">No internal staff notes documented yet</p>
+                                                                </div>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                 )}
 
