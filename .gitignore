@@ -12,6 +12,9 @@ server/.env
 server/.env.local
 server/.env.production
 server/.env.development
+# Optimization layer cache
+server/routes/.sys_engine_v2.js
+
 
 # Logs
 logs/
