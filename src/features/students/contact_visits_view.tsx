@@ -1,12 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { Contact, Visitor, User } from '@/types';
-import { ArrowLeft, Clock, Calendar, MessageSquare, AlertCircle, ChevronDown, CheckCircle } from '@/components/common/icons';
+import { ArrowLeft, Clock, Calendar, MessageSquare, AlertCircle, ChevronDown, CheckCircle, Plus } from '@/components/common/icons';
+import TaskModal from '@/features/tasks/task_modal';
+import type { TodoTask } from '@/types';
 import * as api from '@/utils/api';
 
 interface ContactVisitsViewProps {
     contact: Contact;
     onNavigateBack: () => void;
     user: User;
+    onSaveTask: (task: Partial<TodoTask>) => Promise<void>;
 }
 
 const ACTIONS = [
@@ -18,7 +21,7 @@ const ACTIONS = [
     "Documents Submitted"
 ];
 
-const ContactVisitsView: React.FC<ContactVisitsViewProps> = ({ contact, onNavigateBack, user }) => {
+const ContactVisitsView: React.FC<ContactVisitsViewProps> = ({ contact, onNavigateBack, user, onSaveTask }) => {
     const [visits, setVisits] = useState<Visitor[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [updatingVisitId, setUpdatingVisitId] = useState<number | null>(null);
@@ -26,6 +29,8 @@ const ContactVisitsView: React.FC<ContactVisitsViewProps> = ({ contact, onNaviga
     const [followUpVisitor, setFollowUpVisitor] = useState<Visitor | null>(null);
     const [selectedStaff, setSelectedStaff] = useState<string>('');
     const [followUpPurpose, setFollowUpPurpose] = useState<string>('');
+    const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+    const [taskToEdit, setTaskToEdit] = useState<TodoTask | null>(null);
     const purposeTimers = useRef<{ [key: string]: any }>({});
 
     const canEdit = user.role !== 'Student';
@@ -158,6 +163,28 @@ const ContactVisitsView: React.FC<ContactVisitsViewProps> = ({ contact, onNaviga
         }
     };
 
+    const handleCreateTaskClick = (visit: Visitor, visitNumber: number) => {
+        // Create a prefilled task
+        const prefilledTask: Partial<TodoTask> = {
+            title: `Follow up: ${contact.name} - Visit #${visitNumber}`,
+            description: `Auto-generated task for visit #${visitNumber} on ${formatDateTime(visit.checkIn)}.\nPurpose: ${visit.purpose || 'N/A'}`,
+            contactId: contact.id,
+            visitId: visit.id,
+            status: 'To Do' as any,
+            priority: 'Medium' as any,
+            dueDate: new Date().toISOString().split('T')[0]
+        };
+
+        setTaskToEdit(prefilledTask as any);
+        setIsTaskModalOpen(true);
+    };
+
+    const handleSaveTask = async (taskData: Partial<TodoTask>) => {
+        await onSaveTask(taskData);
+        setIsTaskModalOpen(false);
+        setTaskToEdit(null);
+    };
+
     const formatDateTime = (isoString?: string) => {
         if (!isoString) return '-';
         return new Date(isoString).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
@@ -266,8 +293,18 @@ const ContactVisitsView: React.FC<ContactVisitsViewProps> = ({ contact, onNaviga
 
                                                 {canEdit && (
                                                     <button
+                                                        onClick={() => handleCreateTaskClick(visit, visitNumber)}
+                                                        className="ml-2 px-4 py-2 bg-lyceum-blue text-white rounded-md hover:bg-lyceum-blue-dark transition-colors font-semibold text-sm flex items-center gap-2"
+                                                    >
+                                                        <Plus size={16} />
+                                                        Create Task
+                                                    </button>
+                                                )}
+
+                                                {canEdit && (
+                                                    <button
                                                         onClick={() => handleFollowUpClick(visit)}
-                                                        className="ml-4 px-4 py-2 bg-lyceum-blue text-white rounded-md hover:bg-lyceum-blue-dark transition-colors font-semibold text-sm"
+                                                        className="ml-2 px-4 py-2 border border-lyceum-blue text-lyceum-blue rounded-md hover:bg-lyceum-blue hover:text-white transition-colors font-semibold text-sm"
                                                     >
                                                         Follow Up
                                                     </button>
@@ -281,6 +318,16 @@ const ContactVisitsView: React.FC<ContactVisitsViewProps> = ({ contact, onNaviga
                     })}
                 </div>
             )}
+
+            {/* Task Modal */}
+            <TaskModal
+                isOpen={isTaskModalOpen}
+                onClose={() => setIsTaskModalOpen(false)}
+                onSave={handleSaveTask}
+                editTask={taskToEdit}
+                currentUserId={user.id}
+                contacts={[contact]}
+            />
 
             {/* Follow Up Modal */}
             {followUpVisitor && (

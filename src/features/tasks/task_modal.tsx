@@ -30,6 +30,7 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, editTask
     const [logs, setLogs] = useState<TaskTimeLog[]>([]);
     const [taskDuration, setTaskDuration] = useState<string>('');
     const [ticketId, setTicketId] = useState<number | undefined>(undefined);
+    const [visitId, setVisitId] = useState<number | undefined>(undefined);
 
     useEffect(() => {
         if (isOpen) {
@@ -68,6 +69,7 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, editTask
                 setContactId(editTask.contactId || '');
                 setIsVisibleToStudent(editTask.isVisibleToStudent || false);
                 setTicketId(editTask.ticketId);
+                setVisitId(editTask.visitId);
                 if (editTask.contactId) {
                     const linkedContact = contacts.find(c => c.id === editTask.contactId);
                     setContactSearch(linkedContact ? linkedContact.name : '');
@@ -83,6 +85,7 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, editTask
                 setAssignedTo(editTask?.assignedTo || currentUserId);
                 setContactId(editTask?.contactId || '');
                 setTicketId(editTask?.ticketId);
+                setVisitId(editTask?.visitId);
                 setIsVisibleToStudent(editTask?.isVisibleToStudent || false);
 
                 if (editTask?.contactId) {
@@ -115,7 +118,8 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, editTask
             assignedTo: Number(assignedTo),
             contactId: contactId ? Number(contactId) : undefined,
             isVisibleToStudent,
-            ticketId
+            ticketId,
+            visitId
         });
         onClose();
     };
@@ -129,6 +133,11 @@ const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, onSave, editTask
                     <div>
                         <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100 flex items-center gap-2">
                             {editTask ? 'Edit Task' : 'Create New Task'}
+                            {visitId && (
+                                <span className="text-xs font-normal px-2 py-1 bg-green-50 text-green-600 rounded-full border border-green-100 flex items-center gap-1">
+                                    Linked to Visit #{editTask?.title?.split('#')?.pop() || visitId}
+                                </span>
+                            )}
                             {taskDuration && <span className="text-xs font-normal px-2 py-1 bg-blue-50 text-blue-600 rounded-full border border-blue-100 flex items-center gap-1"><Clock size={12} /> {taskDuration} elapsed</span>}
                         </h2>
                     </div>

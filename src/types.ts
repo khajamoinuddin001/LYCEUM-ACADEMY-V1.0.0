@@ -69,6 +69,7 @@ export interface TodoTask {
   ticketId?: number;
   visibility_emails?: string[];
   recurringTaskId?: number;
+  visitId?: number;
 }
 
 export interface TaskReply {
