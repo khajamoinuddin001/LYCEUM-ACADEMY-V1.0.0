@@ -76,6 +76,7 @@ import StudentDocumentsView from '@/features/students/student_documents_view';
 import StudentDocumentManagerView from '@/features/students/student_document_manager_view';
 import StaffDocumentManagerView from '@/features/students/staff_document_manager_view';
 import StudentUniversityApplicationView from '@/features/students/student_university_view';
+import StudentAnnouncementsView from '@/features/students/student_announcements_view';
 import UniversityManager from '@/features/admin/university_manager';
 import ActiveSessionsView from '@/features/admin/active_sessions_view';
 import MarketingView from '@/features/marketing/marketing_view';
@@ -116,6 +117,7 @@ import DestinationPage from '@/features/university/destinations/DestinationPage'
 import AllDestinationsPage from '@/features/university/destinations/AllDestinationsPage';
 import { VisaOperationsView } from '@/features/visa/visa_operations_view';
 import { StudentVisaView } from '@/features/students/student_visa_view';
+import AnnouncementView from '@/features/announcement/announcement_view';
 import type { VisaOperation } from '@/types';
 
 // ... (keep existing types)
@@ -2091,6 +2093,8 @@ const DashboardLayout: React.FC = () => {
     }
 
     switch (activeApp) {
+      case 'Announcement': return <AnnouncementView user={currentUser} />;
+      case 'Announcements': return <StudentAnnouncementsView />;
       case 'Automation Engine': return <AutomationView />;
       case 'Apps': return <AppsGridView onAppSelect={handleAppSelect} user={currentUser} apps={gridApps} />;
       case 'dashboard': return <Dashboard onNavigateBack={() => handleAppSelect('Apps')} transactions={transactions} user={currentUser} tasks={tasks} onAppSelect={handleAppSelect} paymentActivityLog={paymentActivityLog} contacts={contacts} leads={leads} />;

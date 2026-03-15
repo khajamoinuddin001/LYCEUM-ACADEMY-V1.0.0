@@ -114,5 +114,8 @@ export {
   Globe2,
   Zap,
   Cpu,
-  FileUp
+  FileUp,
+  Megaphone,
+  Inbox,
+  SearchX
 } from 'lucide-react';

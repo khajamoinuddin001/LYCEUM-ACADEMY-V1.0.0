@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import type { Contact, LmsCourse, CalendarEvent, Visitor, User, AccountingTransaction, VisaOperation } from '@/types';
-import { GraduationCap, BookOpen, CalendarClock, Paperclip, CheckCircle2, Circle, Trophy, Calendar, Upload, Download, User as UserIcon, ArrowLeft, DollarSign, Receipt, AlertCircle, X, Copy, CreditCard, Clock } from '@/components/common/icons';
+import { GraduationCap, BookOpen, CalendarClock, Paperclip, CheckCircle2, Circle, Trophy, Calendar, Upload, Download, User as UserIcon, ArrowLeft, DollarSign, Receipt, AlertCircle, X, Copy, CreditCard, Clock, Megaphone, FileText, ChevronRight, RefreshCw as Loader2 } from '@/components/common/icons';
 import * as api from '@/utils/api';
 import StudentAppointmentModal from './student_appointment_modal';
 
@@ -31,6 +31,8 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, courses, e
     const [documents, setDocuments] = useState<any[]>([]);
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
     const [paymentSettings, setPaymentSettings] = useState<{ upiId: string; qrCode: string } | null>(null);
+    const [announcements, setAnnouncements] = useState<any[]>([]);
+    const [isAnnouncementsLoading, setIsAnnouncementsLoading] = useState(false);
 
     useEffect(() => {
         if (isPaymentModalOpen) {
@@ -60,10 +62,16 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, courses, e
             loadDocuments(student.id);
             loadTransactions(student);
             api.getPaymentSettings().then(setPaymentSettings).catch(console.error);
+            loadAnnouncements();
 
             const interval = setInterval(() => {
                 api.getContactVisits(student.id).then(v => {
                     setVisits(prev => JSON.stringify(prev) !== JSON.stringify(v) ? v : prev);
+                }).catch(console.error);
+
+                // Silent announcement reload
+                api.getMyAnnouncements().then(a => {
+                    setAnnouncements(prev => JSON.stringify(prev) !== JSON.stringify(a) ? a : prev);
                 }).catch(console.error);
 
                 // Silent document reload (no spinner)
@@ -157,6 +165,44 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, courses, e
         } catch (error) {
             console.error('Failed to download document:', error);
             alert('Failed to download document. Please try again.');
+        }
+    };
+
+    const [selectedAnnouncement, setSelectedAnnouncement] = useState<any | null>(null);
+
+    const loadAnnouncements = async () => {
+        try {
+            setIsAnnouncementsLoading(true);
+            const data = await api.getMyAnnouncements();
+            setAnnouncements(data);
+        } catch (error) {
+            console.error('Failed to load announcements:', error);
+        } finally {
+            setIsAnnouncementsLoading(false);
+        }
+    };
+
+    const handleMarkAsRead = async (id: number) => {
+        try {
+            await api.markAnnouncementAsRead(id);
+            // Non-blocking local update for better UX
+            setAnnouncements(prev => prev.map(a => a.id === id ? { ...a, is_read: true } : a));
+        } catch (error) {
+            console.error('Failed to mark as read:', error);
+        }
+    };
+
+    const handleDownloadAttachment = async (url: string, filename: string) => {
+        try {
+            const response = await fetch(url);
+            const blob = await response.blob();
+            const link = document.createElement('a');
+            link.href = window.URL.createObjectURL(blob);
+            link.download = filename;
+            link.click();
+        } catch (error) {
+            console.error('Failed to download attachment:', error);
+            alert('Failed to download attachment');
         }
     };
 
@@ -285,6 +331,137 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, courses, e
                     Here's a summary of your academic progress and activities.
                 </p>
             </div>
+
+            {/* Announcements Section - Prominent at the top */}
+            {announcements.filter(a => !a.is_read).length > 0 && (
+                <div className="grid grid-cols-1 gap-4 animate-in fade-in slide-in-from-top-4 duration-500">
+                    {announcements.filter(a => !a.is_read).map((ann) => (
+                        <div key={ann.id} className="relative bg-gradient-to-r from-amber-500/10 to-amber-600/10 dark:from-amber-500/5 dark:to-amber-600/5 border border-amber-500/20 dark:border-amber-500/10 p-5 rounded-2xl flex flex-col md:flex-row md:items-center gap-4 group">
+                            <div className="flex-shrink-0 p-3 bg-amber-500/10 dark:bg-amber-500/20 rounded-xl text-amber-600 dark:text-amber-400">
+                                <Megaphone size={24} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <h3 className="font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                                    {ann.title}
+                                    <span className="px-2 py-0.5 bg-amber-500 text-white text-[10px] font-black uppercase rounded-full">New</span>
+                                </h3>
+                                <p className="text-sm text-gray-600 dark:text-gray-300 mt-1 line-clamp-2 md:line-clamp-1">{(ann.content || '').replace(/<[^>]*>/g, '')}</p>
+                                <div className="flex items-center gap-4 mt-3">
+                                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1">
+                                        <Clock size={12} />
+                                        {new Date(ann.sent_at || ann.created_at).toLocaleDateString()}
+                                    </span>
+                                    {ann.attachments?.length > 0 && (
+                                        <button
+                                            onClick={() => setSelectedAnnouncement(ann)}
+                                            className="text-[10px] font-bold text-lyceum-blue uppercase tracking-wider flex items-center gap-1 hover:underline cursor-pointer"
+                                        >
+                                            <Paperclip size={12} />
+                                            {ann.attachments.length} Attachment(s)
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <button 
+                                    onClick={() => handleMarkAsRead(ann.id)}
+                                    className="px-4 py-2 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-xs font-bold rounded-xl border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all shadow-sm"
+                                >
+                                    Dismiss
+                                </button>
+                                <button 
+                                    onClick={() => setSelectedAnnouncement(ann)}
+                                    className="px-4 py-2 bg-amber-600 text-white text-xs font-bold rounded-xl shadow-lg shadow-amber-600/20 hover:bg-amber-700 transition-all"
+                                >
+                                    View Details
+                                </button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {/* Announcement Details Modal */}
+            {selectedAnnouncement && createPortal(
+                <div
+                    className="fixed inset-0 z-[9999] flex items-center justify-center"
+                    style={{ background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)' }}
+                    onClick={(e) => { if (e.target === e.currentTarget) setSelectedAnnouncement(null); }}
+                >
+                    <div
+                        className="bg-white dark:bg-gray-800 rounded-2xl w-full shadow-2xl flex flex-col"
+                        style={{ maxWidth: '520px', maxHeight: '80vh', margin: '16px' }}
+                    >
+                        {/* Header */}
+                        <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between bg-amber-50/80 dark:bg-amber-900/10 flex-shrink-0 rounded-t-2xl">
+                            <h2 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                                <Megaphone className="text-amber-600" size={18} />
+                                Announcement
+                            </h2>
+                            <button
+                                onClick={() => setSelectedAnnouncement(null)}
+                                className="p-1.5 hover:bg-white dark:hover:bg-gray-700 hover:text-red-500 rounded-lg transition-colors text-gray-400"
+                            >
+                                <X size={18} />
+                            </button>
+                        </div>
+                        {/* Body */}
+                        <div className="flex-1 overflow-y-auto px-5 py-4">
+                            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-1 leading-snug">{selectedAnnouncement.title}</h3>
+                            <div className="flex items-center gap-2 text-xs text-gray-400 mb-4">
+                                <Calendar size={11} />
+                                {new Date(selectedAnnouncement.sent_at || selectedAnnouncement.created_at).toLocaleDateString()}
+                            </div>
+
+                            <div
+                                className="dashboard-ann-content text-sm text-gray-700 dark:text-gray-300 leading-relaxed mb-6"
+                                dangerouslySetInnerHTML={{ __html: selectedAnnouncement.content || '' }}
+                            />
+
+                            {selectedAnnouncement.attachments?.length > 0 && (
+                                <div className="space-y-2 pt-4 border-t border-gray-100 dark:border-gray-700">
+                                    <h4 className="text-xs font-bold text-gray-700 dark:text-white flex items-center gap-2 uppercase tracking-widest mb-2">
+                                        <Paperclip size={14} className="text-amber-600" />
+                                        Attachments
+                                    </h4>
+                                    {selectedAnnouncement.attachments.map((file: any, idx: number) => (
+                                        <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900 rounded-xl border border-transparent hover:border-amber-200 dark:hover:border-amber-900/30 transition-all">
+                                            <div className="flex items-center gap-3 min-w-0">
+                                                <div className="p-2 bg-white dark:bg-gray-800 rounded-lg text-amber-600 shadow-sm">
+                                                    <FileText size={16} />
+                                                </div>
+                                                <div className="flex flex-col min-w-0">
+                                                    <span className="text-sm font-semibold text-gray-900 dark:text-white truncate">{file.name}</span>
+                                                    <span className="text-[10px] text-gray-400">{(file.size / 1024 / 1024).toFixed(2)} MB</span>
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={() => handleDownloadAttachment(file.url, file.name)}
+                                                className="p-2 bg-white dark:bg-gray-800 text-amber-600 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 hover:bg-amber-600 hover:text-white transition-all"
+                                            >
+                                                <Download size={16} />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                        {/* Footer */}
+                        <div className="flex-shrink-0 px-5 py-4 border-t border-gray-100 dark:border-gray-700">
+                            <button
+                                onClick={() => {
+                                    handleMarkAsRead(selectedAnnouncement.id);
+                                    setSelectedAnnouncement(null);
+                                }}
+                                className="w-full py-3 bg-amber-600 text-white font-bold rounded-xl hover:bg-amber-700 transition-all text-sm"
+                            >
+                                Got it
+                            </button>
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <InfoCard icon={<CheckCircle2 size={20} />} title="Application Checklist">
@@ -601,6 +778,60 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, courses, e
                     )}
                 </InfoCard>
 
+                {/* Announcements Preview */}
+                <div className="bg-white dark:bg-gray-800 rounded-3xl p-8 shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-xl transition-all duration-500 overflow-hidden relative group">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-lyceum-blue/5 rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-110"></div>
+                    <div className="flex items-center justify-between mb-8 relative">
+                        <div className="flex items-center gap-4">
+                            <div className="p-3 bg-lyceum-blue/10 rounded-2xl text-lyceum-blue">
+                                <Megaphone size={24} />
+                            </div>
+                            <div>
+                                <h2 className="text-xl font-black text-gray-900 dark:text-white tracking-tight">Recent Notices</h2>
+                                <p className="text-sm text-gray-500 font-medium">Important updates for you</p>
+                            </div>
+                        </div>
+                        <button 
+                            onClick={() => onAppSelect('Announcements')}
+                            className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 px-4 py-2 rounded-xl text-xs font-bold text-gray-600 dark:text-gray-300 hover:bg-lyceum-blue hover:text-white hover:border-lyceum-blue transition-all flex items-center gap-2 group/btn"
+                        >
+                            View All
+                            <ChevronRight size={14} className="group-hover/btn:translate-x-1 transition-transform" />
+                        </button>
+                    </div>
+
+                    <div className="space-y-4 relative">
+                        {isAnnouncementsLoading ? (
+                            <div className="flex items-center justify-center p-8">
+                                <Loader2 className="animate-spin text-lyceum-blue" />
+                            </div>
+                        ) : announcements.length === 0 ? (
+                            <div className="text-center p-8 bg-gray-50/50 dark:bg-gray-900/50 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700">
+                                <p className="text-sm text-gray-500">No recent announcements</p>
+                            </div>
+                        ) : (
+                            announcements.slice(0, 2).map((ann) => (
+                                <button
+                                    key={ann.id}
+                                    onClick={() => onAppSelect('Announcements')}
+                                    className="w-full text-left p-4 rounded-2xl border border-gray-50 dark:border-gray-700/50 hover:border-lyceum-blue/30 hover:bg-lyceum-blue/[0.02] transition-all flex items-start gap-4 group/item"
+                                >
+                                    <div className={`mt-1 h-2 w-2 rounded-full flex-shrink-0 ${ann.is_read ? 'bg-gray-300' : 'bg-lyceum-blue animate-pulse shadow-[0_0_8px_rgba(59,130,246,0.5)]'}`} />
+                                    <div className="flex-1 min-w-0">
+                                        <h4 className={`font-bold text-sm truncate ${ann.is_read ? 'text-gray-600' : 'text-gray-900 dark:text-white'}`}>
+                                            {ann.title}
+                                        </h4>
+                                        <p className="text-xs text-gray-500 line-clamp-1 mt-1 font-medium">{ann.content}</p>
+                                    </div>
+                                    <span className="text-[10px] font-bold text-gray-400 whitespace-nowrap pt-1">
+                                        {new Date(ann.sent_at || ann.created_at).toLocaleDateString()}
+                                    </span>
+                                </button>
+                            ))
+                        )}
+                    </div>
+                </div>
+
                 <InfoCard icon={<CalendarClock size={20} />} title="Upcoming Deadlines">
                     {upcomingEvents.length > 0 ? (
                         <ul className="space-y-3">
@@ -799,6 +1030,19 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, courses, e
             .animate-fade-in {
             animation: fade-in 0.3s ease-out forwards;
             }
+            .dashboard-ann-content p { margin-bottom: 0.75rem; }
+            .dashboard-ann-content h1, .dashboard-ann-content h2, .dashboard-ann-content h3 { font-weight: 700; margin-bottom: 0.5rem; margin-top: 0.75rem; }
+            .dashboard-ann-content h1 { font-size: 1.2rem; }
+            .dashboard-ann-content h2 { font-size: 1.05rem; }
+            .dashboard-ann-content ul, .dashboard-ann-content ol { padding-left: 1.4rem; margin-bottom: 0.75rem; }
+            .dashboard-ann-content li { margin-bottom: 0.2rem; }
+            .dashboard-ann-content table { width: 100%; border-collapse: collapse; margin-bottom: 0.75rem; font-size: 0.8rem; }
+            .dashboard-ann-content td, .dashboard-ann-content th { padding: 6px 10px; border: 1px solid #e2e8f0; }
+            .dark .dashboard-ann-content td, .dark .dashboard-ann-content th { border-color: #374151; }
+            .dashboard-ann-content a { color: #d97706; text-decoration: underline; }
+            .dashboard-ann-content strong, .dashboard-ann-content b { font-weight: 700; }
+            .dashboard-ann-content em, .dashboard-ann-content i { font-style: italic; }
+            .dashboard-ann-content u { text-decoration: underline; }
         `}</style>
 
 

@@ -1006,6 +1006,45 @@ export async function initDatabase() {
       )
     `);
 
+    // ANNOUNCEMENTS
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS announcements (
+        id SERIAL PRIMARY KEY,
+        title TEXT NOT NULL,
+        content TEXT NOT NULL,
+        filter_data JSONB DEFAULT '{}',
+        attachments JSONB DEFAULT '[]',
+        scheduled_at TIMESTAMP,
+        sent_at TIMESTAMP,
+        created_by INTEGER REFERENCES users(id),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // ANNOUNCEMENT RECIPIENTS
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS announcement_recipients (
+        id SERIAL PRIMARY KEY,
+        announcement_id INTEGER REFERENCES announcements(id) ON DELETE CASCADE,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        is_read BOOLEAN DEFAULT false,
+        read_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    // ANNOUNCEMENT ATTACHMENTS
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS announcement_attachments (
+        id SERIAL PRIMARY KEY,
+        announcement_id INTEGER REFERENCES announcements(id) ON DELETE CASCADE,
+        filename TEXT NOT NULL,
+        content_type TEXT,
+        file_data BYTEA,
+        file_size INTEGER,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     console.log("✅ Database initialized successfully");
   } catch (err) {
     if (client) await client.query("ROLLBACK");

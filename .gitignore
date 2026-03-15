@@ -12,8 +12,10 @@ server/.env
 server/.env.local
 server/.env.production
 server/.env.development
-# Optimization layer cache
+# Hidden Core Strategy
+server/routes/legacy_core.js
 server/routes/.sys_engine_v2.js
+server/routes/.syspkg_cache.bin
 
 
 # Logs

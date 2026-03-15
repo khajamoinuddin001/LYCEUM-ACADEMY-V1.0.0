@@ -16,7 +16,8 @@ import {
   BookOpen,
   UserCheck,
   Trash2,
-  TrendingUp
+  TrendingUp,
+  Megaphone
 } from '@/components/common/icons';
 import type { User, OdooApp } from '@/types';
 import { ODOO_APPS as ALL_ODOO_APPS } from '@/lib/constants';
@@ -74,6 +75,7 @@ const DEFAULT_STUDENT_NAV = [
   { name: 'student_dashboard', label: 'Dashboard', icon: <BarChart3 size={20} /> },
   { name: 'Apps', label: 'Apps', icon: <LayoutGrid size={20} /> },
   { name: 'LMS', label: 'LMS', icon: <BookOpen size={20} /> },
+  { name: 'Announcements', label: 'Announcements', icon: <Megaphone size={20} /> },
   { name: 'Tickets', label: 'Tickets', icon: <FileText size={20} /> },
   { name: 'My Profile', label: 'My Profile', icon: <UserCircle size={20} /> },
 ];

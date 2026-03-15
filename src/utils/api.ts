@@ -1939,3 +1939,67 @@ export const generateAutomationDraft = async (prompt: string, context?: string):
     body: JSON.stringify({ prompt, context })
   });
 };
+
+// Announcements
+export const getAnnouncements = async (): Promise<any[]> => {
+  return apiRequest<any[]>('/announcements');
+};
+
+export const getMyAnnouncements = async (): Promise<any[]> => {
+  return apiRequest<any[]>('/my-announcements');
+};
+
+export const createAnnouncement = async (data: {
+  title: string;
+  content: string;
+  filters: any;
+  attachments?: any[];
+  scheduleDate?: string;
+}): Promise<any> => {
+  return apiRequest<any>('/announcements', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+};
+
+export const deleteAnnouncement = async (id: number): Promise<void> => {
+  return apiRequest(`/announcements/${id}`, {
+    method: 'DELETE',
+  });
+};
+
+export const getAnnouncementRecipientCount = async (filters: any): Promise<{ count: number }> => {
+  const queryParams = new URLSearchParams();
+  Object.keys(filters).forEach(key => {
+    if (filters[key]) queryParams.append(key, filters[key]);
+  });
+  return apiRequest<{ count: number }>(`/announcements/recipient-count?${queryParams.toString()}`);
+};
+
+export const markAnnouncementAsRead = async (id: number): Promise<void> => {
+  return apiRequest(`/my-announcements/${id}/read`, {
+    method: 'POST',
+  });
+};
+
+export const uploadAnnouncementAttachment = async (file: File): Promise<any> => {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const token = getToken();
+  const headers: HeadersInit = {
+    ...(token && { 'Authorization': `Bearer ${token}` }),
+  };
+
+  const response = await fetch(`${API_BASE_URL}/uploads/announcement-attachment`, {
+    method: 'POST',
+    headers,
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Failed to upload attachment' }));
+    throw new Error(error.error || `HTTP ${response.status}`);
+  }
+  return response.json();
+};
