@@ -151,6 +151,13 @@ const StudentAppsView: React.FC<StudentAppsViewProps> = ({ onAppSelect }) => {
             bgColor: 'bg-indigo-100 dark:bg-indigo-900/20',
             iconColor: 'text-indigo-600 dark:text-indigo-400',
         },
+        {
+            name: 'Mock Interview',
+            icon: <GraduationCap size={48} />,
+            description: 'View your mock interview sessions and reports',
+            bgColor: 'bg-purple-100 dark:bg-purple-900/20',
+            iconColor: 'text-purple-600 dark:text-purple-400',
+        },
     ];
 
     return (

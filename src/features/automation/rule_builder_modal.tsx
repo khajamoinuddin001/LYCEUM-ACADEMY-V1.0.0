@@ -27,7 +27,9 @@ const TRIGGERS = [
     'Application Rejected',
     'Application Deferred',
     'Document Approved',
-    'Document Rejected'
+    'Document Rejected',
+    'Mock Interview Approved',
+    'Mock Interview Rejected'
 ];
 
 const OPERATORS = [

@@ -1939,3 +1939,10 @@ export const generateAutomationDraft = async (prompt: string, context?: string):
     body: JSON.stringify({ prompt, context })
   });
 };
+
+export const triggerAutomation = async (triggerEvent: string, payload: any): Promise<void> => {
+  return apiRequest<void>('/automation/trigger', {
+    method: 'POST',
+    body: JSON.stringify({ trigger_event: triggerEvent, payload })
+  });
+};
