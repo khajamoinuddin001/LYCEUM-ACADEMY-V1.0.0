@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Edit, Trash2, Save, X, FileText, Target, Layers } from '@/components/common/icons';
 import type { QuestionTemplate, Question, VisaType } from './types';
-import { MOCK_INTERVIEW_VISA_TYPES } from './constants';
+import { MOCK_INTERVIEW_VISA_TYPES } from './util/constants';
 
 interface TemplateManagerProps {
   templates: QuestionTemplate[];

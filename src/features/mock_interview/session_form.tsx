@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Check, ArrowRight, X, RefreshCw, Clock, Target, User, BookOpen, Trophy, ChevronRight, ChevronLeft, ChevronDown, AlertCircle, CheckCircle, TrendingUp, Layout } from '@/components/common/icons';
 import type { InterviewSession, QuestionWithScores, VisaType, Question, MockInterviewSession, QuestionTemplate } from './types';
-import { MOCK_INTERVIEW_VISA_TYPES, DEFAULT_QUESTION_SCORES, calculateAverageScores, calculateOverallAverage, calculateVerdict } from './constants';
+import { MOCK_INTERVIEW_VISA_TYPES, DEFAULT_QUESTION_SCORES, calculateAverageScores, calculateOverallAverage, calculateVerdict } from './util/constants';
 import type { Contact } from '@/types';
 
 interface NewSessionProps {

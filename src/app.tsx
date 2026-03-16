@@ -77,12 +77,12 @@ import StudentDocumentsView from '@/features/students/student_documents_view';
 import StudentDocumentManagerView from '@/features/students/student_document_manager_view';
 import StaffDocumentManagerView from '@/features/students/staff_document_manager_view';
 import StudentUniversityApplicationView from '@/features/students/student_university_view';
-import StudentMockInterviewView from '@/features/mock_interview/student_mock_interview_view';
+import StudentMockInterviewView from '@/features/mock_interview/student_mock_interview';
 import UniversityManager from '@/features/admin/university_manager';
 import ActiveSessionsView from '@/features/admin/active_sessions_view';
 import MarketingView from '@/features/marketing/marketing_view';
 import AutomationView from '@/features/automation/automation_view';
-import MockInterviewView from '@/features/mock_interview/mock_interview_view';
+import MockInterviewView from '@/features/mock_interview/mock_interview';
 import {
   DndContext,
   closestCenter,
