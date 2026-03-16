@@ -404,8 +404,9 @@ export async function initDatabase() {
         SET task_id = 'TSK-' || LPAD((FLOOR(RANDOM() * 90000) + 10000)::TEXT, 5, '0')
         WHERE task_id IS NULL
       `);
-      await client.query('ALTER TABLE documents ADD COLUMN IF NOT EXISTS is_private BOOLEAN DEFAULT false');
-      await client.query('ALTER TABLE documents ADD COLUMN IF NOT EXISTS category TEXT');
+      // Documents table was removed - columns now in contacts.documents JSONB field
+      // await client.query('ALTER TABLE documents ADD COLUMN IF NOT EXISTS is_private BOOLEAN DEFAULT false');
+      // await client.query('ALTER TABLE documents ADD COLUMN IF NOT EXISTS category TEXT');
       await client.query('ALTER TABLE tickets ADD COLUMN IF NOT EXISTS category TEXT');
 
       // Avatar DB Storage Support
