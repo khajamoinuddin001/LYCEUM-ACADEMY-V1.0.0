@@ -47,7 +47,14 @@ export const calculateVerdict = (average: number): { verdict: 'Approved' | 'Reje
   }
 };
 
-export const calculateAverageScores = (questions: any[]): any => {
+import type { QuestionWithScores } from './types';
+
+export const calculateAverageScores = (questions: QuestionWithScores[]): {
+  context: number;
+  body_language: number;
+  fluency: number;
+  grammar: number;
+} | null => {
   if (questions.length === 0) return null;
 
   const sums = questions.reduce((acc, q) => ({
@@ -67,7 +74,12 @@ export const calculateAverageScores = (questions: any[]): any => {
   };
 };
 
-export const calculateOverallAverage = (averageScores: any): number => {
+export const calculateOverallAverage = (averageScores: {
+  context: number;
+  body_language: number;
+  fluency: number;
+  grammar: number;
+}): number => {
   if (!averageScores) return 0;
 
   const sum = averageScores.context + averageScores.body_language +

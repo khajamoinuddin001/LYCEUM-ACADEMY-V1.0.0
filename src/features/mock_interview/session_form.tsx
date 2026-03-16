@@ -61,8 +61,16 @@ const NewSession: React.FC<NewSessionProps> = ({ contacts, onSave }) => {
     fluency: 3,
     grammar: 3
   });
-  const [calculatedAverages, setCalculatedAverages] = useState<any>(null);
-  const [calculatedVerdict, setCalculatedVerdict] = useState<any>(null);
+  const [calculatedAverages, setCalculatedAverages] = useState<{
+    context: number;
+    body_language: number;
+    fluency: number;
+    grammar: number;
+  } | null>(null);
+  const [calculatedVerdict, setCalculatedVerdict] = useState<{
+    verdict: 'Approved' | 'Rejected' | 'Review Required';
+    suggested: string;
+  } | null>(null);
   const [overallComments, setOverallComments] = useState('');
   const [generatingFeedback, setGeneratingFeedback] = useState(false);
   const [aiFeedback, setAiFeedback] = useState('');

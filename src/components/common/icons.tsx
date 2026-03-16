@@ -114,5 +114,7 @@ export {
   Globe2,
   Zap,
   Cpu,
-  FileUp
+  FileUp,
+  Save,
+  Layers
 } from 'lucide-react';
