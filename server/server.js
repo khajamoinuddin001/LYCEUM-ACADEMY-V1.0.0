@@ -21,9 +21,12 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 const allowedOrigins = [
   'https://lyceumacad.com',
   'https://www.lyceumacad.com',
+  'http://195.35.20.146:3000',
+  'http://195.35.20.146:3001',
   'http://localhost:5173',
   'http://localhost:5174',
-  'http://localhost:3000'
+  'http://localhost:3000',
+  'http://localhost:3001'
 ];
 
 app.use(cors({
@@ -58,9 +61,12 @@ app.use(helmet({
       ...helmet.contentSecurityPolicy.getDefaultDirectives(),
       "frame-ancestors": [
         "'self'",
+        "http://195.35.20.146:3000",
+        "http://195.35.20.146:3001",
         "http://localhost:5173",
         "http://localhost:5174",
         "http://localhost:3000",
+        "http://localhost:3001",
         "http://127.0.0.1:3000",
         "https://lyceumacad.com",
         "https://www.lyceumacad.com"
