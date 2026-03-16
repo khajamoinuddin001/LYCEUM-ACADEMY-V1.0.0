@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Clock, User, CheckCircle, X, AlertCircle, ChevronDown, ChevronUp, Download, Eye } from '@/components/common/icons';
+import { Clock, User, CheckCircle, X, AlertCircle, ChevronDown, ChevronUp, Download, Eye, TrendingUp } from '@/components/common/icons';
 import type { Contact } from '@/types';
 
 interface SessionHistoryProps {
