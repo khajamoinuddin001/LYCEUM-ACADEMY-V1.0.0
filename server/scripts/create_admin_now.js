@@ -1,8 +1,9 @@
 import '../load_env.js';
 import { hashPassword } from "../auth.js";
-import { query, closePool } from "../database.js";
+import { query, closePool, initDatabase } from "../database.js";
 
 async function createAdmin() {
+  await initDatabase();
   const email = "admin@lyceum.com";
   const password = "admin123"; // change later
   const name = "Admin";
