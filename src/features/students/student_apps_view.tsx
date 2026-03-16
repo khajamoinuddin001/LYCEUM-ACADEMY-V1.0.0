@@ -1,5 +1,5 @@
 import React from 'react';
-import { BookOpen, FileText, User, FileUp, Paperclip, Receipt, CheckCircle2, MessagesSquare, GraduationCap } from 'lucide-react';
+import { BookOpen, FileText, User, FileUp, Paperclip, Receipt, CheckCircle2, MessagesSquare, GraduationCap, Megaphone } from 'lucide-react';
 
 import { useDraggable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
@@ -150,6 +150,13 @@ const StudentAppsView: React.FC<StudentAppsViewProps> = ({ onAppSelect }) => {
             description: 'Track your university applications and admission status',
             bgColor: 'bg-indigo-100 dark:bg-indigo-900/20',
             iconColor: 'text-indigo-600 dark:text-indigo-400',
+        },
+        {
+            name: 'Announcements',
+            icon: <Megaphone size={48} />,
+            description: 'View important announcements and updates from the academy',
+            bgColor: 'bg-orange-100 dark:bg-orange-900/20',
+            iconColor: 'text-orange-600 dark:text-orange-400',
         },
     ];
 

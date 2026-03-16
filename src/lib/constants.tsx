@@ -32,7 +32,8 @@ import {
   TrendingUp,
   Sparkles,
   Zap,
-  FileUp
+  FileUp,
+  Megaphone
 } from '@/components/common/icons';
 
 export const ODOO_APPS: OdooApp[] = [
@@ -41,6 +42,12 @@ export const ODOO_APPS: OdooApp[] = [
     icon: <BarChart3 size={36} />,
     bgColor: 'bg-cyan-100',
     iconColor: 'text-cyan-600',
+  },
+  {
+    name: 'Announcements',
+    icon: <Megaphone size={36} />,
+    bgColor: 'bg-orange-100',
+    iconColor: 'text-orange-600',
   },
   {
     name: 'Contacts',
@@ -201,6 +208,7 @@ export const DEFAULT_PERMISSIONS: Record<UserRole, { [appName: string]: AppPermi
     'Discuss': fullAccess,
     'Accounts': fullAccess,
     'Document manager': fullAccess,
+    'Announcements': readOnly,
   },
 };
 

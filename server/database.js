@@ -619,6 +619,92 @@ export async function initDatabase() {
     `);
     await client.query('CREATE INDEX IF NOT EXISTS idx_token_blacklist_hash ON token_blacklist(token_hash)');
 
+    // ANNOUNCEMENTS
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS announcements (
+        id SERIAL PRIMARY KEY,
+        title TEXT NOT NULL,
+        content TEXT NOT NULL,
+        audience_filters JSONB DEFAULT '{}',
+        send_via_email BOOLEAN DEFAULT false,
+        attachments JSONB DEFAULT '[]',
+        scheduled_at TIMESTAMP,
+        status TEXT DEFAULT 'Delivered' CHECK (status IN ('Delivered', 'Upcoming')),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        created_by INTEGER REFERENCES users(id) ON DELETE SET NULL
+      )
+    `);
+
+    await client.query('ALTER TABLE announcements ADD COLUMN IF NOT EXISTS audience_filters JSONB DEFAULT \'{}\'');
+    await client.query('ALTER TABLE announcements ADD COLUMN IF NOT EXISTS send_via_email BOOLEAN DEFAULT false');
+    await client.query('ALTER TABLE announcements ADD COLUMN IF NOT EXISTS scheduled_at TIMESTAMP');
+    await client.query('ALTER TABLE announcements ADD COLUMN IF NOT EXISTS status TEXT DEFAULT \'Delivered\'');
+    
+    await client.query('UPDATE announcements SET status = \'Delivered\' WHERE status IS NULL OR status NOT IN (\'Delivered\', \'Upcoming\')');
+
+    // Check for status constraint
+    const constraintCheck = await client.query(`
+      SELECT constraint_name 
+      FROM information_schema.table_constraints 
+      WHERE table_name = 'announcements' AND constraint_name = 'announcements_status_check'
+    `);
+    if (constraintCheck.rows.length === 0) {
+      await client.query('ALTER TABLE announcements ADD CONSTRAINT announcements_status_check CHECK (status IN (\'Delivered\', \'Upcoming\'))');
+    }
+
+    await client.query('ALTER TABLE announcements ADD COLUMN IF NOT EXISTS created_by INTEGER REFERENCES users(id)');
+    await client.query('ALTER TABLE announcements ADD COLUMN IF NOT EXISTS attachments JSONB DEFAULT \'[]\'');
+
+    // ANNOUNCEMENT READS
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS announcement_reads (
+        announcement_id INTEGER REFERENCES announcements(id) ON DELETE CASCADE,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        read_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (announcement_id, user_id)
+      )
+    `);
+
+    await client.query('ALTER TABLE announcement_reads ADD COLUMN IF NOT EXISTS announcement_id INTEGER REFERENCES announcements(id) ON DELETE CASCADE');
+    await client.query('ALTER TABLE announcement_reads ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id) ON DELETE CASCADE');
+    
+    const pkCheck = await client.query(`
+      SELECT constraint_name 
+      FROM information_schema.table_constraints 
+      WHERE table_name = 'announcement_reads' AND constraint_type = 'PRIMARY KEY'
+    `);
+    if (pkCheck.rows.length === 0) {
+      await client.query('ALTER TABLE announcement_reads ADD PRIMARY KEY (announcement_id, user_id)');
+    }
+
+    // Ensure unique constraint for ON CONFLICT (important for the mark-read route)
+    const uniqueCheck = await client.query(`
+      SELECT 1 FROM pg_indexes 
+      WHERE tablename = 'announcement_reads' AND indexname = 'announcement_reads_unique_user_ann'
+    `);
+    if (uniqueCheck.rows.length === 0) {
+      await client.query('ALTER TABLE announcement_reads ADD CONSTRAINT announcement_reads_unique_user_ann UNIQUE (announcement_id, user_id)');
+    }
+
+    // ANNOUNCEMENT ATTACHMENTS
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS announcement_attachments (
+        id SERIAL PRIMARY KEY,
+        announcement_id INTEGER REFERENCES announcements(id) ON DELETE CASCADE,
+        filename TEXT NOT NULL,
+        content_type TEXT,
+        file_data BYTEA,
+        file_size INTEGER,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query('ALTER TABLE announcement_attachments ADD COLUMN IF NOT EXISTS announcement_id INTEGER REFERENCES announcements(id) ON DELETE CASCADE');
+    await client.query('ALTER TABLE announcement_attachments ADD COLUMN IF NOT EXISTS filename TEXT');
+    await client.query('ALTER TABLE announcement_attachments ADD COLUMN IF NOT EXISTS content_type TEXT');
+    await client.query('ALTER TABLE announcement_attachments ADD COLUMN IF NOT EXISTS file_data BYTEA');
+    await client.query('ALTER TABLE announcement_attachments ADD COLUMN IF NOT EXISTS file_size INTEGER');
+
     await client.query("COMMIT");
 
     // Document Submissions table (for approval workflow)
@@ -1018,11 +1104,13 @@ export async function initDatabase() {
 
 export function query(text, params) {
   if (!pool) throw new Error("Database not initialized");
+  // console.log('📡 Executing query:', text.substring(0, 100));
   return pool.query(text, params);
 }
 
 export async function getClient() {
   if (!pool) throw new Error("Database not initialized");
+  // console.log('📡 Getting database client');
   return pool.connect();
 }
 

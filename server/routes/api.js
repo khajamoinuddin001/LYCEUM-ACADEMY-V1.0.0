@@ -3,6 +3,7 @@ import fetch from 'node-fetch';
 import { query, getClient } from '../database.js';
 import { authenticateToken, requireRole } from '../auth.js';
 import { evaluateAutomation } from '../automation.js';
+import { sendAnnouncementEmail } from '../email.js';
 
 const router = express.Router();
 
@@ -744,15 +745,15 @@ router.delete('/document-submissions/:id', authenticateToken, async (req, res) =
  * Format: StudentName_Category_YYYYMMDD_HHMMSS_SubmissionID.ext (IST timezone)
  */
 const CATEGORY_ALIASES = {
-  "IELTS/PTE/TOEFL Score":             "score",
-  "LOR's":                             "lors",
-  "SOP (Statement of Purpose)":        "sop",
-  "CV (Curriculum Vitae)":             "cv",
-  "Affidavit of Support":              "aos",
-  "Individual Memos":                  "memos",
-  "Provisional Certificate":           "pc",
-  "Consolidated Marks Memo (CMM)":     "cmm",
-  "Original Degree (OD)":              "od",
+  "IELTS/PTE/TOEFL Score": "score",
+  "LOR's": "lors",
+  "SOP (Statement of Purpose)": "sop",
+  "CV (Curriculum Vitae)": "cv",
+  "Affidavit of Support": "aos",
+  "Individual Memos": "memos",
+  "Provisional Certificate": "pc",
+  "Consolidated Marks Memo (CMM)": "cmm",
+  "Original Degree (OD)": "od",
 };
 
 const buildApprovedFilename = (contactName, category, submissionId, originalFilename) => {
@@ -769,11 +770,11 @@ const buildApprovedFilename = (contactName, category, submissionId, originalFile
   const catNorm = CATEGORY_ALIASES[catKey] !== undefined
     ? CATEGORY_ALIASES[catKey]
     : catKey
-        .replace(/[^a-zA-Z0-9\s]/g, '_')     // special chars → underscore
-        .replace(/\s+/g, '_')
-        .replace(/_+/g, '_')
-        .replace(/^_|_$/g, '')
-        .toLowerCase();
+      .replace(/[^a-zA-Z0-9\s]/g, '_')     // special chars → underscore
+      .replace(/\s+/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_|_$/g, '')
+      .toLowerCase();
 
   // 3. IST timestamp (UTC+05:30)
   const now = new Date();
@@ -6737,7 +6738,258 @@ Return your response in JSON format: { "subject": "...", "body": "..." }`;
   }
 });
 
+// ─── ANNOUNCEMENTS ROUTES ──────────────────────────────────────────────────
+
+// Create announcement (Admin/Staff)
+router.post('/announcements', authenticateToken, requireRole('Admin', 'Staff'), upload.array('attachments'), async (req, res) => {
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+    const { title, content, audienceFilters, sendViaEmail, scheduledAt } = req.body;
+
+    if (!title || !content) {
+      throw new Error('Title and content are required');
+    }
+
+    const parsedFilters = typeof audienceFilters === 'string' ? JSON.parse(audienceFilters) : (audienceFilters || {});
+
+    const result = await client.query(`
+      INSERT INTO announcements (title, content, audience_filters, send_via_email, scheduled_at, status, created_by)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      RETURNING *
+    `, [title, content, JSON.stringify(parsedFilters), sendViaEmail === 'true' || sendViaEmail === true, scheduledAt || null, scheduledAt ? 'Upcoming' : 'Delivered', req.user.id]);
+
+    const announcement = result.rows[0];
+
+    // Handle attachments
+    if (req.files && req.files.length > 0) {
+      for (const file of req.files) {
+        await client.query(`
+          INSERT INTO announcement_attachments (announcement_id, filename, content_type, file_data, file_size)
+          VALUES ($1, $2, $3, $4, $5)
+        `, [announcement.id, file.originalname, file.mimetype, file.buffer, file.size]);
+      }
+    }
+
+    await client.query('COMMIT');
+
+    // Email broadcast (Non-blocking)
+    if (announcement.send_via_email && announcement.status === 'Delivered') {
+      (async () => {
+        try {
+          console.log(`📢 Starting email broadcast for announcement: ${announcement.title}`);
+
+          let recipientQuery = `
+            SELECT u.email, c.name 
+            FROM contacts c 
+            JOIN users u ON c.user_id = u.id 
+            WHERE u.role = 'Student'
+          `;
+          const values = [];
+          let pCount = 1;
+
+          if (parsedFilters.visaType) {
+            recipientQuery += ` AND c.visa_type = $${pCount++}`;
+            values.push(parsedFilters.visaType);
+          }
+          if (parsedFilters.degree) {
+            recipientQuery += ` AND c.degree = $${pCount++}`;
+            values.push(parsedFilters.degree);
+          }
+          if (parsedFilters.fileStatus) {
+            recipientQuery += ` AND c.file_status = $${pCount++}`;
+            values.push(parsedFilters.fileStatus);
+          }
+
+          const recipients = await query(recipientQuery, values);
+          console.log(`👥 Found ${recipients.rows.length} targeted recipients for email.`);
+
+          for (const recipient of recipients.rows) {
+            if (recipient.email) {
+              await sendAnnouncementEmail(
+                recipient.email,
+                recipient.name || 'Student',
+                announcement.title,
+                announcement.content,
+                req.files // Pass attachments here
+              );
+            }
+          }
+          console.log(`✅ Email broadcast completed for: ${announcement.title}`);
+        } catch (emailErr) {
+          console.error('❌ Error in announcement email broadcast:', emailErr);
+        }
+      })();
+    }
+
+    res.json(announcement);
+  } catch (error) {
+    if (client) await client.query('ROLLBACK');
+    console.error('❌ Error creating announcement:', error);
+    res.status(500).json({ error: error.message });
+  } finally {
+    if (client) client.release();
+  }
+});
+
+// List announcements (Admin/Staff)
+router.get('/announcements', authenticateToken, requireRole('Admin', 'Staff'), async (req, res) => {
+  try {
+    const result = await query(`
+      SELECT a.*, u.name as creator_name,
+             (SELECT COUNT(*)::int FROM announcement_reads WHERE announcement_id = a.id) as read_count,
+             (SELECT json_agg(json_build_object('id', id, 'filename', filename, 'size', file_size)) 
+              FROM announcement_attachments WHERE announcement_id = a.id) as attachments_list
+      FROM announcements a
+      LEFT JOIN users u ON a.created_by = u.id
+      ORDER BY a.created_at DESC
+    `);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching announcements:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Preview recipient count
+router.get('/announcements/preview-count', authenticateToken, requireRole('Admin', 'Staff'), async (req, res) => {
+  try {
+    const filters = req.query;
+    let queryText = 'SELECT COUNT(*)::int FROM contacts c JOIN users u ON c.user_id = u.id WHERE u.role = \'Student\'';
+    const values = [];
+    let pCount = 1;
+
+    if (filters.visaType) {
+      queryText += ` AND c.visa_type = $${pCount++}`;
+      values.push(filters.visaType);
+    }
+    if (filters.degree) {
+      queryText += ` AND c.degree = $${pCount++}`;
+      values.push(filters.degree);
+    }
+    if (filters.fileStatus) {
+      queryText += ` AND c.file_status = $${pCount++}`;
+      values.push(filters.fileStatus);
+    }
+
+    const result = await query(queryText, values);
+    res.json({ count: result.rows[0].count });
+  } catch (error) {
+    console.error('Error previewing count:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// List announcements for student
+router.get('/student/announcements', authenticateToken, requireRole('Student'), async (req, res) => {
+  try {
+    console.log(`📢 Fetching announcements for student: ${req.user.id} (${req.user.role})`);
+
+    // 1. Get student profile details for filtering
+    const studentRes = await query('SELECT * FROM contacts WHERE user_id = $1', [req.user.id]);
+    if (studentRes.rows.length === 0) {
+      console.log('⚠️ No contact found for student user');
+      return res.json([]);
+    }
+    const student = studentRes.rows[0];
+    console.log(`👤 Student profile found: ${student.name}`);
+
+    // 2. Fetch announcements and check if they match student's filters
+    const announcementsRes = await query(`
+      SELECT a.*, ar.read_at,
+             (SELECT json_agg(json_build_object('id', id, 'filename', filename, 'size', file_size)) 
+              FROM announcement_attachments WHERE announcement_id = a.id) as attachments_list
+      FROM announcements a
+      LEFT JOIN announcement_reads ar ON a.id = ar.announcement_id AND ar.user_id = $1
+      WHERE a.status = 'Delivered'
+      ORDER BY a.created_at DESC
+    `, [req.user.id]);
+
+    console.log(`📋 Total announcements found: ${announcementsRes.rows.length}`);
+
+    // 3. Filter on backend for performance
+    const filtered = announcementsRes.rows.filter(ann => {
+      try {
+        const filters = ann.audience_filters || {};
+        if (Object.keys(filters).length === 0) return true; // Sent to all
+
+        // Apply target criteria
+        if (filters.visaType && filters.visaType !== student.visa_type) return false;
+        if (filters.degree && filters.degree !== student.degree) return false;
+        if (filters.fileStatus && filters.fileStatus !== student.file_status) return false;
+
+        return true;
+      } catch (fError) {
+        console.error('Error filtering announcement:', ann.id, fError);
+        return false;
+      }
+    });
+
+    console.log(`✅ Returning ${filtered.length} filtered announcements`);
+
+    res.json(filtered.map(a => ({
+      ...a,
+      isRead: !!a.read_at
+    })));
+  } catch (error) {
+    console.error('❌ Error fetching student announcements:', error);
+    res.status(500).json({
+      error: error.message,
+      detail: error.stack
+    });
+  }
+});
+
+// Mark as read
+router.put('/student/announcements/:id/read', authenticateToken, async (req, res) => {
+  try {
+    console.log(`📢 Marking announcement ${req.params.id} as read for user ${req.user.id}`);
+    await query(`
+      INSERT INTO announcement_reads (announcement_id, user_id)
+      VALUES ($1, $2)
+      ON CONFLICT DO NOTHING
+    `, [req.params.id, req.user.id]);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error marking announcement as read:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Download announcement attachment
+router.get('/announcements/attachments/:id', authenticateToken, async (req, res) => {
+  try {
+    const result = await query('SELECT * FROM announcement_attachments WHERE id = $1', [req.params.id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Attachment not found' });
+    }
+
+    const attachment = result.rows[0];
+
+    // Optional: Add permission check here to ensure user has access to this announcement
+
+    res.setHeader('Content-Type', attachment.content_type || 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="${attachment.filename}"`);
+    res.send(attachment.file_data);
+  } catch (error) {
+    console.error('Error downloading attachment:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete announcement
+router.delete('/announcements/:id', authenticateToken, requireRole('Admin'), async (req, res) => {
+  try {
+    await query('DELETE FROM announcements WHERE id = $1', [req.params.id]);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting announcement:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;
+
 // trigger reload 1770196752
 // trigger reload 1770196793
 // trigger reload 1770196806

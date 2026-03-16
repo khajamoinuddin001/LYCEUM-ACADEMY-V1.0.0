@@ -2,8 +2,8 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import type { Contact, LmsCourse, CalendarEvent, Visitor, User, AccountingTransaction, VisaOperation } from '@/types';
-import { GraduationCap, BookOpen, CalendarClock, Paperclip, CheckCircle2, Circle, Trophy, Calendar, Upload, Download, User as UserIcon, ArrowLeft, DollarSign, Receipt, AlertCircle, X, Copy, CreditCard, Clock } from '@/components/common/icons';
+import type { Contact, LmsCourse, CalendarEvent, Visitor, User, AccountingTransaction, VisaOperation, Announcement } from '@/types';
+import { GraduationCap, BookOpen, CalendarClock, Paperclip, CheckCircle2, Circle, Trophy, Calendar, Upload, Download, User as UserIcon, ArrowLeft, DollarSign, Receipt, AlertCircle, X, Copy, CreditCard, Clock, Megaphone, Eye, Info } from '@/components/common/icons';
 import * as api from '@/utils/api';
 import StudentAppointmentModal from './student_appointment_modal';
 
@@ -31,6 +31,39 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, courses, e
     const [documents, setDocuments] = useState<any[]>([]);
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
     const [paymentSettings, setPaymentSettings] = useState<{ upiId: string; qrCode: string } | null>(null);
+    const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+    const [showAnnouncementModal, setShowAnnouncementModal] = useState(false);
+    const [selectedAnnouncement, setSelectedAnnouncement] = useState<Announcement | null>(null);
+
+    const fetchAnnouncements = async () => {
+        try {
+            const data = await api.getStudentAnnouncements();
+            setAnnouncements(data.filter(a => !a.isRead));
+        } catch (e) {
+            console.error('Failed to fetch announcements');
+        }
+    };
+
+    const handleOpenAnnouncement = (ann: Announcement) => {
+        setSelectedAnnouncement(ann);
+        setShowAnnouncementModal(true);
+    };
+
+    const handleDismissAnnouncement = async (id: number) => {
+        try {
+            await api.markAnnouncementRead(id);
+            setAnnouncements(prev => prev.filter(a => a.id !== id));
+        } catch (e) {
+            alert('Failed to dismiss announcement');
+        }
+    };
+
+    const handleGotIt = async () => {
+        if (selectedAnnouncement) {
+            await handleDismissAnnouncement(selectedAnnouncement.id);
+            setShowAnnouncementModal(false);
+        }
+    };
 
     useEffect(() => {
         if (isPaymentModalOpen) {
@@ -56,6 +89,7 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, courses, e
 
     useEffect(() => {
         if (student) {
+            fetchAnnouncements();
             api.getContactVisits(student.id).then(setVisits).catch(console.error);
             loadDocuments(student.id);
             loadTransactions(student);
@@ -285,6 +319,44 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, courses, e
                     Here's a summary of your academic progress and activities.
                 </p>
             </div>
+
+
+            {/* Announcements Banner */}
+            {announcements.length > 0 && (
+                <div className="mb-8 animate-in slide-in-from-top duration-500">
+                    <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-3xl p-1 shadow-xl shadow-blue-500/20">
+                        <div className="bg-white/10 backdrop-blur-md rounded-[22px] px-6 py-4 flex flex-col md:flex-row items-center justify-between gap-4">
+                            <div className="flex items-center gap-4 text-white text-left">
+                                <div className="p-3 bg-white/20 rounded-2xl">
+                                    <Megaphone className="w-6 h-6 animate-bounce" />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-black tracking-tight">{announcements[0].title}</h3>
+                                    <p className="text-sm font-medium text-blue-100 flex items-center gap-2">
+                                        <span className="inline-block w-2 h-2 bg-blue-300 rounded-full animate-pulse" />
+                                        New announcement received • {new Date(announcements[0].created_at).toLocaleDateString()}
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-3 w-full md:w-auto">
+                                <button 
+                                    onClick={() => handleDismissAnnouncement(announcements[0].id)}
+                                    className="flex-grow md:flex-none px-6 py-2.5 text-white/80 hover:text-white font-bold text-sm transition-colors border border-white/20 hover:border-white/40 rounded-xl"
+                                >
+                                    Dismiss
+                                </button>
+                                <button 
+                                    onClick={() => handleOpenAnnouncement(announcements[0])}
+                                    className="flex-grow md:flex-none px-8 py-2.5 bg-white text-blue-600 hover:bg-blue-50 font-black text-sm rounded-xl shadow-lg transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-2"
+                                >
+                                    <Eye className="w-4 h-4" />
+                                    View Details
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <InfoCard icon={<CheckCircle2 size={20} />} title="Application Checklist">
@@ -800,6 +872,89 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, courses, e
             animation: fade-in 0.3s ease-out forwards;
             }
         `}</style>
+
+            {/* Announcement Detail Modal */}
+            {showAnnouncementModal && selectedAnnouncement && createPortal(
+                <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-in fade-in duration-300">
+                    <div className="bg-white dark:bg-gray-900 rounded-[32px] w-full max-w-2xl max-h-[85vh] overflow-hidden shadow-2xl flex flex-col animate-in zoom-in-95 duration-300 border border-white/10">
+                        <div className="p-8 border-b border-gray-100 dark:border-gray-800 bg-gradient-to-br from-gray-50 to-white dark:from-gray-800/50 dark:to-gray-900 flex justify-between items-start">
+                            <div className="space-y-2 text-left">
+                                <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 font-black text-xs uppercase tracking-widest">
+                                    <Info className="w-4 h-4" />
+                                    Official Announcement
+                                </div>
+                                <h2 className="text-3xl font-black text-gray-900 dark:text-white leading-tight">
+                                    {selectedAnnouncement.title}
+                                </h2>
+                                <div className="flex items-center gap-2 text-gray-500 font-medium text-sm">
+                                    <Calendar className="w-4 h-4" />
+                                    {new Date(selectedAnnouncement.created_at).toLocaleDateString(undefined, { 
+                                        month: 'long', 
+                                        day: 'numeric', 
+                                        year: 'numeric',
+                                        hour: '2-digit',
+                                        minute: '2-digit'
+                                    })}
+                                </div>
+                            </div>
+                            <button 
+                                onClick={() => setShowAnnouncementModal(false)}
+                                className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-2xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-all"
+                            >
+                                <X className="w-6 h-6" />
+                            </button>
+                        </div>
+
+                        <div className="overflow-y-auto p-8 flex-grow custom-scrollbar text-left text-gray-700 dark:text-gray-300 font-medium leading-relaxed">
+                            <div 
+                                className="prose prose-blue dark:prose-invert max-w-none"
+                                dangerouslySetInnerHTML={{ __html: selectedAnnouncement.content }}
+                            />
+                            
+                            {selectedAnnouncement.attachments_list && selectedAnnouncement.attachments_list.length > 0 && (
+                                <div className="mt-8 pt-8 border-t border-gray-100 dark:border-gray-800">
+                                    <h4 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4">Attachments</h4>
+                                    <div className="grid gap-3">
+                                        {selectedAnnouncement.attachments_list.map((file, idx) => (
+                                            <div key={idx} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="p-2 bg-white dark:bg-gray-700 rounded-lg shadow-sm">
+                                                        <Paperclip className="w-4 h-4 text-blue-600" />
+                                                    </div>
+                                                    <span className="font-bold text-gray-900 dark:text-white text-sm">{file.filename}</span>
+                                                </div>
+                                                <button 
+                                                    onClick={() => api.downloadAnnouncementAttachment(file.id, file.filename)}
+                                                    className="text-blue-600 font-bold text-sm hover:underline"
+                                                >
+                                                    Download
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="p-8 bg-gray-50 dark:bg-gray-800/50 flex justify-center">
+                            <button
+                                onClick={handleGotIt}
+                                className="w-full max-w-xs py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black text-lg transition-all hover:scale-105 shadow-xl shadow-blue-500/20 flex items-center justify-center gap-3"
+                            >
+                                <CheckCircle2 className="w-6 h-6" />
+                                Got it, thanks!
+                            </button>
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
+
+            <style>{`
+                .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+                .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+                .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #1e293b; }
+            `}</style>
 
 
             <StudentAppointmentModal

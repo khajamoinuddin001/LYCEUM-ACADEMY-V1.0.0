@@ -587,6 +587,27 @@ export interface DocumentAnalysisResult {
   [key: string]: string | string[];
 }
 
+export interface Announcement {
+  id: number;
+  title: string;
+  content: string;
+  audience_filters?: {
+    visaType?: string;
+    degree?: string;
+    fileStatus?: string;
+  };
+  send_via_email: boolean;
+  attachments?: any[];
+  attachments_list?: { id: number; filename: string; size: number }[];
+  scheduled_at?: string;
+  status: 'Delivered' | 'Upcoming';
+  created_at: string;
+  created_by?: number;
+  creator_name?: string;
+  read_count?: number;
+  isRead?: boolean; // For student view
+}
+
 export interface Notification {
   id: number;
   timestamp: string;
@@ -712,4 +733,12 @@ export interface UniversityCourse {
   wesRequirement?: string;
   logoUrl?: string;
   createdAt?: string;
+}
+
+export interface EmailTemplate {
+  id: number;
+  name: string;
+  subject: string;
+  body: string;
+  from_address?: string;
 }

@@ -114,5 +114,8 @@ export {
   Globe2,
   Zap,
   Cpu,
-  FileUp
+  FileUp,
+  Megaphone,
+  Loader2,
+  Info
 } from 'lucide-react';
