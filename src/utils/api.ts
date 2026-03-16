@@ -1,6 +1,6 @@
 import type {
   CalendarEvent, Contact, CrmLead, AccountingTransaction, CrmStage, Quotation, User, UserRole, AppPermissions, ActivityLog, DocumentAnalysisResult, Document as Doc, ChecklistItem, QuotationTemplate, Visitor, TodoTask, Ticket, PaymentActivityLog, LmsCourse, LmsLesson, LmsModule, Coupon, ContactActivity, ContactActivityAction, DiscussionPost, DiscussionThread, RecordedSession, Channel, Notification, RecurringTask, VisaOperation,
-  UniversityCourse
+  UniversityCourse, Announcement, EmailTemplate
 } from '../types';
 import { DEFAULT_PERMISSIONS, DEFAULT_CHECKLIST } from '@/lib/constants';
 
@@ -1945,4 +1945,77 @@ export const triggerAutomation = async (triggerEvent: string, payload: any): Pro
     method: 'POST',
     body: JSON.stringify({ trigger_event: triggerEvent, payload })
   });
+};
+
+// Announcements
+export const getAnnouncements = async (): Promise<any[]> => {
+  return apiRequest<any[]>('/announcements');
+};
+
+export const createAnnouncement = async (formData: FormData): Promise<any> => {
+  const token = getToken();
+  const headers: HeadersInit = {
+    ...(token && { 'Authorization': `Bearer ${token}` }),
+  };
+
+  const response = await fetch(`${API_BASE_URL}/announcements`, {
+    method: 'POST',
+    headers,
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Failed to create announcement' }));
+    throw new Error(error.error || `HTTP ${response.status}`);
+  }
+
+  return response.json();
+};
+
+export const deleteAnnouncement = async (id: number): Promise<void> => {
+  return apiRequest(`/announcements/${id}`, {
+    method: 'DELETE',
+  });
+};
+
+export const getAnnouncementPreviewCount = async (filters: any): Promise<{ count: number }> => {
+  return apiRequest<{ count: number }>('/announcements/preview-count', {
+    method: 'POST',
+    body: JSON.stringify(filters),
+  });
+};
+
+export const getStudentAnnouncements = async (): Promise<any[]> => {
+  return apiRequest<any[]>('/announcements/student');
+};
+
+export const markAnnouncementRead = async (id: number): Promise<void> => {
+  return apiRequest(`/announcements/${id}/read`, {
+    method: 'PUT',
+  });
+};
+
+export const downloadAnnouncementAttachment = async (fileId: number, filename: string): Promise<void> => {
+  const token = getToken();
+  const headers: HeadersInit = {
+    ...(token && { 'Authorization': `Bearer ${token}` }),
+  };
+
+  const response = await fetch(`${API_BASE_URL}/announcements/attachments/${fileId}`, {
+    headers,
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Failed to download attachment' }));
+    throw new Error(error.error || `HTTP ${response.status}`);
+  }
+
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(url);
+  document.body.removeChild(a);
 };

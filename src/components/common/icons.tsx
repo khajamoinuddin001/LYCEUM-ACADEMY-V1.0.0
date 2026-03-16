@@ -1,4 +1,7 @@
 export {
+  Megaphone,
+  Loader2,
+  Info,
   MessagesSquare,
   Calendar,
   Contact,
@@ -118,3 +121,4 @@ export {
   Save,
   Layers
 } from 'lucide-react';
+

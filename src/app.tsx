@@ -69,6 +69,7 @@ import StudentAppsView from '@/features/students/student_apps_view';
 import StudentAccountsView from '@/features/students/student_accounts_view';
 import StudentQuotationsView from '@/features/students/student_quotations_view';
 import StudentTasksView from '@/features/students/student_tasks_view';
+import StudentAnnouncementsView from '@/features/students/student_announcements_view';
 import VisitorDisplay from '@/features/reception/visitor_display';
 import DepartmentDashboard from '@/features/dashboard/department_dashboard';
 import AttendanceView from '@/features/hr/attendance_view';
@@ -83,6 +84,7 @@ import ActiveSessionsView from '@/features/admin/active_sessions_view';
 import MarketingView from '@/features/marketing/marketing_view';
 import AutomationView from '@/features/automation/automation_view';
 import MockInterviewView from '@/features/mock_interview/mock_interview';
+import AnnouncementView from '@/features/announcement/announcement_view';
 import {
   DndContext,
   closestCenter,
@@ -2241,6 +2243,7 @@ const DashboardLayout: React.FC = () => {
       case 'Live Session Monitor': return <ActiveSessionsView currentUser={{ id: currentUser.id, role: currentUser.role }} />;
       case 'Document manager': return <StaffDocumentManagerView />;
       case 'Mock Interview': return <MockInterviewView contacts={contacts} />;
+      case 'Announcements': return <AnnouncementView user={currentUser} />;
       default: return <AppView appName={activeApp} onNavigateBack={() => handleAppSelect('Apps')} />;
     }
   }
@@ -2444,6 +2447,11 @@ const DashboardLayout: React.FC = () => {
                       onNavigateBack={() => handleAppSelect('Apps')}
                     />
                   ) : <div>Loading...</div>;
+                }
+
+                // Student Announcements Page
+                if (activeApp === 'Announcements') {
+                  return <StudentAnnouncementsView user={currentUser} />;
                 }
 
                 // Student Document Manager Page

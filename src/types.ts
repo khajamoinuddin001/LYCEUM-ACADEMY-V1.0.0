@@ -606,6 +606,34 @@ export interface Notification {
   recipientRoles?: UserRole[];
 }
 
+export interface Announcement {
+  id: number;
+  title: string;
+  content: string;
+  status: string;
+  sendViaEmail?: boolean;
+  scheduledAt?: string;
+  created_at: string;
+  audienceFilters?: {
+    visaType?: string;
+    degree?: string;
+    fileStatus?: string;
+  };
+  read_count?: number;
+  creator_name?: string;
+  attachments?: {
+    name: string;
+    size: number;
+  }[];
+}
+
+export interface EmailTemplate {
+  id: number;
+  name: string;
+  subject: string;
+  body: string;
+}
+
 export interface Visitor {
   id: number;
   name: string;
