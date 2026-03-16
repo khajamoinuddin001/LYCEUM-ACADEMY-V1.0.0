@@ -399,6 +399,10 @@ export interface Contact {
     shiftEnd?: string;
     workingDays?: string[];
   };
+  metadata?: {
+    accountsReceivable?: any[];
+    mockInterviewSessions?: any[];
+  };
   applicationEmail?: string;
   applicationPassword?: string;
   createdAt?: string;

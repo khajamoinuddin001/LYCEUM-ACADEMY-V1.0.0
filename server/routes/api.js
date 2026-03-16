@@ -6737,6 +6737,29 @@ Return your response in JSON format: { "subject": "...", "body": "..." }`;
   }
 });
 
+// Trigger Automation Event
+router.post('/automation/trigger', async (req, res) => {
+  try {
+    const { trigger_event, payload } = req.body;
+
+    if (!trigger_event) {
+      return res.status(400).json({ error: 'trigger_event is required' });
+    }
+
+    if (!payload) {
+      return res.status(400).json({ error: 'payload is required' });
+    }
+
+    // Call the evaluateAutomation function
+    await evaluateAutomation(trigger_event, payload);
+
+    res.json({ success: true, message: 'Automation triggered successfully' });
+  } catch (error) {
+    console.error('Error triggering automation:', error);
+    res.status(500).json({ error: 'Failed to trigger automation: ' + error.message });
+  }
+});
+
 export default router;
 // trigger reload 1770196752
 // trigger reload 1770196793

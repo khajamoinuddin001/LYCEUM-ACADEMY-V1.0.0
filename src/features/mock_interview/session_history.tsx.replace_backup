@@ -1,0 +1,309 @@
+import React, { useState, useEffect } from 'react';
+import { Clock, User, CheckCircle, X, AlertCircle, ChevronDown, ChevronUp, Download, Eye } from '@/components/common/icons';
+import type { Contact } from '@/types';
+
+interface SessionHistoryProps {
+  contacts: Contact[];
+}
+
+interface MockSession {
+  id: string;
+  student_id: number;
+  student_name?: string;
+  visa_type: string;
+  session_date: string;
+  overall_average: number;
+  verdict: string;
+  questions: any[];
+  questions_count: number;
+  correct_count?: number;
+  incorrect_count?: number;
+  ai_feedback?: string;
+  attempt_number?: number;
+}
+
+const SessionHistory: React.FC<SessionHistoryProps> = ({ contacts }) => {
+  const [sessions, setSessions] = useState<MockSession[]>([]);
+  const [expandedSession, setExpandedSession] = useState<string | null>(null);
+  const [filter, setFilter] = useState<{
+    studentId: number | 'all';
+    visaType: string | 'all';
+    verdict: string | 'all';
+  }>({
+    studentId: 'all',
+    visaType: 'all',
+    verdict: 'all'
+  });
+
+  useEffect(() => {
+    const allSessions: MockSession[] = [];
+    contacts.forEach(contact => {
+      const mockSessions = (contact.metadata?.mockInterviewSessions || []) as any[];
+      const sortedSessions = [...mockSessions].sort((a, b) => 
+        new Date(a.session_date).getTime() - new Date(b.session_date).getTime()
+      );
+      sortedSessions.forEach((session, index) => {
+        allSessions.push({
+          ...session,
+          student_name: contact.name,
+          questions_count: session.questions?.length || 0,
+          correct_count: session.questions?.filter((q: any) => q.is_correct === true).length || 0,
+          incorrect_count: session.questions?.filter((q: any) => q.is_correct === false).length || 0,
+          attempt_number: index + 1
+        });
+      });
+    });
+    setSessions(allSessions);
+  }, [contacts]);
+
+  const filteredSessions = sessions.filter(session => {
+    if (filter.studentId !== 'all' && session.student_id !== filter.studentId) return false;
+    if (filter.verdict !== 'all' && session.verdict !== filter.verdict) return false;
+    if (filter.visaType !== 'all' && session.visa_type !== filter.visaType) return false;
+    return true;
+  });
+
+  const getVerdictIcon = (verdict: string) => {
+    switch (verdict) {
+      case 'Approved': return <CheckCircle size={20} className="text-green-500" />;
+      case 'Rejected': return <X size={20} className="text-red-500" />;
+      case 'Review Required': return <AlertCircle size={20} className="text-yellow-500" />;
+      default: return <AlertCircle size={20} className="text-gray-500" />;
+    }
+  };
+
+  const getVerdictColor = (verdict: string) => {
+    switch (verdict) {
+      case 'Approved': return 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300';
+      case 'Rejected': return 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300';
+      case 'Review Required': return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300';
+      default: return 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300';
+    }
+  };
+
+
+  return (
+    <div className="p-6 max-w-6xl mx-auto">
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-100">
+          Mock Interview History
+        </h1>
+        <div className="text-sm text-gray-500 dark:text-gray-400">
+          Total Sessions: {sessions.length}
+        </div>
+      </div>
+
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Student
+            </label>
+            <select
+              value={filter.studentId}
+              onChange={(e) => setFilter({ ...filter, studentId: e.target.value === 'all' ? 'all' : Number(e.target.value) })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-lyceum-blue dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+            >
+              <option value="all">All Students</option>
+              {contacts.map(contact => (
+                <option key={contact.id} value={contact.id}>
+                  {contact.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Visa Type
+            </label>
+            <select
+              value={filter.visaType}
+              onChange={(e) => setFilter({ ...filter, visaType: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-lyceum-blue dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+            >
+              <option value="all">All Visa Types</option>
+              <option value="F-1">F-1</option>
+              <option value="F-2">F-2</option>
+              <option value="F-3">F-3</option>
+              <option value="J-1">J-1</option>
+              <option value="J-2">J-2</option>
+              <option value="B-1">B-1</option>
+              <option value="B-2">B-2</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Verdict
+            </label>
+            <select
+              value={filter.verdict}
+              onChange={(e) => setFilter({ ...filter, verdict: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-lyceum-blue dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+            >
+              <option value="all">All Verdicts</option>
+              <option value="Approved">Approved</option>
+              <option value="Rejected">Rejected</option>
+              <option value="Review Required">Review Required</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        {filteredSessions.length === 0 ? (
+          <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-lg shadow-md">
+            <p className="text-gray-500 dark:text-gray-400">
+              No mock interview sessions found.
+            </p>
+          </div>
+        ) : (
+          filteredSessions.map((session) => (
+            <div key={session.id} className="mb-4">
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
+                <div className="p-4 border-b border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors" onClick={() => setExpandedSession(expandedSession === session.id ? null : session.id)}>
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-4">
+                      {getVerdictIcon(session.verdict)}
+                      <div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded font-bold">
+                          Attempt #{session.attempt_number || 1}
+                        </span>
+                        <span className="font-bold text-gray-800 dark:text-gray-100">
+                          {session.id}
+                        </span>
+                        <span className="text-sm text-gray-500 dark:text-gray-400">
+                          {session.student_name || 'Unknown'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400 mt-1">
+                        <span className="flex items-center gap-1">
+                          <User size={14} />
+                          {session.visa_type}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Clock size={14} />
+                          {new Date(session.session_date).toLocaleDateString()}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Eye size={14} />
+                          {session.questions_count || 0}
+                        </span>
+                        <span>
+                          Score: {session.overall_average.toFixed(2)}/5
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className={`px-3 py-1 rounded-full text-sm font-medium ${getVerdictColor(session.verdict)}`}>
+                    {session.verdict}
+                  </div>
+                  {expandedSession === session.id ? (
+                    <ChevronUp size={20} className="text-gray-500" />
+                  ) : (
+                    <ChevronDown size={20} className="text-gray-500" />
+                  )}
+                </div>
+            </div>
+
+            {expandedSession === session.id && (
+              <div className="p-6 bg-gray-50 dark:bg-gray-900">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                  <div className="bg-white dark:bg-gray-800 p-4 rounded-lg text-center shadow-sm">
+                    <div className="text-sm text-gray-500 dark:text-gray-400 mb-1">Total</div>
+                    <div className="text-2xl font-bold text-gray-800 dark:text-gray-100">
+                      {session.questions_count}
+                    </div>
+                    <div className="text-xs text-gray-400 dark:text-gray-500">questions</div>
+                  </div>
+                  <div className="bg-white dark:bg-gray-800 p-4 rounded-lg text-center shadow-sm">
+                    <div className="text-sm text-gray-500 dark:text-gray-400 mb-1">Correct</div>
+                    <div className="text-2xl font-bold text-green-600">
+                      {session.correct_count || 0}
+                    </div>
+                    <div className="text-xs text-gray-400 dark:text-gray-500">
+                      {session.questions_count > 0 ? ((session.correct_count || 0) / session.questions_count * 100).toFixed(0) : 0}%
+                    </div>
+                  </div>
+                  <div className="bg-white dark:bg-gray-800 p-4 rounded-lg text-center shadow-sm">
+                    <div className="text-sm text-gray-500 dark:text-gray-400 mb-1">Incorrect</div>
+                    <div className="text-2xl font-bold text-red-600">
+                      {session.incorrect_count || 0}
+                    </div>
+                    <div className="text-xs text-gray-400 dark:text-gray-500">
+                      {session.questions_count > 0 ? ((session.incorrect_count || 0) / session.questions_count * 100).toFixed(0) : 0}%
+                    </div>
+                  </div>
+                  <div className="bg-white dark:bg-gray-800 p-4 rounded-lg text-center shadow-sm">
+                    <div className="text-sm text-gray-500 dark:text-gray-400 mb-1">Average</div>
+                    <div className="text-2xl font-bold text-blue-600">
+                      {session.overall_average.toFixed(2)}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mb-6">
+                  <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100 mb-4">
+                    Questions Asked ({session.questions?.length || 0})
+                  </h3>
+                  <div className="space-y-3">
+                    {session.questions?.map((q: any, index: number) => (
+                      <div key={index} className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+                        <div className="flex justify-between items-start mb-2">
+                          <span className="flex items-center justify-center w-8 h-8 rounded-full bg-lyceum-blue text-white text-sm font-bold">
+                            {index + 1}
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-600 dark:text-gray-300 font-medium">
+                              {q.category || 'General'}
+                            </span>
+                            {q.difficulty && (
+                              <span className={`ml-1 px-2 py-1 rounded text-xs font-bold ${q.difficulty === 'easy' ? 'bg-green-100 text-green-700' : q.difficulty === 'medium' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>
+                                {q.difficulty}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <p className="text-gray-800 dark:text-gray-100 text-sm font-medium flex-1">
+                          {q.question_text || 'No question text'}
+                        </p>
+                        {q.notes && (
+                          <div className="mt-2 p-2 bg-gray-50 dark:bg-gray-900 rounded text-xs text-gray-600 dark:text-gray-400">
+                            <span className="font-semibold">Note:</span> {q.notes}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {session.ai_feedback && (
+                  <div className="mb-6">
+                    <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100 mb-4">
+                      AI Feedback Report
+                    </h3>
+                    <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+                      <div className="prose prose-sm dark:prose-invert text-gray-700 dark:text-gray-300 whitespace-pre-wrap max-h-96 overflow-y-auto">
+                        {session.ai_feedback}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-3 border-t border-gray-200 dark:border-gray-700 pt-4">
+                  <button onClick={() => downloadPDF(session)} className="flex items-center px-4 py-2 bg-lyceum-blue text-white rounded-lg hover:bg-blue-700 transition-colors">
+                    <Download size={16} className="mr-2" />
+                    Download PDF Report
+                  </button>
+                </div>
+              </div>
+            )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};

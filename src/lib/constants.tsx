@@ -170,6 +170,12 @@ export const ODOO_APPS: OdooApp[] = [
     bgColor: 'bg-emerald-500',
     iconColor: 'text-white',
   },
+  {
+    name: 'Mock Interview',
+    icon: <GraduationCap size={36} />,
+    bgColor: 'bg-purple-100',
+    iconColor: 'text-purple-600',
+  },
 ];
 
 export const STAFF_ROLES: UserRole[] = ['Admin', 'Staff'];
@@ -182,7 +188,7 @@ const adminPermissions = ODOO_APPS.reduce((acc, app) => {
   return acc;
 }, {} as { [appName: string]: AppPermissions });
 
-const employeeFullAccessApps = new Set(['Contacts', 'CRM', 'Calendar', 'Discuss', 'Tasks', 'Tickets', 'Reception', 'Sales', 'Analytics', 'LMS', 'Visitor Display', 'Department Dashboard', 'Attendance', 'University Application', 'University Manager', 'Document manager']);
+const employeeFullAccessApps = new Set(['Contacts', 'CRM', 'Calendar', 'Discuss', 'Tasks', 'Tickets', 'Reception', 'Sales', 'Analytics', 'LMS', 'Visitor Display', 'Department Dashboard', 'Attendance', 'University Application', 'University Manager', 'Document manager', 'Mock Interview']);
 const employeeReadOnlyApps = new Set(['dashboard', 'Accounts']);
 const employeePermissions: { [appName: string]: AppPermissions } = ODOO_APPS.reduce((acc, app) => {
   if (employeeFullAccessApps.has(app.name)) {
@@ -201,6 +207,7 @@ export const DEFAULT_PERMISSIONS: Record<UserRole, { [appName: string]: AppPermi
     'Discuss': fullAccess,
     'Accounts': fullAccess,
     'Document manager': fullAccess,
+    'Mock Interview': readOnly,
   },
 };
 

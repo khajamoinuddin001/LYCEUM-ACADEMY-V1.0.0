@@ -48,6 +48,7 @@ import NewAppointmentModal from '@/features/reception/new_appointment_modal';
 import ContactVisitsView from '@/features/students/contact_visits_view';
 import ContactCrmView from '@/features/students/contact_crm_view';
 import ContactTasksView from '@/features/students/contact_tasks_view';
+import ContactMockInterviewView from '@/features/students/contact_mock_interview_view';
 import ContactCoursesView from '@/features/students/contact_courses_view';
 import ResetPasswordView from '@/features/auth/reset_password_view';
 import ForgotPasswordView from '@/features/auth/forgot_password_view';
@@ -76,10 +77,12 @@ import StudentDocumentsView from '@/features/students/student_documents_view';
 import StudentDocumentManagerView from '@/features/students/student_document_manager_view';
 import StaffDocumentManagerView from '@/features/students/staff_document_manager_view';
 import StudentUniversityApplicationView from '@/features/students/student_university_view';
+import StudentMockInterviewView from '@/features/mock_interview/student_mock_interview_view';
 import UniversityManager from '@/features/admin/university_manager';
 import ActiveSessionsView from '@/features/admin/active_sessions_view';
 import MarketingView from '@/features/marketing/marketing_view';
 import AutomationView from '@/features/automation/automation_view';
+import MockInterviewView from '@/features/mock_interview/mock_interview_view';
 import {
   DndContext,
   closestCenter,
@@ -100,7 +103,7 @@ import { ODOO_APPS } from '@/lib/constants';
 
 
 
-type ContactViewMode = 'details' | 'documents' | 'visaFiling' | 'checklist' | 'visits' | 'crm' | 'tasks';
+type ContactViewMode = 'details' | 'documents' | 'visaFiling' | 'checklist' | 'visits' | 'crm' | 'tasks' | 'mockInterview';
 
 // ... (keep existing imports)
 import { Routes, Route } from 'react-router-dom';
@@ -2152,11 +2155,12 @@ const DashboardLayout: React.FC = () => {
           if (contactData && contactViewMode === 'visits') return <ContactVisitsView user={currentUser} contact={contactData} onNavigateBack={() => setContactViewMode('details')} onSaveTask={handleSaveTask} />;
           if (contactData && contactViewMode === 'crm') return <ContactCrmView contact={contactData} leads={leads} onNavigateBack={() => setContactViewMode('details')} user={currentUser} onSaveTask={handleSaveTask} onSaveQuotation={handleSaveContactQuotation} quotationTemplates={quotationTemplates} onSaveTemplate={handleSaveQuotationTemplate} onDeleteTemplate={handleDeleteQuotationTemplate} onDeleteContact={handleDeleteContact} onApproveQuotation={handleApproveQuotation} onManualAcceptQuotation={handleManualAcceptQuotation} onDeleteQuotation={async (leadId, quotationId) => { if (window.confirm('Are you sure you want to delete this quotation? This action cannot be undone.')) { const updatedLeads = await api.deleteQuotation(leadId, quotationId); setLeads(updatedLeads); const updatedContacts = await api.getContacts(); setContacts(updatedContacts); } }} />;
           if (contactData && contactViewMode === 'tasks') return <ContactTasksView contact={contactData} tasks={tasks} user={currentUser} onNavigateBack={() => setContactViewMode('details')} onSaveTask={handleSaveTask} />;
+          if (contactData && contactViewMode === 'mockInterview') return <ContactMockInterviewView contact={contactData} user={currentUser} onNavigateBack={() => setContactViewMode('details')} onNavigateToApps={() => { setActiveApp('Mock Interview'); }} />;
           if (contactData && contactViewMode === 'courses') return <ContactCoursesView contact={contactData} user={currentUser} onNavigateBack={() => setContactViewMode('details')} courses={lmsCourses} />;
 
           // Render form if we have data OR if we are creating a new contact
           if (contactData || editingContact === 'new') {
-            return <NewContactForm user={currentUser} users={users} contact={contactData} contacts={contacts} onNavigateBack={handleBackToContacts} onNavigateToDocuments={() => setContactViewMode('documents')} onNavigateToVisa={() => setContactViewMode('visaFiling')} onNavigateToChecklist={() => setContactViewMode('checklist')} onNavigateToVisits={() => setContactViewMode('visits')} onNavigateToCRM={() => setContactViewMode('crm')} onNavigateToTasks={() => setContactViewMode('tasks')} onNavigateToCourses={() => setContactViewMode('courses')} onSave={handleSaveContact} onComposeAIEmail={handleGenerateEmailDraft} onAddSessionVideo={api.addSessionVideo} onDeleteSessionVideo={api.deleteSessionVideo} transactions={transactions} tasks={tasks} onSaveTask={handleSaveTask} onDeleteContact={handleDeleteContact} visaOperations={visaOperations} onOperationCreated={handleOperationCreated} onPrintTransaction={setPrintingTransaction} />;
+            return <NewContactForm user={currentUser} users={users} contact={contactData} contacts={contacts} onNavigateBack={handleBackToContacts} onNavigateToDocuments={() => setContactViewMode('documents')} onNavigateToVisa={() => setContactViewMode('visaFiling')} onNavigateToChecklist={() => setContactViewMode('checklist')} onNavigateToVisits={() => setContactViewMode('visits')} onNavigateToCRM={() => setContactViewMode('crm')} onNavigateToTasks={() => setContactViewMode('tasks')} onNavigateToMockInterview={() => setContactViewMode('mockInterview')} onNavigateToCourses={() => setContactViewMode('courses')} onSave={handleSaveContact} onComposeAIEmail={handleGenerateEmailDraft} onAddSessionVideo={api.addSessionVideo} onDeleteSessionVideo={api.deleteSessionVideo} transactions={transactions} tasks={tasks} onSaveTask={handleSaveTask} onDeleteContact={handleDeleteContact} visaOperations={visaOperations} onOperationCreated={handleOperationCreated} onPrintTransaction={setPrintingTransaction} />;
           }
         }
         return <ContactsView contacts={contacts} onContactSelect={handleContactSelect} onNewContactClick={handleNewContactClick} user={currentUser} />;
@@ -2236,6 +2240,7 @@ const DashboardLayout: React.FC = () => {
       case 'University Manager': return <UniversityManager user={currentUser} />;
       case 'Live Session Monitor': return <ActiveSessionsView currentUser={{ id: currentUser.id, role: currentUser.role }} />;
       case 'Document manager': return <StaffDocumentManagerView />;
+      case 'Mock Interview': return <MockInterviewView contacts={contacts} />;
       default: return <AppView appName={activeApp} onNavigateBack={() => handleAppSelect('Apps')} />;
     }
   }
@@ -2468,6 +2473,20 @@ const DashboardLayout: React.FC = () => {
                       onSave={handleSaveContact}
                       onNavigateToTickets={() => handleAppSelect('Tickets')}
                       onNavigateToDocuments={() => handleAppSelect('Documents')}
+                    />
+                  ) : <div>Loading...</div>;
+                }
+
+                // Student Mock Interview Page
+                if (activeApp === 'Mock Interview') {
+                  const studentContact = contacts.find(c =>
+                    c.userId === currentUser.id ||
+                    (c.email && currentUser.email && c.email.toLowerCase() === currentUser.email.toLowerCase())
+                  );
+                  return studentContact ? (
+                    <StudentMockInterviewView
+                      student={studentContact}
+                      onNavigateBack={() => handleAppSelect('Apps')}
                     />
                   ) : <div>Loading...</div>;
                 }

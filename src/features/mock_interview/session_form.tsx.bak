@@ -1,0 +1,912 @@
+import React, { useState, useEffect } from 'react';
+import { Plus, Check, ArrowRight, X, RefreshCw } from '@/components/common/icons';
+import type { InterviewSession, QuestionWithScores, VisaType, Question, MockInterviewSession } from './types';
+import { MOCK_INTERVIEW_VISA_TYPES, DEFAULT_QUESTION_SCORES, calculateAverageScores, calculateOverallAverage, calculateVerdict } from './constants';
+import type { Contact } from '@/types';
+
+interface NewSessionProps {
+  contacts: Contact[];
+  onSave?: (session: MockInterviewSession) => Promise<void>;
+}
+
+const NewSession: React.FC<NewSessionProps> = ({ contacts, onSave }) => {
+  const [step, setStep] = useState<'student' | 'questions' | 'marking' | 'scoring' | 'verdict'>('student');
+  const [formData, setFormData] = useState<Partial<InterviewSession>>({
+    visa_type: 'F-1',
+    session_notes: ''
+  });
+  const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
+  const [selectedQuestions, setSelectedQuestions] = useState<Question[]>([]);
+  const [questionResponses, setQuestionResponses] = useState<QuestionWithScores[]>([]);
+  const [overallScores, setOverallScores] = useState({
+    context: 3,
+    body_language: 3,
+    fluency: 3,
+    grammar: 3
+  });
+  const [calculatedAverages, setCalculatedAverages] = useState<any>(null);
+  const [calculatedVerdict, setCalculatedVerdict] = useState<any>(null);
+  const [overallComments, setOverallComments] = useState('');
+  const [generatingFeedback, setGeneratingFeedback] = useState(false);
+  const [aiFeedback, setAiFeedback] = useState('');
+
+  const [availableQuestions, setAvailableQuestions] = useState<Question[]>([]);
+
+  // Generate session ID (MCK-000001 format)
+  const generateSessionId = (): string => {
+    const existingSessions = contacts.flatMap(c =>
+      (c.metadata?.mockInterviewSessions || []).map((s: any) => s.id)
+    );
+    const maxId = existingSessions
+      .map(id => parseInt(id?.replace('MCK-', '') || '0', 10))
+      .reduce((max, id) => Math.max(max, id), 0);
+    return `MCK-${String(maxId + 1).padStart(6, '0')}`;
+  };
+
+  // Load questions from localStorage or use defaults
+  useEffect(() => {
+    const savedQuestions = localStorage.getItem('mockInterviewQuestions');
+    const questions = savedQuestions ? JSON.parse(savedQuestions) : [
+      { id: '1', question_text: 'Why did you choose this university?', category: 'Study', difficulty: 'easy' },
+      { id: '2', question_text: 'How will you fund your education?', category: 'Finances', difficulty: 'medium' },
+      { id: '3', question_text: 'Do you have family in the US?', category: 'Ties', difficulty: 'hard' },
+      { id: '4', question_text: 'What will you do after graduation?', category: 'Post-Graduation Plans', difficulty: 'medium' },
+      { id: '5', question_text: 'Tell me about your family.', category: 'General', difficulty: 'easy' },
+    ];
+    setAvailableQuestions(questions);
+  }, []);
+
+  // Auto-fill visa type when contact is selected
+  useEffect(() => {
+    if (selectedContact?.visaType) {
+      setFormData(prev => ({ ...prev, visa_type: selectedContact.visaType as VisaType }));
+    }
+  }, [selectedContact]);
+
+  // Recalculate averages when overall scores change
+  useEffect(() => {
+    if (step === 'scoring' && questionResponses.length > 0) {
+      // Only consider correct answers for scoring
+      const correctResponses = questionResponses.filter(q => q.is_correct === true);
+
+      if (correctResponses.length > 0) {
+        // Create mock question scores based on overall scores
+        const mockScores = correctResponses.map(q => ({
+          ...q,
+          scores: overallScores
+        }));
+        const averages = calculateAverageScores(mockScores);
+        setCalculatedAverages(averages);
+
+        const overall = calculateOverallAverage(averages);
+        setCalculatedVerdict(calculateVerdict(overall));
+      } else {
+        // No correct answers - all scores are 0
+        const zeroScores = {
+          context: 0,
+          body_language: 0,
+          fluency: 0,
+          grammar: 0
+        };
+        setCalculatedAverages(zeroScores);
+        setCalculatedVerdict(calculateVerdict(0));
+      }
+    }
+  }, [questionResponses, overallScores, step]);
+
+  // Generate AI feedback when moving to verdict
+  const generateAIFeedback = async (responses: QuestionWithScores[], averages: any, verdict: any) => {
+    setGeneratingFeedback(true);
+    try {
+      const OPENROUTER_API_KEY = localStorage.getItem('openrouter_api_key') || 'sk-or-v1-5e2a4a2a-3d1d-4a8d-9b1e-6c2f3d4a5e6c';
+
+      const correctCount = responses.filter(q => q.is_correct === true).length;
+      const incorrectCount = responses.filter(q => q.is_correct === false).length;
+      const accuracy = responses.length > 0 ? ((correctCount / responses.length) * 100).toFixed(1) : 0;
+
+      const prompt = `You are an expert visa interview coach. Based on following mock interview results, provide a detailed feedback report in a professional tone.
+
+Student Performance Summary:
+- Total Questions: ${responses.length}
+- Correct Answers: ${correctCount}
+- Incorrect Answers: ${incorrectCount}
+- Accuracy: ${accuracy}%
+
+Overall Scores (1-5 scale, only correct answers considered):
+- Context: ${averages.context}/5
+- Body Language: ${averages.body_language}/5
+- Fluency: ${averages.fluency}/5
+- Grammar: ${averages.grammar}/5
+- Overall Average: ${calculateOverallAverage(averages)}/5
+- Verdict: ${verdict.verdict}
+
+Question-wise Responses:
+${responses.filter(q => q.is_correct === true).map((q, i) => `
+Q${i + 1}: ${q.question_text}
+- Category: ${q.category}
+- Status: CORRECT
+${q.notes ? `- Notes: ${q.notes}` : ''}
+`).join('\n')}
+
+${responses.filter(q => q.is_correct === false).map((q, i) => `
+Q${i + 1}: ${q.question_text}
+- Category: ${q.category}
+- Status: INCORRECT
+${q.notes ? `- Notes: ${q.notes}` : ''}
+`).join('\n')}
+
+Provide:
+1. Strengths identified (based on correct answers)
+2. Areas for improvement (especially on incorrect answers)
+3. Specific recommendations for each weak metric
+4. Overall preparation level and next steps
+5. Encouraging closing remarks`;
+
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': \`Bearer \${OPENROUTER_API_KEY}\`,
+          'HTTP-Referer': window.location.href,
+          'X-Title': 'Lyceum Academy Mock Interview',
+        },
+        body: JSON.stringify({
+          model: 'openrouter/stepfun/step-3.5-flash:free',
+          messages: [
+            { role: 'system', content: 'You are an expert US visa interview coach providing detailed, actionable feedback.' },
+            { role: 'user', content: prompt }
+          ],
+          temperature: 0.7,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(\`API error: \${response.status}\`);
+      }
+
+      const data = await response.json();
+      const feedback = data.choices?.[0]?.message?.content || 'Unable to generate feedback. Please try again.';
+      setAiFeedback(feedback);
+      return feedback;
+    } catch (error) {
+      console.error('AI Feedback generation error:', error);
+      const fallbackFeedback = \`Based on interview performance:
+
+Overall Score: \${calculateOverallAverage(calculatedAverages)}/5
+Verdict: \${calculatedVerdict.verdict}
+
+Performance Summary:
+- Total Questions: \${questionResponses.length}
+- Correct: \${questionResponses.filter(q => q.is_correct === true).length}
+- Incorrect: \${questionResponses.filter(q => q.is_correct === false).length}
+- Accuracy: \${questionResponses.length > 0 ? (((questionResponses.filter(q => q.is_correct === true).length) / questionResponses.length) * 100).toFixed(1) : 0}%
+
+Strengths:
+\${Object.entries(calculatedAverages)
+  .filter(([_, value]) => value >= 4)
+  .map(([key, _]) => \`- \${key.replace('_', ' ')}: Strong performance\`)
+  .join('\\n') || 'None identified - scores are below 4 in all categories'}
+
+Areas for Improvement:
+\${Object.entries(calculatedAverages)
+  .filter(([_, value]) => value < 3)
+  .map(([key, value]) => \`- \${key.replace('_', ' ')}: \${value}/5 - Needs focus\`)
+  .join('\\n') || 'Overall good performance across all categories'}
+
+Recommendations:
+\${Object.entries(calculatedAverages)
+  .map(([key, value]) => {
+    if (value < 3) return \`- Practice \${key.replace('_', ' ')} to improve from \${value}/5\`;
+    if (value < 4) return \`- Continue working on \${key.replace('_', ' ')} to reach 4+/5\`;
+    return '';
+  })
+  .filter(Boolean)
+  .join('\\n') || '- Maintain current level of preparation'}\`;
+      setAiFeedback(fallbackFeedback);
+      return fallbackFeedback;
+    } finally {
+      setGeneratingFeedback(false);
+    }
+  };
+
+  const handleAddQuestion = (question: Question) => {
+    // Check if already selected
+    if (selectedQuestions.find(q => q.id === question.id)) {
+      return;
+    }
+    // Add to selectedQuestions (not questionResponses yet)
+    setSelectedQuestions([...selectedQuestions, question]);
+  };
+
+  const handleRemoveQuestion = (index: number) => {
+    const newSelected = selectedQuestions.filter((_, i) => i !== index);
+    setSelectedQuestions(newSelected);
+  };
+
+  const handleCorrectIncorrectChange = (index: number, is_correct: boolean) => {
+    const newResponses = [...questionResponses];
+    const question = selectedQuestions[index];
+
+    if (question) {
+      // Find if response already exists for this question
+      const existingIndex = newResponses.findIndex(r => r.question_text === question.question_text);
+
+      if (existingIndex !== -1) {
+        // Update existing
+        newResponses[existingIndex] = {
+          ...newResponses[existingIndex],
+          is_correct,
+          category: question.category,
+          difficulty: question.difficulty,
+          scores: { ...DEFAULT_QUESTION_SCORES }
+        };
+      } else {
+        // Add new
+        newResponses.push({
+          ...question,
+          is_correct,
+          notes: '',
+          scores: { ...DEFAULT_QUESTION_SCORES }
+        });
+      }
+
+      setQuestionResponses(newResponses);
+    }
+  };
+
+  const handleNoteChange = (index: number, note: string) => {
+    const newResponses = [...questionResponses];
+    newResponses[index] = {
+      ...newResponses[index],
+      notes: note
+    };
+    setQuestionResponses(newResponses);
+  };
+
+  const handleOverallScoreChange = (field: keyof typeof overallScores, value: number) => {
+    setOverallScores({
+      ...overallScores,
+      [field]: value
+    });
+  };
+
+  const handleSave = async () => {
+    if (!selectedContact || questionResponses.length === 0) {
+      alert('Please select a student and add at least one question');
+      return;
+    }
+
+    // Generate AI feedback if not already generated
+    const finalFeedback = aiFeedback || await generateAIFeedback(questionResponses, calculatedAverages, calculatedVerdict);
+
+    // Calculate averages using only correct responses
+    const correctResponses = questionResponses.filter(q => q.is_correct === true);
+    const mockScores = correctResponses.map(q => ({
+      ...q,
+      scores: overallScores
+    }));
+
+    const averages = calculateAverageScores(mockScores);
+
+    const session: MockInterviewSession = {
+      id: generateSessionId(),
+      student_id: selectedContact.id,
+      visa_type: formData.visa_type || 'F-1',
+      session_date: new Date().toISOString(),
+      counsellor_id: 1, // TODO: Get from current user
+      session_notes: formData.session_notes,
+      questions: questionResponses,
+      average_scores: averages,
+      overall_average: calculateOverallAverage(averages),
+      verdict: calculatedVerdict?.verdict,
+      overall_comments: overallComments || calculatedVerdict?.suggested,
+      ai_feedback: finalFeedback,
+      created_at: new Date().toISOString()
+    };
+
+    await onSave?.(session);
+    alert(\`Session \${session.id} saved successfully!\`);
+  };
+
+  const handleAddAdhocQuestion = () => {
+    const questionText = prompt('Enter question text:');
+    if (questionText) {
+      const newQuestion = {
+        question_text: questionText,
+        category: 'General',
+        difficulty: 'medium' as const
+      };
+      setSelectedQuestions([...selectedQuestions, newQuestion]);
+    }
+  };
+
+  const resetForm = () => {
+    setFormData({ visa_type: 'F-1', session_notes: '' });
+    setSelectedContact(null);
+    setSelectedQuestions([]);
+    setQuestionResponses([]);
+    setOverallScores({ context: 3, body_language: 3, fluency: 3, grammar: 3 });
+    setCalculatedAverages(null);
+    setCalculatedVerdict(null);
+    setOverallComments('');
+    setAiFeedback('');
+    setGeneratingFeedback(false);
+    setStep('student');
+  };
+
+  const getScoreColor = (score: number) => {
+    if (score >= 4) return 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300';
+    if (score >= 3) return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300';
+    return 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300';
+  };
+
+  const getVerdictColor = (verdict: string) => {
+    switch (verdict) {
+      case 'Approved': return 'bg-green-500 text-white';
+      case 'Rejected': return 'bg-red-500 text-white';
+      case 'Review Required': return 'bg-yellow-500 text-white';
+      default: return 'bg-gray-500 text-white';
+    }
+  };
+
+  // When moving to verdict step, generate AI feedback
+  const moveToVerdict = async () => {
+    setStep('verdict');
+    if (!aiFeedback && calculatedAverages && calculatedVerdict) {
+      await generateAIFeedback(questionResponses, calculatedAverages, calculatedVerdict);
+    }
+  };
+
+  return (
+    <div className="p-6 max-w-4xl mx-auto">
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-100">
+          New Mock Interview Session
+        </h1>
+        <button
+          onClick={resetForm}
+          className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+        >
+          <X size={24} />
+        </button>
+      </div>
+
+      {/* Progress Steps */}
+      <div className="flex gap-4 mb-8 overflow-x-auto">
+        {['student', 'questions', 'marking', 'scoring', 'verdict'].map((s, index) => (
+          <div
+            key={s}
+            className={\`flex items-center whitespace-nowrap \${step === s ? 'text-lyceum-blue' : 'text-gray-400'}\`}
+          >
+            <div className={\`w-8 h-8 rounded-full flex items-center justify-center \${
+              step === s ? 'bg-lyceum-blue text-white' : 'bg-gray-200 dark:bg-gray-700'
+            }\`}>
+              {index + 1}
+            </div>
+            <span className="font-medium ml-2">{s.charAt(0).toUpperCase() + s.slice(1)}</span>
+            {index < 4 && <ArrowRight size={16} className="mx-2" />}
+          </div>
+        ))}
+      </div>
+
+      {/* Step 1: Student Selection */}
+      {step === 'student' && (
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+          <h2 className="text-xl font-bold mb-4 text-gray-800 dark:text-gray-100">Select Student</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Student <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={selectedContact?.id || ''}
+                onChange={(e) => {
+                  const contact = contacts.find(c => c.id === Number(e.target.value));
+                  setSelectedContact(contact || null);
+                }}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-lyceum-blue dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+                required
+              >
+                <option value="">Select a student...</option>
+                {contacts.map(contact => (
+                  <option key={contact.id} value={contact.id}>
+                    {contact.name} {contact.email && \`(\${contact.email})\`}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Visa Type <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={formData.visa_type}
+                onChange={(e) => setFormData({ ...formData, visa_type: e.target.value as VisaType })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-lyceum-blue dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+                required
+              >
+                {MOCK_INTERVIEW_VISA_TYPES.map(type => (
+                  <option key={type} value={type}>{type}</option>
+                ))}
+              </select>
+              {selectedContact?.visaType && (
+                <p className="text-xs text-blue-600 mt-1">
+                  Auto-filled from profile: {selectedContact.visaType}
+                </p>
+              )}
+            </div>
+          </div>
+          <div className="mt-4">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Session Notes (Optional)
+            </label>
+            <textarea
+              value={formData.session_notes}
+              onChange={(e) => setFormData({ ...formData, session_notes: e.target.value })}
+              rows={3}
+              placeholder="Any notes for this interview session..."
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-lyceum-blue dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+            />
+          </div>
+          <div className="flex justify-end mt-6">
+            <button
+              onClick={() => setStep('questions')}
+              disabled={!selectedContact}
+              className="flex items-center px-6 py-2 bg-lyceum-blue text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Next: Select Questions
+              <ArrowRight size={20} className="ml-2" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Step 2: Question Selection */}
+      {step === 'questions' && (
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+          <h2 className="text-xl font-bold mb-4 text-gray-800 dark:text-gray-100">Select Questions</h2>
+
+          {/* Available Questions */}
+          <div className="mb-6">
+            <h3 className="text-lg font-medium mb-3 text-gray-700 dark:text-gray-300">
+              Available Questions ({availableQuestions.length})
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-64 overflow-y-auto">
+              {availableQuestions.map(question => (
+                <div
+                  key={question.id}
+                  onClick={() => !selectedQuestions.find(q => q.id === question.id) && handleAddQuestion(question)}
+                  className={\`p-4 border rounded-lg cursor-pointer transition-all \${
+                    selectedQuestions.find(q => q.id === question.id)
+                      ? 'border-lyceum-blue bg-blue-50 dark:bg-blue-900'
+                      : 'border-gray-200 hover:border-lyceum-blue hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-700'
+                  }\`}
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="px-2 py-1 text-xs font-medium rounded bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">
+                      {question.category}
+                    </span>
+                    {question.difficulty && (
+                      <span className="px-2 py-1 text-xs font-medium rounded bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300">
+                        {question.difficulty}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-gray-800 dark:text-gray-100 text-sm">
+                    {question.question_text}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Selected Questions */}
+          {selectedQuestions.length > 0 && (
+            <div className="mb-4 p-4 bg-blue-50 dark:bg-blue-900 rounded-lg">
+              <div className="flex justify-between items-center mb-2">
+                <h3 className="text-lg font-medium text-gray-700 dark:text-gray-300">
+                  Selected Questions ({selectedQuestions.length})
+                </h3>
+                <button
+                  onClick={() => setSelectedQuestions([])}
+                  className="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                >
+                  Clear All
+                </button>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                {selectedQuestions.map((question, index) => (
+                  <div
+                    key={question.id}
+                    className="flex items-center justify-between p-2 bg-white dark:bg-gray-700 rounded text-sm"
+                  >
+                    <span className="truncate" title={question.question_text}>
+                      {index + 1}. {question.question_text}
+                    </span>
+                    <button
+                      onClick={() => handleRemoveQuestion(index)}
+                      className="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-between mt-6">
+            <button
+              onClick={() => setStep('student')}
+              className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+            >
+              Back
+            </button>
+            <div className="flex gap-3">
+              <button
+                onClick={handleAddAdhocQuestion}
+                className="flex items-center px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg hover:border-lyceum-blue dark:border-gray-600 dark:text-gray-100"
+              >
+                <Plus size={16} className="mr-2" />
+                Add Ad-hoc Question
+              </button>
+              <button
+                onClick={() => {
+                  // Initialize question responses with default state
+                  const initialResponses = selectedQuestions.map(q => ({
+                    ...q,
+                    scores: { ...DEFAULT_QUESTION_SCORES },
+                    notes: '',
+                    is_correct: undefined
+                  }));
+                  setQuestionResponses(initialResponses);
+                  setStep('marking');
+                }}
+                disabled={selectedQuestions.length === 0}
+                className="flex items-center px-6 py-2 bg-lyceum-blue text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Next: Mark Responses
+                <ArrowRight size={20} className="ml-2" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Step 3: Mark Correct/Incorrect */}
+      {step === 'marking' && (
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+          <h2 className="text-xl font-bold mb-4 text-gray-800 dark:text-gray-100">
+            Mark Question Responses ({questionResponses.length}/{selectedQuestions.length})
+          </h2>
+
+          <div className="space-y-4">
+            {selectedQuestions.map((question, index) => {
+              const response = questionResponses.find(r => r.question_text === question.question_text);
+              const isMarked = response !== undefined;
+
+              return (
+                <div
+                  key={index}
+                  className={\`p-4 border border-gray-200 dark:border-gray-700 rounded-lg \${
+                    isMarked ? 'bg-gray-50 dark:bg-gray-900' : ''
+                  }\`}
+                >
+                  <div className="flex justify-between items-start mb-3">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="px-2 py-1 text-xs font-medium rounded bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300">
+                          {question.category}
+                        </span>
+                        <span className="text-sm font-bold text-gray-800 dark:text-gray-100">
+                          Q{index + 1}
+                        </span>
+                      </div>
+                      <p className="text-gray-800 dark:text-gray-100">
+                        {question.question_text}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Correct/Incorrect Toggle */}
+                  <div className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Student Response:
+                    </label>
+                    <div className="flex gap-4">
+                      <button
+                        onClick={() => handleCorrectIncorrectChange(index, true)}
+                        className={\`flex-1 py-3 px-4 rounded-lg border-2 font-medium transition-colors \${
+                          response?.is_correct === true
+                            ? 'border-green-500 bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+                            : 'border-gray-300 hover:border-green-300 dark:border-gray-600 dark:text-gray-100'
+                        }\`}
+                      >
+                        <Check size={16} className="inline mr-2" />
+                        Correct
+                      </button>
+                      <button
+                        onClick={() => handleCorrectIncorrectChange(index, false)}
+                        className={\`flex-1 py-3 px-4 rounded-lg border-2 font-medium transition-colors \${
+                          response?.is_correct === false
+                            ? 'border-red-500 bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
+                            : 'border-gray-300 hover:border-red-300 dark:border-gray-600 dark:text-gray-100'
+                        }\`}
+                      >
+                        <X size={16} className="inline mr-2" />
+                        Incorrect
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Notes */}
+                  <div className="mt-3">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Notes (Optional)
+                    </label>
+                    <textarea
+                      value={response?.notes || ''}
+                      onChange={(e) => {
+                        if (isMarked) {
+                          handleNoteChange(questionResponses.findIndex(r => r.question_text === question.question_text), e.target.value);
+                        }
+                      }}
+                      rows={2}
+                      placeholder="Feedback for this question..."
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-lyceum-blue dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Progress */}
+          {questionResponses.length > 0 && (
+            <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900 rounded-lg">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h3 className="text-lg font-bold text-gray-700 dark:text-gray-300">
+                    Progress
+                  </h3>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    Marked: {questionResponses.length} / {selectedQuestions.length} questions
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm text-green-600 font-medium">
+                    ✓ Correct: {questionResponses.filter(q => q.is_correct === true).length}
+                  </p>
+                  <p className="text-sm text-red-600 font-medium">
+                    ✗ Incorrect: {questionResponses.filter(q => q.is_correct === false).length}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-between mt-6">
+            <button
+              onClick={() => setStep('questions')}
+              className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+            >
+              Back
+            </button>
+            <button
+              onClick={() => setStep('scoring')}
+              disabled={questionResponses.length === 0}
+              className="flex items-center px-6 py-2 bg-lyceum-blue text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Next: Score Overall
+              <ArrowRight size={20} className="ml-2" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Step 4: Overall Scoring */}
+      {step === 'scoring' && (
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+          <h2 className="text-xl font-bold mb-4 text-gray-800 dark:text-gray-100">
+            Score Overall Performance (Only Correct Answers)
+          </h2>
+
+          <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900 rounded-lg">
+            <div className="flex justify-between items-center">
+              <div>
+                <h3 className="text-lg font-bold text-gray-700 dark:text-gray-300">
+                  Session Summary
+                </h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Total: {questionResponses.length} | 
+                  Correct: {questionResponses.filter(q => q.is_correct === true).length} | 
+                  Incorrect: {questionResponses.filter(q => q.is_correct === false).length}
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  * Only correct answers are scored
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-3xl font-bold text-lyceum-blue">
+                  {questionResponses.filter(q => q.is_correct === true).length} / {questionResponses.length}
+                </p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Correct
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Overall Score Inputs */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            {(['context', 'body_language', 'fluency', 'grammar'] as const).map(field => (
+              <div key={field}>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  {field === 'context' ? 'Context (1-5)' : field === 'body_language' ? 'Body Language (1-5)' : field === 'fluency' ? 'Fluency (1-5)' : 'Grammar & Vocabulary (1-5)'}
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="range"
+                    min="1"
+                    max="5"
+                    step="0.5"
+                    value={overallScores[field]}
+                    onChange={(e) => handleOverallScoreChange(field, parseFloat(e.target.value))}
+                    className="flex-1"
+                  />
+                  <span className={\`text-2xl font-bold px-4 py-2 rounded-lg \${getScoreColor(overallScores[field])}\`}>
+                    {overallScores[field]}
+                  </span>
+                  <span className="text-sm font-bold text-gray-500 dark:text-gray-400">
+                    /5
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Calculated Averages */}
+          {calculatedAverages && (
+            <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900 rounded-lg">
+              <h3 className="text-lg font-bold mb-4 text-gray-700 dark:text-gray-300">
+                Calculated Averages
+              </h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {Object.entries(calculatedAverages).map(([key, value]) => (
+                  <div key={key} className="text-center">
+                    <div className="text-sm text-gray-600 dark:text-gray-400 mb-1">
+                      {key.replace('_', ' ').toUpperCase()}
+                    </div>
+                    <div className={\`text-3xl font-bold p-3 rounded-lg \${getScoreColor(Number(value))}\`}>
+                      {value}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {calculatedVerdict && (
+                <div className="mt-4 text-center">
+                  <div className={\`inline-block px-6 py-3 rounded-lg \${getVerdictColor(calculatedVerdict.verdict)}\`}>
+                    <div className="text-xl font-bold">
+                      Overall: {calculateOverallAverage(calculatedAverages)}/5 - {calculatedVerdict.verdict}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="flex justify-between mt-6">
+            <button
+              onClick={() => setStep('marking')}
+              className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+            >
+              Back
+            </button>
+            <button
+              onClick={moveToVerdict}
+              disabled={!calculatedAverages}
+              className="flex items-center px-6 py-2 bg-lyceum-blue text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Next: Review & Submit
+              <ArrowRight size={20} className="ml-2" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Step 5: Verdict & Submit */}
+      {step === 'verdict' && (
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+          <h2 className="text-xl font-bold mb-4 text-gray-800 dark:text-gray-100">Review & Submit Session</h2>
+
+          {/* Verdict */}
+          {calculatedVerdict && (
+            <div className="mb-6 p-4 rounded-lg">
+              <div className={\`p-4 rounded-lg text-center \${getVerdictColor(calculatedVerdict.verdict)}\`}>
+                <div className="text-2xl font-bold mb-2">
+                  {calculatedVerdict.verdict}
+                </div>
+                <div className="text-sm opacity-90">
+                  {calculatedVerdict.suggested}
+                </div>
+              </div>
+              <div className="mt-4 text-center text-gray-600 dark:text-gray-400">
+                Overall Average: {calculateOverallAverage(calculatedAverages)}
+              </div>
+            </div>
+          )}
+
+          {/* AI Feedback */}
+          <div className="mb-6">
+            <div className="flex justify-between items-center mb-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                AI Feedback Report
+              </label>
+              {generatingFeedback && (
+                <span className="flex items-center text-sm text-blue-600">
+                  <RefreshCw size={16} className="animate-spin mr-2" />
+                  Generating...
+                </span>
+              )}
+            </div>
+            <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600">
+              <textarea
+                value={aiFeedback}
+                onChange={(e) => setAiFeedback(e.target.value)}
+                rows={12}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-lyceum-blue dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100 text-sm"
+                placeholder="AI feedback will appear here..."
+              />
+            </div>
+          </div>
+
+          {/* Override */}
+          <div className="mb-4">
+            <label className="flex items-center">
+              <input
+                type="checkbox"
+                className="mr-2 w-5 h-5 text-lyceum-blue rounded"
+              />
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                Override System Verdict
+              </span>
+            </label>
+          </div>
+
+          {/* Comments */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Overall Comments
+            </label>
+            <textarea
+              value={overallComments}
+              onChange={(e) => setOverallComments(e.target.value)}
+              rows={4}
+              placeholder="Final comments for the interview session..."
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-lyceum-blue dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+            />
+          </div>
+
+          <div className="flex justify-between mt-6">
+            <button
+              onClick={() => setStep('scoring')}
+              className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-100"
+            >
+              Back
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={generatingFeedback}
+              className="flex items-center px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Check size={20} className="mr-2" />
+              Save Session
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default NewSession;
