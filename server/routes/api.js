@@ -1224,8 +1224,11 @@ router.delete('/contacts/:id', authenticateToken, async (req, res) => {
     // 4. Tasks: Set contact_id to NULL
     await query('UPDATE tasks SET contact_id = NULL WHERE contact_id = $1', [contactId]);
 
-    // 5. Recurring Tasks: Delete if they were specific to this contact
+    // 5. Recurring Tasks: Delete
     await query('DELETE FROM recurring_tasks WHERE contact_id = $1', [contactId]);
+
+    // 6. Visa Operations: Delete (these are specific to a contact)
+    await query('DELETE FROM visa_operations WHERE contact_id = $1', [contactId]);
 
     // Finally, delete the contact
     await query('DELETE FROM contacts WHERE id = $1', [contactId]);

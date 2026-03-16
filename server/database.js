@@ -1092,6 +1092,43 @@ export async function initDatabase() {
       )
     `);
 
+    // --- CONTACT DELETION FIXES (FOREIGN KEYS) ---
+    // Ensure all tables referencing contacts(id) allow deletion (CASCADE or SET NULL)
+    await client.query(`
+      DO $$ 
+      BEGIN
+          -- visa_operations
+          IF EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE table_name = 'visa_operations' AND constraint_name = 'visa_operations_contact_id_fkey') THEN
+              ALTER TABLE visa_operations DROP CONSTRAINT visa_operations_contact_id_fkey;
+          END IF;
+          ALTER TABLE visa_operations ADD CONSTRAINT visa_operations_contact_id_fkey FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE;
+
+          -- transactions
+          IF EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE table_name = 'transactions' AND constraint_name = 'transactions_contact_id_fkey') THEN
+              ALTER TABLE transactions DROP CONSTRAINT transactions_contact_id_fkey;
+          END IF;
+          ALTER TABLE transactions ADD CONSTRAINT transactions_contact_id_fkey FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE SET NULL;
+
+          -- tickets
+          IF EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE table_name = 'tickets' AND constraint_name = 'tickets_contact_id_fkey') THEN
+              ALTER TABLE tickets DROP CONSTRAINT tickets_contact_id_fkey;
+          END IF;
+          ALTER TABLE tickets ADD CONSTRAINT tickets_contact_id_fkey FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE;
+
+          -- visitors
+          IF EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE table_name = 'visitors' AND constraint_name = 'visitors_contact_id_fkey') THEN
+              ALTER TABLE visitors DROP CONSTRAINT visitors_contact_id_fkey;
+          END IF;
+          ALTER TABLE visitors ADD CONSTRAINT visitors_contact_id_fkey FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE SET NULL;
+
+          -- tasks
+          IF EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE table_name = 'tasks' AND constraint_name = 'tasks_contact_id_fkey') THEN
+              ALTER TABLE tasks DROP CONSTRAINT tasks_contact_id_fkey;
+          END IF;
+          ALTER TABLE tasks ADD CONSTRAINT tasks_contact_id_fkey FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE SET NULL;
+      END $$;
+    `);
+
     console.log("✅ Database initialized successfully");
   } catch (err) {
     if (client) await client.query("ROLLBACK");
