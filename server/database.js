@@ -28,6 +28,8 @@ export async function initDatabase() {
 
   const client = await pool.connect();
   try {
+    // Ensure uuid-ossp extension is enabled for uuid_generate_v4()
+    await client.query('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"');
     console.log("✅ Connected to PostgreSQL database");
     await client.query("BEGIN");
 
