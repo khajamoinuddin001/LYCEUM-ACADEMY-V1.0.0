@@ -699,9 +699,22 @@ const createAccountsReceivable = async (leadId: number, quotationId: number | st
     throw new Error('Contact not found');
   }
 
-  // Create AR entry (stored in contact metadata for now)
-  const arEntry = {
-    id: Date.now(),
+  // 1. Scan for unlinked payments (Invoices/Income) for this contact
+  const allTransactions = await apiRequest<AccountingTransaction[]>('/transactions');
+  const contactPayments = allTransactions.filter(t => 
+    t.contactId === contact.id && 
+    (t.type === 'Income' || t.type === 'Invoice') && 
+    t.status === 'Paid' &&
+    (!t.metadata?.linkedArId) // Only unlinked ones
+  );
+
+  let totalApplied = 0;
+  const appliedTxIds: string[] = [];
+
+  // 2. Create AR entry (stored in contact metadata for now)
+  const arId = Date.now();
+  const arEntry: any = {
+    id: arId,
     quotationId: quotation.id,
     quotationRef: quotation.quotationNumber || (String(quotation.id).startsWith('QUO-') ? quotation.id : `QUO-${quotation.id}`),
     leadId: lead.id,
@@ -713,6 +726,33 @@ const createAccountsReceivable = async (leadId: number, quotationId: number | st
     agreedAt: new Date().toISOString(),
     lineItems: quotation.lineItems
   };
+
+  // 3. Apply unlinked payments
+  for (const tx of contactPayments) {
+    if (arEntry.remainingAmount <= 0) break;
+
+    const amountToApply = Math.min(tx.amount, arEntry.remainingAmount);
+    arEntry.remainingAmount -= amountToApply;
+    arEntry.paidAmount += amountToApply;
+    totalApplied += amountToApply;
+    appliedTxIds.push(tx.id);
+
+    // Mark transaction as linked (in its metadata)
+    await apiRequest(`/transactions/${tx.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        ...tx,
+        metadata: { ...(tx.metadata || {}), linkedArId: arId }
+      })
+    });
+  }
+
+  if (arEntry.remainingAmount === 0) {
+    arEntry.status = 'Paid';
+    arEntry.paidAt = new Date().toISOString();
+  } else if (arEntry.paidAmount > 0) {
+    arEntry.status = 'Partially Paid';
+  }
 
   // Store AR in contact metadata (using type assertion for metadata)
   const updatedContact = {
