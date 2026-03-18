@@ -537,6 +537,7 @@ export interface AccountingTransaction {
   }[];
   linkedLeadId?: number;
   linkedQuotationId?: number | string;
+  totalAmount?: number;
 }
 export type UserRole = 'Admin' | 'Staff' | 'Student';
 

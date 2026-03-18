@@ -165,7 +165,11 @@ const AccountingView: React.FC<AccountingViewProps> = ({
 
         // 2. Convert AR Entries from Contacts into pseudo-transactions for display
         contacts.forEach(contact => {
-            const arEntries = (contact as any).metadata?.accountsReceivable || [];
+            let metadata = (contact as any).metadata || {};
+            if (typeof metadata === 'string') {
+                try { metadata = JSON.parse(metadata); } catch (e) { metadata = {}; }
+            }
+            const arEntries = metadata.accountsReceivable || [];
             arEntries.forEach((ar: any) => {
                 // Only show outstanding or partially paid AR entries as 'Income' (Pending)
                 const isPaid = ar.status === 'Paid';
@@ -178,19 +182,19 @@ const AccountingView: React.FC<AccountingViewProps> = ({
 
                 const arTransaction: AccountingTransaction = {
                     id: `AR-${ar.id}`, // Unique ID prefix
-                    date: ar.createdAt,
-                    amount: calculatedRemaining, // Show foolproof remaining pending amount
+                    date: ar.createdAt || ar.agreedAt || ar.date || new Date().toISOString(),
+                    amount: calculatedRemaining, 
                     type: 'Due',
-                    // category: 'Sales', // Removed as it is not part of AccountingTransaction type
-                    description: `Quotation #${ar.quotationRef} (Due)`,
+                    description: `Quotation #${ar.quotationRef || ar.quotationId || 'Unknown'} (Due)`,
                     status: status,
                     paymentMethod: 'Online',
                     contactId: contact.id,
-                    contact: contact.department !== 'Unassigned' ? contact.department : '', // Map Department to Client (Entity)
-                    customerName: contact.name, // Map Name to Customer Name
-                    invoiceNumber: ar.quotationRef,
+                    contact: contact.department !== 'Unassigned' ? contact.department : '', 
+                    customerName: contact.name, 
+                    invoiceNumber: ar.quotationRef || `QUO-${ar.quotationId}`,
                     lineItems: ar.lineItems,
                     additionalDiscount: ar.additionalDiscount,
+                    totalAmount: ar.totalAmount || ar.originalAmount || 0, // Added total amount for reference
                     linkedLeadId: ar.leadId,
                     linkedQuotationId: ar.quotationId
                 };
@@ -236,8 +240,7 @@ const AccountingView: React.FC<AccountingViewProps> = ({
         }
 
         return filtered
-            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-            .slice(0, 50); // Increased slice to show more context
+            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     }, [transactions, contacts, searchQuery, typeFilter, startDate, endDate]);
 
     const formatCurrency = (amount: number) => {
