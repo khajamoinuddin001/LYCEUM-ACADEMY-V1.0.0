@@ -263,9 +263,15 @@ body {
   }
 
   /* Handle long content and page breaks */
-  .overflow-y-auto, .max-h-\[90vh\] {
+  .overflow-y-auto, .max-h-\[90vh\], .h-full, .h-screen {
     max-height: none !important;
+    height: auto !important;
     overflow: visible !important;
+  }
+
+  /* Disable flex for main print containers to allow page breaks */
+  .flex-col, .flex {
+    display: block !important;
   }
 
   /* Retain branding colors for headers */
