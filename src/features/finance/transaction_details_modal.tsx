@@ -105,7 +105,20 @@ const TransactionDetailsModal: React.FC<TransactionDetailsModalProps> = ({ trans
                     <div className="flex items-start gap-3">
                         <DollarSign className="w-5 h-5 text-gray-400 mt-0.5" />
                         <div className="flex-1 space-y-1">
-                            {transaction.additionalDiscount ? (
+                            {transaction.type === 'Due' && transaction.totalAmount ? (
+                                <>
+                                    <div className="flex justify-between text-sm text-gray-500 dark:text-gray-400">
+                                        <span>Total Quotation Value</span>
+                                        <span className="font-semibold">{formatCurrency(transaction.totalAmount)}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center pt-2 border-t border-gray-200 dark:border-gray-700">
+                                        <span className="font-medium text-gray-900 dark:text-white uppercase text-xs tracking-wider">Remaining Balance</span>
+                                        <span className="text-2xl font-bold text-orange-600 dark:text-orange-400">
+                                            {formatCurrency(transaction.amount)}
+                                        </span>
+                                    </div>
+                                </>
+                            ) : transaction.additionalDiscount ? (
                                 <>
                                     <div className="flex justify-between text-sm text-gray-500 dark:text-gray-400">
                                         <span>Subtotal</span>
