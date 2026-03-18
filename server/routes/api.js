@@ -6551,6 +6551,49 @@ router.get('/admin/session-history', authenticateToken, requireRole('Admin'), as
   }
 });
 
+router.delete('/admin/session-history/:id', authenticateToken, requireRole('Admin'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    await query('DELETE FROM session_history WHERE id = $1', [id]);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('DELETE /admin/session-history/:id error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete('/api/contacts/:contactId/mock-interview-sessions/:sessionId', authenticateToken, requireRole('Admin'), async (req, res) => {
+  try {
+    const { contactId, sessionId } = req.params;
+    
+    // Fetch contact
+    const result = await query('SELECT metadata FROM contacts WHERE id = $1', [contactId]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Contact not found' });
+    }
+    
+    const metadata = result.rows[0].metadata || {};
+    const sessions = metadata.mockInterviewSessions || [];
+    
+    // Filter out the session
+    const updatedSessions = sessions.filter(s => s.id !== sessionId);
+    
+    if (sessions.length === updatedSessions.length) {
+      return res.status(404).json({ error: 'Session not found in contact metadata' });
+    }
+    
+    // Update metadata
+    const updatedMetadata = { ...metadata, mockInterviewSessions: updatedSessions };
+    
+    await query('UPDATE contacts SET metadata = $1 WHERE id = $2', [JSON.stringify(updatedMetadata), contactId]);
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('DELETE mock-interview-session error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // --- AUTOMATION RULES CRUD ---
 router.get('/automation-rules', authenticateToken, requireRole('Admin'), async (req, res) => {
   try {
@@ -6610,6 +6653,18 @@ router.delete('/automation-rules/:id', authenticateToken, requireRole('Admin'), 
     await query('DELETE FROM automation_rules WHERE id = $1', [req.params.id]);
     res.json({ success: true });
   } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/automations/trigger', authenticateToken, requireRole('Admin', 'Staff'), async (req, res) => {
+  try {
+    const { type, payload } = req.body;
+    console.log(`🤖 [Automation] Manual trigger: ${type}`);
+    await evaluateAutomation(type, payload);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Automation trigger error:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -6987,6 +7042,147 @@ router.delete('/announcements/:id', authenticateToken, requireRole('Admin'), asy
     res.json({ success: true });
   } catch (error) {
     console.error('Error deleting announcement:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// --- MOCK INTERVIEW QUESTIONS CRUD ---
+router.get('/mock-interview/questions', authenticateToken, async (req, res) => {
+  try {
+    const result = await query('SELECT * FROM mock_interview_questions ORDER BY created_at DESC');
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/mock-interview/questions', authenticateToken, requireRole('Admin', 'Staff'), async (req, res) => {
+  try {
+    const { question_text, category, difficulty } = req.body;
+    const result = await query(
+      'INSERT INTO mock_interview_questions (question_text, category, difficulty) VALUES ($1, $2, $3) RETURNING *',
+      [question_text, category, difficulty]
+    );
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('POST /mock-interview/questions error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.put('/mock-interview/questions/:id', authenticateToken, requireRole('Admin', 'Staff'), async (req, res) => {
+  try {
+    const { question_text, category, difficulty } = req.body;
+    const result = await query(
+      'UPDATE mock_interview_questions SET question_text = $1, category = $2, difficulty = $3 WHERE id = $4 RETURNING *',
+      [question_text, category, difficulty, req.params.id]
+    );
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('PUT /mock-interview/questions/:id error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete('/mock-interview/questions/:id', authenticateToken, requireRole('Admin', 'Staff'), async (req, res) => {
+  try {
+    await query('DELETE FROM mock_interview_questions WHERE id = $1', [req.params.id]);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// --- MOCK INTERVIEW TEMPLATES CRUD ---
+router.get('/mock-interview/templates', authenticateToken, async (req, res) => {
+  try {
+    const result = await query('SELECT * FROM mock_interview_templates ORDER BY created_at DESC');
+    res.json(result.rows);
+  } catch (error) {
+    console.error('GET /mock-interview/templates error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/mock-interview/templates', authenticateToken, requireRole('Admin', 'Staff'), async (req, res) => {
+  try {
+    const { name, description, difficulty, visa_types, questions } = req.body;
+    const result = await query(
+      'INSERT INTO mock_interview_templates (name, description, difficulty, visa_types, questions) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [name, description, difficulty, visa_types, JSON.stringify(questions || [])]
+    );
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('POST /mock-interview/templates error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.put('/mock-interview/templates/:id', authenticateToken, requireRole('Admin', 'Staff'), async (req, res) => {
+  try {
+    const { name, description, difficulty, visa_types, questions } = req.body;
+    const result = await query(
+      'UPDATE mock_interview_templates SET name = $1, description = $2, difficulty = $3, visa_types = $4, questions = $5 WHERE id = $6 RETURNING *',
+      [name, description, difficulty, visa_types, JSON.stringify(questions || []), req.params.id]
+    );
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('PUT /mock-interview/templates/:id error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete('/mock-interview/templates/:id', authenticateToken, requireRole('Admin', 'Staff'), async (req, res) => {
+  try {
+    await query('DELETE FROM mock_interview_templates WHERE id = $1', [req.params.id]);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('DELETE /mock-interview/templates/:id error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// AI Feedback Generation
+router.post('/mock-interview/generate-feedback', authenticateToken, async (req, res) => {
+  try {
+    const { prompt } = req.body;
+    
+    if (!process.env.OPENROUTER_API_KEY) {
+      console.error('OPENROUTER_API_KEY is missing in environment variables');
+      return res.status(500).json({ error: 'AI service not configured on server' });
+    }
+
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
+        'HTTP-Referer': 'https://lyceumlms.com',
+        'X-Title': 'Lyceum Academy Mock Interview',
+      },
+      body: JSON.stringify({
+        model: 'anthropic/claude-3.5-sonnet',
+        messages: [
+          { 
+            role: 'system', 
+            content: 'You are a \"Special Agent\" and Senior US Visa Interview Expert. You provide extremely high-end, rigorous, and professional mock interview evaluations. Your feedback must be authoritative, clear, and high-impact. Avoid long, speech-like paragraphs. Instead, use concise bullet points, bold text for key takeaways, and provide clear, actionable strategies for success. Focus on the nuances of communication, intent, and consistency needed for a successful visa interview.' 
+          },
+          { role: 'user', content: prompt }
+        ],
+        temperature: 0.7,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error('OpenRouter error:', response.status, errorData);
+      return res.status(response.status).json({ error: errorData.error?.message || `AI service error: ${response.status}` });
+    }
+
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    console.error('AI Feedback generation error:', error);
     res.status(500).json({ error: error.message });
   }
 });

@@ -743,3 +743,57 @@ export interface EmailTemplate {
   body: string;
   from_address?: string;
 }
+
+export type VisaType = 'F-1' | 'M-1' | 'J-1' | 'B-1/B-2' | 'H-1B' | 'L-1' | 'Other';
+
+export interface Question {
+    id: string;
+    question_text: string;
+    category: string;
+    difficulty: 'easy' | 'medium' | 'hard' | 'Easy' | 'Medium' | 'Hard';
+}
+
+export interface QuestionScores {
+    context: number;
+    body_language: number;
+    fluency: number;
+    grammar: number;
+}
+
+export interface QuestionWithScores extends Question {
+    is_correct?: boolean;
+    notes?: string;
+    scores: QuestionScores;
+}
+
+export interface InterviewSession {
+    id: string;
+    student_id: number;
+    visa_type: VisaType;
+    session_date: string;
+    counsellor_id: number;
+    session_notes?: string;
+    questions: QuestionWithScores[];
+    questions_count: number;
+    correct_count: number;
+    incorrect_count: number;
+    average_scores: QuestionScores;
+    overall_average: number;
+    verdict: 'Approved' | 'Rejected' | 'Review Required' | 'Pending';
+    overall_comments?: string;
+    ai_feedback?: string;
+    attempt_number?: number;
+    created_at: string;
+}
+
+export interface MockInterviewSession extends InterviewSession {}
+
+export interface QuestionTemplate {
+    id: string;
+    name: string;
+    description?: string;
+    difficulty: 'easy' | 'medium' | 'hard' | 'Easy' | 'Medium' | 'Hard';
+    visa_types: VisaType[];
+    questions: Question[];
+    created_at: string;
+}

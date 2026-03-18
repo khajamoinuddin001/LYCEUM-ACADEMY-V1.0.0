@@ -78,6 +78,7 @@ const DEFAULT_STUDENT_NAV = [
   { name: 'LMS', label: 'LMS', icon: <BookOpen size={20} /> },
   { name: 'Announcements', label: 'Announcements', icon: <Megaphone size={20} /> },
   { name: 'Tickets', label: 'Tickets', icon: <FileText size={20} /> },
+  { name: 'Mock Interview', label: 'Mock Interview', icon: <UserCheck size={20} /> },
   { name: 'My Profile', label: 'My Profile', icon: <UserCircle size={20} /> },
 ];
 

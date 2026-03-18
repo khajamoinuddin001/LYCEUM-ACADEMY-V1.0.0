@@ -706,6 +706,107 @@ export async function initDatabase() {
     await client.query('ALTER TABLE announcement_attachments ADD COLUMN IF NOT EXISTS file_size INTEGER');
 
     await client.query("COMMIT");
+    console.log("✅ Main tables initialized");
+
+    // Mock Interview Questions
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS mock_interview_questions (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        question_text TEXT NOT NULL,
+        category TEXT NOT NULL,
+        difficulty TEXT CHECK(difficulty IN ('easy', 'medium', 'hard')),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    
+    // Migration: ensure all columns exist for mock_interview_questions
+    await client.query('ALTER TABLE mock_interview_questions ADD COLUMN IF NOT EXISTS question_text TEXT');
+    await client.query('ALTER TABLE mock_interview_questions ADD COLUMN IF NOT EXISTS category TEXT');
+    await client.query('ALTER TABLE mock_interview_questions ADD COLUMN IF NOT EXISTS difficulty TEXT');
+    
+    // Data Migration: Copy 'text' to 'question_text' if 'text' column exists and question_text is null
+    try {
+        const hasTextCol = await client.query(`
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'mock_interview_questions' AND column_name = 'text'
+        `);
+        if (hasTextCol.rows.length > 0) {
+            await client.query('UPDATE mock_interview_questions SET question_text = text WHERE question_text IS NULL');
+            // Drop NOT NULL constraint from old 'text' column to allow new inserts
+            await client.query('ALTER TABLE mock_interview_questions ALTER COLUMN "text" DROP NOT NULL');
+        }
+    } catch (err) {
+        console.log('Note: Data migration for mock_interview_questions failed or not needed:', err.message);
+    }
+
+    // Re-apply NOT NULL to question_text and category if they were added as NULLable
+    try {
+        await client.query('ALTER TABLE mock_interview_questions ALTER COLUMN question_text SET NOT NULL');
+        await client.query('ALTER TABLE mock_interview_questions ALTER COLUMN category SET NOT NULL');
+    } catch (err) {
+        console.log('Note: Could not set NOT NULL on mock_interview_questions (might already be set or have nulls)');
+    }
+
+    // Fix difficulty constraint case
+    try {
+        await client.query('ALTER TABLE mock_interview_questions DROP CONSTRAINT IF EXISTS mock_interview_questions_difficulty_check');
+        await client.query("ALTER TABLE mock_interview_questions ADD CONSTRAINT mock_interview_questions_difficulty_check CHECK (difficulty IN ('easy', 'medium', 'hard'))");
+        // Update existing data to lowercase
+        await client.query("UPDATE mock_interview_questions SET difficulty = LOWER(difficulty) WHERE difficulty IS NOT NULL");
+    } catch (err) {
+        console.log('Note: Could not update difficulty constraint on mock_interview_questions');
+    }
+
+    // Mock Interview Templates
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS mock_interview_templates (
+        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+        name VARCHAR(255) NOT NULL,
+        description TEXT,
+        difficulty VARCHAR(50),
+        visa_types TEXT[],
+        questions JSONB,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    
+    // Migration: ensure all columns exist for mock_interview_templates
+    await client.query('ALTER TABLE mock_interview_templates ADD COLUMN IF NOT EXISTS name VARCHAR(255)');
+    await client.query('ALTER TABLE mock_interview_templates ADD COLUMN IF NOT EXISTS description TEXT');
+    await client.query('ALTER TABLE mock_interview_templates ADD COLUMN IF NOT EXISTS difficulty VARCHAR(50)');
+    await client.query('ALTER TABLE mock_interview_templates ADD COLUMN IF NOT EXISTS visa_types TEXT[]');
+    await client.query('ALTER TABLE mock_interview_templates ADD COLUMN IF NOT EXISTS questions JSONB');
+    
+    // Data Migration: Copy 'title' to 'name' and 'visa_type' to 'visa_types' if needed
+    try {
+        const hasTitleCol = await client.query(`
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'mock_interview_templates' AND column_name = 'title'
+        `);
+        if (hasTitleCol.rows.length > 0) {
+            await client.query('UPDATE mock_interview_templates SET name = title WHERE name IS NULL');
+            await client.query('ALTER TABLE mock_interview_templates ALTER COLUMN "title" DROP NOT NULL');
+        }
+
+        const hasVisaTypeCol = await client.query(`
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'mock_interview_templates' AND column_name = 'visa_type'
+        `);
+        if (hasVisaTypeCol.rows.length > 0) {
+            await client.query('UPDATE mock_interview_templates SET visa_types = ARRAY[visa_type] WHERE visa_types IS NULL AND visa_type IS NOT NULL');
+            await client.query('ALTER TABLE mock_interview_templates ALTER COLUMN "visa_type" DROP NOT NULL');
+        }
+    } catch (err) {
+        console.log('Note: Data migration for mock_interview_templates failed or not needed:', err.message);
+    }
+
+    // Re-apply NOT NULL to name if it was added as NULLable
+    try {
+        await client.query('ALTER TABLE mock_interview_templates ALTER COLUMN name SET NOT NULL');
+    } catch (err) {
+        console.log('Note: Could not set NOT NULL on mock_interview_templates.name');
+    }
+    console.log("✅ Mock Interview tables initialized");
 
     // Document Submissions table (for approval workflow)
     // Drop and recreate to fix any broken prior state (table has no user data yet)

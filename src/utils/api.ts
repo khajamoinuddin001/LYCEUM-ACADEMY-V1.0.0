@@ -2045,3 +2045,77 @@ export const downloadAnnouncementAttachment = async (attachmentId: number, filen
   window.URL.revokeObjectURL(url);
   document.body.removeChild(a);
 };
+
+export const triggerAutomation = async (type: string, payload: any): Promise<any> => {
+  return apiRequest('/automations/trigger', {
+    method: 'POST',
+    body: JSON.stringify({ type, payload }),
+  });
+};
+
+export const getQuestions = async (): Promise<any[]> => {
+  return apiRequest('/mock-interview/questions');
+};
+
+export const getTemplates = async (): Promise<any[]> => {
+  return apiRequest('/mock-interview/templates');
+};
+
+export const saveQuestion = async (question: any): Promise<any> => {
+  const isNew = !question.id || parseInt(question.id) > 2000000000000; // Heuristic for Date.now() IDs
+  return apiRequest(isNew ? '/mock-interview/questions' : `/mock-interview/questions/${question.id}`, {
+    method: isNew ? 'POST' : 'PUT',
+    body: JSON.stringify(question)
+  });
+};
+
+export const deleteQuestion = async (id: string): Promise<void> => {
+  await apiRequest(`/mock-interview/questions/${id}`, { method: 'DELETE' });
+};
+
+export const saveTemplate = async (template: any): Promise<any> => {
+  const isNew = !template.id || parseInt(template.id) > 2000000000000;
+  return apiRequest(isNew ? '/mock-interview/templates' : `/mock-interview/templates/${template.id}`, {
+    method: isNew ? 'POST' : 'PUT',
+    body: JSON.stringify(template)
+  });
+};
+
+export const deleteTemplate = async (id: string): Promise<void> => {
+  await apiRequest(`/mock-interview/templates/${id}`, { method: 'DELETE' });
+};
+
+export const getSetting = async (key: string): Promise<any> => {
+  try {
+    return await apiRequest(`/settings/${key}`, { method: 'GET' });
+  } catch (err) {
+    console.error(`Error getting setting ${key}:`, err);
+    return null;
+  }
+};
+
+export const saveSetting = async (key: string, value: any): Promise<void> => {
+  await apiRequest(`/settings/${key}`, {
+    method: 'POST',
+    body: JSON.stringify({ value })
+  });
+};
+
+export const generateAiFeedback = async (prompt: string): Promise<any> => {
+  return apiRequest('/mock-interview/generate-feedback', {
+    method: 'POST',
+    body: JSON.stringify({ prompt })
+  });
+};
+
+export const deleteSessionHistory = async (id: string | number): Promise<void> => {
+  await apiRequest(`/admin/session-history/${id}`, {
+    method: 'DELETE'
+  });
+};
+
+export const deleteMockInterviewSession = async (contactId: string | number, sessionId: string): Promise<void> => {
+  await apiRequest(`/api/contacts/${contactId}/mock-interview-sessions/${sessionId}`, {
+    method: 'DELETE'
+  });
+};

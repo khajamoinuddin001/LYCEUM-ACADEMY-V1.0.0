@@ -82,6 +82,8 @@ import MarketingView from '@/features/marketing/marketing_view';
 import AutomationView from '@/features/automation/automation_view';
 import AnouncementView from '@/features/announcement/announcement_view';
 import StudentAnnouncementsView from '@/features/students/student_announcements_view';
+import AdminMockInterviewView from '@/features/mock_interview/admin_mock_interview_view';
+import StudentMockInterviewView from '@/features/students/student_mock_interview_view';
 import {
   DndContext,
   closestCenter,
@@ -2095,6 +2097,10 @@ const DashboardLayout: React.FC = () => {
     switch (activeApp) {
       case 'Automation Engine': return <AutomationView />;
       case 'Announcements': return <AnouncementView user={currentUser} />;
+      case 'Mock Interview':
+        return currentUser.role === 'Student' ? 
+          <StudentMockInterviewView user={currentUser} sessions={studentContact?.metadata?.mockInterviewSessions || []} /> : 
+          <AdminMockInterviewView contacts={contacts} />;
       case 'Apps': return <AppsGridView onAppSelect={handleAppSelect} user={currentUser} apps={gridApps} />;
       case 'dashboard': return <Dashboard onNavigateBack={() => handleAppSelect('Apps')} transactions={transactions} user={currentUser} tasks={tasks} onAppSelect={handleAppSelect} paymentActivityLog={paymentActivityLog} contacts={contacts} leads={leads} />;
       case 'Department Dashboard': return <DepartmentDashboard user={currentUser} tickets={tickets} onTicketSelect={(ticketId) => { setSelectedTicketId(ticketId); setActiveApp('Tickets'); }} onViewVisits={handleViewContactVisits} />;
@@ -2478,6 +2484,15 @@ const DashboardLayout: React.FC = () => {
                       onNavigateToDocuments={() => handleAppSelect('Documents')}
                     />
                   ) : <div>Loading...</div>;
+                }
+
+                // Student Mock Interview Page
+                if (activeApp === 'Mock Interview') {
+                  const studentContact = contacts.find(c =>
+                    c.userId === currentUser.id ||
+                    (c.email && currentUser.email && c.email.toLowerCase() === currentUser.email.toLowerCase())
+                  );
+                  return <StudentMockInterviewView user={currentUser} sessions={studentContact?.metadata?.mockInterviewSessions || []} />;
                 }
 
                 // Student Dashboard (default)

@@ -2,7 +2,7 @@
 
 
 import React from 'react';
-import type { OdooApp, UserRole, AppPermissions, ChecklistItem, QuotationTemplate } from '@/types';
+import type { OdooApp, UserRole, AppPermissions, ChecklistItem, QuotationTemplate, VisaType, QuestionScores, QuestionWithScores } from '@/types';
 import {
   MessagesSquare,
   Calendar,
@@ -177,6 +177,12 @@ export const ODOO_APPS: OdooApp[] = [
     bgColor: 'bg-emerald-500',
     iconColor: 'text-white',
   },
+  {
+    name: 'Mock Interview',
+    icon: <UserCheck size={36} />,
+    bgColor: 'bg-rose-500',
+    iconColor: 'text-white',
+  },
 ];
 
 export const STAFF_ROLES: UserRole[] = ['Admin', 'Staff'];
@@ -185,7 +191,9 @@ const fullAccess: AppPermissions = { read: true, create: true, update: true, del
 const readOnly: AppPermissions = { read: true };
 
 const adminPermissions = ODOO_APPS.reduce((acc, app) => {
-  acc[app.name] = { ...fullAccess };
+  if (app.name !== 'Mock Interview') {
+    acc[app.name] = { ...fullAccess };
+  }
   return acc;
 }, {} as { [appName: string]: AppPermissions });
 
@@ -209,6 +217,7 @@ export const DEFAULT_PERMISSIONS: Record<UserRole, { [appName: string]: AppPermi
     'Accounts': fullAccess,
     'Document manager': fullAccess,
     'Announcements': readOnly,
+    'Mock Interview': readOnly,
   },
 };
 
@@ -337,4 +346,51 @@ export const getStudentUploadCategories = (visaType?: string, degree?: string) =
     return getDocumentCategories(visaType, degree).filter(
         cat => !STAFF_ONLY_DOCUMENT_CATEGORIES.has(cat)
     );
+};
+
+// --- Mock Interview ---
+export const MOCK_INTERVIEW_VISA_TYPES: VisaType[] = ['F-1', 'M-1', 'J-1', 'B-1/B-2', 'H-1B', 'L-1', 'Other'];
+
+export const DEFAULT_QUESTION_SCORES: QuestionScores = {
+    context: 3,
+    body_language: 3,
+    fluency: 3,
+    grammar: 3
+};
+
+export const calculateAverageScores = (responses: QuestionWithScores[]): QuestionScores => {
+    if (responses.length === 0) return { ...DEFAULT_QUESTION_SCORES };
+
+    const totals = responses.reduce((acc, curr) => {
+        if (curr.scores) {
+            acc.context += curr.scores.context || 0;
+            acc.body_language += curr.scores.body_language || 0;
+            acc.fluency += curr.scores.fluency || 0;
+            acc.grammar += curr.scores.grammar || 0;
+        }
+        return acc;
+    }, { context: 0, body_language: 0, fluency: 0, grammar: 0 });
+
+    const count = responses.length;
+    return {
+        context: parseFloat((totals.context / count).toFixed(2)),
+        body_language: parseFloat((totals.body_language / count).toFixed(2)),
+        fluency: parseFloat((totals.fluency / count).toFixed(2)),
+        grammar: parseFloat((totals.grammar / count).toFixed(2))
+    };
+};
+
+export const calculateOverallAverage = (averages: QuestionScores): number => {
+    const sum = (averages.context || 0) + (averages.body_language || 0) + (averages.fluency || 0) + (averages.grammar || 0);
+    return parseFloat((sum / 4).toFixed(2));
+};
+
+export const calculateVerdict = (overallAverage: number): { verdict: 'Approved' | 'Rejected' | 'Review Required'; suggested: string } => {
+    if (overallAverage >= 4) {
+        return { verdict: 'Approved', suggested: 'Excellent performance! Candidate is well-prepared.' };
+    } else if (overallAverage >= 3) {
+        return { verdict: 'Review Required', suggested: 'Solid performance, but some areas need minor refinement.' };
+    } else {
+        return { verdict: 'Rejected', suggested: 'Significant improvement needed in multiple areas.' };
+    }
 };

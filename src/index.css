@@ -64,10 +64,11 @@ body {
 
 @media print {
 
-  /* 1. Hide everything in the body by default */
+  /* 1. Hide everything in the body by default (DISABLED: too invasive)
   body>* {
     display: none !important;
   }
+  */
 
   /* 2. Un-hide ONLY the print portal and position it correctly */
   body>.print-portal-container,
@@ -184,5 +185,104 @@ body {
 
   100% {
     transform: translateX(-50%);
+  }
+}
+
+/* Mock Interview Print Styles */
+@media print {
+  /* 1. Reset everything to ensure a clean start */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* 2. Hide non-essential elements specifically */
+  .no-print, nav, aside, header, .sidebar, .top-nav, button.no-print,
+  [role="dialog"] button:not(.print-btn) {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  /* 3. Hide Modal Backdrop specifically */
+  .fixed.inset-0 > div.absolute.inset-0.bg-gray-900\/60 {
+    display: none !important;
+  }
+
+  /* 4. Force a clean print layout for the modal and prevent clipping */
+  .fixed.inset-0 {
+    position: relative !important;
+    top: auto !important;
+    left: auto !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 100% !important;
+    background: white !important;
+    color: black !important;
+    display: block !important;
+    z-index: auto !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Ensure background and text colors are print-friendly and flowable */
+  body, html {
+    background: white !important;
+    background-color: white !important;
+    color: black !important;
+    height: auto !important;
+    min-height: 100% !important;
+    overflow: visible !important;
+  }
+
+  .fixed.inset-0, .bg-white, .dark .bg-gray-800, .bg-gray-50, .dark .bg-gray-900,
+  .bg-rose-50\/50, .dark .bg-rose-900\/10 {
+    background: white !important;
+    background-color: white !important;
+    color: black !important;
+  }
+
+  .text-white, .dark .text-white, .text-gray-100, .text-gray-900, .dark .text-gray-100,
+  .text-rose-900, .dark .text-rose-100 {
+    color: black !important;
+  }
+
+  .border-rose-100, .dark .border-rose-900\/30, .border-2 {
+    border-color: #e5e7eb !important; /* light gray border */
+  }
+
+  /* Style the report container */
+  .max-w-4xl {
+    position: relative !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 20px !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  /* Handle long content and page breaks */
+  .overflow-y-auto, .max-h-\[90vh\] {
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  /* Retain branding colors for headers */
+  .bg-gradient-to-r, .bg-rose-500, .bg-rose-600 {
+    background: #e11d48 !important; /* Rose 600 */
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color: white !important;
+  }
+
+  /* Improve typography for print */
+  h1, h2, h3, p, div {
+    font-family: inherit !important;
+  }
+
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 }
