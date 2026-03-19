@@ -4134,7 +4134,8 @@ const transformTicket = (ticket) => ({
   linkedTasks: ticket.linked_tasks || [],
   messages: ticket.messages || [],
   createdAt: ticket.created_at,
-  updatedAt: ticket.updated_at
+  updatedAt: ticket.updated_at,
+  solvedAt: ticket.solved_at
 });
 
 // Create ticket
@@ -4400,7 +4401,8 @@ router.put('/tickets/:id', authenticateToken, async (req, res) => {
 
     const result = await query(`
       UPDATE tickets 
-      SET status = $1, priority = $2, assigned_to = $3, resolution_notes = $4, updated_at = CURRENT_TIMESTAMP, category = $9
+      SET status = $1, priority = $2, assigned_to = $3, resolution_notes = $4, updated_at = CURRENT_TIMESTAMP, category = $9,
+          solved_at = CASE WHEN $1 IN ('Resolved', 'Closed') THEN COALESCE(solved_at, CURRENT_TIMESTAMP) ELSE NULL END
       WHERE id = $5 AND EXISTS(
   SELECT 1 FROM tickets t2
         LEFT JOIN contacts c ON t2.contact_id = c.id
@@ -4425,7 +4427,7 @@ RETURNING *
 
     // Fetch the full record with names after update
     const finalResult = await query(`
-      SELECT t.*, c.name as contact_name,
+      SELECT t.*, c.name as contact_name, c.email as contact_email,
   COALESCE(u1.name, c.counselor_assigned, c.counselor_assigned_2) as assigned_to_name,
   u2.name as created_by_name,
   (SELECT json_agg(json_build_object('id', ta.id, 'name', ta.filename, 'size', ta.file_size))
@@ -4439,19 +4441,33 @@ RETURNING *
 
     const updatedTicket = transformTicket(finalResult.rows[0]);
 
-    // Automation Trigger
-    evaluateAutomation('Ticket Updated', {
+    // Automation Triggers
+    const automationPayload = {
       ...updatedTicket,
       ticket_id: updatedTicket.ticketId || updatedTicket.id,
       contact_id: updatedTicket.contactId,
       contact_name: updatedTicket.contactName,
       contact_email: updatedTicket.contactEmail,
-      email: updatedTicket.contactEmail, // Generic fallback
+      email: updatedTicket.contactEmail,
       status: updatedTicket.status,
       priority: updatedTicket.priority,
       staff_name: updatedTicket.assignedToName,
-      subject: updatedTicket.subject
-    });
+      subject: updatedTicket.subject,
+      created_at: updatedTicket.createdAt ? new Date(updatedTicket.createdAt).toLocaleDateString() : 'N/A',
+      solved_at: updatedTicket.solvedAt ? new Date(updatedTicket.solvedAt).toLocaleDateString() : 'N/A',
+      client_name: updatedTicket.contactName || 'Client',
+      client_email: updatedTicket.contactEmail || 'N/A'
+    };
+
+    // 1. General Update
+    evaluateAutomation('Ticket Updated', automationPayload);
+    
+    // 2. State-Specific Triggers
+    if (updatedTicket.status === 'Resolved') {
+      evaluateAutomation('Ticket Resolved', automationPayload);
+    } else if (updatedTicket.status === 'Closed') {
+      evaluateAutomation('Ticket Closed', automationPayload);
+    }
 
     res.json(updatedTicket);
   } catch (error) {

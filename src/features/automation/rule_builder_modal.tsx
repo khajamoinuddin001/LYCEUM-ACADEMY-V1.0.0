@@ -14,6 +14,8 @@ const TRIGGERS = [
     'Contact Created',
     'Ticket Created',
     'Ticket Updated',
+    'Ticket Resolved',
+    'Ticket Closed',
     'Visa Operation Created',
     'Visa Status Changed',
     'User Created',

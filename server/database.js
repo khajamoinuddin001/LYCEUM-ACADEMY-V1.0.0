@@ -409,6 +409,7 @@ export async function initDatabase() {
       await client.query('ALTER TABLE documents ADD COLUMN IF NOT EXISTS is_private BOOLEAN DEFAULT false');
       await client.query('ALTER TABLE documents ADD COLUMN IF NOT EXISTS category TEXT');
       await client.query('ALTER TABLE tickets ADD COLUMN IF NOT EXISTS category TEXT');
+      await client.query('ALTER TABLE tickets ADD COLUMN IF NOT EXISTS solved_at TIMESTAMP');
 
       // Avatar DB Storage Support
       await client.query('ALTER TABLE contacts ADD COLUMN IF NOT EXISTS avatar_data BYTEA');
