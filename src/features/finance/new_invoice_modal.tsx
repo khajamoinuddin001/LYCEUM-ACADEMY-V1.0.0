@@ -406,7 +406,8 @@ const NewInvoiceModal: React.FC<NewInvoiceModalProps> = ({
                       if (selectedAR && selectedAR.lineItems && selectedAR.lineItems.length > 0) {
                         // Auto-populate line items from AR
                         const newItems = selectedAR.lineItems.map((item: any) => {
-                          const itemTotalCost = (item.price || 0) * (item.quantity || 1);
+                          const itemPrice = item.price !== undefined ? item.price : (item.rate || 0);
+                          const itemTotalCost = itemPrice * (item.quantity || 1);
                           const itemDiscount = item.discount || 0;
                           const paidSoFar = item.paidAmount || 0;
                           // The 'original' pending for this specific invoice line should be the total remaining balance for this item
@@ -417,7 +418,7 @@ const NewInvoiceModal: React.FC<NewInvoiceModalProps> = ({
                             description: item.description,
                             longDescription: '',
                             quantity: 1,
-                            rate: item.price || 0,
+                            rate: itemPrice,
                             discount: item.discount || 0,
                             amount: amountToPay,
                             linkedQuotationLineItemId: item.id,
@@ -425,7 +426,7 @@ const NewInvoiceModal: React.FC<NewInvoiceModalProps> = ({
                             originalPending: amountToPay,
                             pendingBalance: 0
                           };
-                        }).filter((item: any) => (item.originalPending || 0) > 0);
+                        });
 
                         if (newItems.length > 0) {
                           setLineItems(newItems);

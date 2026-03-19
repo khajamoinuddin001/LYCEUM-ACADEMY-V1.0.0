@@ -929,13 +929,16 @@ const DashboardLayout: React.FC = () => {
                 // Update AR entry with editable fields
                 return {
                   ...ar,
-                  status: data.status,
-                  // We map Transaction fields back to AR fields where applicable
-                  remainingAmount: data.status === 'Paid' ? 0 : (data.amount || ar.remainingAmount || 0),
-                  paidAmount: data.status === 'Paid' ? (ar.totalAmount || ar.originalAmount || data.amount) : (ar.paidAmount || 0) + (Number(data.amount) || 0),
+                  totalAmount: Number(data.amount) || 0,
+                  remainingAmount: data.status === 'Paid' ? 0 : Math.max(0, (Number(data.amount) || 0) - (Number(ar.paidAmount) || 0)),
+                  paidAmount: data.status === 'Paid' ? (Number(data.amount) || ar.totalAmount || ar.originalAmount) : (Number(ar.paidAmount) || 0),
                   invoicedAmount: ar.invoicedAmount || 0,
                   dueDate: data.dueDate,
-                  lineItems: data.lineItems,
+                   lineItems: (data.lineItems || []).map((item: any) => ({
+                    ...item,
+                    price: item.rate !== undefined ? item.rate : (item.price || 0),
+                    rate: item.rate !== undefined ? item.rate : (item.price || 0)
+                  })),
                   additionalDiscount: data.additionalDiscount
                 };
               }
@@ -953,13 +956,15 @@ const DashboardLayout: React.FC = () => {
                   const arEntry = updatedMetadata.accountsReceivable.find((ar: any) => ar.id === arId);
                   const updatedQuotations = lead.quotations.map((q: any) => {
                     if (String(q.id) === String(data.linkedQuotationId)) {
-                      // Calculate new total based on current paid amount + remaining amount
-                      const newTotal = (Number(arEntry.paidAmount) || 0) + (Number(arEntry.remainingAmount) || 0);
                       const subtotal = data.lineItems.reduce((sum: number, item: any) => sum + (Number(item.rate) * (Number(item.quantity) || 1)), 0);
                       const discount = Number(data.additionalDiscount) || 0;
                       return {
                         ...q,
-                        lineItems: data.lineItems,
+                        lineItems: data.lineItems.map((item: any) => ({
+                          ...item,
+                          price: item.rate, // Ensure price is synced from rate
+                          amount: item.amount
+                        })),
                         discount: discount,
                         subtotal: subtotal,
                         total: Math.max(0, subtotal - discount)
@@ -1276,8 +1281,8 @@ const DashboardLayout: React.FC = () => {
               if (matchingInvoiceItem) {
                 return {
                   ...arItem,
-                  invoicedAmount: Math.max(0, (Number(arItem.invoicedAmount) || Number(arItem.paidAmount) || 0) - (matchingInvoiceItem.amount || 0)),
-                  paidAmount: isPaid ? Math.max(0, (arItem.paidAmount || 0) - (matchingInvoiceItem.received || 0)) : arItem.paidAmount
+                  invoicedAmount: Math.max(0, (Number(arItem.invoicedAmount) || 0) - (Number(matchingInvoiceItem.amount) || 0)),
+                  paidAmount: Math.max(0, (Number(arItem.paidAmount) || 0) - (Number(matchingInvoiceItem.received) || 0))
                 };
               }
               return arItem;

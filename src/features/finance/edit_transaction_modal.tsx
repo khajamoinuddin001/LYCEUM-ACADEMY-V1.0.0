@@ -164,7 +164,11 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
                 status: formData.status as any,
                 additionalDiscount: parseFloat(formData.additionalDiscount?.toString() || '0'),
                 description: updatedDescription,
-                lineItems: lineItems
+                lineItems: lineItems,
+                // Persist identifying metadata for syncing
+                linkedLeadId: (transaction as any).linkedLeadId,
+                linkedQuotationId: (transaction as any).linkedQuotationId,
+                invoiceNumber: (transaction as any).invoiceNumber
             });
             onClose();
         } catch (error) {
