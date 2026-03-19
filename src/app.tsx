@@ -931,8 +931,9 @@ const DashboardLayout: React.FC = () => {
                   ...ar,
                   status: data.status,
                   // We map Transaction fields back to AR fields where applicable
-                  remainingAmount: data.status === 'Paid' ? 0 : data.amount, // auto clear remaining if paid
-                  paidAmount: data.status === 'Paid' ? (ar.totalAmount || ar.originalAmount || data.amount) : ar.paidAmount,
+                  remainingAmount: data.status === 'Paid' ? 0 : (data.amount || ar.remainingAmount || 0),
+                  paidAmount: data.status === 'Paid' ? (ar.totalAmount || ar.originalAmount || data.amount) : (ar.paidAmount || 0) + (Number(data.amount) || 0),
+                  invoicedAmount: ar.invoicedAmount || 0,
                   dueDate: data.dueDate,
                   lineItems: data.lineItems,
                   additionalDiscount: data.additionalDiscount
@@ -954,11 +955,14 @@ const DashboardLayout: React.FC = () => {
                     if (String(q.id) === String(data.linkedQuotationId)) {
                       // Calculate new total based on current paid amount + remaining amount
                       const newTotal = (Number(arEntry.paidAmount) || 0) + (Number(arEntry.remainingAmount) || 0);
+                      const subtotal = data.lineItems.reduce((sum: number, item: any) => sum + (Number(item.rate) * (Number(item.quantity) || 1)), 0);
+                      const discount = Number(data.additionalDiscount) || 0;
                       return {
                         ...q,
                         lineItems: data.lineItems,
-                        additionalDiscount: data.additionalDiscount,
-                        total: newTotal
+                        discount: discount,
+                        subtotal: subtotal,
+                        total: Math.max(0, subtotal - discount)
                       };
                     }
                     return q;
@@ -981,85 +985,89 @@ const DashboardLayout: React.FC = () => {
         }
 
         // Update existing regular transaction
+        const oldTx = transactions.find(t => t.id.toString() === data.id?.toString());
         const { transaction: tx, allTransactions } = await api.updateTransaction(data.id, data);
         setTransactions(allTransactions);
 
-        // Handle Linking to AR entry if status is Paid and linkedArId is present
-        if ((data as any).linkedArId && data.contactId && data.status === 'Paid') {
+        // Handle Linking to AR entry - Supporting Pending and Paid
+        if ((data as any).linkedArId && data.contactId) {
           const contact = contacts.find(c => c.id === data.contactId);
           if (contact) {
             const updatedMetadata = { ...((contact as any).metadata || {}) };
             let arUpdated = false;
+            let linkedLeadId = data.linkedLeadId || tx.linkedLeadId;
+            let linkedQuotationId = data.linkedQuotationId || tx.linkedQuotationId;
+
             updatedMetadata.accountsReceivable = (updatedMetadata.accountsReceivable || []).map((ar: any) => {
               if (ar.id === (data as any).linkedArId) {
+                // If this is a new link or update, we must track both invoiced and paid amounts
+                const newTotalInvoicedInThisInvoice = (data.lineItems || []).reduce((sum, item) => sum + (item.amount || 0), 0);
                 const newPaymentAmount = Math.abs(data.amount);
                 const newDiscountAmount = Number(data.additionalDiscount) || 0;
-                const newCoverage = newPaymentAmount + newDiscountAmount;
+                const newPaidCoverage = newPaymentAmount + newDiscountAmount;
 
-                // Find the original transaction state before these updates for diffing
-                const oldTx = transactions.find(t => t.id.toString() === data.id?.toString());
-                
-                // Calculate old amount to diff against
-                let oldCoverage = 0;
-                if (oldTx) {
-                  const oldPaymentAmount = Math.abs(oldTx.amount);
-                  const oldDiscountAmount = Number(oldTx.additionalDiscount) || 0;
-                  oldCoverage = oldPaymentAmount + oldDiscountAmount;
+                // Old values for diffing
+                let oldTotalInvoicedInThisInvoice = 0;
+                let oldPaidCoverage = 0;
+                let wasLinked = false;
+
+                if (oldTx && (oldTx as any).linkedArId === ar.id) {
+                  wasLinked = true;
+                  oldTotalInvoicedInThisInvoice = (oldTx.lineItems || []).reduce((sum, item) => sum + (item.amount || 0), 0);
+                  if (oldTx.status === 'Paid') {
+                    oldPaidCoverage = Math.abs(oldTx.amount) + (Number(oldTx.additionalDiscount) || 0);
+                  }
                 }
 
-                // Calculate diff based on status transitions
-                let coverageDiff = 0;
-                const wasPaid = oldTx?.status === 'Paid';
-                const isPaid = data.status === 'Paid';
+                const invoicedDiff = newTotalInvoicedInThisInvoice - oldTotalInvoicedInThisInvoice;
+                const paidDiff = (data.status === 'Paid' ? newPaidCoverage : 0) - oldPaidCoverage;
 
-                if (!wasPaid && isPaid) {
-                  // Transition: Pending -> Paid (or new Paid)
-                  coverageDiff = newCoverage;
-                } else if (wasPaid && !isPaid) {
-                  // Transition: Paid -> Pending/Cancelled
-                  coverageDiff = -oldCoverage;
-                } else if (wasPaid && isPaid) {
-                  // Transition: Paid -> Paid (Amount updated)
-                  coverageDiff = newCoverage - oldCoverage;
-                }
-
-                const newPaidAmount = Math.max(0, (Number(ar.paidAmount) || 0) + coverageDiff);
-                const newRemainingAmount = Math.max(0, (Number(ar.totalAmount) || Number(ar.originalAmount) || 0) - newPaidAmount);
+                const newInvoicedAmount = Math.max(0, (Number(ar.invoicedAmount) || Number(ar.paidAmount) || 0) + invoicedDiff);
+                const newPaidAmount = Math.max(0, (Number(ar.paidAmount) || 0) + paidDiff);
+                const totalCost = Number(ar.totalAmount) || Number(ar.originalAmount) || 0;
+                const newRemainingAmount = Math.max(0, totalCost - newPaidAmount);
 
                 const updatedArLineItems = (ar.lineItems || []).map((arItem: any) => {
                   const linkedInvoiceItem = (data.lineItems || []).find((invItem: any) => invItem.linkedQuotationLineItemId === arItem.id);
-                  let oldInvoiceItemAmount = 0;
-                  if (oldTx && oldTx.lineItems) {
+                  let oldInvoiceItemInvoiced = 0;
+                  let oldInvoiceItemPaid = 0;
+                  
+                  if (wasLinked && oldTx && oldTx.lineItems) {
                     const oldItem = oldTx.lineItems.find((invItem: any) => (invItem as any).linkedQuotationLineItemId === arItem.id);
-                    if (oldItem) oldInvoiceItemAmount = (oldItem as any).received || 0;
+                    if (oldItem) {
+                      oldInvoiceItemInvoiced = oldItem.amount || 0;
+                      oldInvoiceItemPaid = (oldTx.status === 'Paid') ? (oldItem as any).received || 0 : 0;
+                    }
                   }
 
-                    if (linkedInvoiceItem) {
-                      const itemReceived = linkedInvoiceItem.received || 0;
-                      let itemCoverageDiff = 0;
-                      if (!wasPaid && isPaid) {
-                        itemCoverageDiff = itemReceived;
-                      } else if (wasPaid && !isPaid) {
-                        itemCoverageDiff = -oldInvoiceItemAmount;
-                      } else if (wasPaid && isPaid) {
-                        itemCoverageDiff = itemReceived - oldInvoiceItemAmount;
-                      }
+                  if (linkedInvoiceItem) {
+                    const itemInvoiced = linkedInvoiceItem.amount || 0;
+                    const itemPaid = (data.status === 'Paid') ? (linkedInvoiceItem.received || 0) : 0;
+                    
+                    const itemInvoicedDiff = itemInvoiced - oldInvoiceItemInvoiced;
+                    const itemPaidDiff = itemPaid - oldInvoiceItemPaid;
 
-                      return {
-                        ...arItem,
-                        paidAmount: Math.max(0, (Number(arItem.paidAmount) || 0) + itemCoverageDiff)
-                      };
-                    }
+                    return {
+                      ...arItem,
+                      invoicedAmount: Math.max(0, (Number(arItem.invoicedAmount) || Number(arItem.paidAmount) || 0) + itemInvoicedDiff),
+                      paidAmount: Math.max(0, (Number(arItem.paidAmount) || 0) + itemPaidDiff)
+                    };
+                  }
                   return arItem;
                 });
 
                 arUpdated = true;
+                // Capture lead/quotation IDs from AR if not in transaction data
+                if (!linkedLeadId) linkedLeadId = ar.linkedLeadId;
+                if (!linkedQuotationId) linkedQuotationId = ar.linkedQuotationId;
+
                 return {
                   ...ar,
                   lineItems: updatedArLineItems,
+                  invoicedAmount: newInvoicedAmount,
                   paidAmount: newPaidAmount,
                   remainingAmount: newRemainingAmount,
-                  status: newRemainingAmount <= 0 ? 'Paid' : 'Partial',
+                  status: newPaidAmount >= totalCost ? 'Paid' : (newInvoicedAmount > 0 ? 'Partial' : 'Pending'),
                   updatedAt: new Date().toISOString()
                 };
               }
@@ -1070,6 +1078,36 @@ const DashboardLayout: React.FC = () => {
               const updatedContact = { ...contact, metadata: updatedMetadata };
               await api.saveContact(updatedContact, false);
               setContacts(prev => prev.map(c => c.id === contact.id ? updatedContact : c));
+              
+              // Sync back to Lead Quotation
+              if (linkedLeadId && linkedQuotationId) {
+                try {
+                  const lead = await api.getLead(linkedLeadId);
+                  if (lead && lead.quotations) {
+                    const arEntry = updatedMetadata.accountsReceivable.find((ar: any) => ar.id === (data as any).linkedArId);
+                    const updatedQuotations = lead.quotations.map((q: any) => {
+                      if (String(q.id) === String(linkedQuotationId)) {
+                        const subtotal = arEntry.lineItems.reduce((sum: number, item: any) => sum + (Number(item.price) * (Number(item.quantity) || 1)), 0);
+                        const discount = Number(arEntry.additionalDiscount) || 0;
+                        return {
+                          ...q,
+                          lineItems: arEntry.lineItems,
+                          discount: discount,
+                          subtotal: subtotal,
+                          total: Math.max(0, subtotal - discount)
+                        };
+                      }
+                      return q;
+                    });
+                    const updatedLead = { ...lead, quotations: updatedQuotations };
+                    await api.saveLead(updatedLead, false);
+                    setLeads(prev => prev.map(l => l.id === lead.id ? updatedLead : l));
+                  }
+                } catch (err) {
+                  console.error('Failed to sync back to lead during invoice update:', err);
+                }
+              }
+              
               logActivity(`Linked updated transaction ${tx.id} to AR entry ${(data as any).linkedArId} for ${contact.name}`);
             }
           }
@@ -1080,38 +1118,54 @@ const DashboardLayout: React.FC = () => {
         const { transaction: tx, allTransactions } = await api.saveTransaction(data);
         setTransactions(allTransactions);
 
-        // Handle Linking to AR entry if specified
+        // Handle Linking to AR entry if specified - Supporting Pending and Paid
         if ((data as any).linkedArId && data.contactId) {
           const contact = contacts.find(c => c.id === data.contactId);
-          if (contact && data.status === 'Paid') {
+          if (contact) {
             const updatedMetadata = { ...((contact as any).metadata || {}) };
             let arUpdated = false;
+            let linkedLeadId = data.linkedLeadId || tx.linkedLeadId;
+            let linkedQuotationId = data.linkedQuotationId || tx.linkedQuotationId;
+
             updatedMetadata.accountsReceivable = (updatedMetadata.accountsReceivable || []).map((ar: any) => {
               if (ar.id === (data as any).linkedArId) {
-                const paymentAmount = Math.abs(data.amount);
+                const totalInvoicedInThisInvoice = (data.lineItems || []).reduce((sum, item) => sum + (item.amount || 0), 0);
+                const paymentAmount = Math.abs(Number(data.amount) || 0);
                 const discountAmount = Number(data.additionalDiscount) || 0;
+                // Add recorded payment to coverage regardless of status (to support partial payments)
                 const totalCoverage = paymentAmount + discountAmount;
+                
+                const currentInvoiced = Number(ar.invoicedAmount) || 0;
+                const newInvoicedAmount = currentInvoiced + totalInvoicedInThisInvoice;
                 const newPaidAmount = (Number(ar.paidAmount) || 0) + totalCoverage;
-                const newRemainingAmount = Math.max(0, (Number(ar.totalAmount) || Number(ar.originalAmount) || 0) - newPaidAmount);
+                const totalCost = Number(ar.totalAmount) || Number(ar.originalAmount) || 0;
+                const newRemainingAmount = Math.max(0, totalCost - newPaidAmount);
 
                 const updatedArLineItems = (ar.lineItems || []).map((arItem: any) => {
                   const linkedInvoiceItem = (data.lineItems || []).find((invItem: any) => invItem.linkedQuotationLineItemId === arItem.id);
-                  if (linkedInvoiceItem && (linkedInvoiceItem.received || 0) > 0) {
+                  if (linkedInvoiceItem) {
+                    const itemInvoiced = Number(linkedInvoiceItem.amount) || 0;
+                    const itemPaid = Number(linkedInvoiceItem.received) || 0;
                     return {
                       ...arItem,
-                      paidAmount: (Number(arItem.paidAmount) || 0) + (linkedInvoiceItem.received || 0)
+                      invoicedAmount: (Number(arItem.invoicedAmount) || 0) + itemInvoiced,
+                      paidAmount: (Number(arItem.paidAmount) || 0) + itemPaid
                     };
                   }
                   return arItem;
                 });
 
                 arUpdated = true;
+                if (!linkedLeadId) linkedLeadId = ar.linkedLeadId;
+                if (!linkedQuotationId) linkedQuotationId = ar.linkedQuotationId;
+
                 return {
                   ...ar,
                   lineItems: updatedArLineItems,
+                  invoicedAmount: newInvoicedAmount,
                   paidAmount: newPaidAmount,
                   remainingAmount: newRemainingAmount,
-                  status: newRemainingAmount <= 0 ? 'Paid' : 'Partial',
+                  status: newPaidAmount >= totalCost ? 'Paid' : (newInvoicedAmount > 0 ? 'Partial' : 'Pending'),
                   updatedAt: new Date().toISOString()
                 };
               }
@@ -1122,6 +1176,36 @@ const DashboardLayout: React.FC = () => {
               const updatedContact = { ...contact, metadata: updatedMetadata };
               await api.saveContact(updatedContact, false);
               setContacts(prev => prev.map(c => c.id === contact.id ? updatedContact : c));
+              
+              // Sync back to Lead Quotation
+              if (linkedLeadId && linkedQuotationId) {
+                try {
+                  const lead = await api.getLead(linkedLeadId);
+                  if (lead && lead.quotations) {
+                    const arEntry = updatedMetadata.accountsReceivable.find((ar: any) => ar.id === (data as any).linkedArId);
+                    const updatedQuotations = lead.quotations.map((q: any) => {
+                      if (String(q.id) === String(linkedQuotationId)) {
+                        const subtotal = arEntry.lineItems.reduce((sum: number, item: any) => sum + (Number(item.price) * (Number(item.quantity) || 1)), 0);
+                        const discount = Number(arEntry.additionalDiscount) || 0;
+                        return {
+                          ...q,
+                          lineItems: arEntry.lineItems,
+                          discount: discount,
+                          subtotal: subtotal,
+                          total: Math.max(0, subtotal - discount)
+                        };
+                      }
+                      return q;
+                    });
+                    const updatedLead = { ...lead, quotations: updatedQuotations };
+                    await api.saveLead(updatedLead, false);
+                    setLeads(prev => prev.map(l => l.id === lead.id ? updatedLead : l));
+                  }
+                } catch (err) {
+                  console.error('Failed to sync back to lead during invoice creation:', err);
+                }
+              }
+              
               logActivity(`Linked transaction ${tx.id} to AR entry ${(data as any).linkedArId} for ${contact.name}`);
             }
           }
@@ -1129,7 +1213,7 @@ const DashboardLayout: React.FC = () => {
 
         addNotification({
           title: `New ${tx.type} Created`,
-          description: `${tx.type} ${tx.id} for ${tx.customerName} has been created${(data as any).linkedArId && data.status === 'Paid' ? ' and linked to fee' : ''}.`,
+          description: `${tx.type} ${tx.id} for ${tx.customerName} has been created${(data as any).linkedArId ? ' and linked to fee' : ''}.`,
           recipientRoles: ['Admin', 'Staff']
         });
         await api.logPaymentActivity(`${tx.type} ${tx.id} for ${tx.customerName} was created.`, tx.amount, 'invoice_created');
@@ -1173,7 +1257,7 @@ const DashboardLayout: React.FC = () => {
       return;
     }
     const txToDelete = transactions.find((t: any) => t.id === id);
-    if (txToDelete && (txToDelete as any).linkedArId && txToDelete.status === 'Paid') {
+    if (txToDelete && (txToDelete as any).linkedArId) {
       const arId = (txToDelete as any).linkedArId;
       const contact = contacts.find(c => c.id === txToDelete.contactId);
       
@@ -1183,15 +1267,17 @@ const DashboardLayout: React.FC = () => {
         
         if (arIndex !== -1) {
           const arEntry = { ...updatedMetadata.accountsReceivable[arIndex] };
+          const isPaid = txToDelete.status === 'Paid';
           
           // 1. Reverse Line Items tracking
           if (txToDelete.lineItems && arEntry.lineItems) {
             const updatedArLineItems = arEntry.lineItems.map((arItem: any) => {
               const matchingInvoiceItem = txToDelete.lineItems!.find((invItem: any) => invItem.linkedQuotationLineItemId === arItem.id);
-              if (matchingInvoiceItem && matchingInvoiceItem.amount) {
+              if (matchingInvoiceItem) {
                 return {
                   ...arItem,
-                  paidAmount: Math.max(0, (arItem.paidAmount || 0) - matchingInvoiceItem.amount)
+                  invoicedAmount: Math.max(0, (Number(arItem.invoicedAmount) || Number(arItem.paidAmount) || 0) - (matchingInvoiceItem.amount || 0)),
+                  paidAmount: isPaid ? Math.max(0, (arItem.paidAmount || 0) - (matchingInvoiceItem.received || 0)) : arItem.paidAmount
                 };
               }
               return arItem;
@@ -1200,13 +1286,15 @@ const DashboardLayout: React.FC = () => {
           }
 
           // 2. Reverse overall tracking
-          const coverageToRemove = txToDelete.amount + (Number(txToDelete.additionalDiscount) || 0);
-          arEntry.paidAmount = Math.max(0, (arEntry.paidAmount || 0) - coverageToRemove);
+          const invoicedToRemove = (txToDelete.lineItems || []).reduce((sum: number, item: any) => sum + (item.amount || 0), 0);
+          const coverageToRemove = Math.abs(txToDelete.amount) + (Number(txToDelete.additionalDiscount) || 0);
+
+          arEntry.invoicedAmount = Math.max(0, (Number(arEntry.invoicedAmount) || 0) - invoicedToRemove);
+          arEntry.paidAmount = Math.max(0, (Number(arEntry.paidAmount) || 0) - coverageToRemove);
+          
           const totalCost = Number(arEntry.totalAmount) || Number(arEntry.originalAmount) || 0;
           arEntry.remainingAmount = Math.max(0, totalCost - arEntry.paidAmount);
-          if (arEntry.paidAmount < totalCost) {
-            arEntry.status = arEntry.paidAmount > 0 ? 'Partial' : 'Pending';
-          }
+          arEntry.status = arEntry.paidAmount >= totalCost ? 'Paid' : (arEntry.invoicedAmount > 0 ? 'Partial' : 'Pending');
 
           updatedMetadata.accountsReceivable[arIndex] = arEntry;
           const updatedContact = { ...contact, metadata: updatedMetadata };
@@ -1214,9 +1302,30 @@ const DashboardLayout: React.FC = () => {
           try {
             await api.saveContact(updatedContact, false);
             setContacts(prev => prev.map(c => c.id === contact.id ? updatedContact : c));
-            console.log(`Reversed payment of ${txToDelete.amount} from AR ${arId}`);
+            
+            // Sync back to Lead Quotation
+            if (txToDelete.linkedLeadId && txToDelete.linkedQuotationId) {
+              const lead = await api.getLead(txToDelete.linkedLeadId);
+              if (lead && lead.quotations) {
+                const updatedQuotations = lead.quotations.map((q: any) => {
+                  if (String(q.id) === String(txToDelete.linkedQuotationId)) {
+                    const subtotal = arEntry.lineItems.reduce((sum: number, item: any) => sum + (Number(item.price) * (Number(item.quantity) || 1)), 0);
+                    const discount = Number(arEntry.additionalDiscount) || 0;
+                    return {
+                      ...q,
+                      lineItems: arEntry.lineItems,
+                      discount: discount,
+                      subtotal: subtotal,
+                      total: Math.max(0, subtotal - discount)
+                    };
+                  }
+                  return q;
+                });
+                await api.saveLead({ ...lead, quotations: updatedQuotations }, false);
+              }
+            }
           } catch (e) {
-            console.error("Failed to reverse AR payment tracking", e);
+            console.error("Failed to reverse AR tracking during deletion", e);
           }
         }
       }

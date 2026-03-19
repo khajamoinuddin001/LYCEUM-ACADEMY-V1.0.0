@@ -409,7 +409,7 @@ const NewInvoiceModal: React.FC<NewInvoiceModalProps> = ({
                           const itemTotalCost = (item.price || 0) * (item.quantity || 1);
                           const itemDiscount = item.discount || 0;
                           const paidSoFar = item.paidAmount || 0;
-                          // The 'original' pending for this specific invoice line should be the remaining balance
+                          // The 'original' pending for this specific invoice line should be the total remaining balance for this item
                           const amountToPay = Math.max(0, (itemTotalCost - itemDiscount) - paidSoFar);
 
                           return {

@@ -117,7 +117,11 @@ const AccountingView: React.FC<AccountingViewProps> = ({
         // 2. AR from agreed quotations
         const quotationAR = contacts.reduce((sum, contact) => {
             const arEntries = (contact as any).metadata?.accountsReceivable || [];
-            return sum + arEntries.reduce((arSum: number, ar: any) => arSum + ar.remainingAmount, 0);
+            return sum + arEntries.reduce((arSum: number, ar: any) => {
+                const totalCost = Number(ar.totalAmount) || Number(ar.originalAmount) || 0;
+                const paid = Number(ar.paidAmount) || 0;
+                return arSum + Math.max(0, totalCost - paid);
+            }, 0);
         }, 0);
 
         const accountsReceivable = pendingIncome + quotationAR;
@@ -178,12 +182,14 @@ const AccountingView: React.FC<AccountingViewProps> = ({
                 if (ar.status === 'Paid') status = 'Paid';
                 else if (ar.status === 'Overdue') status = 'Overdue';
 
-                const calculatedRemaining = Math.max(0, (Number(ar.totalAmount) || Number(ar.originalAmount) || 0) - (Number(ar.paidAmount) || 0));
+                const totalPaid = Number(ar.paidAmount) || 0;
+                const totalCost = Number(ar.totalAmount) || Number(ar.originalAmount) || 0;
+                const remainingBalance = Math.max(0, totalCost - totalPaid);
 
                 const arTransaction: AccountingTransaction = {
                     id: `AR-${ar.id}`, // Unique ID prefix
                     date: ar.createdAt || ar.agreedAt || ar.date || new Date().toISOString(),
-                    amount: calculatedRemaining, 
+                    amount: remainingBalance, 
                     type: 'Due',
                     description: `Quotation #${ar.quotationRef || ar.quotationId || 'Unknown'} (Due)`,
                     status: status,
@@ -194,7 +200,7 @@ const AccountingView: React.FC<AccountingViewProps> = ({
                     invoiceNumber: ar.quotationRef || `QUO-${ar.quotationId}`,
                     lineItems: ar.lineItems,
                     additionalDiscount: ar.additionalDiscount,
-                    totalAmount: ar.totalAmount || ar.originalAmount || 0, // Added total amount for reference
+                    totalAmount: totalCost, // Added total amount for reference
                     linkedLeadId: ar.leadId,
                     linkedQuotationId: ar.quotationId
                 };

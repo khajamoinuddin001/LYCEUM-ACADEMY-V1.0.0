@@ -37,6 +37,10 @@ const StudentAccountsView: React.FC<StudentAccountsViewProps> = ({ student, quot
                 if (ar.status === 'Paid') status = 'Paid';
                 else if (ar.status === 'Overdue') status = 'Overdue';
 
+                const totalPaid = Number(ar.paidAmount) || 0;
+                const totalCost = Number(ar.totalAmount) || Number(ar.originalAmount) || 0;
+                const remainingBalance = Math.max(0, totalCost - totalPaid);
+
                 return {
                     id: `AR-${ar.id}`,
                     contactId: student.id,
@@ -45,13 +49,13 @@ const StudentAccountsView: React.FC<StudentAccountsViewProps> = ({ student, quot
                     description: `Quotation #${ar.quotationRef} (Due)`,
                     type: 'Due', // Distinct type for AR
                     status: status,
-                    amount: ar.remainingAmount, // Show remaining due
+                    amount: remainingBalance, // Show total remaining balance (Total - Paid)
                     paymentMethod: 'Online',
                     invoiceNumber: ar.quotationRef, // Store ref for lookup
                     createdAt: ar.createdAt,
                     updatedAt: ar.updatedAt
                 } as AccountingTransaction;
-            }).filter((t: AccountingTransaction) => t.status !== 'Paid' && t.amount > 0); // Only show unpaid AR as "Due"
+            }).filter((t: AccountingTransaction) => t.status !== 'Paid' && t.amount > 0); // Only show uninvoiced parts of unpaid AR as "Due"
 
             // Combine and sort by date desc
             const combined = [...arTransactions, ...realTransactions].sort((a, b) =>
