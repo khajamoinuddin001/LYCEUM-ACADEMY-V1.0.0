@@ -233,9 +233,20 @@ const EmailTemplateModal: React.FC<EmailTemplateModalProps> = ({ isOpen, onClose
 
                             <div className="space-y-4">
                                 <div>
-                                    <p className="text-[10px] uppercase tracking-wider font-bold text-gray-500 dark:text-gray-400 mb-2">👤 Contact & Lead</p>
+                                    <p className="text-[10px] uppercase tracking-wider font-bold text-gray-500 dark:text-gray-400 mb-2">👤 Contact</p>
                                     <div className="flex flex-wrap gap-1.5">
-                                        {['contact_name', 'first_name', 'contact_email', 'contact_phone', 'company_name', 'lead_source', 'lead_stage'].map(tag => (
+                                        {['contact_name', 'first_name', 'contact_email', 'contact_phone'].map(tag => (
+                                            <button key={tag} type="button" onClick={() => insertText(`{{${tag}}}`)} className="px-2 py-0.5 bg-white dark:bg-gray-800 rounded shadow-sm text-[10px] font-mono border border-gray-200 dark:border-gray-700 hover:border-emerald-500 hover:text-emerald-600 transition-colors">
+                                                {`{{${tag}}}`}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <p className="text-[10px] uppercase tracking-wider font-bold text-gray-500 dark:text-gray-400 mb-2">🎯 CRM (Leads)</p>
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {['company_name', 'lead_source', 'lead_stage', 'current_stage_name', 'date_entered_current_stage', 'date_entered_new_stage', 'date_entered_qualified_stage', 'date_entered_proposal_stage', 'date_entered_won_stage'].map(tag => (
                                             <button key={tag} type="button" onClick={() => insertText(`{{${tag}}}`)} className="px-2 py-0.5 bg-white dark:bg-gray-800 rounded shadow-sm text-[10px] font-mono border border-gray-200 dark:border-gray-700 hover:border-emerald-500 hover:text-emerald-600 transition-colors">
                                                 {`{{${tag}}}`}
                                             </button>

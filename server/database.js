@@ -410,6 +410,11 @@ export async function initDatabase() {
       await client.query('ALTER TABLE documents ADD COLUMN IF NOT EXISTS category TEXT');
       await client.query('ALTER TABLE tickets ADD COLUMN IF NOT EXISTS category TEXT');
       await client.query('ALTER TABLE tickets ADD COLUMN IF NOT EXISTS solved_at TIMESTAMP');
+      await client.query('ALTER TABLE leads ADD COLUMN IF NOT EXISTS entered_new_at TIMESTAMP');
+      await client.query('ALTER TABLE leads ADD COLUMN IF NOT EXISTS entered_qualified_at TIMESTAMP');
+      await client.query('ALTER TABLE leads ADD COLUMN IF NOT EXISTS entered_proposal_at TIMESTAMP');
+      await client.query('ALTER TABLE leads ADD COLUMN IF NOT EXISTS entered_won_at TIMESTAMP');
+      await client.query('ALTER TABLE leads ADD COLUMN IF NOT EXISTS current_stage_entered_at TIMESTAMP');
 
       // Avatar DB Storage Support
       await client.query('ALTER TABLE contacts ADD COLUMN IF NOT EXISTS avatar_data BYTEA');

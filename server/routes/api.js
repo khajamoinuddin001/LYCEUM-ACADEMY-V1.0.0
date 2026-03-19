@@ -1652,7 +1652,12 @@ const transformLead = (lead) => {
   return {
     ...rest,
     assignedTo: assignedTo || lead.assigned_to,
-    createdAt: createdAt || lead.created_at
+    createdAt: createdAt || lead.created_at,
+    enteredNewAt: lead.entered_new_at,
+    enteredQualifiedAt: lead.entered_qualified_at,
+    enteredProposalAt: lead.entered_proposal_at,
+    enteredWonAt: lead.entered_won_at,
+    currentStageEnteredAt: lead.current_stage_entered_at
   };
 };
 
@@ -2624,8 +2629,14 @@ router.post('/leads', authenticateToken, async (req, res) => {
 
     // 1. Create the Lead
     const leadResult = await query(`
-      INSERT INTO leads(title, company, value, contact, stage, email, phone, source, assigned_to, notes, quotations)
-    VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      INSERT INTO leads(title, company, value, contact, stage, email, phone, source, assigned_to, notes, quotations, 
+                        entered_new_at, entered_qualified_at, entered_proposal_at, entered_won_at, current_stage_entered_at)
+    VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 
+           CASE WHEN $5 = 'New' THEN CURRENT_TIMESTAMP ELSE NULL END,
+           CASE WHEN $5 = 'Qualified' THEN CURRENT_TIMESTAMP ELSE NULL END,
+           CASE WHEN $5 = 'Proposal' THEN CURRENT_TIMESTAMP ELSE NULL END,
+           CASE WHEN $5 = 'Won' THEN CURRENT_TIMESTAMP ELSE NULL END,
+           CURRENT_TIMESTAMP)
     RETURNING *
       `, [
       lead.title,
@@ -2786,7 +2797,12 @@ router.put('/leads/:id', authenticateToken, async (req, res) => {
     await query(`
       UPDATE leads SET
 title = $1, company = $2, value = $3, contact = $4, stage = $5,
-  email = $6, phone = $7, source = $8, assigned_to = $9, notes = $10, quotations = $11
+  email = $6, phone = $7, source = $8, assigned_to = $9, notes = $10, quotations = $11,
+  current_stage_entered_at = CASE WHEN stage != $5 THEN CURRENT_TIMESTAMP ELSE current_stage_entered_at END,
+  entered_new_at = CASE WHEN stage != $5 AND $5 = 'New' THEN CURRENT_TIMESTAMP ELSE entered_new_at END,
+  entered_qualified_at = CASE WHEN stage != $5 AND $5 = 'Qualified' THEN CURRENT_TIMESTAMP ELSE entered_qualified_at END,
+  entered_proposal_at = CASE WHEN stage != $5 AND $5 = 'Proposal' THEN CURRENT_TIMESTAMP ELSE entered_proposal_at END,
+  entered_won_at = CASE WHEN stage != $5 AND $5 = 'Won' THEN CURRENT_TIMESTAMP ELSE entered_won_at END
       WHERE id = $12
   `, [
       lead.title,
@@ -2811,15 +2827,28 @@ title = $1, company = $2, value = $3, contact = $4, stage = $5,
     // AUTOMATION HOOK
     if (lead.stage && lead.stage !== currentLead.stage) {
       const transformedLeadData = transformLead(updatedLead);
-      evaluateAutomation('Status Changed', {
+      const automationPayload = {
         ...transformedLeadData,
         contact_name: transformedLeadData.name,
         contact_email: transformedLeadData.email,
         contact_phone: transformedLeadData.phone,
         lead_stage: transformedLeadData.stage,
         old_stage: currentLead.stage,
-        new_stage: lead.stage
-      });
+        new_stage: lead.stage,
+        current_stage_name: lead.stage,
+        date_entered_current_stage: updatedLead.current_stage_entered_at ? new Date(updatedLead.current_stage_entered_at).toLocaleDateString() : 'N/A',
+        date_entered_new_stage: updatedLead.entered_new_at ? new Date(updatedLead.entered_new_at).toLocaleDateString() : 'N/A',
+        date_entered_qualified_stage: updatedLead.entered_qualified_at ? new Date(updatedLead.entered_qualified_at).toLocaleDateString() : 'N/A',
+        date_entered_proposal_stage: updatedLead.entered_proposal_at ? new Date(updatedLead.entered_proposal_at).toLocaleDateString() : 'N/A',
+        date_entered_won_stage: updatedLead.entered_won_at ? new Date(updatedLead.entered_won_at).toLocaleDateString() : 'N/A'
+      };
+
+      evaluateAutomation('Status Changed', automationPayload);
+      
+      // Stage Specific Triggers
+      if (['New', 'Qualified', 'Proposal', 'Won'].includes(lead.stage)) {
+        evaluateAutomation(`Stage Changed to ${lead.stage}`, automationPayload);
+      }
     }
 
     res.json(transformLead(updatedLead));

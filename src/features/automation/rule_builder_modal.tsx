@@ -5,6 +5,10 @@ import * as api from '@/utils/api';
 const TRIGGERS = [
     'Lead Created',
     'Status Changed',
+    'Stage Changed to New',
+    'Stage Changed to Qualified',
+    'Stage Changed to Proposal',
+    'Stage Changed to Won',
     'Payment Received',
     'Document Uploaded',
     'Task Completed',
