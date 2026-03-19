@@ -1185,6 +1185,8 @@ export async function initDatabase() {
     // Migration for WhatsApp fields if they don't exist
     await client.query('ALTER TABLE automation_rules ADD COLUMN IF NOT EXISTS action_send_whatsapp BOOLEAN DEFAULT false');
     await client.query('ALTER TABLE automation_rules ADD COLUMN IF NOT EXISTS whatsapp_template TEXT');
+    await client.query('ALTER TABLE automation_rules ADD COLUMN IF NOT EXISTS action_update_field BOOLEAN DEFAULT false');
+    await client.query('ALTER TABLE automation_rules ADD COLUMN IF NOT EXISTS update_field_config JSONB DEFAULT \'{}\'');
 
     // AUTOMATION LOGS
     await client.query(`
@@ -1192,7 +1194,7 @@ export async function initDatabase() {
         id SERIAL PRIMARY KEY,
         rule_id INTEGER REFERENCES automation_rules(id) ON DELETE SET NULL,
         trigger_event TEXT NOT NULL,
-        action_type TEXT NOT NULL, -- 'email', 'task', or 'whatsapp'
+        action_type TEXT NOT NULL, -- 'email', 'task', 'whatsapp' or 'update_field'
         recipient TEXT,
         subject TEXT,
         status TEXT NOT NULL, -- 'success' or 'failed'
@@ -1200,6 +1202,7 @@ export async function initDatabase() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    // Ensure action_type comment is updated (constraint if it exists would need more complex migration, but literal check is usually in app code)
 
     // --- CONTACT DELETION FIXES (FOREIGN KEYS) ---
     // Ensure all tables referencing contacts(id) allow deletion (CASCADE or SET NULL)

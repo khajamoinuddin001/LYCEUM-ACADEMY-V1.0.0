@@ -365,6 +365,107 @@ export async function evaluateAutomation(triggerEvent, payload) {
                             });
                         }
                     }
+
+                    // Action 4: Update Field
+                    if (rule.action_update_field && rule.update_field_config) {
+                        try {
+                            const config = typeof rule.update_field_config === 'string' ? JSON.parse(rule.update_field_config) : rule.update_field_config;
+                            const { target_app, lookup_by, lookup_value, field, value } = config;
+
+                            if (!target_app || !lookup_by || !lookup_value || !field) {
+                                throw new Error('Incomplete update field configuration.');
+                            }
+
+                            const compiledLookupValue = compileTemplate(lookup_value, payload);
+                            const compiledNewValue = compileTemplate(value, payload);
+
+                            console.log(`🤖 [Automation] Executing Update Field: ${target_app}.${field} = ${compiledNewValue} (Lookup: ${lookup_by}=${compiledLookupValue})`);
+
+                            let success = false;
+                            let errorMsg = '';
+
+                            if (target_app === 'Contacts') {
+                                const lookupSql = `SELECT id FROM contacts WHERE LOWER(${lookup_by === 'name' ? 'name' : lookup_by}) = LOWER($1) LIMIT 1`;
+                                const contactRes = await query(lookupSql, [compiledLookupValue]);
+                                
+                                if (contactRes.rows.length > 0) {
+                                    const contactId = contactRes.rows[0].id;
+                                    await query(`UPDATE contacts SET ${field} = $1 WHERE id = $2`, [compiledNewValue, contactId]);
+                                    success = true;
+                                } else {
+                                    errorMsg = `No contact found with ${lookup_by}: ${compiledLookupValue}`;
+                                }
+                            } else if (target_app === 'Visa Operations') {
+                                const lookupSql = `SELECT id FROM visa_operations WHERE LOWER(${lookup_by === 'name' ? 'name' : lookup_by}) = LOWER($1) LIMIT 1`;
+                                const vopRes = await query(lookupSql, [compiledLookupValue]);
+
+                                if (vopRes.rows.length > 0) {
+                                    const vopId = vopRes.rows[0].id;
+                                    await query(`UPDATE visa_operations SET ${field} = $1 WHERE id = $2`, [compiledNewValue, vopId]);
+                                    success = true;
+                                } else {
+                                    errorMsg = `No visa operation found with ${lookup_by}: ${compiledLookupValue}`;
+                                }
+                            } else if (target_app === 'University Application') {
+                                // University Applications are nested in contacts.visa_information
+                                const lookupSql = `SELECT id, visa_information FROM contacts WHERE LOWER(${lookup_by === 'name' ? 'name' : lookup_by}) = LOWER($1) LIMIT 1`;
+                                const contactRes = await query(lookupSql, [compiledLookupValue]);
+
+                                if (contactRes.rows.length > 0) {
+                                    const contact = contactRes.rows[0];
+                                    const visaInfo = contact.visa_information || {};
+                                    if (!visaInfo.universityApplication) visaInfo.universityApplication = { universities: [] };
+                                    
+                                    // Update the first university or add if empty (simplification for automation)
+                                    if (visaInfo.universityApplication.universities.length === 0) {
+                                        visaInfo.universityApplication.universities.push({});
+                                    }
+                                    
+                                    // Map UI field names to JSON keys if necessary
+                                    const jsonKey = field === 'university_name' ? 'universityName' : 
+                                                    field === 'course_name' ? 'courseName' : field;
+                                    
+                                    visaInfo.universityApplication.universities[0][jsonKey] = compiledNewValue;
+                                    
+                                    await query('UPDATE contacts SET visa_information = $1 WHERE id = $2', [JSON.stringify(visaInfo), contact.id]);
+                                    success = true;
+                                } else {
+                                    errorMsg = `No contact found for university application update with ${lookup_by}: ${compiledLookupValue}`;
+                                }
+                            }
+
+                            if (success) {
+                                await logAutomationAction({
+                                    rule_id: rule.id,
+                                    trigger_event: triggerEvent,
+                                    action_type: 'update_field',
+                                    recipient: `${target_app}: ${compiledLookupValue}`,
+                                    subject: `${field} -> ${compiledNewValue}`,
+                                    status: 'success'
+                                });
+                            } else {
+                                console.error(`🤖 [Automation] Update Field failed: ${errorMsg}`);
+                                await logAutomationAction({
+                                    rule_id: rule.id,
+                                    trigger_event: triggerEvent,
+                                    action_type: 'update_field',
+                                    recipient: `${target_app}: ${compiledLookupValue}`,
+                                    subject: `${field} -> ${compiledNewValue}`,
+                                    status: 'failed',
+                                    error_message: errorMsg
+                                });
+                            }
+                        } catch (updateErr) {
+                            console.error(`🤖 [Automation] Update Field logic error for rule ${rule.id}:`, updateErr);
+                            await logAutomationAction({
+                                rule_id: rule.id,
+                                trigger_event: triggerEvent,
+                                action_type: 'update_field',
+                                status: 'failed',
+                                error_message: updateErr.message
+                            });
+                        }
+                    }
                 }
             } catch (err) {
                 console.error(`🤖 [Automation] Error executing rule ${rule.id}:`, err);

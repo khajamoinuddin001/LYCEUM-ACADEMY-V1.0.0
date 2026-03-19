@@ -1,40 +1,87 @@
 import React, { useState, useEffect } from 'react';
-import { X, Plus, Trash2 } from 'lucide-react';
+import { X, Plus, Trash2, Edit3, Search, Database, ArrowRight } from 'lucide-react';
 import * as api from '@/utils/api';
 
-const TRIGGERS = [
-    'Lead Created',
-    'Status Changed',
-    'Stage Changed to New',
-    'Stage Changed to Qualified',
-    'Stage Changed to Proposal',
-    'Stage Changed to Won',
-    'Payment Received',
-    'Document Uploaded',
-    'Task Completed',
-    'Visit Created',
-    'Visit Updated',
-    'Visit Checkout',
-    'Contact Created',
-    'Ticket Created',
-    'Ticket Updated',
-    'Ticket Resolved',
-    'Ticket Closed',
-    'Visa Operation Created',
-    'Visa Status Changed',
-    'User Created',
-    'Transaction Created',
-    'LMS Course Created',
-    'Application Marked Applied',
-    'Application Review Started',
-    'Application Marked On Hold',
-    'Application Acceptance Received',
-    'Application I20 Received',
-    'Application Rejected',
-    'Application Deferred',
-    'Document Approved',
-    'Document Rejected'
+const TRIGGER_GROUPS = [
+    {
+        group: '🎯 CRM (Leads)',
+        triggers: [
+            'Lead Created',
+            'Status Changed',
+            'Stage Changed to New',
+            'Stage Changed to Qualified',
+            'Stage Changed to Proposal',
+            'Stage Changed to Won'
+        ]
+    },
+    {
+        group: '👤 Contacts',
+        triggers: [
+            'Contact Created',
+            'User Created'
+        ]
+    },
+    {
+        group: '🎫 Tickets & Support',
+        triggers: [
+            'Ticket Created',
+            'Ticket Updated',
+            'Ticket Resolved',
+            'Ticket Closed'
+        ]
+    },
+    {
+        group: '🎓 University Applications',
+        triggers: [
+            'Application Marked Applied',
+            'Application Review Started',
+            'Application Marked On Hold',
+            'Application Acceptance Received',
+            'Application I20 Received',
+            'Application Rejected',
+            'Application Deferred'
+        ]
+    },
+    {
+        group: '🛂 Visa Operations',
+        triggers: [
+            'Visa Operation Created',
+            'Visa Status Changed'
+        ]
+    },
+    {
+        group: '💰 Finance & Transactions',
+        triggers: [
+            'Transaction Created',
+            'Payment Received'
+        ]
+    },
+    {
+        group: '📁 Documents & Tasks',
+        triggers: [
+            'Document Uploaded',
+            'Document Approved',
+            'Document Rejected',
+            'Task Completed'
+        ]
+    },
+    {
+        group: '🏢 Check-ins & Visits',
+        triggers: [
+            'Visit Created',
+            'Visit Updated',
+            'Visit Checkout'
+        ]
+    },
+    {
+        group: '📚 Education',
+        triggers: [
+            'LMS Course Created'
+        ]
+    }
 ];
+
+const TRIGGERS = TRIGGER_GROUPS.flatMap(g => g.triggers);
 
 const OPERATORS = [
     { value: '==', label: 'Equals' },
@@ -43,6 +90,33 @@ const OPERATORS = [
     { value: '<', label: 'Less Than' },
     { value: 'contains', label: 'Contains' },
 ];
+
+const APP_FIELDS: Record<string, { value: string; label: string }[]> = {
+    'Contacts': [
+        { value: 'name', label: 'Name' },
+        { value: 'email', label: 'Email' },
+        { value: 'phone', label: 'Phone' },
+        { value: 'department', label: 'Department' },
+        { value: 'major', label: 'Program/Major' },
+        { value: 'visa_type', label: 'Visa Type' },
+        { value: 'degree', label: 'Degree' },
+        { value: 'source', label: 'Source' },
+        { value: 'file_status', label: 'File Status' },
+        { value: 'notes', label: 'Notes' }
+    ],
+    'Visa Operations': [
+        { value: 'status', label: 'Status' },
+        { value: 'country', label: 'Country' },
+        { value: 'name', label: 'Name' },
+        { value: 'phone', label: 'Phone' }
+    ],
+    'University Application': [
+        { value: 'university_name', label: 'University Name' },
+        { value: 'course_name', label: 'Course/Program' },
+        { value: 'status', label: 'Application Status' },
+        { value: 'intake', label: 'Intake' }
+    ]
+};
 
 interface RuleBuilderModalProps {
     isOpen: boolean;
@@ -70,6 +144,14 @@ const RuleBuilderModal: React.FC<RuleBuilderModalProps> = ({ isOpen, onClose, ru
         },
         action_send_whatsapp: false,
         whatsapp_template: '',
+        action_update_field: false,
+        update_field_config: {
+            target_app: 'Contacts',
+            lookup_by: 'email',
+            lookup_value: '',
+            field: '',
+            value: ''
+        },
         is_active: true
     });
 
@@ -93,6 +175,8 @@ const RuleBuilderModal: React.FC<RuleBuilderModalProps> = ({ isOpen, onClose, ru
                 task_template: typeof rule.task_template === 'string' ? JSON.parse(rule.task_template) : (rule.task_template || { title: '', description: '', assigned_to_role: 'Staff', due_days: 0, priority: 'Medium' }),
                 action_send_whatsapp: rule.action_send_whatsapp || false,
                 whatsapp_template: rule.whatsapp_template || '',
+                action_update_field: rule.action_update_field || false,
+                update_field_config: typeof rule.update_field_config === 'string' ? JSON.parse(rule.update_field_config) : (rule.update_field_config || { target_app: 'Contacts', lookup_by: 'email', lookup_value: '', field: '', value: '' }),
                 is_active: rule.is_active
             });
         }
@@ -178,11 +262,19 @@ const RuleBuilderModal: React.FC<RuleBuilderModalProps> = ({ isOpen, onClose, ru
                         <div>
                             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">When (Trigger Event)</label>
                             <select
-                                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-emerald-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                                required
+                                className="w-full px-4 py-2 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-sm text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all shadow-sm"
                                 value={formData.trigger_event}
                                 onChange={e => setFormData({ ...formData, trigger_event: e.target.value })}
                             >
-                                {TRIGGERS.map(t => <option key={t} value={t}>{t}</option>)}
+                                <option value="">Select a trigger event...</option>
+                                {TRIGGER_GROUPS.map(group => (
+                                    <optgroup key={group.group} label={group.group}>
+                                        {group.triggers.map(t => (
+                                            <option key={t} value={t}>{t}</option>
+                                        ))}
+                                    </optgroup>
+                                ))}
                             </select>
                         </div>
                     </div>
@@ -400,6 +492,137 @@ const RuleBuilderModal: React.FC<RuleBuilderModalProps> = ({ isOpen, onClose, ru
                                     </div>
                                 )}
                             </div>
+
+                            {/* Update Field Action */}
+                            <div className="p-4 border rounded-xl border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+                                <label className="flex items-center gap-3 font-semibold text-gray-900 dark:text-white mb-4 cursor-pointer w-max group">
+                                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${formData.action_update_field ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-200 dark:shadow-none' : 'bg-gray-100 dark:bg-gray-700 text-gray-500'}`}>
+                                        <Edit3 size={20} />
+                                    </div>
+                                    <div className="flex flex-col">
+                                        <div className="flex items-center gap-2">
+                                            <input
+                                                type="checkbox"
+                                                checked={formData.action_update_field}
+                                                onChange={e => setFormData({ ...formData, action_update_field: e.target.checked })}
+                                                className="w-4 h-4 text-emerald-600 rounded"
+                                            />
+                                            <span className="text-base">Update a field</span>
+                                        </div>
+                                        <span className="text-xs font-normal text-gray-500 dark:text-gray-400">Sync data across different applications automatically</span>
+                                    </div>
+                                </label>
+
+                                {formData.action_update_field && (
+                                    <div className="space-y-4 ml-2">
+                                        {/* Step 1: Lookup */}
+                                        <div className="p-4 bg-white dark:bg-gray-700/30 rounded-xl border border-gray-100 dark:border-gray-600 shadow-sm relative overflow-hidden">
+                                            <div className="absolute top-0 left-0 w-1 h-full bg-blue-500"></div>
+                                            <div className="flex items-center gap-2 mb-4 text-blue-600 dark:text-blue-400">
+                                                <Search size={16} />
+                                                <h4 className="text-xs font-bold uppercase tracking-wider">Step 1: Find the Record</h4>
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-4 mb-4">
+                                                <div>
+                                                    <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase mb-1 ml-1">In Application</label>
+                                                    <div className="relative">
+                                                        <select
+                                                            className="w-full pl-3 pr-8 py-2.5 bg-gray-50 dark:bg-gray-800 border-none rounded-lg text-sm dark:text-white focus:ring-2 focus:ring-blue-500 outline-none appearance-none cursor-pointer"
+                                                            value={formData.update_field_config.target_app}
+                                                            onChange={e => setFormData({ 
+                                                                ...formData, 
+                                                                update_field_config: { 
+                                                                    ...formData.update_field_config, 
+                                                                    target_app: e.target.value,
+                                                                    field: '' 
+                                                                } 
+                                                            })}
+                                                        >
+                                                            {Object.keys(APP_FIELDS).map(app => <option key={app} value={app}>{app}</option>)}
+                                                        </select>
+                                                        <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+                                                            <Database size={14} />
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase mb-1 ml-1">Match Record By</label>
+                                                    <select
+                                                        className="w-full px-3 py-2.5 bg-gray-50 dark:bg-gray-800 border-none rounded-lg text-sm dark:text-white focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer"
+                                                        value={formData.update_field_config.lookup_by}
+                                                        onChange={e => setFormData({ ...formData, update_field_config: { ...formData.update_field_config, lookup_by: e.target.value } })}
+                                                    >
+                                                        <option value="email">📧 Email Address</option>
+                                                        <option value="phone">📞 Phone Number</option>
+                                                        <option value="name">👤 Full Name</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase mb-1 ml-1">Search Value</label>
+                                                <div className="relative">
+                                                    <input
+                                                        required
+                                                        type="text"
+                                                        className="w-full pl-3 pr-10 py-2.5 bg-gray-50 dark:bg-gray-800 border-none rounded-lg text-sm dark:text-white focus:ring-2 focus:ring-blue-500 outline-none placeholder:text-gray-400"
+                                                        placeholder="e.g. {{contact_email}}"
+                                                        value={formData.update_field_config.lookup_value}
+                                                        onChange={e => setFormData({ ...formData, update_field_config: { ...formData.update_field_config, lookup_value: e.target.value } })}
+                                                    />
+                                                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-mono text-gray-400 bg-gray-100 dark:bg-gray-700 px-1 rounded">
+                                                        TAGS
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex justify-center -my-2 relative z-10">
+                                            <div className="bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 p-1.5 rounded-full shadow-sm text-gray-400">
+                                                <ArrowRight size={14} className="rotate-90" />
+                                            </div>
+                                        </div>
+
+                                        {/* Step 2: Update */}
+                                        <div className="p-4 bg-white dark:bg-gray-700/30 rounded-xl border border-gray-100 dark:border-gray-600 shadow-sm relative overflow-hidden">
+                                            <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500"></div>
+                                            <div className="flex items-center gap-2 mb-4 text-emerald-600 dark:text-emerald-400">
+                                                <Edit3 size={16} />
+                                                <h4 className="text-xs font-bold uppercase tracking-wider">Step 2: Update Data</h4>
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase mb-1 ml-1">Field to Update</label>
+                                                    <select
+                                                        required
+                                                        className="w-full px-3 py-2.5 bg-gray-50 dark:bg-gray-800 border-none rounded-lg text-sm dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none cursor-pointer"
+                                                        value={formData.update_field_config.field}
+                                                        onChange={e => setFormData({ ...formData, update_field_config: { ...formData.update_field_config, field: e.target.value } })}
+                                                    >
+                                                        <option value="">Select field...</option>
+                                                        {APP_FIELDS[formData.update_field_config.target_app as keyof typeof APP_FIELDS]?.map(f => (
+                                                            <option key={f.value} value={f.value}>{f.label}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase mb-1 ml-1">New Value</label>
+                                                    <input
+                                                        required
+                                                        type="text"
+                                                        className="w-full px-3 py-2.5 bg-gray-50 dark:bg-gray-800 border-none rounded-lg text-sm dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none placeholder:text-gray-400"
+                                                        placeholder="e.g. {{new_status}} or Won"
+                                                        value={formData.update_field_config.value}
+                                                        onChange={e => setFormData({ ...formData, update_field_config: { ...formData.update_field_config, value: e.target.value } })}
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
 
@@ -425,7 +648,7 @@ const RuleBuilderModal: React.FC<RuleBuilderModalProps> = ({ isOpen, onClose, ru
                         </button>
                         <button
                             type="submit"
-                            disabled={isSubmitting || (!formData.action_send_email && !formData.action_create_task && !formData.action_send_whatsapp)}
+                            disabled={isSubmitting || (!formData.action_send_email && !formData.action_create_task && !formData.action_send_whatsapp && !formData.action_update_field)}
                             className="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors disabled:bg-emerald-400"
                         >
                             {isSubmitting ? 'Saving...' : 'Save Rule'}

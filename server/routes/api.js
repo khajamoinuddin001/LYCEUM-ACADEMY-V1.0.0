@@ -6656,19 +6656,20 @@ router.get('/automation-rules', authenticateToken, requireRole('Admin'), async (
 
 router.post('/automation-rules', authenticateToken, requireRole('Admin'), async (req, res) => {
   try {
-    const { name, trigger_event, conditions, action_send_email, email_template_id, email_recipient, action_create_task, task_template, action_send_whatsapp, whatsapp_template, is_active } = req.body;
+    const { name, trigger_event, conditions, action_send_email, email_template_id, email_recipient, action_create_task, task_template, action_send_whatsapp, whatsapp_template, action_update_field, update_field_config, is_active } = req.body;
     const result = await query(`
       INSERT INTO automation_rules (
         name, trigger_event, conditions, action_send_email, email_template_id, 
         email_recipient, action_create_task, task_template, action_send_whatsapp, 
-        whatsapp_template, is_active
+        whatsapp_template, action_update_field, update_field_config, is_active
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *
     `, [
       name, trigger_event, JSON.stringify(conditions || []), action_send_email || false,
       email_template_id || null, email_recipient || 'client', action_create_task || false,
       JSON.stringify(task_template || {}), action_send_whatsapp || false,
-      whatsapp_template || null, is_active !== false
+      whatsapp_template || null, action_update_field || false,
+      JSON.stringify(update_field_config || {}), is_active !== false
     ]);
     res.json(result.rows[0]);
   } catch (error) {
@@ -6678,19 +6679,20 @@ router.post('/automation-rules', authenticateToken, requireRole('Admin'), async 
 
 router.put('/automation-rules/:id', authenticateToken, requireRole('Admin'), async (req, res) => {
   try {
-    const { name, trigger_event, conditions, action_send_email, email_template_id, email_recipient, action_create_task, task_template, action_send_whatsapp, whatsapp_template, is_active } = req.body;
+    const { name, trigger_event, conditions, action_send_email, email_template_id, email_recipient, action_create_task, task_template, action_send_whatsapp, whatsapp_template, action_update_field, update_field_config, is_active } = req.body;
     const result = await query(`
       UPDATE automation_rules SET 
         name = $1, trigger_event = $2, conditions = $3, action_send_email = $4, 
         email_template_id = $5, email_recipient = $6, action_create_task = $7, 
         task_template = $8, action_send_whatsapp = $9, whatsapp_template = $10, 
-        is_active = $11
-      WHERE id = $12 RETURNING *
+        action_update_field = $11, update_field_config = $12, is_active = $13
+      WHERE id = $14 RETURNING *
     `, [
       name, trigger_event, JSON.stringify(conditions || []), action_send_email,
       email_template_id || null, email_recipient, action_create_task,
       JSON.stringify(task_template || {}), action_send_whatsapp,
-      whatsapp_template, is_active !== false, req.params.id
+      whatsapp_template, action_update_field || false,
+      JSON.stringify(update_field_config || {}), is_active !== false, req.params.id
     ]);
     res.json(result.rows[0]);
   } catch (error) {
