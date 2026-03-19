@@ -4119,6 +4119,7 @@ const transformTicket = (ticket) => ({
   ticketId: ticket.ticket_id,
   contactId: ticket.contact_id,
   contactName: ticket.contact_name,
+  contactEmail: ticket.contact_email,
   subject: ticket.subject,
   description: ticket.description,
   status: ticket.status,
@@ -4197,7 +4198,7 @@ VALUES($1, $2, $3, $4, $5)
 
     // Fetch the ticket with its attachments and names for the response
     const finalResult = await client.query(`
-      SELECT t.*, c.name as contact_name, u1.name as assigned_to_name, u2.name as created_by_name,
+      SELECT t.*, c.name as contact_name, c.email as contact_email, u1.name as assigned_to_name, u2.name as created_by_name,
   (SELECT json_agg(json_build_object('id', ta.id, 'name', ta.filename, 'size', ta.file_size))
          FROM ticket_attachments ta WHERE ta.ticket_id = t.id) as attachments
       FROM tickets t
@@ -4212,10 +4213,12 @@ VALUES($1, $2, $3, $4, $5)
     // Automation Trigger
     evaluateAutomation('Ticket Created', {
       ...transformedTicket,
-      ticket_id: transformedTicket.ticket_id || transformedTicket.id,
-      contact_name: transformedTicket.contact_name,
-      contact_email: transformedTicket.contact_email,
-      staff_name: transformedTicket.assigned_to_name,
+      ticket_id: transformedTicket.ticketId || transformedTicket.id,
+      contact_id: transformedTicket.contactId,
+      contact_name: transformedTicket.contactName,
+      contact_email: transformedTicket.contactEmail,
+      email: transformedTicket.contactEmail, // Generic fallback
+      staff_name: transformedTicket.assignedToName,
       status: transformedTicket.status,
       priority: transformedTicket.priority,
       subject: transformedTicket.subject
@@ -4439,12 +4442,14 @@ RETURNING *
     // Automation Trigger
     evaluateAutomation('Ticket Updated', {
       ...updatedTicket,
-      ticket_id: updatedTicket.ticket_id || updatedTicket.id,
-      contact_name: updatedTicket.contact_name,
-      contact_email: updatedTicket.contact_email,
+      ticket_id: updatedTicket.ticketId || updatedTicket.id,
+      contact_id: updatedTicket.contactId,
+      contact_name: updatedTicket.contactName,
+      contact_email: updatedTicket.contactEmail,
+      email: updatedTicket.contactEmail, // Generic fallback
       status: updatedTicket.status,
       priority: updatedTicket.priority,
-      staff_name: updatedTicket.assigned_to_name,
+      staff_name: updatedTicket.assignedToName,
       subject: updatedTicket.subject
     });
 

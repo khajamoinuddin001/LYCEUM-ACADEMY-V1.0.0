@@ -172,7 +172,22 @@ export async function evaluateAutomation(triggerEvent, payload) {
 
                         for (const type of recipientTypes) {
                             if (type === 'student' || type === 'client') {
-                                const email = payload.client_email || payload.student_email || payload.email;
+                                // Priority 1: Direct from payload
+                                let email = payload.client_email || payload.student_email || payload.email || payload.contact_email;
+                                
+                                // Priority 2: Fallback to database lookup if contact_id exists
+                                const contactId = payload.contact_id || payload.contactId;
+                                if (!email && contactId) {
+                                  try {
+                                    const contactRes = await query("SELECT email FROM contacts WHERE id = $1", [contactId]);
+                                    if (contactRes.rows.length > 0) {
+                                      email = contactRes.rows[0].email;
+                                    }
+                                  } catch (dbErr) {
+                                    console.error('🤖 [Automation] Failed to fetch contact email from database:', dbErr);
+                                  }
+                                }
+                                
                                 if (email) recipientEmails.add(email);
                             } else if (type === 'staff') {
                                 const email = payload.staff_email || payload.assigned_to_email;
