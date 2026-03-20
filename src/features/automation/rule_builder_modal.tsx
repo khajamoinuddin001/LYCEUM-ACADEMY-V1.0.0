@@ -82,6 +82,14 @@ const TRIGGER_GROUPS = [
         triggers: [
             'LMS Course Created'
         ]
+    },
+    {
+        group: '🎤 Mock Interview',
+        triggers: [
+            'Mock Interview Approved (>=3.5)',
+            'Mock Interview Rejected (<2.5)',
+            'Mock Interview Review Required'
+        ]
     }
 ];
 
@@ -119,6 +127,17 @@ const APP_FIELDS: Record<string, { value: string; label: string }[]> = {
         { value: 'course_name', label: 'Course/Program' },
         { value: 'status', label: 'Application Status' },
         { value: 'intake', label: 'Intake' }
+    ],
+    'Mock Interview': [
+        { value: 'mock_interview_outcome', label: 'Approved / Rejected / Review Required' },
+        { value: 'mock_interview_date', label: 'Date Conducted' },
+        { value: 'mock_interview_questions_count', label: 'Number of Questions' },
+        { value: 'mock_interview_average_score', label: 'Average Score (0-5)' },
+        { value: 'mock_interview_context_score', label: 'Context Score (1-5)' },
+        { value: 'mock_interview_body_language_score', label: 'Body Language Score (1-5)' },
+        { value: 'mock_interview_fluency_score', label: 'Fluency Score (1-5)' },
+        { value: 'mock_interview_grammar_score', label: 'Grammar Score (1-5)' },
+        { value: 'mock_interview_feedback', label: 'Feedback / Comments' }
     ]
 };
 

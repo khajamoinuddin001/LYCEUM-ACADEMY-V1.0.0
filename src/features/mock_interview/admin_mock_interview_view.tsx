@@ -102,10 +102,18 @@ const MockInterviewView: React.FC<MockInterviewViewProps> = ({ contacts = [] }) 
             console.log('Saved contact:', savedContact);
 
             // Trigger automation for mock interview approval/rejection
-            if (session.verdict === 'Approved' || session.verdict === 'Rejected') {
-                const correctCount = session.correct_count || 0;
-                const incorrectCount = session.incorrect_count || 0;
+            let automationTrigger = '';
+            if (session.overall_average >= 3.5) {
+                automationTrigger = 'Mock Interview Approved';
+            } else if (session.overall_average < 2.5) {
+                automationTrigger = 'Mock Interview Rejected';
+            } else if (session.verdict === 'Review Required') {
+                automationTrigger = 'Mock Interview Review Required';
+            }
+
+            if (automationTrigger) {
                 const questionsCount = session.questions_count || 0;
+                const correctCount = session.correct_count || 0;
                 const accuracy = questionsCount > 0 ? ((correctCount / questionsCount) * 100).toFixed(1) : '0.0';
 
                 const automationPayload = {
@@ -114,17 +122,22 @@ const MockInterviewView: React.FC<MockInterviewViewProps> = ({ contacts = [] }) 
                     student_id: session.student_id,
                     mock_interview_date: new Date(session.session_date).toLocaleDateString(),
                     attempt_number: session.attempt_number || 1,
-                    mock_interview_decision: session.verdict,
-                    overall_average: session.overall_average.toFixed(2),
-                    questions_count: questionsCount,
+                    mock_interview_outcome: session.verdict,
+                    mock_interview_average_score: session.overall_average.toFixed(2),
+                    mock_interview_questions_count: questionsCount,
                     correct_count: correctCount,
-                    incorrect_count: incorrectCount,
+                    incorrect_count: session.incorrect_count || 0,
                     accuracy: accuracy,
-                    visa_type: session.visa_type
+                    visa_type: session.visa_type,
+                    mock_interview_context_score: session.average_scores?.context?.toFixed(2) || '0.00',
+                    mock_interview_body_language_score: session.average_scores?.body_language?.toFixed(2) || '0.00',
+                    mock_interview_fluency_score: session.average_scores?.fluency?.toFixed(2) || '0.00',
+                    mock_interview_grammar_score: session.average_scores?.grammar?.toFixed(2) || '0.00',
+                    mock_interview_feedback: session.ai_feedback || ''
                 };
 
                 await api.triggerAutomation(
-                    `Mock Interview ${session.verdict}`,
+                    automationTrigger,
                     automationPayload
                 ).catch(err => {
                     console.error('Failed to trigger automation:', err);
