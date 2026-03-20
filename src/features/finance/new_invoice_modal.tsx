@@ -390,6 +390,35 @@ const NewInvoiceModal: React.FC<NewInvoiceModalProps> = ({
               </div>
             </div>
 
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Status
+                </label>
+                <select
+                  value={formData.status}
+                  onChange={(e) => {
+                    const newStatus = e.target.value as 'Paid' | 'Pending' | 'Overdue';
+                    setFormData({ ...formData, status: newStatus });
+                    
+                    // If changed to Paid, auto-fill all received amounts to match total amount 
+                    if (newStatus === 'Paid') {
+                      const updatedLines = lineItems.map(item => ({
+                        ...item,
+                        received: item.amount
+                      }));
+                      setLineItems(updatedLines);
+                    }
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                >
+                  <option value="Paid">Paid</option>
+                  <option value="Pending">Pending</option>
+                  <option value="Overdue">Overdue</option>
+                </select>
+              </div>
+            </div>
+
             {/* Link to Quotation/AR */}
             {availableAREntries.length > 0 && (
               <div className="bg-blue-50 dark:bg-blue-900/10 p-4 rounded-lg border border-blue-100 dark:border-blue-800">
@@ -421,6 +450,7 @@ const NewInvoiceModal: React.FC<NewInvoiceModalProps> = ({
                             rate: itemPrice,
                             discount: item.discount || 0,
                             amount: amountToPay,
+                            received: formData.status === 'Paid' ? amountToPay : 0, // Auto-populate if Paid
                             linkedQuotationLineItemId: item.id,
                             paidSoFar: paidSoFar,
                             originalPending: amountToPay,

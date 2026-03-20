@@ -441,7 +441,37 @@ const EditInvoiceModal: React.FC<EditInvoiceModalProps> = ({
                                         setSelectedAREntryId(arId);
                                         if (arId) {
                                             const selectedAR = availableAREntries.find(ar => ar.id === arId);
-                                            // Optional: Auto-populate items logic here if needed, but since it's Edit mode, we probably want to leave existing items intact unless user explicitly overrides.
+                                            if (selectedAR && selectedAR.lineItems && selectedAR.lineItems.length > 0) {
+                                                // Confirm with user if they want to overwrite items
+                                                if (window.confirm('Do you want to sync this invoice with the selected quotation? This will update line items to match the quotation.')) {
+                                                    const newItems = selectedAR.lineItems.map((item: any) => {
+                                                        const itemPrice = item.price !== undefined ? item.price : (item.rate || 0);
+                                                        const itemTotalCost = itemPrice * (item.quantity || 1);
+                                                        const itemDiscount = item.discount || 0;
+                                                        const paidSoFar = item.paidAmount || 0;
+                                                        const amountToPay = Math.max(0, (itemTotalCost - itemDiscount) - paidSoFar);
+
+                                                        return {
+                                                            id: item.id || '',
+                                                            description: item.description,
+                                                            longDescription: '',
+                                                            quantity: 1,
+                                                            rate: itemPrice,
+                                                            discount: item.discount || 0,
+                                                            amount: amountToPay,
+                                                            received: formData.status === 'Paid' ? amountToPay : 0,
+                                                            linkedQuotationLineItemId: item.id,
+                                                            paidSoFar: paidSoFar,
+                                                            originalPending: amountToPay,
+                                                            pendingBalance: 0
+                                                        };
+                                                    });
+
+                                                    if (newItems.length > 0) {
+                                                        setLineItems(newItems);
+                                                    }
+                                                }
+                                            }
                                         }
                                     }}
                                     className="w-full px-3 py-2 border border-blue-200 dark:border-blue-700 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
@@ -466,7 +496,19 @@ const EditInvoiceModal: React.FC<EditInvoiceModalProps> = ({
                                 </label>
                                 <select
                                     value={formData.status}
-                                    onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
+                                    onChange={(e) => {
+                                        const newStatus = e.target.value as 'Paid' | 'Pending' | 'Overdue';
+                                        setFormData({ ...formData, status: newStatus });
+
+                                        // If changed to Paid, auto-fill all received amounts to match total amount 
+                                        if (newStatus === 'Paid') {
+                                            const updatedLines = lineItems.map(item => ({
+                                                ...item,
+                                                received: item.amount
+                                            }));
+                                            setLineItems(updatedLines);
+                                        }
+                                    }}
                                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
                                 >
                                     <option value="Paid">Paid</option>

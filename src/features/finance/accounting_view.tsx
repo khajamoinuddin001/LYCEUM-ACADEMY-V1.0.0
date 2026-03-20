@@ -2,9 +2,9 @@ import React, { useState, useMemo } from 'react';
 import {
     TrendingUp, TrendingDown, DollarSign, PieChart, Wallet, Receipt, AlertCircle,
     ShoppingCart, CreditCard, FileText, Trash2, X, ArrowRightLeft, Edit, Printer,
-    Search, Calendar
+    Search, Calendar, FileSpreadsheet
 } from 'lucide-react';
-import type { AccountingTransaction, Contact, User } from '@/types';
+import type { AccountingTransaction, Contact, User, CrmLead } from '@/types';
 import * as api from '@/utils/api';
 import AccountTransferModal from './account_transfer_modal';
 import EditTransactionModal from './edit_transaction_modal';
@@ -19,6 +19,7 @@ import TransactionDetailsModal from './transaction_details_modal';
 import ProfitReportsView from './profit_reports_view';
 import AccountsReceivableView from './accounts_receivable_view';
 import OverduePaymentsView from './overdue_payments_view';
+import ExportTransactionsModal from './export_transactions_modal';
 
 interface AccountingViewProps {
     transactions: AccountingTransaction[];
@@ -32,6 +33,7 @@ interface AccountingViewProps {
     onPrintTransaction: (transaction: AccountingTransaction) => void;
     onSaveTransaction: (transaction: Omit<AccountingTransaction, 'id'> & { id?: string }) => Promise<void>;
     onAddContact: (contact: any) => Promise<Contact>;
+    leads?: CrmLead[];
 }
 
 const AccountingView: React.FC<AccountingViewProps> = ({
@@ -42,11 +44,13 @@ const AccountingView: React.FC<AccountingViewProps> = ({
     onDeleteTransaction,
     onSaveTransaction,
     onAddContact,
+    leads = [],
 }) => {
     const [showPurchaseModal, setShowPurchaseModal] = useState(false);
     const [showExpensesModal, setShowExpensesModal] = useState(false);
     const [showInvoiceModal, setShowInvoiceModal] = useState(false);
     const [showTransferModal, setShowTransferModal] = useState(false);
+    const [showExportModal, setShowExportModal] = useState(false);
     const [editingTransaction, setEditingTransaction] = useState<AccountingTransaction | null>(null);
     const [printingTransaction, setPrintingTransaction] = useState<AccountingTransaction | null>(null);
     const [viewingTransaction, setViewingTransaction] = useState<AccountingTransaction | null>(null);
@@ -124,7 +128,19 @@ const AccountingView: React.FC<AccountingViewProps> = ({
             }, 0);
         }, 0);
 
-        const accountsReceivable = pendingIncome + quotationAR;
+        // 3. AR from leads (ONLY Accepted quotations)
+        const leadAR = leads.reduce((sum, lead) => {
+            const quotations = Array.isArray(lead.quotations) ? lead.quotations : [];
+            return sum + quotations.reduce((qSum, q: any) => {
+                // User specifically requested ONLY "Accepted" quotations
+                if (q.status === 'Accepted') {
+                    return qSum + (Number(q.total) || 0);
+                }
+                return qSum;
+            }, 0);
+        }, 0);
+
+        const accountsReceivable = pendingIncome + quotationAR + leadAR;
 
         // Overdue amount - check if due date has passed
         const today = new Date();
@@ -153,8 +169,8 @@ const AccountingView: React.FC<AccountingViewProps> = ({
         };
     }, [transactions, contacts]);
 
-    // Recent transactions (last 20) with search and filter
-    const recentTransactions = useMemo(() => {
+    // Combined transactions (Transactions + AR Entries) for filtering/export
+    const combinedTransactions = useMemo(() => {
         // 1. Start with regular transactions
         let combined: AccountingTransaction[] = transactions.map(t => {
             // For purchases, if there's a linked student (contactId), resolve their name for display
@@ -175,8 +191,6 @@ const AccountingView: React.FC<AccountingViewProps> = ({
             }
             const arEntries = metadata.accountsReceivable || [];
             arEntries.forEach((ar: any) => {
-                // Only show outstanding or partially paid AR entries as 'Income' (Pending)
-                const isPaid = ar.status === 'Paid';
                 // Define status mapping
                 let status: 'Pending' | 'Paid' | 'Overdue' | 'Cancelled' = 'Pending';
                 if (ar.status === 'Paid') status = 'Paid';
@@ -189,14 +203,14 @@ const AccountingView: React.FC<AccountingViewProps> = ({
                 const arTransaction: AccountingTransaction = {
                     id: `AR-${ar.id}`, // Unique ID prefix
                     date: ar.createdAt || ar.agreedAt || ar.date || new Date().toISOString(),
-                    amount: remainingBalance, 
+                    amount: remainingBalance,
                     type: 'Due',
                     description: `Quotation #${ar.quotationRef || ar.quotationId || 'Unknown'} (Due)`,
                     status: status,
                     paymentMethod: 'Online',
                     contactId: contact.id,
-                    contact: contact.department !== 'Unassigned' ? contact.department : '', 
-                    customerName: contact.name, 
+                    contact: contact.department !== 'Unassigned' ? contact.department : '',
+                    customerName: contact.name,
                     invoiceNumber: ar.quotationRef || `QUO-${ar.quotationId}`,
                     lineItems: ar.lineItems,
                     additionalDiscount: ar.additionalDiscount,
@@ -208,9 +222,37 @@ const AccountingView: React.FC<AccountingViewProps> = ({
             });
         });
 
+        // 3. Convert Accepted Quotations from Leads into pseudo-transactions
+        leads.forEach(lead => {
+            const quotations = Array.isArray(lead.quotations) ? lead.quotations : [];
+            quotations.forEach((q: any) => {
+                if (q.status !== 'Accepted') return; // Only show Accepted
+                
+                const totalCost = Number(q.total) || 0;
+                const leadTransaction: AccountingTransaction = {
+                    id: `LQUO-${q.id || Math.random().toString(36).substr(2, 9)}`,
+                    date: q.date || lead.created_at || new Date().toISOString(),
+                    amount: totalCost,
+                    type: 'Due',
+                    description: `Lead Quotation #${q.quotationNumber || q.id || 'New'} (${lead.title})`,
+                    status: 'Pending',
+                    paymentMethod: 'Online',
+                    customerName: lead.contact,
+                    invoiceNumber: q.quotationNumber || `QUO-${q.id}`,
+                    lineItems: q.lineItems,
+                    linkedLeadId: lead.id
+                };
+                combined.push(leadTransaction);
+            });
+        });
 
+        return combined;
+    }, [transactions, contacts]);
+
+    // Recent transactions with search and filter
+    const recentTransactions = useMemo(() => {
         // 3. Apply Filters
-        let filtered = combined;
+        let filtered = [...combinedTransactions];
 
         // Apply type filter
         if (typeFilter !== 'All') {
@@ -247,7 +289,7 @@ const AccountingView: React.FC<AccountingViewProps> = ({
 
         return filtered
             .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    }, [transactions, contacts, searchQuery, typeFilter, startDate, endDate]);
+    }, [combinedTransactions, searchQuery, typeFilter, startDate, endDate]);
 
     const formatCurrency = (amount: number) => {
         return new Intl.NumberFormat('en-IN', {
@@ -339,6 +381,13 @@ const AccountingView: React.FC<AccountingViewProps> = ({
                     </div>
 
                     <div className="flex gap-3">
+                        <button
+                            onClick={() => setShowExportModal(true)}
+                            className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors shadow-md"
+                        >
+                            <FileSpreadsheet size={18} className="mr-2" />
+                            Export Excel
+                        </button>
                         <button
                             onClick={() => setShowTransferModal(true)}
                             className="flex items-center px-4 py-2 bg-lyceum-blue text-white rounded-lg hover:bg-lyceum-blue-dark transition-colors shadow-md"
@@ -536,21 +585,19 @@ const AccountingView: React.FC<AccountingViewProps> = ({
                                 <button
                                     key={filter.id}
                                     onClick={() => setTypeFilter(filter.id as any)}
-                                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all shadow-sm border ${
-                                        typeFilter === filter.id
-                                            ? filter.color === 'blue' ? 'bg-lyceum-blue text-white border-transparent scale-105 shadow-md' :
-                                              filter.color === 'orange' ? 'bg-orange-600 text-white border-transparent scale-105 shadow-md' :
-                                              filter.color === 'green' ? 'bg-green-600 text-white border-transparent scale-105 shadow-md' :
-                                              filter.color === 'purple' ? 'bg-purple-600 text-white border-transparent scale-105 shadow-md' :
-                                              'bg-red-600 text-white border-transparent scale-105 shadow-md'
-                                            : `bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-gray-100 dark:border-gray-700 ${
-                                                filter.color === 'blue' ? 'hover:border-lyceum-blue hover:text-lyceum-blue' :
-                                                filter.color === 'orange' ? 'hover:border-orange-400 hover:text-orange-600' :
+                                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all shadow-sm border ${typeFilter === filter.id
+                                        ? filter.color === 'blue' ? 'bg-lyceum-blue text-white border-transparent scale-105 shadow-md' :
+                                            filter.color === 'orange' ? 'bg-orange-600 text-white border-transparent scale-105 shadow-md' :
+                                                filter.color === 'green' ? 'bg-green-600 text-white border-transparent scale-105 shadow-md' :
+                                                    filter.color === 'purple' ? 'bg-purple-600 text-white border-transparent scale-105 shadow-md' :
+                                                        'bg-red-600 text-white border-transparent scale-105 shadow-md'
+                                        : `bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-gray-100 dark:border-gray-700 ${filter.color === 'blue' ? 'hover:border-lyceum-blue hover:text-lyceum-blue' :
+                                            filter.color === 'orange' ? 'hover:border-orange-400 hover:text-orange-600' :
                                                 filter.color === 'green' ? 'hover:border-green-400 hover:text-green-600' :
-                                                filter.color === 'purple' ? 'hover:border-purple-400 hover:text-purple-600' :
-                                                'hover:border-red-400 hover:text-red-600'
-                                              }`
-                                    }`}
+                                                    filter.color === 'purple' ? 'hover:border-purple-400 hover:text-purple-600' :
+                                                        'hover:border-red-400 hover:text-red-600'
+                                        }`
+                                        }`}
                                 >
                                     {filter.icon}
                                     {filter.label}
@@ -674,7 +721,7 @@ const AccountingView: React.FC<AccountingViewProps> = ({
                                                     {transaction.dueDate ? formatDate(transaction.dueDate) : '-'}
                                                 </span>
                                             </td>
-                                             <td className="px-6 py-4 whitespace-nowrap text-right">
+                                            <td className="px-6 py-4 whitespace-nowrap text-right">
                                                 {(() => {
                                                     const itemDiscount = (transaction.lineItems || []).reduce((acc: number, item: any) => acc + (Number(item.discount) || 0), 0);
                                                     const totalDiscount = (Number(transaction.additionalDiscount) || 0) + itemDiscount;
@@ -686,8 +733,8 @@ const AccountingView: React.FC<AccountingViewProps> = ({
                                                         <span className="text-sm text-gray-400 dark:text-gray-500">-</span>
                                                     );
                                                 })()}
-                                             </td>
-                                             <td className="px-6 py-4 whitespace-nowrap text-right">
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-right">
                                                 {transaction.type === 'Due' ? (
                                                     <div className="flex flex-col items-end">
                                                         <span className="text-sm font-bold text-gray-900 dark:text-white">
@@ -709,7 +756,7 @@ const AccountingView: React.FC<AccountingViewProps> = ({
                                                 ) : (
                                                     <span className="text-sm text-gray-500 dark:text-gray-400">-</span>
                                                 )}
-                                             </td>
+                                            </td>
                                             <td className="px-6 py-4 whitespace-nowrap text-center">
                                                 <div className="flex items-center justify-center gap-2">
                                                     <button
@@ -774,6 +821,12 @@ const AccountingView: React.FC<AccountingViewProps> = ({
                     isOpen={showTransferModal}
                     onClose={() => setShowTransferModal(false)}
                     onSave={onSaveTransaction}
+                />
+
+                <ExportTransactionsModal
+                    isOpen={showExportModal}
+                    onClose={() => setShowExportModal(false)}
+                    transactions={combinedTransactions}
                 />
 
                 {/* Edit Transaction/Invoice/Purchase/Expense Modal */}

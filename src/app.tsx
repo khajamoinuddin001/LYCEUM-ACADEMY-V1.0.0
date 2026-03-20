@@ -934,7 +934,7 @@ const DashboardLayout: React.FC = () => {
                   paidAmount: data.status === 'Paid' ? (Number(data.amount) || ar.totalAmount || ar.originalAmount) : (Number(ar.paidAmount) || 0),
                   invoicedAmount: ar.invoicedAmount || 0,
                   dueDate: data.dueDate,
-                   lineItems: (data.lineItems || []).map((item: any) => ({
+                  lineItems: (data.lineItems || []).map((item: any) => ({
                     ...item,
                     price: item.rate !== undefined ? item.rate : (item.price || 0),
                     rate: item.rate !== undefined ? item.rate : (item.price || 0)
@@ -947,7 +947,7 @@ const DashboardLayout: React.FC = () => {
             const updatedContact = { ...contact, metadata: updatedMetadata };
             await api.saveContact(updatedContact, false);
             setContacts(prev => prev.map(c => c.id === contact.id ? updatedContact : c));
-            
+
             // Sync back to Lead Quotation if IDs are present
             if (data.linkedLeadId && data.linkedQuotationId) {
               try {
@@ -1007,9 +1007,9 @@ const DashboardLayout: React.FC = () => {
               if (ar.id === (data as any).linkedArId) {
                 // If this is a new link or update, we must track both invoiced and paid amounts
                 const newTotalInvoicedInThisInvoice = (data.lineItems || []).reduce((sum, item) => sum + (item.amount || 0), 0);
-                const newPaymentAmount = Math.abs(data.amount);
-                const newDiscountAmount = Number(data.additionalDiscount) || 0;
-                const newPaidCoverage = newPaymentAmount + newDiscountAmount;
+                const newPaymentPart = (data.status === 'Paid' ? Math.abs(Number(data.amount) || 0) : 0);
+                const newDiscountPart = Number(data.additionalDiscount) || 0;
+                const newPaidCoverage = newPaymentPart + newDiscountPart;
 
                 // Old values for diffing
                 let oldTotalInvoicedInThisInvoice = 0;
@@ -1018,14 +1018,16 @@ const DashboardLayout: React.FC = () => {
 
                 if (oldTx && (oldTx as any).linkedArId === ar.id) {
                   wasLinked = true;
-                  oldTotalInvoicedInThisInvoice = (oldTx.lineItems || []).reduce((sum, item) => sum + (item.amount || 0), 0);
-                  if (oldTx.status === 'Paid') {
-                    oldPaidCoverage = Math.abs(oldTx.amount) + (Number(oldTx.additionalDiscount) || 0);
-                  }
+                  oldTotalInvoicedInThisInvoice = (oldTx.lineItems || []).reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+
+                  // Old coverage: Discount always counted, Payment only if Paid
+                  const oldPaymentPart = oldTx.status === 'Paid' ? Math.abs(Number(oldTx.amount) || 0) : 0;
+                  const oldDiscountPart = Number(oldTx.additionalDiscount) || 0;
+                  oldPaidCoverage = oldPaymentPart + oldDiscountPart;
                 }
 
                 const invoicedDiff = newTotalInvoicedInThisInvoice - oldTotalInvoicedInThisInvoice;
-                const paidDiff = (data.status === 'Paid' ? newPaidCoverage : 0) - oldPaidCoverage;
+                const paidDiff = newPaidCoverage - oldPaidCoverage;
 
                 const newInvoicedAmount = Math.max(0, (Number(ar.invoicedAmount) || Number(ar.paidAmount) || 0) + invoicedDiff);
                 const newPaidAmount = Math.max(0, (Number(ar.paidAmount) || 0) + paidDiff);
@@ -1036,7 +1038,7 @@ const DashboardLayout: React.FC = () => {
                   const linkedInvoiceItem = (data.lineItems || []).find((invItem: any) => invItem.linkedQuotationLineItemId === arItem.id);
                   let oldInvoiceItemInvoiced = 0;
                   let oldInvoiceItemPaid = 0;
-                  
+
                   if (wasLinked && oldTx && oldTx.lineItems) {
                     const oldItem = oldTx.lineItems.find((invItem: any) => (invItem as any).linkedQuotationLineItemId === arItem.id);
                     if (oldItem) {
@@ -1048,7 +1050,7 @@ const DashboardLayout: React.FC = () => {
                   if (linkedInvoiceItem) {
                     const itemInvoiced = linkedInvoiceItem.amount || 0;
                     const itemPaid = (data.status === 'Paid') ? (linkedInvoiceItem.received || 0) : 0;
-                    
+
                     const itemInvoicedDiff = itemInvoiced - oldInvoiceItemInvoiced;
                     const itemPaidDiff = itemPaid - oldInvoiceItemPaid;
 
@@ -1083,7 +1085,7 @@ const DashboardLayout: React.FC = () => {
               const updatedContact = { ...contact, metadata: updatedMetadata };
               await api.saveContact(updatedContact, false);
               setContacts(prev => prev.map(c => c.id === contact.id ? updatedContact : c));
-              
+
               // Sync back to Lead Quotation
               if (linkedLeadId && linkedQuotationId) {
                 try {
@@ -1112,7 +1114,7 @@ const DashboardLayout: React.FC = () => {
                   console.error('Failed to sync back to lead during invoice update:', err);
                 }
               }
-              
+
               logActivity(`Linked updated transaction ${tx.id} to AR entry ${(data as any).linkedArId} for ${contact.name}`);
             }
           }
@@ -1134,12 +1136,13 @@ const DashboardLayout: React.FC = () => {
 
             updatedMetadata.accountsReceivable = (updatedMetadata.accountsReceivable || []).map((ar: any) => {
               if (ar.id === (data as any).linkedArId) {
-                const totalInvoicedInThisInvoice = (data.lineItems || []).reduce((sum, item) => sum + (item.amount || 0), 0);
-                const paymentAmount = Math.abs(Number(data.amount) || 0);
-                const discountAmount = Number(data.additionalDiscount) || 0;
-                // Add recorded payment to coverage regardless of status (to support partial payments)
-                const totalCoverage = paymentAmount + discountAmount;
-                
+                const totalInvoicedInThisInvoice = (data.lineItems || []).reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+                const paymentBasis = Math.abs(Number(data.amount) || 0);
+                const discountBasis = Number(data.additionalDiscount) || 0;
+
+                // Only count payment towards paidAmount if status is 'Paid'
+                const totalCoverage = (data.status === 'Paid' ? paymentBasis : 0) + discountBasis;
+
                 const currentInvoiced = Number(ar.invoicedAmount) || 0;
                 const newInvoicedAmount = currentInvoiced + totalInvoicedInThisInvoice;
                 const newPaidAmount = (Number(ar.paidAmount) || 0) + totalCoverage;
@@ -1181,7 +1184,7 @@ const DashboardLayout: React.FC = () => {
               const updatedContact = { ...contact, metadata: updatedMetadata };
               await api.saveContact(updatedContact, false);
               setContacts(prev => prev.map(c => c.id === contact.id ? updatedContact : c));
-              
+
               // Sync back to Lead Quotation
               if (linkedLeadId && linkedQuotationId) {
                 try {
@@ -1210,7 +1213,7 @@ const DashboardLayout: React.FC = () => {
                   console.error('Failed to sync back to lead during invoice creation:', err);
                 }
               }
-              
+
               logActivity(`Linked transaction ${tx.id} to AR entry ${(data as any).linkedArId} for ${contact.name}`);
             }
           }
@@ -1265,15 +1268,15 @@ const DashboardLayout: React.FC = () => {
     if (txToDelete && (txToDelete as any).linkedArId) {
       const arId = (txToDelete as any).linkedArId;
       const contact = contacts.find(c => c.id === txToDelete.contactId);
-      
+
       if (contact && contact.metadata?.accountsReceivable) {
         const updatedMetadata = { ...contact.metadata };
         const arIndex = updatedMetadata.accountsReceivable.findIndex((ar: any) => ar.id === arId);
-        
+
         if (arIndex !== -1) {
           const arEntry = { ...updatedMetadata.accountsReceivable[arIndex] };
           const isPaid = txToDelete.status === 'Paid';
-          
+
           // 1. Reverse Line Items tracking
           if (txToDelete.lineItems && arEntry.lineItems) {
             const updatedArLineItems = arEntry.lineItems.map((arItem: any) => {
@@ -1291,14 +1294,20 @@ const DashboardLayout: React.FC = () => {
           }
 
           // 2. Reverse overall tracking
-          const invoicedToRemove = (txToDelete.lineItems || []).reduce((sum: number, item: any) => sum + (item.amount || 0), 0);
-          const coverageToRemove = Math.abs(txToDelete.amount) + (Number(txToDelete.additionalDiscount) || 0);
+          const invoicedToRemove = (txToDelete.lineItems || []).reduce((sum: number, item: any) => sum + (Number(item.amount) || 0), 0);
+
+          // Only remove payment if it was actually Paid
+          const paymentToRemove = txToDelete.status === 'Paid' ? Math.abs(Number(txToDelete.amount) || 0) : 0;
+          // Discount is always added to paidAmount even for Pending transactions
+          const discountToRemove = Number(txToDelete.additionalDiscount) || 0;
+
+          const coverageToRemove = paymentToRemove + discountToRemove;
 
           arEntry.invoicedAmount = Math.max(0, (Number(arEntry.invoicedAmount) || 0) - invoicedToRemove);
           arEntry.paidAmount = Math.max(0, (Number(arEntry.paidAmount) || 0) - coverageToRemove);
-          
+
           const totalCost = Number(arEntry.totalAmount) || Number(arEntry.originalAmount) || 0;
-          arEntry.remainingAmount = Math.max(0, totalCost - arEntry.paidAmount);
+          arEntry.remainingAmount = Math.max(0, totalCost - (Number(arEntry.paidAmount) || 0));
           arEntry.status = arEntry.paidAmount >= totalCost ? 'Paid' : (arEntry.invoicedAmount > 0 ? 'Partial' : 'Pending');
 
           updatedMetadata.accountsReceivable[arIndex] = arEntry;
@@ -1307,7 +1316,7 @@ const DashboardLayout: React.FC = () => {
           try {
             await api.saveContact(updatedContact, false);
             setContacts(prev => prev.map(c => c.id === contact.id ? updatedContact : c));
-            
+
             // Sync back to Lead Quotation
             if (txToDelete.linkedLeadId && txToDelete.linkedQuotationId) {
               const lead = await api.getLead(txToDelete.linkedLeadId);
@@ -2212,8 +2221,8 @@ const DashboardLayout: React.FC = () => {
       case 'Automation Engine': return <AutomationView />;
       case 'Announcements': return <AnouncementView user={currentUser} />;
       case 'Mock Interview':
-        return currentUser.role === 'Student' ? 
-          <StudentMockInterviewView user={currentUser} sessions={studentContact?.metadata?.mockInterviewSessions || []} /> : 
+        return currentUser.role === 'Student' ?
+          <StudentMockInterviewView user={currentUser} sessions={studentContact?.metadata?.mockInterviewSessions || []} /> :
           <AdminMockInterviewView contacts={contacts} />;
       case 'Apps': return <AppsGridView onAppSelect={handleAppSelect} user={currentUser} apps={gridApps} />;
       case 'dashboard': return <Dashboard onNavigateBack={() => handleAppSelect('Apps')} transactions={transactions} user={currentUser} tasks={tasks} onAppSelect={handleAppSelect} paymentActivityLog={paymentActivityLog} contacts={contacts} leads={leads} />;
@@ -2303,6 +2312,7 @@ const DashboardLayout: React.FC = () => {
           onPrintTransaction={setPrintingTransaction}
           onSaveTransaction={handleSaveTransaction}
           contacts={contacts}
+          leads={leads}
           onAddContact={async (contactData) => {
             const newContact: Contact = {
               id: 0,

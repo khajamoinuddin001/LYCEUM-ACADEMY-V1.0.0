@@ -573,20 +573,21 @@ const transformContact = (dbContact) => {
     // JSON fields
     checklist: (() => {
       try {
-        const parsed = Array.isArray(dbContact.checklist) ? dbContact.checklist : JSON.parse(dbContact.checklist || '[]');
+        const raw = dbContact.checklist;
+        const parsed = (Array.isArray(raw) || (raw && typeof raw === 'object')) ? raw : JSON.parse(raw && raw.trim() ? raw : '[]');
         return (Array.isArray(parsed) && parsed.length > 0) ? parsed : DEFAULT_CHECKLIST_ITEMS;
       } catch {
         return DEFAULT_CHECKLIST_ITEMS;
       }
     })(),
-    activityLog: Array.isArray(dbContact.activity_log) ? dbContact.activity_log : JSON.parse(dbContact.activity_log || '[]'),
-    recordedSessions: Array.isArray(dbContact.recorded_sessions) ? dbContact.recorded_sessions : JSON.parse(dbContact.recorded_sessions || '[]'),
-    documents: Array.isArray(dbContact.documents) ? dbContact.documents : JSON.parse(dbContact.documents || '[]'),
-    visaInformation: typeof dbContact.visa_information === 'object' ? dbContact.visa_information : JSON.parse(dbContact.visa_information || '{}'),
-    lmsProgress: typeof dbContact.lms_progress === 'object' ? dbContact.lms_progress : JSON.parse(dbContact.lms_progress || '{}'),
-    lmsNotes: typeof dbContact.lms_notes === 'object' ? dbContact.lms_notes : JSON.parse(dbContact.lms_notes || '{}'),
-    courses: Array.isArray(dbContact.courses) ? dbContact.courses : JSON.parse(dbContact.courses || '[]'),
-    metadata: typeof dbContact.metadata === 'object' ? dbContact.metadata : JSON.parse(dbContact.metadata || '{}')
+    activityLog: (() => { try { return (Array.isArray(dbContact.activity_log) || (dbContact.activity_log && typeof dbContact.activity_log === 'object')) ? dbContact.activity_log : JSON.parse(dbContact.activity_log && dbContact.activity_log.trim() ? dbContact.activity_log : '[]'); } catch { return []; } })(),
+    recordedSessions: (() => { try { return (Array.isArray(dbContact.recorded_sessions) || (dbContact.recorded_sessions && typeof dbContact.recorded_sessions === 'object')) ? dbContact.recorded_sessions : JSON.parse(dbContact.recorded_sessions && dbContact.recorded_sessions.trim() ? dbContact.recorded_sessions : '[]'); } catch { return []; } })(),
+    documents: (() => { try { return (Array.isArray(dbContact.documents) || (dbContact.documents && typeof dbContact.documents === 'object')) ? dbContact.documents : JSON.parse(dbContact.documents && dbContact.documents.trim() ? dbContact.documents : '[]'); } catch { return []; } })(),
+    visaInformation: (() => { try { return (typeof dbContact.visa_information === 'object' && dbContact.visa_information !== null) ? dbContact.visa_information : JSON.parse(dbContact.visa_information && dbContact.visa_information.trim() ? dbContact.visa_information : '{}'); } catch { return {}; } })(),
+    lmsProgress: (() => { try { return (typeof dbContact.lms_progress === 'object' && dbContact.lms_progress !== null) ? dbContact.lms_progress : JSON.parse(dbContact.lms_progress && dbContact.lms_progress.trim() ? dbContact.lms_progress : '{}'); } catch { return {}; } })(),
+    lmsNotes: (() => { try { return (typeof dbContact.lms_notes === 'object' && dbContact.lms_notes !== null) ? dbContact.lms_notes : JSON.parse(dbContact.lms_notes && dbContact.lms_notes.trim() ? dbContact.lms_notes : '{}'); } catch { return {}; } })(),
+    courses: (() => { try { return (Array.isArray(dbContact.courses) || (dbContact.courses && typeof dbContact.courses === 'object')) ? dbContact.courses : JSON.parse(dbContact.courses && dbContact.courses.trim() ? dbContact.courses : '[]'); } catch { return []; } })(),
+    metadata: (() => { try { return (typeof dbContact.metadata === 'object' && dbContact.metadata !== null) ? dbContact.metadata : JSON.parse(dbContact.metadata && dbContact.metadata.trim() ? dbContact.metadata : '{}'); } catch { return {}; } })()
   };
   return contact;
 };
@@ -1274,6 +1275,14 @@ router.put('/contacts/:id', authenticateToken, async (req, res) => {
 
     const nameChanged = oldContact.name !== contact.name;
 
+    // Merge metadata to prevent losing accountsReceivable or other fields
+    let existingMetadata = oldContact.metadata || {};
+    if (typeof existingMetadata === 'string') {
+      try { existingMetadata = JSON.parse(existingMetadata); } catch (e) { existingMetadata = {}; }
+    }
+    const newMetadata = contact.metadata || {};
+    const mergedMetadata = { ...existingMetadata, ...newMetadata };
+
     // Update the contact
     await query(`
       UPDATE contacts SET
@@ -1325,7 +1334,7 @@ name = $1, email = $2, phone = $3, department = $4, major = $5, notes = $6,
       contact.counselorAssigned2,
       contact.applicationEmail,
       contact.applicationPassword,
-      JSON.stringify(contact.metadata || {}),
+      JSON.stringify(mergedMetadata),
       req.params.id
     ]);
 
@@ -1550,7 +1559,13 @@ router.post('/contacts/:id/merge', authenticateToken, async (req, res) => {
       advisor: primary.advisor || target.advisor,
 
       // Preserve user link from either
-      user_id: primary.user_id || target.user_id
+      user_id: primary.user_id || target.user_id,
+
+      // Merge metadata (Accounts Receivable, etc.)
+      metadata: {
+        ...(typeof target.metadata === 'string' ? JSON.parse(target.metadata || '{}') : (target.metadata || {})),
+        ...(typeof primary.metadata === 'string' ? JSON.parse(primary.metadata || '{}') : (primary.metadata || {}))
+      }
     };
 
     // Update primary contact with merged data
@@ -1563,7 +1578,7 @@ router.post('/contacts/:id/merge', authenticateToken, async (req, res) => {
         city = $21, state = $22, zip = $23, country = $24, gstin = $25, pan = $26, tags = $27,
         visa_type = $28, country_of_application = $29, source = $30, contact_type = $31,
         stream = $32, intake = $33, counselor_assigned = $34, counselor_assigned_2 = $35, application_email = $36,
-        application_password = $37, avatar_url = $38, user_id = $39
+        application_password = $37, avatar_url = $38, user_id = $39, metadata = $41
       WHERE id = $40
     `, [
       mergedData.name, mergedData.email, mergedData.phone, mergedData.department, mergedData.major, mergedData.notes,
@@ -1574,7 +1589,7 @@ router.post('/contacts/:id/merge', authenticateToken, async (req, res) => {
       mergedData.zip, mergedData.country, mergedData.gstin, mergedData.pan, mergedData.tags, mergedData.visa_type,
       mergedData.country_of_application, mergedData.source, mergedData.contact_type, mergedData.stream, mergedData.intake,
       mergedData.counselor_assigned, mergedData.counselor_assigned_2, mergedData.application_email, mergedData.application_password,
-      mergedData.avatar_url, mergedData.user_id, primaryId
+      mergedData.avatar_url, mergedData.user_id, primaryId, JSON.stringify(mergedData.metadata)
     ].map(val => val === undefined ? null : val));
 
     // Update all related records to point to primary contact
@@ -2466,7 +2481,7 @@ router.post('/visa-operations/:id/ds-160/dependency/document', authenticateToken
         if (!dep.internalDocuments) dep.internalDocuments = [];
         // Migrate old single
         if (dep.documentId && dep.internalDocuments.length === 0) {
-           dep.internalDocuments.push({ id: dep.documentId, name: dep.documentName });
+          dep.internalDocuments.push({ id: dep.documentId, name: dep.documentName });
         }
         dep.internalDocuments.push({ id: itemId, name: req.file.originalname });
         dep.documentId = itemId;
@@ -3425,7 +3440,15 @@ router.post('/transactions', authenticateToken, async (req, res) => {
       }
     }
 
-    const metadata = transaction.metadata || {};
+    let metadata = transaction.metadata || {};
+    if (typeof metadata === 'string') {
+      try { metadata = JSON.parse(metadata); } catch (e) { metadata = {}; }
+    }
+
+    // Explicitly preserve linked fields from request body into metadata if not already there
+    if (transaction.linkedArId) metadata.linkedArId = transaction.linkedArId;
+    if (transaction.linkedLeadId) metadata.linkedLeadId = transaction.linkedLeadId;
+    if (transaction.linkedQuotationId) metadata.linkedQuotationId = transaction.linkedQuotationId;
     if (transaction.linkedArId) metadata.linkedArId = transaction.linkedArId;
 
     const result = await query(`
@@ -3497,8 +3520,10 @@ RETURNING *
           let metadata = contact.metadata || {};
 
           // Ensure structure exists
-          if (typeof metadata === 'string') {
+          if (metadata && typeof metadata === 'string') {
             try { metadata = JSON.parse(metadata); } catch (e) { metadata = {}; }
+          } else if (!metadata) {
+            metadata = {};
           }
           if (!metadata.accountsReceivable) metadata.accountsReceivable = [];
 
@@ -3542,7 +3567,10 @@ RETURNING *
               .map(e => ({ id: e.id, amount: e._lastDeduction }));
 
             if (arDeductions.length > 0) {
-              const currentTxMetadata = newTransaction.metadata || {};
+              let currentTxMetadata = newTransaction.metadata || {};
+              if (typeof currentTxMetadata === 'string') {
+                try { currentTxMetadata = JSON.parse(currentTxMetadata); } catch (e) { currentTxMetadata = {}; }
+              }
               await query('UPDATE transactions SET metadata = $1 WHERE id = $2', [
                 JSON.stringify({ ...currentTxMetadata, arDeductions }),
                 newTransaction.id
@@ -3606,7 +3634,16 @@ router.put('/transactions/:id', authenticateToken, async (req, res) => {
     delete newMetadata.arDeductions;
 
     // Allow updating metadata from request but don't overwrite blindly if not provided
-    const requestMetadata = transaction.metadata || {};
+    let requestMetadata = transaction.metadata || {};
+    if (typeof requestMetadata === 'string') {
+      try { requestMetadata = JSON.parse(requestMetadata); } catch (e) { requestMetadata = {}; }
+    }
+
+    // Explicitly preserve linked fields from request body into metadata if not already there
+    if (transaction.linkedArId) requestMetadata.linkedArId = transaction.linkedArId;
+    if (transaction.linkedLeadId) requestMetadata.linkedLeadId = transaction.linkedLeadId;
+    if (transaction.linkedQuotationId) requestMetadata.linkedQuotationId = transaction.linkedQuotationId;
+
     const mergedMetadata = { ...newMetadata, ...requestMetadata };
 
     await query(`
@@ -3696,8 +3733,10 @@ router.delete('/transactions/:id', authenticateToken, async (req, res) => {
         if (contactRes.rows.length > 0) {
           const contact = contactRes.rows[0];
           let contactMetadata = contact.metadata || {};
-          if (typeof contactMetadata === 'string') {
+          if (contactMetadata && typeof contactMetadata === 'string') {
             try { contactMetadata = JSON.parse(contactMetadata); } catch (e) { contactMetadata = {}; }
+          } else if (!contactMetadata) {
+            contactMetadata = {};
           }
 
           if (contactMetadata.accountsReceivable) {
@@ -6828,7 +6867,10 @@ router.delete('/api/contacts/:contactId/mock-interview-sessions/:sessionId', aut
       return res.status(404).json({ error: 'Contact not found' });
     }
 
-    const metadata = result.rows[0].metadata || {};
+    let metadata = result.rows[0].metadata || {};
+    if (typeof metadata === 'string') {
+      try { metadata = JSON.parse(metadata); } catch (e) { metadata = {}; }
+    }
     const sessions = metadata.mockInterviewSessions || [];
 
     // Filter out the session

@@ -174,20 +174,20 @@ export async function evaluateAutomation(triggerEvent, payload) {
                             if (type === 'student' || type === 'client') {
                                 // Priority 1: Direct from payload
                                 let email = payload.client_email || payload.student_email || payload.email || payload.contact_email;
-                                
+
                                 // Priority 2: Fallback to database lookup if contact_id exists
                                 const contactId = payload.contact_id || payload.contactId;
                                 if (!email && contactId) {
-                                  try {
-                                    const contactRes = await query("SELECT email FROM contacts WHERE id = $1", [contactId]);
-                                    if (contactRes.rows.length > 0) {
-                                      email = contactRes.rows[0].email;
+                                    try {
+                                        const contactRes = await query("SELECT email FROM contacts WHERE id = $1", [contactId]);
+                                        if (contactRes.rows.length > 0) {
+                                            email = contactRes.rows[0].email;
+                                        }
+                                    } catch (dbErr) {
+                                        console.error('🤖 [Automation] Failed to fetch contact email from database:', dbErr);
                                     }
-                                  } catch (dbErr) {
-                                    console.error('🤖 [Automation] Failed to fetch contact email from database:', dbErr);
-                                  }
                                 }
-                                
+
                                 if (email) recipientEmails.add(email);
                             } else if (type === 'staff') {
                                 const email = payload.staff_email || payload.assigned_to_email;
@@ -387,10 +387,27 @@ export async function evaluateAutomation(triggerEvent, payload) {
                             if (target_app === 'Contacts') {
                                 const lookupSql = `SELECT id FROM contacts WHERE LOWER(${lookup_by === 'name' ? 'name' : lookup_by}) = LOWER($1) LIMIT 1`;
                                 const contactRes = await query(lookupSql, [compiledLookupValue]);
-                                
+
                                 if (contactRes.rows.length > 0) {
                                     const contactId = contactRes.rows[0].id;
-                                    await query(`UPDATE contacts SET ${field} = $1 WHERE id = $2`, [compiledNewValue, contactId]);
+                                    if (field === 'metadata') {
+                                        // SPECIAL HANDLING: If updating metadata, we MUST merge to avoid wiping AR/Quotations
+                                        const currentResult = await query('SELECT metadata FROM contacts WHERE id = $1', [contactId]);
+                                        let currentMetadata = currentResult.rows[0].metadata || {};
+                                        if (typeof currentMetadata === 'string') {
+                                            try { currentMetadata = JSON.parse(currentMetadata); } catch (e) { currentMetadata = {}; }
+                                        }
+
+                                        let updateValue = compiledNewValue;
+                                        if (typeof updateValue === 'string') {
+                                            try { updateValue = JSON.parse(updateValue); } catch (e) { }
+                                        }
+
+                                        const mergedMetadata = { ...currentMetadata, ...(typeof updateValue === 'object' ? updateValue : { [field]: updateValue }) };
+                                        await query(`UPDATE contacts SET metadata = $1 WHERE id = $2`, [JSON.stringify(mergedMetadata), contactId]);
+                                    } else {
+                                        await query(`UPDATE contacts SET ${field} = $1 WHERE id = $2`, [compiledNewValue, contactId]);
+                                    }
                                     success = true;
                                 } else {
                                     errorMsg = `No contact found with ${lookup_by}: ${compiledLookupValue}`;
@@ -415,18 +432,18 @@ export async function evaluateAutomation(triggerEvent, payload) {
                                     const contact = contactRes.rows[0];
                                     const visaInfo = contact.visa_information || {};
                                     if (!visaInfo.universityApplication) visaInfo.universityApplication = { universities: [] };
-                                    
+
                                     // Update the first university or add if empty (simplification for automation)
                                     if (visaInfo.universityApplication.universities.length === 0) {
                                         visaInfo.universityApplication.universities.push({});
                                     }
-                                    
+
                                     // Map UI field names to JSON keys if necessary
-                                    const jsonKey = field === 'university_name' ? 'universityName' : 
-                                                    field === 'course_name' ? 'courseName' : field;
-                                    
+                                    const jsonKey = field === 'university_name' ? 'universityName' :
+                                        field === 'course_name' ? 'courseName' : field;
+
                                     visaInfo.universityApplication.universities[0][jsonKey] = compiledNewValue;
-                                    
+
                                     await query('UPDATE contacts SET visa_information = $1 WHERE id = $2', [JSON.stringify(visaInfo), contact.id]);
                                     success = true;
                                 } else {
