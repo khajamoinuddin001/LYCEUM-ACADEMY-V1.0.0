@@ -46,7 +46,11 @@ const TRIGGER_GROUPS = [
         group: '🛂 Visa Operations',
         triggers: [
             'Visa Operation Created',
-            'Visa Status Changed'
+            'Visa Status Changed',
+            'Visa Approved',
+            'Visa Rejected',
+            'Visa 221g (Administrative Processing)',
+            'Visa Confirmation Document Uploaded'
         ]
     },
     {
@@ -530,13 +534,13 @@ const RuleBuilderModal: React.FC<RuleBuilderModalProps> = ({ isOpen, onClose, ru
                                                         <select
                                                             className="w-full pl-3 pr-8 py-2.5 bg-gray-50 dark:bg-gray-800 border-none rounded-lg text-sm dark:text-white focus:ring-2 focus:ring-blue-500 outline-none appearance-none cursor-pointer"
                                                             value={formData.update_field_config.target_app}
-                                                            onChange={e => setFormData({ 
-                                                                ...formData, 
-                                                                update_field_config: { 
-                                                                    ...formData.update_field_config, 
+                                                            onChange={e => setFormData({
+                                                                ...formData,
+                                                                update_field_config: {
+                                                                    ...formData.update_field_config,
                                                                     target_app: e.target.value,
-                                                                    field: '' 
-                                                                } 
+                                                                    field: ''
+                                                                }
                                                             })}
                                                         >
                                                             {Object.keys(APP_FIELDS).map(app => <option key={app} value={app}>{app}</option>)}

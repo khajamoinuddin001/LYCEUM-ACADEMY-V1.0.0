@@ -2072,6 +2072,26 @@ router.put('/visa-operations/:id/slot-booking', authenticateToken, async (req, r
       userId: opData.user_id,
       createdAt: opData.created_at
     };
+
+    // AUTOMATION TRIGGERS for Visa Outcome
+    if (visaInterviewData && visaInterviewData.visaOutcome) {
+      const outcome = visaInterviewData.visaOutcome.toLowerCase();
+      let triggerEvent = null;
+      if (outcome === 'approved') triggerEvent = 'Visa Approved';
+      else if (outcome === 'rejected') triggerEvent = 'Visa Rejected';
+      else if (outcome === '221g') triggerEvent = 'Visa 221g (Administrative Processing)';
+
+      if (triggerEvent) {
+        evaluateAutomation(triggerEvent, {
+          ...slotResponse,
+          contact_id: opData.contact_id,
+          vop_number: opData.vop_number,
+          visa_status: opData.status,
+          outcome: visaInterviewData.visaOutcome
+        });
+      }
+    }
+
     res.json(slotResponse);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -2226,7 +2246,7 @@ router.post('/visa-operations/:id/ds-160/document', authenticateToken, upload.si
     `, [JSON.stringify(updatedDsData), req.params.id]);
 
     const op = result.rows[0];
-    res.json({
+    const finalResponse = {
       ...op,
       cgiData: op.cgi_data,
       slotBookingData: op.slot_booking_data,
@@ -2237,7 +2257,19 @@ router.post('/visa-operations/:id/ds-160/document', authenticateToken, upload.si
       contactId: op.contact_id,
       userId: op.user_id,
       createdAt: op.created_at
-    });
+    };
+
+    // AUTOMATION TRIGGER for Confirmation Document
+    if (uploadType === 'confirmation') {
+      evaluateAutomation('Visa Confirmation Document Uploaded', {
+        ...finalResponse,
+        contact_id: op.contact_id,
+        vop_number: op.vop_number,
+        document_name: req.file.originalname
+      });
+    }
+
+    res.json(finalResponse);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -2844,7 +2876,7 @@ title = $1, company = $2, value = $3, contact = $4, stage = $5,
       };
 
       evaluateAutomation('Status Changed', automationPayload);
-      
+
       // Stage Specific Triggers
       if (['New', 'Qualified', 'Proposal', 'Won'].includes(lead.stage)) {
         evaluateAutomation(`Stage Changed to ${lead.stage}`, automationPayload);
@@ -4490,7 +4522,7 @@ RETURNING *
 
     // 1. General Update
     evaluateAutomation('Ticket Updated', automationPayload);
-    
+
     // 2. State-Specific Triggers
     if (updatedTicket.status === 'Resolved') {
       evaluateAutomation('Ticket Resolved', automationPayload);
@@ -6615,28 +6647,28 @@ router.delete('/admin/session-history/:id', authenticateToken, requireRole('Admi
 router.delete('/api/contacts/:contactId/mock-interview-sessions/:sessionId', authenticateToken, requireRole('Admin'), async (req, res) => {
   try {
     const { contactId, sessionId } = req.params;
-    
+
     // Fetch contact
     const result = await query('SELECT metadata FROM contacts WHERE id = $1', [contactId]);
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Contact not found' });
     }
-    
+
     const metadata = result.rows[0].metadata || {};
     const sessions = metadata.mockInterviewSessions || [];
-    
+
     // Filter out the session
     const updatedSessions = sessions.filter(s => s.id !== sessionId);
-    
+
     if (sessions.length === updatedSessions.length) {
       return res.status(404).json({ error: 'Session not found in contact metadata' });
     }
-    
+
     // Update metadata
     const updatedMetadata = { ...metadata, mockInterviewSessions: updatedSessions };
-    
+
     await query('UPDATE contacts SET metadata = $1 WHERE id = $2', [JSON.stringify(updatedMetadata), contactId]);
-    
+
     res.json({ success: true });
   } catch (error) {
     console.error('DELETE mock-interview-session error:', error);
@@ -7198,7 +7230,7 @@ router.delete('/mock-interview/templates/:id', authenticateToken, requireRole('A
 router.post('/mock-interview/generate-feedback', authenticateToken, async (req, res) => {
   try {
     const { prompt } = req.body;
-    
+
     if (!process.env.OPENROUTER_API_KEY) {
       console.error('OPENROUTER_API_KEY is missing in environment variables');
       return res.status(500).json({ error: 'AI service not configured on server' });
@@ -7215,9 +7247,9 @@ router.post('/mock-interview/generate-feedback', authenticateToken, async (req, 
       body: JSON.stringify({
         model: 'anthropic/claude-3.5-sonnet',
         messages: [
-          { 
-            role: 'system', 
-            content: 'You are a \"Special Agent\" and Senior US Visa Interview Expert. You provide extremely high-end, rigorous, and professional mock interview evaluations. Your feedback must be authoritative, clear, and high-impact. Avoid long, speech-like paragraphs. Instead, use concise bullet points, bold text for key takeaways, and provide clear, actionable strategies for success. Focus on the nuances of communication, intent, and consistency needed for a successful visa interview.' 
+          {
+            role: 'system',
+            content: 'You are a \"Special Agent\" and Senior US Visa Interview Expert. You provide extremely high-end, rigorous, and professional mock interview evaluations. Your feedback must be authoritative, clear, and high-impact. Avoid long, speech-like paragraphs. Instead, use concise bullet points, bold text for key takeaways, and provide clear, actionable strategies for success. Focus on the nuances of communication, intent, and consistency needed for a successful visa interview.'
           },
           { role: 'user', content: prompt }
         ],
