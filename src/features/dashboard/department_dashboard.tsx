@@ -272,7 +272,13 @@ const DepartmentDashboard: React.FC<DepartmentDashboardProps> = ({ user, tickets
                                     <div key={v.id} className={`p-4 rounded-lg border ${i === 0 ? 'bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800' : 'bg-gray-50 border-gray-100 dark:bg-gray-700/30 dark:border-gray-700'}`}>
                                         <div className="flex justify-between items-start">
                                             <div>
-                                                <div className="font-bold text-lg">#{v.dailySequenceNumber} {v.name}</div>
+                                                <div className="flex items-center gap-3">
+                                                    <div className="font-bold text-lg">#{v.dailySequenceNumber} {v.name}</div>
+                                                    <div className="flex items-center gap-1.5 px-2 py-0.5 bg-gray-100 dark:bg-gray-700 rounded-full border border-gray-200 dark:border-gray-600">
+                                                        <span className="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-tight">Meeting with:</span>
+                                                        <span className="text-xs font-bold text-lyceum-blue">{v.staffName || v.host || 'General Staff'}</span>
+                                                    </div>
+                                                </div>
                                                 <div className="text-sm text-gray-500 max-w-md">
                                                     {v.visitSegments && v.visitSegments.length > 1 ? (
                                                         <div className="flex flex-wrap gap-1 items-center mt-1">
