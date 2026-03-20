@@ -2076,6 +2076,24 @@ router.put('/visa-operations/:id/slot-booking', authenticateToken, async (req, r
       createdAt: opData.created_at
     };
 
+    // AUTOMATION Payload Helper
+    const automationPayload = {
+      ...slotResponse,
+      contact_id: opData.contact_id,
+      vop_number: opData.vop_number,
+      visa_status: opData.status,
+      appointment_state: finalSlotBookingData?.appointmentState || opData.slot_booking_data?.appointmentState,
+      ds160_number: opData.ds_data?.confirmationNumber,
+      ds160_start_date: opData.ds_data?.startDate,
+      ds160_expiry_date: opData.ds_data?.expiryDate,
+      ds160_status: opData.ds_data?.status
+    };
+
+    // Slot Booked Trigger
+    if (slotBookingData && slotBookingData.appointmentState && slotBookingData.appointmentState !== currentSlotData.appointmentState) {
+      evaluateAutomation('Slot Booked', automationPayload);
+    }
+
     // AUTOMATION TRIGGERS for Visa Outcome
     if (visaInterviewData && visaInterviewData.visaOutcome) {
       const outcome = visaInterviewData.visaOutcome.toLowerCase();
@@ -2086,10 +2104,7 @@ router.put('/visa-operations/:id/slot-booking', authenticateToken, async (req, r
 
       if (triggerEvent) {
         evaluateAutomation(triggerEvent, {
-          ...slotResponse,
-          contact_id: opData.contact_id,
-          vop_number: opData.vop_number,
-          visa_status: opData.status,
+          ...automationPayload,
           outcome: visaInterviewData.visaOutcome
         });
       }
@@ -2139,7 +2154,7 @@ router.put('/visa-operations/:id/ds-160', authenticateToken, async (req, res) =>
     }
 
     const op = result.rows[0];
-    res.json({
+    const dsResponse = {
       ...op,
       cgiData: op.cgi_data,
       slotBookingData: op.slot_booking_data,
@@ -2150,7 +2165,24 @@ router.put('/visa-operations/:id/ds-160', authenticateToken, async (req, res) =>
       contactId: op.contact_id,
       userId: op.user_id,
       createdAt: op.created_at
-    });
+    };
+
+    // DS-160 Submitted Trigger
+    if (dsData.confirmationNumber && (!existingDsData.confirmationNumber || dsData.confirmationNumber !== existingDsData.confirmationNumber)) {
+      evaluateAutomation('DS-160 Submitted', {
+        ...dsResponse,
+        contact_id: op.contact_id,
+        vop_number: op.vop_number,
+        visa_status: op.status,
+        ds160_number: dsData.confirmationNumber,
+        ds160_start_date: dsData.startDate,
+        ds160_expiry_date: dsData.expiryDate,
+        ds160_status: dsData.status,
+        appointment_state: op.slot_booking_data?.appointmentState
+      });
+    }
+
+    res.json(dsResponse);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -2268,7 +2300,30 @@ router.post('/visa-operations/:id/ds-160/document', authenticateToken, upload.si
         ...finalResponse,
         contact_id: op.contact_id,
         vop_number: op.vop_number,
-        document_name: req.file.originalname
+        document_name: req.file.originalname,
+        ds160_number: op.ds_data?.confirmationNumber,
+        ds160_start_date: op.ds_data?.startDate,
+        ds160_expiry_date: op.ds_data?.expiryDate,
+        ds160_status: op.ds_data?.status,
+        appointment_state: op.slot_booking_data?.appointmentState
+      });
+    }
+
+    // DS-160 Waiting for Approval Trigger
+    if (uploadType === 'filling') {
+      evaluateAutomation('DS-160 Waiting for Student Approval', {
+        ...finalResponse,
+        contact_id: op.contact_id,
+        vop_number: op.vop_number,
+        ds160_number: op.ds_data?.confirmationNumber,
+        ds160_status: 'pending'
+      });
+      evaluateAutomation('DS-160 Waiting for Admin Approval', {
+        ...finalResponse,
+        contact_id: op.contact_id,
+        vop_number: op.vop_number,
+        ds160_number: op.ds_data?.confirmationNumber,
+        ds160_status: 'pending'
       });
     }
 
@@ -2431,6 +2486,41 @@ router.put('/visa-operations/:id/ds-160/status', authenticateToken, async (req, 
     ]);
 
     const op = result.rows[0];
+    const statusResponse = {
+      ...op,
+      cgiData: op.cgi_data,
+      slotBookingData: op.slot_booking_data,
+      visaInterviewData: op.visa_interview_data,
+      dsData: op.ds_data,
+      showCgiOnPortal: op.show_cgi_on_portal,
+      vopNumber: op.vop_number,
+      contactId: op.contact_id,
+      userId: op.user_id,
+      createdAt: op.created_at
+    };
+
+    const automationPayload = {
+      ...statusResponse,
+      contact_id: op.contact_id,
+      vop_number: op.vop_number,
+      visa_status: op.status,
+      ds160_number: op.ds_data?.confirmationNumber,
+      ds160_status: op.ds_data?.status,
+      appointment_state: op.slot_booking_data?.appointmentState
+    };
+
+    // Approval Triggers
+    if (studentStatus === 'accepted') {
+      evaluateAutomation('DS-160 Student Approved', automationPayload);
+    } else if (studentStatus === 'pending') {
+      evaluateAutomation('DS-160 Waiting for Student Approval', automationPayload);
+    }
+
+    if (adminStatus === 'accepted') {
+      evaluateAutomation('DS-160 Admin Approved', automationPayload);
+    } else if (adminStatus === 'pending') {
+      evaluateAutomation('DS-160 Waiting for Admin Approval', automationPayload);
+    }
 
     // Notification Logic: If student approves, notify Admin
     if (studentStatus === 'accepted') {

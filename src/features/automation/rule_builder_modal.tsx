@@ -50,7 +50,13 @@ const TRIGGER_GROUPS = [
             'Visa Approved',
             'Visa Rejected',
             'Visa 221g (Administrative Processing)',
-            'Visa Confirmation Document Uploaded'
+            'Visa Confirmation Document Uploaded',
+            'Slot Booked',
+            'DS-160 Submitted',
+            'DS-160 Waiting for Student Approval',
+            'DS-160 Waiting for Admin Approval',
+            'DS-160 Student Approved',
+            'DS-160 Admin Approved'
         ]
     },
     {
@@ -116,11 +122,16 @@ const APP_FIELDS: Record<string, { value: string; label: string }[]> = {
         { value: 'file_status', label: 'File Status' },
         { value: 'notes', label: 'Notes' }
     ],
-    'Visa Operations': [
+    'Visa Operations App': [
         { value: 'status', label: 'Status' },
         { value: 'country', label: 'Country' },
         { value: 'name', label: 'Name' },
-        { value: 'phone', label: 'Phone' }
+        { value: 'phone', label: 'Phone' },
+        { value: 'appointment_state', label: 'Appointment State' },
+        { value: 'ds160_number', label: 'DS-160 Number' },
+        { value: 'ds160_start_date', label: 'DS-160 Start Date' },
+        { value: 'ds160_expiry_date', label: 'DS-160 Expiry Date' },
+        { value: 'ds160_status', label: 'DS-160 Status' }
     ],
     'University Application': [
         { value: 'university_name', label: 'University Name' },
