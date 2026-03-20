@@ -8,7 +8,7 @@ import {
     Award, Copy, ArrowRight, User as UserIcon, Mail,
     Phone, Briefcase, Trash2, Edit3, MoreVertical,
     AlertCircle, CheckCircle, BookOpen, Languages, Folder, Key, Plus, Sparkles, Settings, Save,
-    ClipboardList
+    ClipboardList, Eye
 } from 'lucide-react';
 import ContactDocumentsView from '../students/contact_documents_view';
 import ApplicationCredentialsView from '../students/application_credentials_view';
@@ -105,6 +105,9 @@ const UniversityApplicationView: React.FC<UniversityApplicationViewProps> = ({ u
     const [savingInternalNote, setSavingInternalNote] = useState(false);
     const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
     const [editingNoteText, setEditingNoteText] = useState('');
+    const statusFilePickerRef = useRef<HTMLInputElement>(null);
+    const [pendingStatusUpdate, setPendingStatusUpdate] = useState<{ student: Contact; idx: number; status: string } | null>(null);
+    const [statusDocs, setStatusDocs] = useState<any[]>([]);
 
     useEffect(() => {
         fetchStudents();
@@ -208,6 +211,15 @@ const UniversityApplicationView: React.FC<UniversityApplicationViewProps> = ({ u
         } finally {
             setRefreshing(false);
         }
+
+        // Fetch documents for the selected student
+        try {
+            const docs = await api.getContactDocuments(item.student.id);
+            setStatusDocs(docs || []);
+        } catch (error) {
+            console.error('Failed to fetch contact documents:', error);
+            setStatusDocs([]);
+        }
     };
 
     const handleAddOrUpdateMessage = () => {
@@ -239,17 +251,28 @@ const UniversityApplicationView: React.FC<UniversityApplicationViewProps> = ({ u
     };
 
     const handleUpdateStatus = async (student: Contact, appIdx: number, newStatus: string) => {
-        setUpdating(true);
+        // Intercept for I-20 and Acceptance
+        if (newStatus === 'Received Acceptance' || newStatus === 'Received I20') {
+            setPendingStatusUpdate({ student, idx: appIdx, status: newStatus });
+            statusFilePickerRef.current?.click();
+            return;
+        }
+
+        await performStatusUpdate(student, appIdx, newStatus);
+    };
+
+    const performStatusUpdate = async (student: Contact, appIdx: number, newStatus: string) => {
         try {
+            setUpdating(true);
             const updatedStudent = { ...student };
             if (updatedStudent.visaInformation?.universityApplication?.universities) {
-                updatedStudent.visaInformation.universityApplication.universities[appIdx].status = newStatus;
+                const app = updatedStudent.visaInformation.universityApplication.universities[appIdx];
+                app.status = newStatus;
 
                 // Add a remark if it's being updated by staff
-                const existingRemarks = updatedStudent.visaInformation.universityApplication.universities[appIdx].remarks || '';
+                const existingRemarks = app.remarks || '';
                 const timestamp = new Date().toLocaleString();
-                updatedStudent.visaInformation.universityApplication.universities[appIdx].remarks =
-                    `${existingRemarks}\n[${timestamp}] Updated to ${newStatus} by ${user.name}`;
+                app.remarks = `${existingRemarks}\n[${timestamp}] Updated to ${newStatus} by ${user.name}`;
 
                 await api.saveContact(updatedStudent, false);
 
@@ -269,6 +292,52 @@ const UniversityApplicationView: React.FC<UniversityApplicationViewProps> = ({ u
         } finally {
             setUpdating(false);
         }
+    };
+
+    const handleStatusFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file || !pendingStatusUpdate) {
+            setPendingStatusUpdate(null);
+            return;
+        }
+
+        // Validate format
+        const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png'];
+        if (!allowedTypes.includes(file.type)) {
+            alert('Only PDF, JPG, and PNG formats are supported.');
+            setPendingStatusUpdate(null);
+            if (statusFilePickerRef.current) statusFilePickerRef.current.value = '';
+            return;
+        }
+
+        try {
+            setUpdating(true);
+            const category = pendingStatusUpdate.status === 'Received Acceptance' ? 'Acceptance' : 'I20';
+            
+            // Note: In this view we're using alert/confirm instead of toast for consistency with existing code
+            await api.uploadDocument(pendingStatusUpdate.student.id, file, false, category);
+
+            // Re-fetch documents to update UI immediately
+            const freshDocs = await api.getContactDocuments(pendingStatusUpdate.student.id);
+            setStatusDocs(freshDocs || []);
+
+            // Now proceed with status update
+            await performStatusUpdate(pendingStatusUpdate.student, pendingStatusUpdate.idx, pendingStatusUpdate.status);
+        } catch (error) {
+            console.error('Failed to upload status document:', error);
+            alert('Failed to upload document. Status not updated.');
+        } finally {
+            setPendingStatusUpdate(null);
+            setUpdating(false);
+            if (statusFilePickerRef.current) statusFilePickerRef.current.value = '';
+        }
+    };
+
+    const getStatusDocument = (category: string) => {
+        if (!statusDocs || statusDocs.length === 0) return null;
+        return [...statusDocs]
+            .filter(d => d.category === category)
+            .sort((a, b) => new Date(b.uploaded_at || b.uploadDate).getTime() - new Date(a.uploaded_at || a.uploadDate).getTime())[0];
     };
 
     const handleSaveTask = async (task: any) => {
@@ -1507,6 +1576,26 @@ const UniversityApplicationView: React.FC<UniversityApplicationViewProps> = ({ u
                                                         >
                                                             <Award size={16} /> Received Acceptance
                                                         </button>
+
+                                                        {selectedApp.app.status === 'Received Acceptance' && getStatusDocument('Acceptance') && (
+                                                            <div className="mx-2 mt-2 p-3 bg-emerald-500/10 rounded-xl border border-emerald-500/20 flex items-center justify-between animate-in fade-in slide-in-from-top-2 duration-300">
+                                                                <div className="flex items-center gap-2 overflow-hidden">
+                                                                    <FileText size={14} className="text-emerald-500 shrink-0" />
+                                                                    <span className="text-[10px] font-bold text-emerald-200 truncate">{getStatusDocument('Acceptance')?.name}</span>
+                                                                </div>
+                                                                <button
+                                                                    onClick={() => {
+                                                                        const doc = getStatusDocument('Acceptance');
+                                                                        if (doc) window.open(`${api.API_BASE_URL}/documents/${doc.id}?preview=true&token=${api.getToken()}`, '_blank');
+                                                                    }}
+                                                                    className="p-1.5 hover:bg-emerald-500/20 rounded-lg text-emerald-400 transition-colors"
+                                                                    title="Preview Acceptance Letter"
+                                                                >
+                                                                    <Eye size={12} />
+                                                                </button>
+                                                            </div>
+                                                        )}
+
                                                         <button
                                                             onClick={() => handleUpdateStatus(selectedApp.student, selectedApp.idx, 'Received I20')}
                                                             disabled={updating || selectedApp.app.status === 'Received I20' || selectedApp.app.status === 'Application Deferred'}
@@ -1514,6 +1603,25 @@ const UniversityApplicationView: React.FC<UniversityApplicationViewProps> = ({ u
                                                         >
                                                             <Award size={16} /> Received I20
                                                         </button>
+
+                                                        {selectedApp.app.status === 'Received I20' && getStatusDocument('I20') && (
+                                                            <div className="mx-2 mt-2 p-3 bg-emerald-500/10 rounded-xl border border-emerald-500/20 flex items-center justify-between animate-in fade-in slide-in-from-top-2 duration-300">
+                                                                <div className="flex items-center gap-2 overflow-hidden">
+                                                                    <FileText size={14} className="text-emerald-500 shrink-0" />
+                                                                    <span className="text-[10px] font-bold text-emerald-200 truncate">{getStatusDocument('I20')?.name}</span>
+                                                                </div>
+                                                                <button
+                                                                    onClick={() => {
+                                                                        const doc = getStatusDocument('I20');
+                                                                        if (doc) window.open(`${api.API_BASE_URL}/documents/${doc.id}?preview=true&token=${api.getToken()}`, '_blank');
+                                                                    }}
+                                                                    className="p-1.5 hover:bg-emerald-500/20 rounded-lg text-emerald-400 transition-colors"
+                                                                    title="Preview I-20"
+                                                                >
+                                                                    <Eye size={12} />
+                                                                </button>
+                                                            </div>
+                                                        )}
                                                         <button
                                                             onClick={() => handleUpdateStatus(selectedApp.student, selectedApp.idx, 'Rejected')}
                                                             disabled={updating || selectedApp.app.status === 'Rejected' || selectedApp.app.status === 'Application Deferred'}
@@ -1566,6 +1674,14 @@ const UniversityApplicationView: React.FC<UniversityApplicationViewProps> = ({ u
                 onSuccess={() => {
                     fetchStudents();
                 }}
+            />
+
+            <input
+                type="file"
+                ref={statusFilePickerRef}
+                onChange={handleStatusFileSelect}
+                className="hidden"
+                accept=".pdf,.jpg,.jpeg,.png"
             />
 
             <TaskModal
