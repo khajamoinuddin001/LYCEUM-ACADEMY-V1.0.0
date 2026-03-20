@@ -285,8 +285,11 @@ router.post('/documents', authenticateToken, async (req, res) => {
       evaluateAutomation('Document Uploaded', {
         contact_id: contactId,
         document_name: file.originalname,
-        category,
-        document_id: newDoc.id
+        category: category || 'General',
+        document_id: newDoc.id,
+        'document_date&time': new Date(newDoc.uploaded_at).toLocaleString(),
+        document_uploader_name: req.user.name,
+        document_uploader_email: req.user.email
       });
 
       res.json(newDoc);

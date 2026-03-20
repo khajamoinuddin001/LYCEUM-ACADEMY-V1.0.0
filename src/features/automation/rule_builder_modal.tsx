@@ -4,7 +4,7 @@ import * as api from '@/utils/api';
 
 const TRIGGER_GROUPS = [
     {
-        group: '🎯 CRM (Leads)',
+        group: '🎯 CRM (Leads App)',
         triggers: [
             'Lead Created',
             'Status Changed',
@@ -15,14 +15,14 @@ const TRIGGER_GROUPS = [
         ]
     },
     {
-        group: '👤 Contacts',
+        group: '👤 Contacts App',
         triggers: [
             'Contact Created',
             'User Created'
         ]
     },
     {
-        group: '🎫 Tickets & Support',
+        group: '🎫 Tickets App',
         triggers: [
             'Ticket Created',
             'Ticket Updated',
@@ -31,7 +31,7 @@ const TRIGGER_GROUPS = [
         ]
     },
     {
-        group: '🎓 University Applications',
+        group: '🎓 University App',
         triggers: [
             'Application Marked Applied',
             'Application Review Started',
@@ -43,7 +43,7 @@ const TRIGGER_GROUPS = [
         ]
     },
     {
-        group: '🛂 Visa Operations',
+        group: '🛂 Visa Operations App',
         triggers: [
             'Visa Operation Created',
             'Visa Status Changed',
@@ -54,14 +54,14 @@ const TRIGGER_GROUPS = [
         ]
     },
     {
-        group: '💰 Finance & Transactions',
+        group: '💰 Finance App',
         triggers: [
             'Transaction Created',
             'Payment Received'
         ]
     },
     {
-        group: '📁 Documents & Tasks',
+        group: '📁 Documents Manager',
         triggers: [
             'Document Uploaded',
             'Document Approved',
@@ -70,7 +70,7 @@ const TRIGGER_GROUPS = [
         ]
     },
     {
-        group: '🏢 Check-ins & Visits',
+        group: '🏢 Visitor Desk App',
         triggers: [
             'Visit Created',
             'Visit Updated',
@@ -78,13 +78,13 @@ const TRIGGER_GROUPS = [
         ]
     },
     {
-        group: '📚 Education',
+        group: '📚 LMS App',
         triggers: [
             'LMS Course Created'
         ]
     },
     {
-        group: '🎤 Mock Interview',
+        group: '🎤 Mock Interview App',
         triggers: [
             'Mock Interview Approved (>=3.5)',
             'Mock Interview Rejected (<2.5)',
@@ -127,6 +127,13 @@ const APP_FIELDS: Record<string, { value: string; label: string }[]> = {
         { value: 'course_name', label: 'Course/Program' },
         { value: 'status', label: 'Application Status' },
         { value: 'intake', label: 'Intake' }
+    ],
+    'Documents Manager': [
+        { value: 'document_name', label: 'Document Name' },
+        { value: 'document_category', label: 'Document Category' },
+        { value: 'document_date&time', label: 'Upload Date/Time' },
+        { value: 'document_uploader_name', label: 'Uploader Name' },
+        { value: 'document_uploader_email', label: 'Uploader Email' }
     ],
     'Mock Interview': [
         { value: 'mock_interview_outcome', label: 'Approved / Rejected / Review Required' },

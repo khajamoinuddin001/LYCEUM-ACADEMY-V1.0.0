@@ -233,7 +233,7 @@ const EmailTemplateModal: React.FC<EmailTemplateModalProps> = ({ isOpen, onClose
 
                             <div className="space-y-4">
                                 <div>
-                                    <p className="text-[10px] uppercase tracking-wider font-bold text-gray-500 dark:text-gray-400 mb-2">👤 Contact</p>
+                                    <p className="text-[10px] uppercase tracking-wider font-bold text-gray-500 dark:text-gray-400 mb-2">👤 Contacts App</p>
                                     <div className="flex flex-wrap gap-1.5">
                                         {['contact_name', 'first_name', 'contact_email', 'contact_phone'].map(tag => (
                                             <button key={tag} type="button" onClick={() => insertText(`{{${tag}}}`)} className="px-2 py-0.5 bg-white dark:bg-gray-800 rounded shadow-sm text-[10px] font-mono border border-gray-200 dark:border-gray-700 hover:border-emerald-500 hover:text-emerald-600 transition-colors">
@@ -244,7 +244,7 @@ const EmailTemplateModal: React.FC<EmailTemplateModalProps> = ({ isOpen, onClose
                                 </div>
 
                                 <div>
-                                    <p className="text-[10px] uppercase tracking-wider font-bold text-gray-500 dark:text-gray-400 mb-2">🎯 CRM (Leads)</p>
+                                    <p className="text-[10px] uppercase tracking-wider font-bold text-gray-500 dark:text-gray-400 mb-2">🎯 CRM (Leads App)</p>
                                     <div className="flex flex-wrap gap-1.5">
                                         {['company_name', 'lead_source', 'lead_stage', 'current_stage_name', 'date_entered_current_stage', 'date_entered_new_stage', 'date_entered_qualified_stage', 'date_entered_proposal_stage', 'date_entered_won_stage'].map(tag => (
                                             <button key={tag} type="button" onClick={() => insertText(`{{${tag}}}`)} className="px-2 py-0.5 bg-white dark:bg-gray-800 rounded shadow-sm text-[10px] font-mono border border-gray-200 dark:border-gray-700 hover:border-emerald-500 hover:text-emerald-600 transition-colors">
@@ -255,7 +255,7 @@ const EmailTemplateModal: React.FC<EmailTemplateModalProps> = ({ isOpen, onClose
                                 </div>
 
                                 <div>
-                                    <p className="text-[10px] uppercase tracking-wider font-bold text-gray-500 dark:text-gray-400 mb-2">🏢 Visitor Desk</p>
+                                    <p className="text-[10px] uppercase tracking-wider font-bold text-gray-500 dark:text-gray-400 mb-2">🏢 Reception Desk App</p>
                                     <div className="flex flex-wrap gap-1.5">
                                         {['visitor_name', 'visitor_phone', 'staff_name', 'visit_purpose', 'visit_action', 'visit_department', 'visit_number'].map(tag => (
                                             <button key={tag} type="button" onClick={() => insertText(`{{${tag}}}`)} className="px-2 py-0.5 bg-white dark:bg-gray-800 rounded shadow-sm text-[10px] font-mono border border-gray-200 dark:border-gray-700 hover:border-emerald-500 hover:text-emerald-600 transition-colors">
@@ -267,7 +267,7 @@ const EmailTemplateModal: React.FC<EmailTemplateModalProps> = ({ isOpen, onClose
 
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
-                                        <p className="text-[10px] uppercase tracking-wider font-bold text-gray-500 dark:text-gray-400 mb-2">🎟️ Tickets</p>
+                                        <p className="text-[10px] uppercase tracking-wider font-bold text-gray-500 dark:text-gray-400 mb-2">🎟️ Tickets App</p>
                                         <div className="flex flex-wrap gap-1.5">
                                             {['ticket_id', 'subject', 'status', 'priority', 'client_name', 'client_email', 'created_at', 'solved_at'].map(tag => (
                                                 <button key={tag} type="button" onClick={() => insertText(`{{${tag}}}`)} className="px-2 py-0.5 bg-white dark:bg-gray-800 rounded shadow-sm text-[10px] font-mono border border-gray-200 dark:border-gray-700 hover:border-emerald-500 hover:text-emerald-600 transition-colors">
@@ -277,7 +277,7 @@ const EmailTemplateModal: React.FC<EmailTemplateModalProps> = ({ isOpen, onClose
                                         </div>
                                     </div>
                                     <div>
-                                        <p className="text-[10px] uppercase tracking-wider font-bold text-gray-500 dark:text-gray-400 mb-2">🌍 Visa Ops</p>
+                                        <p className="text-[10px] uppercase tracking-wider font-bold text-gray-500 dark:text-gray-400 mb-2">🌍 Visa Operations App</p>
                                         <div className="flex flex-wrap gap-1.5">
                                             {['vop_number', 'visa_status', 'country'].map(tag => (
                                                 <button key={tag} type="button" onClick={() => insertText(`{{${tag}}}`)} className="px-2 py-0.5 bg-white dark:bg-gray-800 rounded shadow-sm text-[10px] font-mono border border-gray-200 dark:border-gray-700 hover:border-emerald-500 hover:text-emerald-600 transition-colors">
@@ -313,7 +313,7 @@ const EmailTemplateModal: React.FC<EmailTemplateModalProps> = ({ isOpen, onClose
 
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
-                                        <p className="text-[10px] uppercase tracking-wider font-bold text-gray-500 dark:text-gray-400 mb-2">💰 Finance</p>
+                                        <p className="text-[10px] uppercase tracking-wider font-bold text-gray-500 dark:text-gray-400 mb-2">💰 Finance App</p>
                                         <div className="flex flex-wrap gap-1.5">
                                             {['transaction_id', 'amount', 'date', 'status'].map(tag => (
                                                 <button key={tag} type="button" onClick={() => insertText(`{{${tag}}}`)} className="px-2 py-0.5 bg-white dark:bg-gray-800 rounded shadow-sm text-[10px] font-mono border border-gray-200 dark:border-gray-700 hover:border-emerald-500 hover:text-emerald-600 transition-colors">
@@ -323,7 +323,7 @@ const EmailTemplateModal: React.FC<EmailTemplateModalProps> = ({ isOpen, onClose
                                         </div>
                                     </div>
                                     <div>
-                                        <p className="text-[10px] uppercase tracking-wider font-bold text-gray-500 dark:text-gray-400 mb-2">🎤 Mock Interview</p>
+                                        <p className="text-[10px] uppercase tracking-wider font-bold text-gray-500 dark:text-gray-400 mb-2">🎤 Mock Interview App</p>
                                         <div className="flex flex-wrap gap-1.5">
                                             {[
                                                 'mock_interview_outcome',
@@ -341,6 +341,28 @@ const EmailTemplateModal: React.FC<EmailTemplateModalProps> = ({ isOpen, onClose
                                                 </button>
                                             ))}
                                         </div>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <p className="text-[10px] uppercase tracking-wider font-bold text-gray-500 dark:text-gray-400 mb-2">📁 Documents Manager</p>
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {[
+                                                'document_name',
+                                                'document_category',
+                                                'document_date&time',
+                                                'document_uploader_name',
+                                                'document_uploader_email'
+                                            ].map(tag => (
+                                                <button key={tag} type="button" onClick={() => insertText(`{{${tag}}}`)} className="px-2 py-0.5 bg-white dark:bg-gray-800 rounded shadow-sm text-[10px] font-mono border border-gray-200 dark:border-gray-700 hover:border-emerald-500 hover:text-emerald-600 transition-colors">
+                                                    {`{{${tag}}}`}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        {/* Empty column for balance */}
                                     </div>
                                 </div>
                             </div>
