@@ -1179,10 +1179,11 @@ export const updateDs160Status = async (
   });
 };
 
-export const uploadDs160DependencyDocument = async (id: number, file: File, type: 'internal' | 'filling' | 'confirmation' = 'internal'): Promise<any> => {
+export const uploadDs160DependencyDocument = async (id: number, file: File, index: number, type: 'internal' | 'filling' | 'confirmation' = 'internal'): Promise<any> => {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('type', type);
+  formData.append('index', index.toString());
 
   // We need to use raw fetch here because apiRequest handles JSON by default and doesn't support FormData automatically unless we customize it, 
   // or maybe apiRequest DOES check for FormData? 

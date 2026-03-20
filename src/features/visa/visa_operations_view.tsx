@@ -97,6 +97,7 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
         adminStatus: 'pending' as 'pending' | 'accepted' | 'rejected',
         rejectionReason: '',
         adminName: '',
+        internalDocuments: [] as { id: number; name: string }[], // NEW: Multiple internal attachments
         dependencies: [] as any[]
     });
     const [showPassword, setShowPassword] = useState(false);
@@ -141,6 +142,7 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                     surname: '',
                     yearOfBirth: '',
                     basicDsBox: '',
+                    internalDocuments: [],        // NEW: Array for multiple documents
                     documentId: undefined,
                     documentName: '',
                     fillingDocumentId: undefined, // DEPRECATED: Use fillingDocuments
@@ -180,12 +182,18 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
             // We use the same endpoint but will likely need to store the result in the correct field
             // Since the backend might not differentiate yet, we rely on the frontend to solve where it goes
             // For now, let's assume `uploadDs160DependencyDocument` is generic or we add a type param to it
-            const response = await uploadDs160DependencyDocument(activeOp.id, file, type);
+            const response = await uploadDs160DependencyDocument(activeOp.id, file, index, type);
 
             setDsFormData(prev => {
                 const newDeps = [...prev.dependencies];
                 if (type === 'internal') {
-                    newDeps[index] = { ...newDeps[index], documentId: response.id, documentName: response.name };
+                    const existingDocs = newDeps[index].internalDocuments || [];
+                    newDeps[index] = { 
+                        ...newDeps[index], 
+                        internalDocuments: [...existingDocs, { id: response.id, name: response.name }],
+                        documentId: response.id, 
+                        documentName: response.name 
+                    };
                 } else if (type === 'filling') {
                     // Append new document to the list
                     const existingDocs = newDeps[index].fillingDocuments || [];
@@ -466,6 +474,7 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                 ...prev,
                 documentId: updatedOp.dsData?.documentId,
                 documentName: updatedOp.dsData?.documentName,
+                internalDocuments: updatedOp.dsData?.internalDocuments || [],
                 confirmationDocumentId: updatedOp.dsData?.confirmationDocumentId,
                 confirmationDocumentName: updatedOp.dsData?.confirmationDocumentName,
                 surname: updatedOp.dsData?.surname || '',
@@ -1572,8 +1581,8 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                                         />
 
                                         <div className="space-y-3">
-                                            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Internal Attachment</label>
-                                            <div className="flex flex-wrap items-center gap-3">
+                                            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Internal Attachments</label>
+                                            <div className="flex flex-col gap-3">
                                                 <input
                                                     type="file"
                                                     id="ds-document-main-upload"
@@ -1582,34 +1591,47 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                                                 />
                                                 <label
                                                     htmlFor="ds-document-main-upload"
-                                                    className="flex items-center gap-2 bg-slate-100 text-slate-600 px-5 py-2.5 rounded-lg text-sm font-bold hover:bg-slate-200 transition-all cursor-pointer border border-slate-200"
+                                                    className="flex items-center justify-center gap-2 bg-slate-100 text-slate-600 px-5 py-2.5 rounded-lg text-sm font-bold hover:bg-slate-200 transition-all cursor-pointer border border-slate-200 shadow-sm"
                                                 >
                                                     <Upload size={18} />
-                                                    {dsFormData.documentName ? 'Replace Internal' : 'Upload Internal'}
+                                                    Upload Internal Document
                                                 </label>
 
-                                                {dsFormData.documentId && (
-                                                    <div className="flex items-center gap-3 bg-slate-50 px-4 py-2 rounded-xl border border-slate-100">
-                                                        <FileText size={16} className="text-slate-400" />
-                                                        <div className="flex flex-col">
-                                                            <span className="text-xs font-bold text-slate-700 max-w-[150px] truncate">{dsFormData.documentName}</span>
-                                                            <div className="flex items-center gap-3 mt-1">
-                                                                <button
-                                                                    onClick={() => handlePreviewFile(dsFormData.documentId!)}
-                                                                    className="flex items-center gap-1 text-[10px] font-bold text-slate-600 hover:text-slate-800 transition-colors"
-                                                                >
-                                                                    <Eye size={12} />
-                                                                    Preview
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => handleDownloadFile(dsFormData.documentId!, dsFormData.documentName || 'ds-160-internal.pdf')}
-                                                                    className="flex items-center gap-1 text-[10px] font-bold text-slate-600 hover:text-slate-800 transition-colors"
-                                                                >
-                                                                    <Download size={12} />
-                                                                    Download
-                                                                </button>
+                                                {(dsFormData.internalDocuments?.length > 0 || dsFormData.documentId) && (
+                                                    <div className="space-y-2 mt-2">
+                                                        {(dsFormData.internalDocuments || (dsFormData.documentId ? [{ id: dsFormData.documentId, name: dsFormData.documentName }] : [])).map((doc, i) => (
+                                                            <div key={doc.id} className="flex items-center gap-3 bg-slate-50 px-4 py-3 rounded-2xl border border-slate-100 shadow-sm group/doc">
+                                                                <div className="flex items-center justify-center w-8 h-8 bg-white text-slate-400 rounded-lg font-bold text-xs shrink-0 border border-slate-100 group-hover/doc:text-blue-500 group-hover/doc:border-blue-100 transition-colors">
+                                                                    {i + 1}
+                                                                </div>
+                                                                <div className="flex-1 min-w-0">
+                                                                    <div className="text-xs font-bold text-slate-700 truncate">{doc.name}</div>
+                                                                    <div className="flex items-center gap-3 mt-1.5 pt-1.5 border-t border-slate-100/50">
+                                                                        <button
+                                                                            onClick={() => handlePreviewFile(doc.id)}
+                                                                            className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 hover:text-blue-600 transition-colors"
+                                                                        >
+                                                                            <Eye size={12} />
+                                                                            Preview
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => handleDownloadFile(doc.id, doc.name)}
+                                                                            className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 hover:text-blue-600 transition-colors"
+                                                                        >
+                                                                            <Download size={12} />
+                                                                            Download
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => handleDsFileDelete(doc.id)}
+                                                                            className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 hover:text-rose-600 transition-colors ml-auto"
+                                                                        >
+                                                                            <Trash2 size={12} />
+                                                                            Delete
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
                                                             </div>
-                                                        </div>
+                                                        ))}
                                                     </div>
                                                 )}
                                             </div>
@@ -1921,7 +1943,7 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                                                     placeholder="Internal notes..."
                                                 />
 
-                                                <div className="flex flex-wrap items-center gap-3">
+                                                <div className="flex flex-col gap-3">
                                                     <input
                                                         type="file"
                                                         id={`dep-doc-${index}`}
@@ -1930,32 +1952,38 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                                                     />
                                                     <label
                                                         htmlFor={`dep-doc-${index}`}
-                                                        className="flex items-center gap-2 bg-slate-100 text-slate-600 px-4 py-2 rounded-lg text-xs font-bold hover:bg-slate-200 transition-all cursor-pointer border border-slate-200"
+                                                        className="flex items-center justify-center gap-2 bg-slate-100 text-slate-600 px-4 py-2 rounded-lg text-xs font-bold hover:bg-slate-200 transition-all cursor-pointer border border-slate-200 shadow-sm"
                                                     >
                                                         <Upload size={14} />
-                                                        {dep.documentName ? 'Replace Internal' : 'Upload Internal'}
+                                                        Upload Internal Document
                                                     </label>
 
-                                                    {dep.documentId && (
-                                                        <div className="flex items-center gap-3 bg-slate-50 px-3 py-2 rounded-xl border border-slate-100">
-                                                            <FileText size={14} className="text-slate-400" />
-                                                            <div className="flex flex-col">
-                                                                <span className="text-xs font-bold text-slate-700 max-w-[150px] truncate">{dep.documentName}</span>
-                                                                <div className="flex items-center gap-2 mt-0.5">
-                                                                    <button
-                                                                        onClick={() => handlePreviewFile(dep.documentId!)}
-                                                                        className="text-[10px] font-bold text-slate-500 hover:text-slate-800 transition-colors"
-                                                                    >
-                                                                        Preview
-                                                                    </button>
-                                                                    <button
-                                                                        onClick={() => handleDependencyFileDelete(index, 'internal')}
-                                                                        className="text-[10px] font-bold text-rose-500 hover:text-rose-700 transition-colors"
-                                                                    >
-                                                                        Delete
-                                                                    </button>
+                                                    {(dep.internalDocuments?.length > 0 || dep.documentId) && (
+                                                        <div className="space-y-2 mt-2">
+                                                            {(dep.internalDocuments || (dep.documentId ? [{ id: dep.documentId, name: dep.documentName }] : [])).map((doc: any, i: number) => (
+                                                                <div key={doc.id} className="flex items-center gap-3 bg-slate-50 px-3 py-2.5 rounded-xl border border-slate-100 shadow-sm group/depdoc">
+                                                                    <div className="flex items-center justify-center w-6 h-6 bg-white text-slate-400 rounded-lg font-bold text-[10px] shrink-0 border border-slate-100 group-hover/depdoc:text-blue-500 group-hover/depdoc:border-blue-100 transition-colors">
+                                                                        {i + 1}
+                                                                    </div>
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <div className="text-[11px] font-bold text-slate-700 truncate">{doc.name}</div>
+                                                                        <div className="flex items-center gap-2.5 mt-1 pt-1 border-t border-slate-100/50">
+                                                                            <button
+                                                                                onClick={() => handlePreviewFile(doc.id)}
+                                                                                className="text-[10px] font-bold text-slate-500 hover:text-blue-600 transition-colors"
+                                                                            >
+                                                                                Preview
+                                                                            </button>
+                                                                            <button
+                                                                                onClick={() => handleDependencyFileDelete(index, 'internal', doc.id)}
+                                                                                className="text-[10px] font-bold text-slate-400 hover:text-rose-600 transition-colors ml-auto"
+                                                                            >
+                                                                                Delete
+                                                                            </button>
+                                                                        </div>
+                                                                    </div>
                                                                 </div>
-                                                            </div>
+                                                            ))}
                                                         </div>
                                                     )}
                                                 </div>
@@ -2239,6 +2267,7 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                                 adminStatus: activeOp?.dsData?.adminStatus || 'pending',
                                 rejectionReason: activeOp?.dsData?.rejectionReason || '',
                                 adminName: activeOp?.dsData?.adminName || '',
+                                internalDocuments: activeOp?.dsData?.internalDocuments || (activeOp?.dsData?.documentId ? [{ id: activeOp.dsData.documentId, name: activeOp.dsData.documentName || 'document.pdf' }] : []),
                                 dependencies: activeOp?.dsData?.dependencies || []
                             });
                             setStep('ds');
@@ -2342,6 +2371,7 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                                             adminStatus: activeOp?.dsData?.adminStatus || 'pending',
                                             rejectionReason: activeOp?.dsData?.rejectionReason || '',
                                             adminName: activeOp?.dsData?.adminName || '',
+                                            internalDocuments: activeOp?.dsData?.internalDocuments || (activeOp?.dsData?.documentId ? [{ id: activeOp.dsData.documentId, name: activeOp.dsData.documentName || 'document.pdf' }] : []),
                                             dependencies: activeOp?.dsData?.dependencies || []
                                         });
                                         setStep('ds');

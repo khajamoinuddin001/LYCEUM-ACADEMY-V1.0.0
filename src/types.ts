@@ -713,6 +713,7 @@ export interface VisaOperation {
     adminStatus?: 'pending' | 'accepted' | 'rejected';
     rejectionReason?: string;
     adminName?: string;
+    internalDocuments?: { id: number; name: string }[];
   };
   showCgiOnPortal?: boolean;
 }

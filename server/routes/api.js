@@ -2268,7 +2268,24 @@ router.post('/visa-operations/:id/ds-160/document', authenticateToken, upload.si
       `, [itemId, req.file.originalname, req.params.id]);
 
     } else {
-      // Internal (default) - updates the main document slot (legacy/internal)
+      // Internal (default) - supports multiple attachments
+      if (!updatedDsData.internalDocuments) {
+        updatedDsData.internalDocuments = [];
+        // Optional: migrate old single value if it exists
+        if (updatedDsData.documentId) {
+          updatedDsData.internalDocuments.push({
+            id: updatedDsData.documentId,
+            name: updatedDsData.documentName
+          });
+        }
+      }
+
+      updatedDsData.internalDocuments.push({
+        id: itemId,
+        name: req.file.originalname
+      });
+
+      // Keep legacy for backward compatibility (latest file)
       updatedDsData.documentId = itemId;
       updatedDsData.documentName = req.file.originalname;
     }
@@ -2355,6 +2372,11 @@ router.delete('/visa-operations/:id/ds-160/document/:itemId', authenticateToken,
       updatedDsData.fillingDocuments = updatedDsData.fillingDocuments.filter(doc => doc.id !== itemId);
     }
 
+    // Handle internalDocuments array
+    if (updatedDsData.internalDocuments) {
+      updatedDsData.internalDocuments = updatedDsData.internalDocuments.filter(doc => doc.id !== itemId);
+    }
+
     // Also check the old single filling document fields for backward compatibility
     if (updatedDsData.fillingDocumentId === itemId) {
       delete updatedDsData.fillingDocumentId;
@@ -2406,22 +2428,26 @@ router.post('/visa-operations/:id/ds-160/dependency/document', authenticateToken
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    const { type } = req.body;
-    const isPrivate = type === 'internal' || !type; // Default to private if internal or undefined
+    const { type, index } = req.body;
+    const depIndex = parseInt(index);
+    const isPrivate = type === 'internal' || !type;
 
-    const opResult = await query('SELECT contact_id FROM visa_operations WHERE id = $1', [req.params.id]);
+    const opResult = await query('SELECT contact_id, ds_data FROM visa_operations WHERE id = $1', [req.params.id]);
     if (opResult.rows.length === 0) {
       return res.status(404).json({ error: 'Operation not found' });
     }
 
-    const contactId = opResult.rows[0].contact_id;
+    const { contact_id, ds_data } = opResult.rows[0];
+    const contactId = contact_id;
 
-    // Create entry in visa_operation_items (Private by default for dependency/internal)
+    // Create entry in visa_operation_items
     const itemResult = await query(`
       INSERT INTO visa_operation_items (operation_id, item_type, name, content_type, file_data)
       VALUES ($1, 'dependency_document', $2, $3, $4)
       RETURNING id
     `, [req.params.id, req.file.originalname, req.file.mimetype, req.file.buffer]);
+
+    const itemId = itemResult.rows[0].id;
 
     // Also add to documents with correct visibility
     if (contactId) {
@@ -2431,8 +2457,36 @@ router.post('/visa-operations/:id/ds-160/dependency/document', authenticateToken
       `, [contactId, req.file.originalname, req.file.mimetype, req.file.size, req.file.buffer, isPrivate]);
     }
 
+    // UPDATE ds_data to persist the reference!
+    if (ds_data && ds_data.dependencies && !isNaN(depIndex) && ds_data.dependencies[depIndex]) {
+      const updatedDsData = { ...ds_data };
+      const dep = { ...updatedDsData.dependencies[depIndex] };
+
+      if (type === 'internal' || !type) {
+        if (!dep.internalDocuments) dep.internalDocuments = [];
+        // Migrate old single
+        if (dep.documentId && dep.internalDocuments.length === 0) {
+           dep.internalDocuments.push({ id: dep.documentId, name: dep.documentName });
+        }
+        dep.internalDocuments.push({ id: itemId, name: req.file.originalname });
+        dep.documentId = itemId;
+        dep.documentName = req.file.originalname;
+      } else if (type === 'filling') {
+        if (!dep.fillingDocuments) dep.fillingDocuments = [];
+        dep.fillingDocuments.push({ id: itemId, name: req.file.originalname });
+        dep.studentStatus = 'pending';
+        dep.adminStatus = 'pending';
+      } else if (type === 'confirmation') {
+        dep.confirmationDocumentId = itemId;
+        dep.confirmationDocumentName = req.file.originalname;
+      }
+
+      updatedDsData.dependencies[depIndex] = dep;
+      await query('UPDATE visa_operations SET ds_data = $1 WHERE id = $2', [JSON.stringify(updatedDsData), req.params.id]);
+    }
+
     res.json({
-      id: itemResult.rows[0].id,
+      id: itemId,
       name: req.file.originalname
     });
   } catch (error) {
@@ -2443,6 +2497,33 @@ router.post('/visa-operations/:id/ds-160/dependency/document', authenticateToken
 router.delete('/visa-operations/:id/ds-160/dependency/document/:itemId', authenticateToken, async (req, res) => {
   try {
     const itemId = parseInt(req.params.itemId);
+
+    const opResult = await query('SELECT ds_data FROM visa_operations WHERE id = $1', [req.params.id]);
+    if (opResult.rows.length > 0 && opResult.rows[0].ds_data) {
+      const updatedDsData = { ...opResult.rows[0].ds_data };
+      if (updatedDsData.dependencies) {
+        updatedDsData.dependencies = updatedDsData.dependencies.map(dep => {
+          const newDep = { ...dep };
+          if (newDep.internalDocuments) {
+            newDep.internalDocuments = newDep.internalDocuments.filter(d => d.id !== itemId);
+          }
+          if (newDep.fillingDocuments) {
+            newDep.fillingDocuments = newDep.fillingDocuments.filter(d => d.id !== itemId);
+          }
+          if (newDep.documentId === itemId) {
+            delete newDep.documentId;
+            delete newDep.documentName;
+          }
+          if (newDep.confirmationDocumentId === itemId) {
+            delete newDep.confirmationDocumentId;
+            delete newDep.confirmationDocumentName;
+          }
+          return newDep;
+        });
+        await query('UPDATE visa_operations SET ds_data = $1 WHERE id = $2', [JSON.stringify(updatedDsData), req.params.id]);
+      }
+    }
+
     await query('DELETE FROM visa_operation_items WHERE id = $1', [itemId]);
     res.json({ success: true });
   } catch (error) {
