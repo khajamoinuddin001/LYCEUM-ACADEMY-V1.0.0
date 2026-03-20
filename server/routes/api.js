@@ -5784,7 +5784,7 @@ VALUES($1, $2)
 router.get('/settings/office-location', authenticateToken, async (req, res) => {
   try {
     const result = await query('SELECT value FROM system_settings WHERE key = $1', ['OFFICE_LOCATION']);
-    res.json(result.rows[0]?.value || null);
+    res.json(result.rows.length > 0 ? result.rows[0].value : null);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -5830,9 +5830,12 @@ router.get('/settings/payment', authenticateToken, async (req, res) => {
     const upiResult = await query('SELECT value FROM system_settings WHERE key = $1', ['PAYMENT_UPI_ID']);
     const qrResult = await query('SELECT value FROM system_settings WHERE key = $1', ['PAYMENT_QR_CODE']);
 
+    const upiData = upiResult.rows[0]?.value;
+    const qrData = qrResult.rows[0]?.value;
+
     res.json({
-      upiId: upiResult.rows[0]?.value?.upiId || '',
-      qrCode: qrResult.rows[0]?.value?.qrCode || null // This will be the base64 data
+      upiId: upiData ? (typeof upiData === 'object' ? upiData.upiId : upiData) : '',
+      qrCode: qrData ? (typeof qrData === 'object' ? qrData.qrCode : qrData) : null
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -5877,7 +5880,7 @@ router.get('/settings/:key', authenticateToken, async (req, res) => {
   try {
     const result = await query('SELECT value FROM system_settings WHERE key = $1', [req.params.key]);
     console.log(`GET /settings/${req.params.key} - found:`, !!result.rows[0]);
-    res.json(result.rows[0]?.value || null);
+    res.json(result.rows.length > 0 ? result.rows[0].value : null);
   } catch (error) {
     console.error(`GET /settings/${req.params.key} error:`, error);
     res.status(500).json({ error: error.message });

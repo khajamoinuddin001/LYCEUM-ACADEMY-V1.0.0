@@ -158,15 +158,28 @@ const StudentDocumentsView: React.FC<StudentDocumentsViewProps> = ({ student, on
         const locked = new Set<string>(STAFF_ONLY_DOCUMENT_CATEGORIES);
         const arList = (student.metadata as any)?.accountsReceivable || [];
 
+        // First pass: Identify all categories that HAVE payment conditions
+        // and add them to the locked set if they are not already there.
+        arList.forEach((ar: any) => {
+            const lineItems = ar.lineItems || [];
+            lineItems.forEach((item: any) => {
+                if (item.isDocumentUnlockEnabled) {
+                    const linkedCategories = item.linkedDocumentCategories || [];
+                    linkedCategories.forEach((cat: string) => locked.add(cat));
+                }
+            });
+        });
+
+        // Second pass: Remove categories where payment conditions ARE met
         arList.forEach((ar: any) => {
             const lineItems = ar.lineItems || [];
 
             lineItems.forEach((item: any) => {
                 const itemCost = (Number(item.price || 0) * Number(item.quantity || 1));
-                const itemPaidAmount = Number(item.paidAmount) || 0; // The precisely allocated paid amount for this item
+                const itemPaidAmount = Number(item.paidAmount) || 0;
 
                 if (item.isDocumentUnlockEnabled) {
-                    // Handle new multi-stage logic
+                    // Handle multi-stage logic
                     if (item.unlockStages && item.unlockStages.length > 0) {
                         item.unlockStages.forEach((stage: any) => {
                             const requiredAmount = stage.type === 'Custom'
