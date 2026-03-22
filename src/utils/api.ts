@@ -90,7 +90,7 @@ export async function apiRequest<T>(endpoint: string, options: RequestInit = {})
 export const login = async (email: string, password: string, remember: boolean = true): Promise<{ user: User; token: string }> => {
   const data = await apiRequest<{ user: User; token: string }>('/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ email, password, rememberMe: remember }),
   });
   setToken(data.token, remember);
   return data;

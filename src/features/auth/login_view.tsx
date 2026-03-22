@@ -73,7 +73,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, users, onRegister, onFor
         setIsLoading(true);
 
         try {
-            await onLogin(email, password);
+            await onLogin(email, password, rememberMe);
         } catch (error: any) {
             setError(error.message || 'Invalid email or password.');
         } finally {

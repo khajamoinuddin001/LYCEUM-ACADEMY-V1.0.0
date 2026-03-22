@@ -17,11 +17,11 @@ const getSecret = () => {
   return secret;
 };
 
-export function generateToken(user) {
+export function generateToken(user, expiresIn = '7d') {
   return jwt.sign(
     { id: user.id, email: user.email, role: user.role },
     getSecret(),
-    { expiresIn: '7d' }
+    { expiresIn }
   );
 }
 

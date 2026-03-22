@@ -300,9 +300,11 @@ router.post('/login', async (req, res) => {
     }
 
     const { password: _, ...userWithoutPassword } = user;
-    const token = generateToken(userWithoutPassword);
+    const { rememberMe } = req.body;
+    const expiresIn = rememberMe ? '7d' : '24h';
+    const token = generateToken(userWithoutPassword, expiresIn);
 
-    console.log(`✅ Successful login: ${email} (Role: ${user.role})`);
+    console.log(`✅ Successful login: ${email} (Role: ${user.role}, RememberMe: ${!!rememberMe})`);
 
     // Record session in active_sessions
     try {
