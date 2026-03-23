@@ -449,7 +449,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onRegister, onTerms,
             </section>
 
             {/* Test Prep Section */}
-            <section id="tests" className="py-24 bg-gray-50 dark:bg-gray-800/50 relative overflow-hidden">
+            <section id="test-prep" className="py-24 bg-gray-50 dark:bg-gray-800/50 relative overflow-hidden">
                 {/* Background Decor */}
                 <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
                     <div className="absolute -top-24 -right-24 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl"></div>
@@ -589,7 +589,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onRegister, onTerms,
             </section>
 
             {/* How It Works Section */}
-            <section className="py-32 bg-gray-50 dark:bg-gray-800/30">
+            <section id="about" className="py-32 bg-gray-50 dark:bg-gray-800/30">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="text-center mb-20">
                         <h2 className="text-4xl md:text-5xl font-black text-gray-900 dark:text-white mb-6">How It Works</h2>
@@ -1010,7 +1010,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onRegister, onTerms,
                             <h4 className="font-bold text-lg mb-6">Quick Links</h4>
                             <ul className="space-y-4 text-gray-400 text-sm">
                                 <li><a href="#destinations" className="hover:text-lyceum-blue transition-colors">Destinations</a></li>
-                                <li><a href="#tests" className="hover:text-lyceum-blue transition-colors">Test Preparation</a></li>
+                                <li><a href="#test-prep" className="hover:text-lyceum-blue transition-colors">Test Preparation</a></li>
                                 <li><a href="#services" className="hover:text-lyceum-blue transition-colors">Our Services</a></li>
                                 <li><button onClick={onDocuments} className="hover:text-lyceum-blue transition-colors text-left">Downloads & Documents</button></li>
                             </ul>
