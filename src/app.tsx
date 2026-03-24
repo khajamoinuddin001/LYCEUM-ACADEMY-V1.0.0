@@ -384,7 +384,7 @@ const DashboardLayout: React.FC = () => {
       setIsLoading(true);
       try {
         // Check if user is authenticated
-        const token = localStorage.getItem('authToken');
+        const token = api.getToken();
         let effectiveUser = storedCurrentUser;
         if (token) {
           try {
