@@ -109,6 +109,67 @@ const OPERATORS = [
     { value: 'contains', label: 'Contains' },
 ];
 
+const TRIGGER_PAYLOAD_FIELDS: Record<string, { value: string; label: string }[]> = {
+    '🎯 CRM (Leads App)': [
+        { value: '{{contact_name}}', label: 'Contact Name' },
+        { value: '{{contact_email}}', label: 'Contact Email' },
+        { value: '{{contact_phone}}', label: 'Contact Phone' },
+        { value: '{{lead_stage}}', label: 'Lead Stage' },
+        { value: '{{value}}', label: 'Lead Value' }
+    ],
+    '👤 Contacts App': [
+        { value: '{{name}}', label: 'Name' },
+        { value: '{{email}}', label: 'Email' },
+        { value: '{{phone}}', label: 'Phone' },
+        { value: '{{department}}', label: 'Department' },
+        { value: '{{major}}', label: 'Major' }
+    ],
+    '🎫 Tickets App': [
+        { value: '{{contact_name}}', label: 'Contact Name' },
+        { value: '{{contact_email}}', label: 'Contact Email' },
+        { value: '{{subject}}', label: 'Subject' },
+        { value: '{{status}}', label: 'Status' }
+    ],
+    '🎓 University App': [
+        { value: '{{contact_name}}', label: 'Contact Name' },
+        { value: '{{university_name}}', label: 'University Name' },
+        { value: '{{program}}', label: 'Program' },
+        { value: '{{application_status}}', label: 'Status' }
+    ],
+    '🛂 Visa Operations App': [
+        { value: '{{name}}', label: 'Name' },
+        { value: '{{email}}', label: 'Email' },
+        { value: '{{status}}', label: 'Status' },
+        { value: '{{visa_type}}', label: 'Visa Type' }
+    ],
+    '💰 Finance App': [
+        { value: '{{contact_name}}', label: 'Contact Name' },
+        { value: '{{contact_email}}', label: 'Contact Email' },
+        { value: '{{amount}}', label: 'Amount' },
+        { value: '{{type}}', label: 'Type' }
+    ],
+    '📁 Documents Manager': [
+        { value: '{{contact_id}}', label: 'Contact ID' },
+        { value: '{{document_name}}', label: 'Document Name' },
+        { value: '{{category}}', label: 'Category' },
+        { value: '{{document_uploader_name}}', label: 'Uploader' }
+    ],
+    '🏢 Visitor Desk App': [
+        { value: '{{visitor_name}}', label: 'Visitor Name' },
+        { value: '{{staff_name}}', label: 'Staff Name' },
+        { value: '{{visit_purpose}}', label: 'Visit Purpose' }
+    ],
+    '📚 LMS App': [
+        { value: '{{course_name}}', label: 'Course Name' },
+        { value: '{{category}}', label: 'Category' }
+    ],
+    '🎤 Mock Interview App': [
+        { value: '{{contact_name}}', label: 'Contact Name' },
+        { value: '{{mock_interview_outcome}}', label: 'Outcome' },
+        { value: '{{mock_interview_average_score}}', label: 'Avg Score' }
+    ]
+};
+
 const APP_FIELDS: Record<string, { value: string; label: string }[]> = {
     'Contacts': [
         { value: 'name', label: 'Name' },
@@ -604,15 +665,38 @@ const RuleBuilderModal: React.FC<RuleBuilderModalProps> = ({ isOpen, onClose, ru
                                             <div>
                                                 <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase mb-1 ml-1">Search Value</label>
                                                 <div className="relative">
-                                                    <input
-                                                        required
-                                                        type="text"
-                                                        className="w-full pl-3 pr-10 py-2.5 bg-gray-50 dark:bg-gray-800 border-none rounded-lg text-sm dark:text-white focus:ring-2 focus:ring-blue-500 outline-none placeholder:text-gray-400"
-                                                        placeholder="e.g. {{contact_email}}"
-                                                        value={formData.update_field_config.lookup_value}
-                                                        onChange={e => setFormData({ ...formData, update_field_config: { ...formData.update_field_config, lookup_value: e.target.value } })}
-                                                    />
-                                                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-mono text-gray-400 bg-gray-100 dark:bg-gray-700 px-1 rounded">
+                                                    {(() => {
+                                                        const group = TRIGGER_GROUPS.find(g => g.triggers.includes(formData.trigger_event))?.group;
+                                                        const tags = group ? TRIGGER_PAYLOAD_FIELDS[group] : [];
+                                                        
+                                                        if (tags && tags.length > 0) {
+                                                            return (
+                                                                <select
+                                                                    required
+                                                                    className="w-full px-3 py-2.5 bg-gray-50 dark:bg-gray-800 border-none rounded-lg text-sm dark:text-white focus:ring-2 focus:ring-blue-500 outline-none cursor-pointer appearance-none"
+                                                                    value={formData.update_field_config.lookup_value}
+                                                                    onChange={e => setFormData({ ...formData, update_field_config: { ...formData.update_field_config, lookup_value: e.target.value } })}
+                                                                >
+                                                                    <option value="">Select a tag...</option>
+                                                                    {tags.map(tag => (
+                                                                        <option key={tag.value} value={tag.value}>{tag.label} ({tag.value})</option>
+                                                                    ))}
+                                                                </select>
+                                                            );
+                                                        }
+                                                        
+                                                        return (
+                                                            <input
+                                                                required
+                                                                type="text"
+                                                                className="w-full pl-3 pr-10 py-2.5 bg-gray-50 dark:bg-gray-800 border-none rounded-lg text-sm dark:text-white focus:ring-2 focus:ring-blue-500 outline-none placeholder:text-gray-400"
+                                                                placeholder="e.g. {{contact_email}}"
+                                                                value={formData.update_field_config.lookup_value}
+                                                                onChange={e => setFormData({ ...formData, update_field_config: { ...formData.update_field_config, lookup_value: e.target.value } })}
+                                                            />
+                                                        );
+                                                    })()}
+                                                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-mono text-gray-400 bg-gray-100 dark:bg-gray-700 px-1 rounded pointer-events-none">
                                                         TAGS
                                                     </div>
                                                 </div>
@@ -640,7 +724,7 @@ const RuleBuilderModal: React.FC<RuleBuilderModalProps> = ({ isOpen, onClose, ru
                                                         required
                                                         className="w-full px-3 py-2.5 bg-gray-50 dark:bg-gray-800 border-none rounded-lg text-sm dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none cursor-pointer"
                                                         value={formData.update_field_config.field}
-                                                        onChange={e => setFormData({ ...formData, update_field_config: { ...formData.update_field_config, field: e.target.value } })}
+                                                        onChange={e => setFormData({ ...formData, update_field_config: { ...formData.update_field_config, field: e.target.value, value: '' } })}
                                                     >
                                                         <option value="">Select field...</option>
                                                         {APP_FIELDS[formData.update_field_config.target_app as keyof typeof APP_FIELDS]?.map(f => (
@@ -650,14 +734,101 @@ const RuleBuilderModal: React.FC<RuleBuilderModalProps> = ({ isOpen, onClose, ru
                                                 </div>
                                                 <div>
                                                     <label className="block text-[10px] font-bold text-gray-400 dark:text-gray-500 uppercase mb-1 ml-1">New Value</label>
-                                                    <input
-                                                        required
-                                                        type="text"
-                                                        className="w-full px-3 py-2.5 bg-gray-50 dark:bg-gray-800 border-none rounded-lg text-sm dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none placeholder:text-gray-400"
-                                                        placeholder="e.g. {{new_status}} or Won"
-                                                        value={formData.update_field_config.value}
-                                                        onChange={e => setFormData({ ...formData, update_field_config: { ...formData.update_field_config, value: e.target.value } })}
-                                                    />
+                                                    <div className="relative">
+                                                        {(() => {
+                                                            const field = formData.update_field_config.field;
+                                                            
+                                                            // Specific dropdowns for certain fields
+                                                            if (field === 'file_status') {
+                                                                return (
+                                                                    <select
+                                                                        required
+                                                                        className="w-full px-3 py-2.5 bg-gray-50 dark:bg-gray-800 border-none rounded-lg text-sm dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none cursor-pointer appearance-none"
+                                                                        value={formData.update_field_config.value}
+                                                                        onChange={e => setFormData({ ...formData, update_field_config: { ...formData.update_field_config, value: e.target.value } })}
+                                                                    >
+                                                                        <option value="">Select status...</option>
+                                                                        <option value="In progress">In progress</option>
+                                                                        <option value="Closed">Closed</option>
+                                                                        <option value="On hold">On hold</option>
+                                                                        <option value="Not Set">Not Set</option>
+                                                                    </select>
+                                                                );
+                                                            }
+                                                            
+                                                            if (field === 'visa_type') {
+                                                                return (
+                                                                    <select
+                                                                        required
+                                                                        className="w-full px-3 py-2.5 bg-gray-50 dark:bg-gray-800 border-none rounded-lg text-sm dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none cursor-pointer appearance-none"
+                                                                        value={formData.update_field_config.value}
+                                                                        onChange={e => setFormData({ ...formData, update_field_config: { ...formData.update_field_config, value: e.target.value } })}
+                                                                    >
+                                                                        <option value="">Select visa type...</option>
+                                                                        <option value="F1">F1 (Student)</option>
+                                                                        <option value="J1">J1 (Exchange)</option>
+                                                                        <option value="H1B">H1B (Work)</option>
+                                                                        <option value="B1/B2">B1/B2 (Visitor)</option>
+                                                                    </select>
+                                                                );
+                                                            }
+
+                                                            if (field === 'status' || field === 'ds160_status') {
+                                                                const statuses = formData.update_field_config.target_app === 'Visa Operations App' 
+                                                                    ? ['Pending', 'Approved', 'Rejected', '221g', 'Slot Booked', 'DS-160 Submitted']
+                                                                    : ['Applied', 'Review Started', 'On Hold', 'Acceptance Received', 'I20 Received', 'Rejected', 'Deferred'];
+                                                                
+                                                                return (
+                                                                    <select
+                                                                        required
+                                                                        className="w-full px-3 py-2.5 bg-gray-50 dark:bg-gray-800 border-none rounded-lg text-sm dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none cursor-pointer appearance-none"
+                                                                        value={formData.update_field_config.value}
+                                                                        onChange={e => setFormData({ ...formData, update_field_config: { ...formData.update_field_config, value: e.target.value } })}
+                                                                    >
+                                                                        <option value="">Select status...</option>
+                                                                        {statuses.map(s => <option key={s} value={s}>{s}</option>)}
+                                                                    </select>
+                                                                );
+                                                            }
+
+                                                            // Default text input with Tag support
+                                                            const group = TRIGGER_GROUPS.find(g => g.triggers.includes(formData.trigger_event))?.group;
+                                                            const tags = group ? TRIGGER_PAYLOAD_FIELDS[group] : [];
+
+                                                            return (
+                                                                <div className="flex gap-2">
+                                                                    <input
+                                                                        required
+                                                                        type="text"
+                                                                        className="flex-1 px-3 py-2.5 bg-gray-50 dark:bg-gray-800 border-none rounded-lg text-sm dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none placeholder:text-gray-400"
+                                                                        placeholder="e.g. {{new_status}} or Won"
+                                                                        value={formData.update_field_config.value}
+                                                                        onChange={e => setFormData({ ...formData, update_field_config: { ...formData.update_field_config, value: e.target.value } })}
+                                                                    />
+                                                                    {tags.length > 0 && (
+                                                                        <select
+                                                                            className="w-10 bg-gray-100 dark:bg-gray-700 border-none rounded-lg text-[10px] text-gray-500 cursor-pointer outline-none"
+                                                                            value=""
+                                                                            onChange={e => {
+                                                                                if (e.target.value) {
+                                                                                    setFormData({ 
+                                                                                        ...formData, 
+                                                                                        update_field_config: { 
+                                                                                            ...formData.update_field_config, 
+                                                                                            value: formData.update_field_config.value + e.target.value 
+                                                                                        } 
+                                                                                    });
+                                                                                }
+                                                                            }}
+                                                                        >
+                                                                            <option value="">{'{ }'}</option>
+                                                                            {tags.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                                                                        </select>
+                                                                    )}
+                                                                </div>
+                                                            );
+                                                        })()}
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
