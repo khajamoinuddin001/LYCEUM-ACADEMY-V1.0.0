@@ -2,8 +2,8 @@ import React, { useState, useMemo } from 'react';
 import {
     Filter,
     Calendar,
-    ChevronLeft,
-    ChevronRight,
+    ChevronDown,
+    ChevronUp,
     ShieldCheck,
     MapPin,
     CheckCircle,
@@ -18,6 +18,7 @@ import {
     UserCheck,
     Phone,
     Globe,
+    Users as UsersIcon,
     Plus,
     ArrowLeft,
     Clock,
@@ -81,25 +82,8 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
         visaOutcome: '',
         remarks: ''
     });
-    const [dsFormData, setDsFormData] = useState({
-        confirmationNumber: '',
-        securityQuestion: '',
-        securityAnswer: '',
-        surname: '',
-        yearOfBirth: '',
-        startDate: new Date().toISOString().split('T')[0],
-        expiryDate: '',
-        basicDsBox: '',
-        documentId: undefined as number | undefined,
-        documentName: '',
-        fillingDocuments: [] as { id: number; name: string }[],
-        studentStatus: 'pending' as 'pending' | 'accepted' | 'rejected',
-        adminStatus: 'pending' as 'pending' | 'accepted' | 'rejected',
-        rejectionReason: '',
-        adminName: '',
-        internalDocuments: [] as { id: number; name: string }[], // NEW: Multiple internal attachments
-        dependencies: [] as any[]
-    });
+    const [dsGroups, setDsGroups] = useState<any[]>([]);
+    const [minimizedFlows, setMinimizedFlows] = useState<boolean[][]>([]); // [groupIndex][flowIndex]
     const [showPassword, setShowPassword] = useState(false);
     const [activeOp, setActiveOp] = useState<VisaOperation | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -109,6 +93,35 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
     React.useEffect(() => {
         setOperations(existingOperations);
     }, [existingOperations]);
+
+    // Initialize DS Groups from active operation
+    React.useEffect(() => {
+        if (step === 'ds' && activeOp) {
+            let initialGroups = [];
+            if (Array.isArray(activeOp.dsData)) {
+                initialGroups = activeOp.dsData.map((g: any) => ({
+                    ...g,
+                    minimized: g.minimized ?? false
+                }));
+            } else if (activeOp.dsData && typeof activeOp.dsData === 'object' && Object.keys(activeOp.dsData).length > 0) {
+                // Migrate legacy single object to first group
+                initialGroups = [{
+                    main: activeOp.dsData,
+                    dependencies: activeOp.dsData.dependencies || [],
+                    minimized: false
+                }];
+            } else {
+                // New operation or empty data
+                initialGroups = [{
+                    main: createFlowTemplate(),
+                    dependencies: [],
+                    minimized: false
+                }];
+            }
+            setDsGroups(initialGroups);
+            setMinimizedFlows(initialGroups.map(g => [false, ...new Array(g.dependencies?.length || 0).fill(false)]));
+        }
+    }, [step, activeOp]);
 
     const [searchTerm, setSearchTerm] = useState('');
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -125,143 +138,96 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
     }, [operations]);
 
     const ds160NotSubmittedCount = useMemo(() => {
-        return operations.filter(op => !op.dsData?.confirmationDocumentId).length;
+        return operations.filter(op => {
+            const dsData = op.dsData;
+            if (Array.isArray(dsData) && dsData.length > 0) {
+                return !dsData[0].main?.confirmationDocumentId;
+            }
+            return !dsData?.confirmationDocumentId;
+        }).length;
     }, [operations]);
 
-    const handleAddDependency = () => {
-        setDsFormData(prev => ({
-            ...prev,
-            dependencies: [
-                ...prev.dependencies,
+    const createFlowTemplate = () => ({
+        confirmationNumber: '',
+        securityQuestion: '',
+        securityAnswer: '',
+        surname: '',
+        yearOfBirth: '',
+        startDate: new Date().toISOString().split('T')[0],
+        expiryDate: '',
+        basicDsBox: '',
+        documentId: undefined,
+        documentName: '',
+        fillingDocuments: [],
+        studentStatus: 'pending',
+        adminStatus: 'pending',
+        rejectionReason: '',
+        adminName: '',
+        internalDocuments: [],
+        dependencies: []
+    });
+
+    const handleAddNewGroup = () => {
+        setDsGroups(prev => [...prev, { main: createFlowTemplate(), dependencies: [], minimized: false }]);
+        setMinimizedFlows(prev => [...prev, [false]]);
+    };
+
+    const handleRemoveDsGroup = (index: number) => {
+        if (!window.confirm(`Are you sure you want to remove Group #${index + 1}?`)) return;
+        setDsGroups(prev => prev.filter((_, i) => i !== index));
+        setMinimizedFlows(prev => prev.filter((_, i) => i !== index));
+    };
+
+    const handleAddDependency = (groupIndex: number) => {
+        setDsGroups(prev => {
+            const newGroups = [...prev];
+            const group = { ...newGroups[groupIndex] };
+            group.dependencies = [
+                ...group.dependencies,
                 {
-                    confirmationNumber: '',
-                    startDate: '',
-                    expiryDate: '',
-                    securityQuestion: '',
-                    securityAnswer: '',
-                    surname: '',
-                    yearOfBirth: '',
-                    basicDsBox: '',
-                    internalDocuments: [],        // NEW: Array for multiple documents
-                    documentId: undefined,
-                    documentName: '',
-                    fillingDocumentId: undefined, // DEPRECATED: Use fillingDocuments
-                    fillingDocumentName: '',      // DEPRECATED: Use fillingDocuments
-                    fillingDocuments: [],         // NEW: Array for multiple documents
-                    studentStatus: 'pending',
-                    adminStatus: 'pending'
+                    ...createFlowTemplate(),
+                    dependencies: undefined // Dependents don't have nested dependencies
                 }
-            ]
-        }));
-    };
-
-    const handleRemoveDependency = (index: number) => {
-        setDsFormData(prev => ({
-            ...prev,
-            dependencies: prev.dependencies.filter((_, i) => i !== index)
-        }));
-    };
-
-    const handleDependencyChange = (index: number, field: string, value: any) => {
-        setDsFormData(prev => {
-            const newDeps = [...prev.dependencies];
-            newDeps[index] = { ...newDeps[index], [field]: value };
-            if (field === 'startDate') {
-                newDeps[index].expiryDate = calculateExpiry(value);
-            }
-            return { ...prev, dependencies: newDeps };
+            ];
+            newGroups[groupIndex] = group;
+            return newGroups;
+        });
+        setMinimizedFlows(prev => {
+            const next = [...prev];
+            next[groupIndex] = [...next[groupIndex], false];
+            return next;
         });
     };
 
-    const handleDependencyFileUpload = async (index: number, e: React.ChangeEvent<HTMLInputElement>, type: 'internal' | 'filling' | 'confirmation' = 'internal') => {
-        const file = e.target.files?.[0];
-        if (!file || !activeOp) return;
-
-        setIsSubmitting(true);
-        try {
-            // We use the same endpoint but will likely need to store the result in the correct field
-            // Since the backend might not differentiate yet, we rely on the frontend to solve where it goes
-            // For now, let's assume `uploadDs160DependencyDocument` is generic or we add a type param to it
-            const response = await uploadDs160DependencyDocument(activeOp.id, file, index, type);
-
-            setDsFormData(prev => {
-                const newDeps = [...prev.dependencies];
-                if (type === 'internal') {
-                    const existingDocs = newDeps[index].internalDocuments || [];
-                    newDeps[index] = { 
-                        ...newDeps[index], 
-                        internalDocuments: [...existingDocs, { id: response.id, name: response.name }],
-                        documentId: response.id, 
-                        documentName: response.name 
-                    };
-                } else if (type === 'filling') {
-                    // Append new document to the list
-                    const existingDocs = newDeps[index].fillingDocuments || [];
-                    newDeps[index] = {
-                        ...newDeps[index],
-                        fillingDocuments: [...existingDocs, { id: response.id, name: response.name }],
-                        // Reset statuses on new upload
-                        studentStatus: 'pending',
-                        adminStatus: 'pending'
-                    };
-                } else {
-                    newDeps[index] = { ...newDeps[index], confirmationDocumentId: response.id, confirmationDocumentName: response.name };
-                }
-                return { ...prev, dependencies: newDeps };
-            });
-            alert(`${type === 'filling' ? 'Filling' : type === 'confirmation' ? 'Confirmation' : 'Internal'} document uploaded successfully!`);
-        } catch (error) {
-            console.error('Failed to upload dependency document:', error);
-            alert('Failed to upload document. Please try again.');
-        } finally {
-            setIsSubmitting(false);
-        }
+    const handleRemoveDependency = (groupIndex: number, index: number) => {
+        setDsGroups(prev => {
+            const newGroups = [...prev];
+            const group = { ...newGroups[groupIndex] };
+            group.dependencies = group.dependencies.filter((_, i) => i !== index);
+            newGroups[groupIndex] = group;
+            return newGroups;
+        });
     };
 
-    const handleDependencyFileDelete = async (index: number, type: 'internal' | 'filling' | 'confirmation' = 'internal', docIdToDelete?: number) => {
-        if (!activeOp || !confirm('Are you sure you want to delete this document?')) return;
-
-        const dep = dsFormData.dependencies[index];
-        let docId: number | undefined;
-
-        if (type === 'internal') docId = dep.documentId;
-        else if (type === 'filling') docId = docIdToDelete || dep.fillingDocumentId; // Support both array deletion and legacy single field
-        else docId = dep.confirmationDocumentId;
-
-        if (!docId) return;
-
-        setIsSubmitting(true);
-        try {
-            await deleteDs160DependencyDocument(activeOp.id, docId);
-            setDsFormData(prev => {
-                const newDeps = [...prev.dependencies];
-                if (type === 'internal') {
-                    newDeps[index] = { ...newDeps[index], documentId: undefined, documentName: '' };
-                } else if (type === 'filling') {
-                    // Remove from array if ID is provided
-                    if (docIdToDelete) {
-                        const currentDocs = newDeps[index].fillingDocuments || [];
-                        newDeps[index] = {
-                            ...newDeps[index],
-                            fillingDocuments: currentDocs.filter((d: any) => d.id !== docIdToDelete)
-                        };
-                    } else {
-                        // Legacy cleanup
-                        newDeps[index] = { ...newDeps[index], fillingDocumentId: undefined, fillingDocumentName: '' };
-                    }
-                } else {
-                    newDeps[index] = { ...newDeps[index], confirmationDocumentId: undefined, confirmationDocumentName: '' };
-                }
-                return { ...prev, dependencies: newDeps };
-            });
-            alert('Dependency document deleted!');
-        } catch (error) {
-            console.error('Failed to delete dependency document:', error);
-            alert('Failed to delete document. Please try again.');
-        } finally {
-            setIsSubmitting(false);
-        }
+    const handleFlowChange = (groupIndex: number, flowIndex: number, field: string, value: any) => {
+        setDsGroups(prev => {
+            const newGroups = [...prev];
+            const group = { ...newGroups[groupIndex] };
+            if (flowIndex === 0) {
+                group.main = { ...group.main, [field]: value };
+                if (field === 'startDate') group.main.expiryDate = calculateExpiry(value);
+            } else {
+                const newDeps = [...group.dependencies];
+                newDeps[flowIndex - 1] = { ...newDeps[flowIndex - 1], [field]: value };
+                if (field === 'startDate') newDeps[flowIndex - 1].expiryDate = calculateExpiry(value);
+                group.dependencies = newDeps;
+            }
+            newGroups[groupIndex] = group;
+            return newGroups;
+        });
     };
+
+
 
     const handleSlotFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -448,11 +414,11 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
         if (!activeOp) return;
         setIsSubmitting(true);
         try {
-            const updatedOp = await updateVisaOperationDs160(activeOp.id, dsFormData);
+            const updatedOp = await updateVisaOperationDs160(activeOp.id, dsGroups);
             setActiveOp(updatedOp);
             setOperations(prev => prev.map(op => op.id === updatedOp.id ? updatedOp : op));
             setStep('detail');
-            alert('DS-160 data saved successfully!');
+            alert('DS-160 Groups saved successfully!');
         } catch (error) {
             console.error('Failed to save DS-160 data:', error);
             alert('Failed to save DS-160 data. Please try again.');
@@ -461,32 +427,42 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
         }
     };
 
-    const handleDsFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'internal' | 'filling' | 'confirmation' = 'internal') => {
+    const handleDsFileUpload = async (groupIndex: number, flowIndex: number, e: React.ChangeEvent<HTMLInputElement>, type: 'internal' | 'filling' | 'confirmation' = 'internal') => {
         const file = e.target.files?.[0];
         if (!file || !activeOp) return;
 
         setIsSubmitting(true);
         try {
-            const updatedOp = await uploadDs160Document(activeOp.id, file, type);
+            const updatedOp = await uploadDs160Document(activeOp.id, file, type, groupIndex, flowIndex);
             setActiveOp(updatedOp);
             setOperations(prev => prev.map(op => op.id === updatedOp.id ? updatedOp : op));
-            setDsFormData(prev => ({
-                ...prev,
-                documentId: updatedOp.dsData?.documentId,
-                documentName: updatedOp.dsData?.documentName,
-                internalDocuments: updatedOp.dsData?.internalDocuments || [],
-                confirmationDocumentId: updatedOp.dsData?.confirmationDocumentId,
-                confirmationDocumentName: updatedOp.dsData?.confirmationDocumentName,
-                surname: updatedOp.dsData?.surname || '',
-                yearOfBirth: updatedOp.dsData?.yearOfBirth || '',
-                fillingDocuments: updatedOp.dsData?.fillingDocuments || [],
-                studentStatus: updatedOp.dsData?.studentStatus || 'pending',
-                adminStatus: updatedOp.dsData?.adminStatus || 'pending'
-            }));
-            alert(`${type === 'filling' ? 'Filling' : type === 'confirmation' ? 'Confirmation' : 'Internal'} document uploaded successfully!`);
+
+            // Sync local state
+            setDsGroups(prev => {
+                const newGroups = [...prev];
+                const group = { ...newGroups[groupIndex] };
+                let target;
+                if (flowIndex === 0) target = group.main = { ...group.main };
+                else target = group.dependencies[flowIndex - 1] = { ...group.dependencies[flowIndex - 1] };
+
+                if (type === 'filling') {
+                    target.fillingDocuments = [...(target.fillingDocuments || []), { id: updatedOp.dsData[groupIndex].main.fillingDocuments.slice(-1)[0].id, name: file.name }];
+                } else if (type === 'confirmation') {
+                    // Update confirmation info from updatedOp
+                    const freshTarget = flowIndex === 0 ? updatedOp.dsData[groupIndex].main : updatedOp.dsData[groupIndex].dependencies[flowIndex - 1];
+                    target.confirmationDocumentId = freshTarget.confirmationDocumentId;
+                    target.confirmationDocumentName = freshTarget.confirmationDocumentName;
+                } else {
+                    target.internalDocuments = [...(target.internalDocuments || []), { id: updatedOp.dsData[groupIndex].main.internalDocuments.slice(-1)[0].id, name: file.name }];
+                    target.documentId = target.internalDocuments.slice(-1)[0].id;
+                    target.documentName = file.name;
+                }
+
+                newGroups[groupIndex] = group;
+                return newGroups;
+            });
         } catch (error) {
-            console.error('Failed to upload DS-160 document:', error);
-            alert('Failed to upload document. Please try again.');
+            console.error('Upload failed:', error);
         } finally {
             setIsSubmitting(false);
         }
@@ -494,7 +470,7 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
 
     // ... inside render ...
 
-    const handleDsFileDelete = async (itemId: number) => {
+    const handleDsFileDelete = async (groupIndex: number, flowIndex: number, itemId: number) => {
         if (!activeOp || !confirm('Are you sure you want to delete this document?')) return;
 
         setIsSubmitting(true);
@@ -502,18 +478,29 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
             const updatedOp = await deleteDs160Document(activeOp.id, itemId);
             setActiveOp(updatedOp);
             setOperations(prev => prev.map(op => op.id === updatedOp.id ? updatedOp : op));
-            setDsFormData(prev => ({
-                ...prev,
-                documentId: updatedOp.dsData?.documentId,
-                documentName: updatedOp.dsData?.documentName,
-                confirmationDocumentId: updatedOp.dsData?.confirmationDocumentId,
-                confirmationDocumentName: updatedOp.dsData?.confirmationDocumentName,
-                surname: updatedOp.dsData?.surname || '',
-                yearOfBirth: updatedOp.dsData?.yearOfBirth || '',
-                fillingDocuments: updatedOp.dsData?.fillingDocuments || [],
-                studentStatus: updatedOp.dsData?.studentStatus || 'pending',
-                adminStatus: updatedOp.dsData?.adminStatus || 'pending'
-            }));
+
+            // Sync local state
+            setDsGroups(prev => {
+                const newGroups = [...prev];
+                const group = { ...newGroups[groupIndex] };
+                let target;
+                if (flowIndex === 0) target = group.main = { ...group.main };
+                else target = group.dependencies[flowIndex - 1] = { ...group.dependencies[flowIndex - 1] };
+
+                target.internalDocuments = (target.internalDocuments || []).filter((d: any) => d.id !== itemId);
+                target.fillingDocuments = (target.fillingDocuments || []).filter((d: any) => d.id !== itemId);
+                if (target.documentId === itemId) {
+                    target.documentId = undefined;
+                    target.documentName = '';
+                }
+                if (target.confirmationDocumentId === itemId) {
+                    target.confirmationDocumentId = undefined;
+                    target.confirmationDocumentName = '';
+                }
+
+                newGroups[groupIndex] = group;
+                return newGroups;
+            });
             alert('Document deleted successfully!');
         } catch (error) {
             console.error('Failed to delete DS-160 document:', error);
@@ -547,18 +534,30 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
         return date.toISOString().split('T')[0];
     }
 
-    const handleDsStatusUpdate = async (data: { studentStatus?: string, adminStatus?: string, rejectionReason?: string }) => {
+    const handleDsStatusUpdate = async (groupIndex: number, flowIndex: number, data: { studentStatus?: string, adminStatus?: string, rejectionReason?: string }) => {
         if (!activeOp) return;
         setIsSubmitting(true);
         try {
-            const updatedOp = await updateDs160Status(activeOp.id, data);
+            const updatedOp = await updateDs160Status(activeOp.id, { ...data, groupIndex, flowIndex });
             setActiveOp(updatedOp);
             setOperations(prev => prev.map(op => op.id === updatedOp.id ? updatedOp : op));
-            setDsFormData(prev => ({
-                ...prev,
-                ...data,
-                ...(data.adminStatus === 'accepted' ? { adminName: user?.name } : {})
-            }));
+
+            // Sync local state
+            setDsGroups(prev => {
+                const newGroups = [...prev];
+                const group = { ...newGroups[groupIndex] };
+                let target;
+                if (flowIndex === 0) target = group.main = { ...group.main };
+                else target = group.dependencies[flowIndex - 1] = { ...group.dependencies[flowIndex - 1] };
+
+                Object.assign(target, data);
+                if (data.adminStatus === 'accepted') {
+                    target.adminName = user?.name;
+                }
+
+                newGroups[groupIndex] = group;
+                return newGroups;
+            });
             alert('DS-160 status updated successfully!');
         } catch (error) {
             console.error('Failed to update DS-160 status:', error);
@@ -595,6 +594,220 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
         }
     };
 
+    const renderDsApplicant = (groupIndex: number, flowIndex: number, data: any) => {
+        const isMain = flowIndex === 0;
+        const title = isMain ? "Main Applicant" : `Dependent #${flowIndex}`;
+
+        return (
+            <div className={`bg-white p-8 rounded-2xl border border-slate-200 shadow-sm relative ${!isMain ? 'mt-6' : ''}`}>
+                {!isMain && (
+                    <div className="absolute -top-3 -right-3">
+                        <button
+                            onClick={() => handleRemoveDependency(groupIndex, flowIndex - 1)}
+                            className="p-2 bg-white text-slate-400 hover:text-rose-600 rounded-full border border-slate-200 shadow-sm transition-colors"
+                        >
+                            <Trash2 size={16} />
+                        </button>
+                    </div>
+                )}
+
+                <div className="flex items-center gap-3 mb-8 pb-4 border-b border-slate-100">
+                    <div className={`p-2 rounded-lg ${isMain ? 'bg-blue-50 text-blue-600' : 'bg-slate-50 text-slate-500'}`}>
+                        {isMain ? <UserIcon size={20} /> : <UsersIcon size={18} />}
+                    </div>
+                    <h4 className="text-lg font-bold text-slate-800">{title}</h4>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    {/* Left Column: Details */}
+                    <div className="space-y-6">
+                        <h4 className="text-sm font-bold text-slate-800 border-b border-slate-100 pb-2">Details</h4>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="col-span-2">
+                                <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Confirmation Number</label>
+                                <input
+                                    type="text"
+                                    value={data.confirmationNumber || ''}
+                                    onChange={(e) => handleFlowChange(groupIndex, flowIndex, 'confirmationNumber', e.target.value.toUpperCase())}
+                                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:border-blue-500 outline-none transition-all font-mono font-bold text-slate-700"
+                                    placeholder="AA00XXXXXX"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Start Date</label>
+                                <input
+                                    type="date"
+                                    value={data.startDate || ''}
+                                    onChange={(e) => handleFlowChange(groupIndex, flowIndex, 'startDate', e.target.value)}
+                                    className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:border-blue-500 outline-none transition-all text-sm font-medium"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Expiry Date</label>
+                                <input type="date" readOnly value={data.expiryDate || ''} className="w-full px-4 py-2 bg-slate-100 border border-slate-200 rounded-lg text-slate-400 text-sm font-medium cursor-not-allowed" />
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Surname (First 5)</label>
+                                <input
+                                    type="text"
+                                    value={data.surname || ''}
+                                    onChange={(e) => handleFlowChange(groupIndex, flowIndex, 'surname', e.target.value.replace(/[^a-zA-Z]/g, '').toUpperCase().slice(0, 5))}
+                                    className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:border-blue-500 outline-none transition-all text-sm font-medium"
+                                    placeholder="ABCDE"
+                                    maxLength={5}
+                                />
+                            </div>
+                            <div>
+                                <label className="text-xs font-bold text-slate-500 uppercase mb-1 block">Year of Birth</label>
+                                <input
+                                    type="text"
+                                    value={data.yearOfBirth || ''}
+                                    onChange={(e) => handleFlowChange(groupIndex, flowIndex, 'yearOfBirth', e.target.value)}
+                                    className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:border-blue-500 outline-none transition-all text-sm font-medium"
+                                    placeholder="YYYY"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="pt-2">
+                            <label className="text-xs font-bold text-slate-500 uppercase mb-2 block tracking-tight">Basic DS Box</label>
+                            <textarea
+                                rows={3}
+                                value={data.basicDsBox || ''}
+                                onChange={(e) => handleFlowChange(groupIndex, flowIndex, 'basicDsBox', e.target.value)}
+                                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-blue-500 outline-none transition-all text-sm font-medium resize-none"
+                                placeholder="Enter details..."
+                            />
+                        </div>
+                    </div>
+
+                    {/* Right Column: Documentation & Status */}
+                    <div className="space-y-6">
+                        <h4 className="text-sm font-bold text-slate-800 border-b border-slate-100 pb-2">Documentation</h4>
+
+                        {/* Internal Resource Section */}
+                        <div className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                            <label className="text-[10px] font-bold text-slate-500 uppercase mb-2 block">Internal Resource</label>
+                            <input
+                                type="file"
+                                id={`upload-internal-${groupIndex}-${flowIndex}`}
+                                className="hidden"
+                                onChange={(e) => handleDsFileUpload(groupIndex, flowIndex, e, 'internal')}
+                            />
+                            <label
+                                htmlFor={`upload-internal-${groupIndex}-${flowIndex}`}
+                                className="flex items-center justify-center gap-2 bg-white text-slate-600 px-5 py-2 rounded-lg text-xs font-bold hover:bg-slate-100 transition-all cursor-pointer border border-slate-200 shadow-sm"
+                            >
+                                <Upload size={14} /> Upload Document
+                            </label>
+                            <div className="mt-3 space-y-2">
+                                {data.internalDocuments?.map((doc: any) => (
+                                    <div key={doc.id} className="flex items-center justify-between bg-white p-2 rounded-lg border border-slate-100">
+                                        <span className="text-xs font-medium text-slate-600 truncate max-w-[150px]">{doc.name}</span>
+                                        <div className="flex items-center gap-1">
+                                            <button onClick={() => handlePreviewFile(doc.id)} className="p-1 text-blue-600 hover:bg-blue-50 rounded"><Eye size={12} /></button>
+                                            <button onClick={() => handleDsFileDelete(groupIndex, flowIndex, doc.id)} className="p-1 text-rose-500 hover:bg-rose-50 rounded"><Trash2 size={12} /></button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Customer Review Section */}
+                        <div className="p-4 bg-blue-50/50 rounded-xl border border-blue-100 space-y-4">
+                            <div className="flex items-center gap-2 text-blue-700 font-bold text-xs uppercase">
+                                <FileText size={14} /> Customer Review (Filling)
+                            </div>
+                            <input
+                                type="file"
+                                id={`upload-filling-${groupIndex}-${flowIndex}`}
+                                className="hidden"
+                                onChange={(e) => handleDsFileUpload(groupIndex, flowIndex, e, 'filling')}
+                            />
+                            <label
+                                htmlFor={`upload-filling-${groupIndex}-${flowIndex}`}
+                                className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white py-2 rounded-lg text-xs font-bold hover:bg-blue-700 transition-all cursor-pointer shadow-sm"
+                            >
+                                <Upload size={14} /> {data.fillingDocuments?.length ? 'Add Another' : 'Upload Filling'}
+                            </label>
+                            <div className="space-y-2">
+                                {data.fillingDocuments?.map((doc: any) => (
+                                    <div key={doc.id} className="flex items-center justify-between bg-white/60 p-2 rounded-lg border border-blue-100">
+                                        <span className="text-xs font-bold text-blue-700 truncate max-w-[150px]">{doc.name}</span>
+                                        <div className="flex items-center gap-1">
+                                            <button onClick={() => handlePreviewFile(doc.id)} className="p-1 text-blue-600 hover:bg-white rounded"><Eye size={12} /></button>
+                                            <button onClick={() => handleDsFileDelete(groupIndex, flowIndex, doc.id)} className="p-1 text-rose-500 hover:bg-white rounded"><Trash2 size={12} /></button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Status Sections */}
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className={`p-4 rounded-xl border ${data.studentStatus === 'accepted' ? 'bg-emerald-50 border-emerald-100' : 'bg-slate-50 border-slate-200'}`}>
+                                <span className="text-[10px] font-bold text-slate-500 uppercase block mb-2">Filling Status</span>
+                                {data.studentStatus === 'accepted' ? (
+                                    <div className="flex items-center gap-2 text-emerald-600 font-bold text-xs">
+                                        <CheckCircle size={14} /> Accepted
+                                    </div>
+                                ) : (
+                                    <button
+                                        onClick={() => handleDsStatusUpdate(groupIndex, flowIndex, { studentStatus: 'accepted' })}
+                                        className="w-full py-1.5 bg-white text-slate-600 rounded-lg text-[9px] font-bold uppercase tracking-wider border border-slate-200 hover:bg-slate-50"
+                                    >
+                                        Mark as Accepted
+                                    </button>
+                                )}
+                            </div>
+                            <div className={`p-4 rounded-xl border ${data.adminStatus === 'accepted' ? 'bg-emerald-50 border-emerald-100' : 'bg-slate-50 border-slate-200'}`}>
+                                <span className="text-[10px] font-bold text-slate-500 uppercase block mb-2">Staff Verification</span>
+                                {data.adminStatus === 'accepted' ? (
+                                    <div className="flex items-center gap-2 text-emerald-600 font-bold text-xs">
+                                        <ShieldCheck size={14} /> Verified
+                                    </div>
+                                ) : (
+                                    <div className="flex gap-1.5">
+                                        <button onClick={() => handleDsStatusUpdate(groupIndex, flowIndex, { adminStatus: 'accepted' })} className="flex-1 py-1.5 bg-emerald-600 text-white rounded-lg text-[9px] font-bold uppercase hover:bg-emerald-700">Accept</button>
+                                        <button onClick={() => handleDsStatusUpdate(groupIndex, flowIndex, { adminStatus: 'rejected' })} className="flex-1 py-1.5 bg-rose-600 text-white rounded-lg text-[9px] font-bold uppercase hover:bg-rose-700">Reject</button>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Final Confirmation */}
+                        {data.studentStatus === 'accepted' && data.adminStatus === 'accepted' && (
+                            <div className="p-4 bg-slate-800 rounded-xl text-white shadow-lg space-y-3">
+                                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Final Confirmation</div>
+                                <input
+                                    type="file"
+                                    id={`upload-conf-${groupIndex}-${flowIndex}`}
+                                    className="hidden"
+                                    onChange={(e) => handleDsFileUpload(groupIndex, flowIndex, e, 'confirmation')}
+                                />
+                                <label
+                                    htmlFor={`upload-conf-${groupIndex}-${flowIndex}`}
+                                    className="w-full flex items-center justify-center gap-2 bg-emerald-600 text-white py-2 rounded-lg text-xs font-bold hover:bg-emerald-700 cursor-pointer shadow-sm"
+                                >
+                                    <Upload size={14} /> {data.confirmationDocumentId ? 'Replace File' : 'Upload Final Confirmation'}
+                                </label>
+                                {data.confirmationDocumentName && (
+                                    <div className="flex items-center justify-between bg-white/10 p-2 rounded-lg border border-white/10">
+                                        <span className="text-xs font-medium truncate flex-1 pr-2">{data.confirmationDocumentName}</span>
+                                        <div className="flex items-center gap-1">
+                                            <button onClick={() => handlePreviewFile(data.confirmationDocumentId!)} className="p-1 hover:bg-white/10 rounded"><Eye size={12} /></button>
+                                            <button onClick={() => handleDsFileDelete(groupIndex, flowIndex, data.confirmationDocumentId!)} className="p-1 text-rose-300 hover:bg-white/10 rounded"><Trash2 size={12} /></button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
     if (step === 'list') {
         return (
             <div className="space-y-6">
@@ -622,8 +835,8 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                     <button
                         onClick={() => setActiveTab('Ongoing')}
                         className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'Ongoing'
-                                ? 'bg-white dark:bg-slate-700 text-lyceum-blue shadow-md'
-                                : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                            ? 'bg-white dark:bg-slate-700 text-lyceum-blue shadow-md'
+                            : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
                             }`}
                     >
                         Ongoing Visa operations
@@ -631,8 +844,8 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                     <button
                         onClick={() => setActiveTab('Completed')}
                         className={`px-6 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'Completed'
-                                ? 'bg-white dark:bg-slate-700 text-lyceum-blue shadow-md'
-                                : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                            ? 'bg-white dark:bg-slate-700 text-lyceum-blue shadow-md'
+                            : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
                             }`}
                     >
                         Completed Visa operations
@@ -1387,826 +1600,147 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
 
     if (step === 'ds') {
         return (
-            <div className="max-w-4xl mx-auto py-8">
-                <button
-                    onClick={() => setStep('detail')}
-                    className="flex items-center gap-1.5 text-slate-500 hover:text-slate-800 font-bold mb-6 transition-colors"
-                >
-                    <ArrowLeft size={18} />
-                    Back to Detail
-                </button>
-
-                <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
-                    <div className="bg-blue-50 px-8 py-6 border-b border-blue-100 flex justify-between items-center">
-                        <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
-                            <FileText className="text-blue-600" size={24} />
-                            DS-160 Workflow
-                        </h2>
-                        {dsFormData.studentStatus === 'accepted' && dsFormData.adminStatus === 'accepted' && (
-                            <div className="flex items-center gap-2 text-emerald-600 bg-emerald-50 px-4 py-2 rounded-full border border-emerald-100">
-                                <CheckCircle size={18} />
-                                <span className="text-sm font-bold">Accepted by client and {dsFormData.adminName || 'Admin'}</span>
+            <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-50 flex items-center justify-center p-4 lg:p-10 animate-in fade-in duration-300">
+                <div className="bg-white w-full max-w-7xl h-full max-h-[90vh] rounded-[3rem] shadow-2xl overflow-hidden flex flex-col border border-white/20 animate-in zoom-in-95 duration-300">
+                    {/* Header */}
+                    <div className="px-10 py-8 border-b border-slate-100 flex justify-between items-center bg-white/50 backdrop-blur-xl sticky top-0 z-10">
+                        <div className="flex items-center gap-4">
+                            <div className="p-4 bg-blue-600 text-white rounded-[1.5rem] shadow-lg shadow-blue-600/20">
+                                <FileText size={28} />
                             </div>
-                        )}
-                    </div>
-
-                    <div className="p-8 space-y-8">
-                        {/* Status Message for "Accepted by client and Admin" */}
-                        {dsFormData.studentStatus === 'accepted' && dsFormData.adminStatus === 'accepted' && (
-                            <div className="bg-emerald-50 border border-emerald-200 p-6 rounded-2xl space-y-4">
-                                <div className="flex items-center gap-3 text-emerald-800">
-                                    <ShieldCheck size={24} />
-                                    <div>
-                                        <h4 className="font-bold text-lg">Proceed to Submit</h4>
-                                        <p className="text-sm text-emerald-600">The DS-160 has been approved by both student and admin. You can now proceed with the submission and upload the final confirmation document below.</p>
-                                    </div>
-                                </div>
-
-                                <div className="pt-4 border-t border-emerald-100">
-                                    <label className="block text-sm font-bold text-emerald-800 mb-2">Upload Confirmation Document</label>
-                                    <div className="flex items-center gap-4">
-                                        <input
-                                            type="file"
-                                            id="ds-document-upload"
-                                            className="hidden"
-                                            onChange={(e) => handleDsFileUpload(e, 'confirmation')}
-                                        />
-                                        <label
-                                            htmlFor="ds-document-upload"
-                                            className="flex items-center gap-2 bg-emerald-600 text-white px-6 py-2.5 rounded-lg font-bold hover:bg-emerald-700 transition-all cursor-pointer shadow-lg shadow-emerald-600/20"
-                                        >
-                                            <Upload size={20} />
-                                            {dsFormData.confirmationDocumentName ? 'Replace Document' : 'Upload Document'}
-                                        </label>
-                                        {dsFormData.confirmationDocumentName && (
-                                            <div className="flex items-center gap-3">
-                                                <span className="text-sm text-emerald-600 font-medium truncate max-w-xs">{dsFormData.confirmationDocumentName}</span>
-                                                <div className="flex items-center gap-2">
-                                                    <button
-                                                        onClick={() => handlePreviewFile(dsFormData.confirmationDocumentId!)}
-                                                        className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 hover:text-emerald-800 transition-colors bg-emerald-50 px-2 py-1 rounded-md border border-emerald-100"
-                                                    >
-                                                        <Eye size={12} />
-                                                        Preview
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleDownloadFile(dsFormData.confirmationDocumentId!, dsFormData.confirmationDocumentName!)}
-                                                        className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 hover:text-emerald-800 transition-colors bg-emerald-50 px-2 py-1 rounded-md border border-emerald-100"
-                                                    >
-                                                        <Download size={12} />
-                                                        Download
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleDsFileDelete(dsFormData.confirmationDocumentId!)}
-                                                        className="flex items-center gap-1 text-[10px] font-bold text-rose-600 hover:text-rose-800 transition-colors bg-rose-50 px-2 py-1 rounded-md border border-rose-100"
-                                                    >
-                                                        <Trash2 size={12} />
-                                                        Delete
-                                                    </button>
-                                                </div>
-
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                            {/* Left Column: Form Fields */}
-                            <div className="space-y-6">
-                                <h3 className="text-lg font-bold text-slate-800 border-b border-slate-100 pb-2">DS-160 Details</h3>
-
-                                <div className="space-y-4">
-                                    <div>
-                                        <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Confirmation Number</label>
-                                        <input
-                                            type="text"
-                                            value={dsFormData.confirmationNumber}
-                                            onChange={(e) => setDsFormData(prev => ({ ...prev, confirmationNumber: e.target.value }))}
-                                            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:border-blue-500 outline-none transition-all font-mono font-bold text-slate-700"
-                                            placeholder="AA00XXXXXX"
-                                        />
-                                    </div>
-
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Start Date</label>
-                                            <input
-                                                type="date"
-                                                value={dsFormData.startDate}
-                                                onChange={(e) => {
-                                                    const newStart = e.target.value;
-                                                    setDsFormData(prev => ({
-                                                        ...prev,
-                                                        startDate: newStart,
-                                                        expiryDate: calculateExpiry(newStart)
-                                                    }));
-                                                }}
-                                                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:border-blue-500 outline-none transition-all font-medium"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Expiry Date (Auto)</label>
-                                            <input
-                                                type="date"
-                                                readOnly
-                                                value={dsFormData.expiryDate}
-                                                className="w-full px-4 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-slate-500 font-medium cursor-not-allowed"
-                                            />
-                                        </div>
-                                    </div>
-
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Security Question</label>
-                                            <input
-                                                type="text"
-                                                value={dsFormData.securityQuestion}
-                                                onChange={(e) => setDsFormData(prev => ({ ...prev, securityQuestion: e.target.value }))}
-                                                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:border-blue-500 outline-none transition-all text-sm font-medium"
-                                                placeholder="Mother's Maiden Name, etc."
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Security Answer</label>
-                                            <input
-                                                type="text"
-                                                value={dsFormData.securityAnswer}
-                                                onChange={(e) => setDsFormData(prev => ({ ...prev, securityAnswer: e.target.value }))}
-                                                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:border-blue-500 outline-none transition-all text-sm font-medium"
-                                                placeholder="Answer..."
-                                            />
-                                        </div>
-                                    </div>
-
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Surname</label>
-                                            <input
-                                                type="text"
-                                                value={dsFormData.surname}
-                                                onChange={(e) => {
-                                                    const value = e.target.value.replace(/[^a-zA-Z]/g, '').toUpperCase().slice(0, 5);
-                                                    setDsFormData(prev => ({ ...prev, surname: value }));
-                                                }}
-                                                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:border-blue-500 outline-none transition-all text-sm font-medium"
-                                                placeholder="MAX 5 ALPHABETS (e.g. MOHAM)"
-                                                maxLength={5}
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Year of Birth</label>
-                                            <input
-                                                type="text"
-                                                value={dsFormData.yearOfBirth}
-                                                onChange={(e) => setDsFormData(prev => ({ ...prev, yearOfBirth: e.target.value }))}
-                                                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:border-blue-500 outline-none transition-all text-sm font-medium"
-                                                placeholder="YYYY"
-                                            />
-                                        </div>
-                                    </div>
-
-                                    <div className="pt-4 border-t border-slate-100">
-                                        <h4 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
-                                            <FileText size={16} className="text-blue-600" />
-                                            Basic DS (Internal Use)
-                                        </h4>
-                                        <textarea
-                                            rows={4}
-                                            value={dsFormData.basicDsBox}
-                                            onChange={(e) => setDsFormData(prev => ({ ...prev, basicDsBox: e.target.value }))}
-                                            className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:border-blue-500 outline-none transition-all text-sm font-medium resize-none mb-4 shadow-sm"
-                                            placeholder="Enter basic DS-160 information or instructions (Staff Internal Use)..."
-                                        />
-
-                                        <div className="space-y-3">
-                                            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Internal Attachments</label>
-                                            <div className="flex flex-col gap-3">
-                                                <input
-                                                    type="file"
-                                                    id="ds-document-main-upload"
-                                                    className="hidden"
-                                                    onChange={(e) => handleDsFileUpload(e, 'internal')}
-                                                />
-                                                <label
-                                                    htmlFor="ds-document-main-upload"
-                                                    className="flex items-center justify-center gap-2 bg-slate-100 text-slate-600 px-5 py-2.5 rounded-lg text-sm font-bold hover:bg-slate-200 transition-all cursor-pointer border border-slate-200 shadow-sm"
-                                                >
-                                                    <Upload size={18} />
-                                                    Upload Internal Document
-                                                </label>
-
-                                                {(dsFormData.internalDocuments?.length > 0 || dsFormData.documentId) && (
-                                                    <div className="space-y-2 mt-2">
-                                                        {(dsFormData.internalDocuments || (dsFormData.documentId ? [{ id: dsFormData.documentId, name: dsFormData.documentName }] : [])).map((doc, i) => (
-                                                            <div key={doc.id} className="flex items-center gap-3 bg-slate-50 px-4 py-3 rounded-2xl border border-slate-100 shadow-sm group/doc">
-                                                                <div className="flex items-center justify-center w-8 h-8 bg-white text-slate-400 rounded-lg font-bold text-xs shrink-0 border border-slate-100 group-hover/doc:text-blue-500 group-hover/doc:border-blue-100 transition-colors">
-                                                                    {i + 1}
-                                                                </div>
-                                                                <div className="flex-1 min-w-0">
-                                                                    <div className="text-xs font-bold text-slate-700 truncate">{doc.name}</div>
-                                                                    <div className="flex items-center gap-3 mt-1.5 pt-1.5 border-t border-slate-100/50">
-                                                                        <button
-                                                                            onClick={() => handlePreviewFile(doc.id)}
-                                                                            className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 hover:text-blue-600 transition-colors"
-                                                                        >
-                                                                            <Eye size={12} />
-                                                                            Preview
-                                                                        </button>
-                                                                        <button
-                                                                            onClick={() => handleDownloadFile(doc.id, doc.name)}
-                                                                            className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 hover:text-blue-600 transition-colors"
-                                                                        >
-                                                                            <Download size={12} />
-                                                                            Download
-                                                                        </button>
-                                                                        <button
-                                                                            onClick={() => handleDsFileDelete(doc.id)}
-                                                                            className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 hover:text-rose-600 transition-colors ml-auto"
-                                                                        >
-                                                                            <Trash2 size={12} />
-                                                                            Delete
-                                                                        </button>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                </div>
-                            </div>
-
-                            {/* Right Column: Filling and Approvals */}
-                            <div className="space-y-6">
-                                {/* DS-160 Filling Section */}
-                                <div className="bg-blue-50/30 p-6 rounded-3xl border border-blue-100/50">
-                                    <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-                                        <div className="p-1.5 bg-blue-100 rounded-lg">
-                                            <FileText size={18} className="text-blue-600" />
-                                        </div>
-                                        DS-160 Filling
-                                    </h3>
-
-                                    <div className="space-y-4">
-                                        <p className="text-xs text-slate-500 font-medium">Upload the final DS-160 form for student review and approval. This document will be visible to the student.</p>
-
-                                        <div className="flex flex-col gap-3">
-                                            <input
-                                                type="file"
-                                                id="ds-document-filling-upload"
-                                                className="hidden"
-                                                onChange={(e) => handleDsFileUpload(e, 'filling')}
-                                            />
-                                            <label
-                                                htmlFor="ds-document-filling-upload"
-                                                className="flex items-center justify-center gap-2 bg-blue-600 text-white px-5 py-3 rounded-xl text-sm font-bold hover:bg-blue-700 transition-all cursor-pointer shadow-md active:scale-95"
-                                            >
-                                                <Upload size={18} />
-                                                Upload Filling Document
-                                            </label>
-
-                                            <div className="space-y-3 mt-2">
-                                                {dsFormData.fillingDocuments && dsFormData.fillingDocuments.length > 0 ? (
-                                                    dsFormData.fillingDocuments.map((doc, index) => (
-                                                        <div key={doc.id} className="flex items-center gap-3 bg-white px-4 py-3 rounded-2xl border border-blue-100 shadow-sm transition-all hover:border-blue-200">
-                                                            <div className="flex items-center justify-center w-8 h-8 bg-blue-50 text-blue-600 rounded-lg font-bold text-xs shrink-0">
-                                                                {index + 1}
-                                                            </div>
-                                                            <div className="flex-1 min-w-0">
-                                                                <div className="text-xs font-bold text-slate-700 truncate">{doc.name}</div>
-                                                                <div className="flex items-center gap-3 mt-1.5 pt-1.5 border-t border-slate-50">
-                                                                    <button
-                                                                        onClick={() => handlePreviewFile(doc.id)}
-                                                                        className="flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:text-blue-800 transition-colors"
-                                                                    >
-                                                                        <Eye size={12} />
-                                                                        Preview
-                                                                    </button>
-                                                                    <button
-                                                                        onClick={() => handleDownloadFile(doc.id, doc.name)}
-                                                                        className="flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:text-blue-800 transition-colors"
-                                                                    >
-                                                                        <Download size={12} />
-                                                                        Download
-                                                                    </button>
-                                                                    <button
-                                                                        onClick={() => handleDsFileDelete(doc.id)}
-                                                                        className="flex items-center gap-1 text-[10px] font-bold text-rose-600 hover:text-rose-800 transition-colors ml-auto"
-                                                                    >
-                                                                        <Trash2 size={12} />
-                                                                        Delete
-                                                                    </button>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    ))
-                                                ) : (
-                                                    <div className="text-center py-6 border-2 border-dashed border-slate-100 rounded-2xl">
-                                                        <FileText size={24} className="mx-auto text-slate-200 mb-2" />
-                                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">No documents uploaded</p>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <h3 className="text-lg font-bold text-slate-800 border-b border-slate-100 pb-2">Status & Approvals</h3>
-
-                                <div className="space-y-4">
-                                    {/* Student Response */}
-                                    <div className={`p-4 rounded-2xl border ${dsFormData.studentStatus === 'accepted' ? 'bg-emerald-50 border-emerald-100' : dsFormData.studentStatus === 'rejected' ? 'bg-rose-50 border-rose-100' : 'bg-slate-50 border-slate-100'}`}>
-                                        <div className="flex justify-between items-center mb-2">
-                                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Student Response</span>
-                                            <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${dsFormData.studentStatus === 'accepted' ? 'bg-emerald-100 text-emerald-600' : dsFormData.studentStatus === 'rejected' ? 'bg-rose-100 text-rose-600' : 'bg-slate-200 text-slate-600'}`}>
-                                                {dsFormData.studentStatus}
-                                            </span>
-                                        </div>
-                                        {dsFormData.studentStatus === 'accepted' ? (
-                                            <div className="flex gap-2 items-start mt-2 p-2 bg-white/50 rounded-lg border border-emerald-100">
-                                                <CheckCircle size={14} className="text-emerald-500 mt-0.5 shrink-0" />
-                                                <p className="text-xs text-emerald-600 font-bold">Student has approved the DS-160 Filling documents.</p>
-                                            </div>
-                                        ) : (
-                                            <div className="space-y-2">
-                                                {dsFormData.studentStatus === 'rejected' && dsFormData.rejectionReason && (
-                                                    <div className="flex gap-2 items-start mt-2 p-2 bg-white/50 rounded-lg border border-rose-100">
-                                                        <AlertCircle size={14} className="text-rose-500 mt-0.5 shrink-0" />
-                                                        <p className="text-xs text-rose-600 italic">"Student Rejected: {dsFormData.rejectionReason}"</p>
-                                                    </div>
-                                                )}
-                                                {(user?.role === 'Admin' || user?.role === 'Staff') && (
-                                                    <button
-                                                        onClick={() => {
-                                                            if (window.confirm('Are you sure you want to approve this on behalf of the student?')) {
-                                                                handleDsStatusUpdate({ studentStatus: 'accepted' });
-                                                            }
-                                                        }}
-                                                        className="w-full mt-2 flex items-center justify-center gap-2 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 hover:text-slate-800 rounded-lg text-xs font-bold transition-all"
-                                                    >
-                                                        <UserCheck size={14} />
-                                                        Approve on behalf of Student
-                                                    </button>
-                                                )}
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* Admin Status */}
-                                    <div className={`p-4 rounded-2xl border ${dsFormData.adminStatus === 'accepted' ? 'bg-emerald-50 border-emerald-100' : dsFormData.adminStatus === 'rejected' ? 'bg-rose-50 border-rose-100' : 'bg-slate-50 border-slate-100'}`}>
-                                        <div className="flex justify-between items-center mb-4">
-                                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Admin Status</span>
-                                            <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${dsFormData.adminStatus === 'accepted' ? 'bg-emerald-100 text-emerald-600' : dsFormData.adminStatus === 'rejected' ? 'bg-rose-100 text-rose-600' : 'bg-slate-200 text-slate-600'}`}>
-                                                {dsFormData.adminStatus}
-                                            </span>
-                                        </div>
-
-                                        {user?.role === 'Admin' && dsFormData.adminStatus === 'pending' && (
-                                            <div className="space-y-3">
-                                                <input
-                                                    type="text"
-                                                    placeholder="Reason for rejection (if applicable)"
-                                                    value={dsFormData.rejectionReason}
-                                                    onChange={(e) => setDsFormData(prev => ({ ...prev, rejectionReason: e.target.value }))}
-                                                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm outline-none focus:border-blue-500"
-                                                />
-                                                <div className="flex gap-2">
-                                                    <button
-                                                        onClick={() => handleDsStatusUpdate({ adminStatus: 'accepted' })}
-                                                        className="flex-1 bg-emerald-600 text-white py-2 rounded-lg font-bold text-xs hover:bg-emerald-700 transition-colors"
-                                                    >
-                                                        Accept
-                                                    </button>
-                                                    <button
-                                                        onClick={() => {
-                                                            if (!dsFormData.rejectionReason) return alert('Please provide a rejection reason');
-                                                            handleDsStatusUpdate({ adminStatus: 'rejected', rejectionReason: dsFormData.rejectionReason });
-                                                        }}
-                                                        className="flex-1 bg-rose-600 text-white py-2 rounded-lg font-bold text-xs hover:bg-rose-700 transition-colors"
-                                                    >
-                                                        Reject
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {dsFormData.adminStatus === 'accepted' && (
-                                            <div className="flex items-center gap-2 text-xs text-emerald-600 font-bold">
-                                                <CheckCircle size={14} />
-                                                Approved by {dsFormData.adminName || 'Admin'}
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
+                            <div>
+                                <h2 className="text-3xl font-black text-slate-800 tracking-tight">DS-160 Workflow</h2>
+                                <p className="text-sm font-bold text-slate-400 uppercase tracking-[0.2em] mt-1">Multi-Group Application management</p>
                             </div>
                         </div>
+                        <div className="flex items-center gap-3">
+                            <button
+                                onClick={handleAddNewGroup}
+                                className="flex items-center gap-2 px-6 py-3 bg-slate-800 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-900 transition-all shadow-xl active:scale-95"
+                            >
+                                <Plus size={16} /> Add New Group
+                            </button>
+                            <button
+                                onClick={() => setStep('detail')}
+                                className="p-4 text-slate-400 hover:text-slate-800 hover:bg-slate-50 rounded-2xl transition-all"
+                            >
+                                <X size={24} />
+                            </button>
+                        </div>
+                    </div>
 
-                        {/* Dependencies Section - Moved Outside Main Grid */}
-                        <div className="pt-8 border-t border-slate-100">
-                            <div className="flex justify-between items-center mb-6">
-                                <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                                    <div className="p-1.5 bg-blue-100 rounded-lg">
-                                        <UserIcon size={20} className="text-blue-600" />
+                    {/* Scrollable Content */}
+                    <div className="flex-1 overflow-y-auto p-10 space-y-12">
+                        {dsGroups.map((group, gIdx) => (
+                            <div key={gIdx} className="space-y-6 animate-in slide-in-from-bottom-5 duration-500" style={{ animationDelay: `${gIdx * 100}ms` }}>
+                                {/* Group Header */}
+                                <div className="flex items-center justify-between group/header">
+                                    <div className="flex items-center gap-4">
+                                        <div className="flex items-center justify-center w-12 h-12 rounded-2xl bg-slate-100 text-slate-800 font-black text-xl border-2 border-slate-200">
+                                            #{gIdx + 1}
+                                        </div>
+                                        <div>
+                                            <h3 className="text-2xl font-black text-slate-800 tracking-tight">
+                                                {gIdx === 0 ? "Group" : `Group #${gIdx + 1}`}
+                                            </h3>
+                                            <div className="flex items-center gap-3 mt-1">
+                                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                                    {group.dependencies?.length || 0} Dependents
+                                                </span>
+                                                <span className="w-1.5 h-1.5 rounded-full bg-slate-200"></span>
+                                                <button
+                                                    onClick={() => handleAddDependency(gIdx)}
+                                                    className="text-[10px] font-black text-blue-600 uppercase tracking-widest hover:text-blue-800 transition-colors"
+                                                >
+                                                    + Add Family Member
+                                                </button>
+                                            </div>
+                                        </div>
                                     </div>
-                                    Dependencies ({dsFormData.dependencies.length})
-                                </h3>
-                                <button
-                                    onClick={handleAddDependency}
-                                    className="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center gap-2 bg-blue-50 px-4 py-2 rounded-xl transition-colors hover:bg-blue-100 border border-blue-100 shadow-sm"
-                                >
-                                    <Plus size={16} />
-                                    Add Dependency
-                                </button>
-                            </div>
 
-                            <div className="space-y-8">
-                                {dsFormData.dependencies.map((dep, index) => (
-                                    <div key={index} className="bg-white rounded-3xl p-8 border border-slate-200 shadow-sm relative group">
-                                        {/* Header */}
-                                        <div className="flex items-center justify-between mb-8">
-                                            <span className="text-sm font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-lg border border-slate-200 uppercase tracking-wider">
-                                                Dependent #{index + 1}
-                                            </span>
-                                            <div className="h-px bg-slate-100 flex-1 mx-4"></div>
+                                    <div className="flex items-center gap-3">
+                                        {dsGroups.length > 1 && (
                                             <button
-                                                onClick={() => handleRemoveDependency(index)}
-                                                className="text-slate-400 hover:text-rose-600 bg-slate-50 hover:bg-rose-50 p-2 rounded-lg transition-colors border border-slate-100 hover:border-rose-100"
-                                                title="Remove Dependency"
+                                                onClick={() => { if (confirm('Delete entire group?')) setDsGroups(prev => prev.filter((_, i) => i !== gIdx)); }}
+                                                className="p-3 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all opacity-0 group-hover/header:opacity-100"
                                             >
-                                                <Trash2 size={16} />
+                                                <Trash2 size={20} />
                                             </button>
-                                        </div>
-
-                                        {/* 2-Column Grid Layout matching Main Box */}
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                            {/* Left Column: Details */}
-                                            <div className="space-y-6">
-                                                <h4 className="text-sm font-bold text-slate-800 border-b border-slate-100 pb-2">dependent Details</h4>
-
-                                                <div className="space-y-4">
-                                                    <div>
-                                                        <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Confirmation Number</label>
-                                                        <input
-                                                            type="text"
-                                                            value={dep.confirmationNumber}
-                                                            onChange={(e) => handleDependencyChange(index, 'confirmationNumber', e.target.value)}
-                                                            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:border-blue-500 outline-none transition-all font-mono font-bold text-slate-700"
-                                                            placeholder="AA00XXXXXX"
-                                                        />
-                                                    </div>
-
-                                                    <div className="grid grid-cols-2 gap-4">
-                                                        <div>
-                                                            <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Start Date</label>
-                                                            <input
-                                                                type="date"
-                                                                value={dep.startDate}
-                                                                onChange={(e) => handleDependencyChange(index, 'startDate', e.target.value)}
-                                                                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:border-blue-500 outline-none transition-all font-medium"
-                                                            />
-                                                        </div>
-                                                        <div>
-                                                            <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Expiry Date</label>
-                                                            <input
-                                                                type="date"
-                                                                readOnly
-                                                                value={dep.expiryDate}
-                                                                className="w-full px-4 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-slate-500 font-medium cursor-not-allowed"
-                                                            />
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="grid grid-cols-2 gap-4">
-                                                        <div>
-                                                            <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Security Question</label>
-                                                            <input
-                                                                type="text"
-                                                                value={dep.securityQuestion}
-                                                                onChange={(e) => handleDependencyChange(index, 'securityQuestion', e.target.value)}
-                                                                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:border-blue-500 outline-none transition-all text-sm font-medium"
-                                                                placeholder="Q..."
-                                                            />
-                                                        </div>
-                                                        <div>
-                                                            <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Answer</label>
-                                                            <input
-                                                                type="text"
-                                                                value={dep.securityAnswer}
-                                                                onChange={(e) => handleDependencyChange(index, 'securityAnswer', e.target.value)}
-                                                                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:border-blue-500 outline-none transition-all text-sm font-medium"
-                                                                placeholder="A..."
-                                                            />
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="grid grid-cols-2 gap-4">
-                                                        <div>
-                                                            <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Surname</label>
-                                                            <input
-                                                                type="text"
-                                                                value={dep.surname || ''}
-                                                                onChange={(e) => {
-                                                                    const value = e.target.value.replace(/[^a-zA-Z]/g, '').toUpperCase().slice(0, 5);
-                                                                    handleDependencyChange(index, 'surname', value);
-                                                                }}
-                                                                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:border-blue-500 outline-none transition-all text-sm font-medium"
-                                                                placeholder="MAX 5 ALPHABETS (e.g. MOHAM)"
-                                                                maxLength={5}
-                                                            />
-                                                        </div>
-                                                        <div>
-                                                            <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Year of Birth</label>
-                                                            <input
-                                                                type="text"
-                                                                value={dep.yearOfBirth || ''}
-                                                                onChange={(e) => handleDependencyChange(index, 'yearOfBirth', e.target.value)}
-                                                                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:border-blue-500 outline-none transition-all text-sm font-medium"
-                                                                placeholder="YYYY"
-                                                            />
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <div className="pt-4 border-t border-slate-100">
-                                                <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Basic DS (Internal Note)</label>
-                                                <textarea
-                                                    rows={2}
-                                                    value={dep.basicDsBox}
-                                                    onChange={(e) => handleDependencyChange(index, 'basicDsBox', e.target.value)}
-                                                    className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl focus:border-blue-500 outline-none transition-all text-sm font-medium resize-none mb-4 shadow-sm"
-                                                    placeholder="Internal notes..."
-                                                />
-
-                                                <div className="flex flex-col gap-3">
-                                                    <input
-                                                        type="file"
-                                                        id={`dep-doc-${index}`}
-                                                        className="hidden"
-                                                        onChange={(e) => handleDependencyFileUpload(index, e, 'internal')}
-                                                    />
-                                                    <label
-                                                        htmlFor={`dep-doc-${index}`}
-                                                        className="flex items-center justify-center gap-2 bg-slate-100 text-slate-600 px-4 py-2 rounded-lg text-xs font-bold hover:bg-slate-200 transition-all cursor-pointer border border-slate-200 shadow-sm"
-                                                    >
-                                                        <Upload size={14} />
-                                                        Upload Internal Document
-                                                    </label>
-
-                                                    {(dep.internalDocuments?.length > 0 || dep.documentId) && (
-                                                        <div className="space-y-2 mt-2">
-                                                            {(dep.internalDocuments || (dep.documentId ? [{ id: dep.documentId, name: dep.documentName }] : [])).map((doc: any, i: number) => (
-                                                                <div key={doc.id} className="flex items-center gap-3 bg-slate-50 px-3 py-2.5 rounded-xl border border-slate-100 shadow-sm group/depdoc">
-                                                                    <div className="flex items-center justify-center w-6 h-6 bg-white text-slate-400 rounded-lg font-bold text-[10px] shrink-0 border border-slate-100 group-hover/depdoc:text-blue-500 group-hover/depdoc:border-blue-100 transition-colors">
-                                                                        {i + 1}
-                                                                    </div>
-                                                                    <div className="flex-1 min-w-0">
-                                                                        <div className="text-[11px] font-bold text-slate-700 truncate">{doc.name}</div>
-                                                                        <div className="flex items-center gap-2.5 mt-1 pt-1 border-t border-slate-100/50">
-                                                                            <button
-                                                                                onClick={() => handlePreviewFile(doc.id)}
-                                                                                className="text-[10px] font-bold text-slate-500 hover:text-blue-600 transition-colors"
-                                                                            >
-                                                                                Preview
-                                                                            </button>
-                                                                            <button
-                                                                                onClick={() => handleDependencyFileDelete(index, 'internal', doc.id)}
-                                                                                className="text-[10px] font-bold text-slate-400 hover:text-rose-600 transition-colors ml-auto"
-                                                                            >
-                                                                                Delete
-                                                                            </button>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-
-                                            {/* Right Column: Filling & Status */}
-                                            <div className="space-y-6">
-                                                {/* DS-160 Filling Section */}
-                                                <div className="bg-blue-50/30 p-6 rounded-3xl border border-blue-100/50">
-                                                    <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-                                                        <div className="p-1.5 bg-blue-100 rounded-lg">
-                                                            <FileText size={18} className="text-blue-600" />
-                                                        </div>
-                                                        DS-160 Filling
-                                                    </h3>
-
-                                                    <div className="flex flex-col gap-3">
-                                                        <input
-                                                            type="file"
-                                                            id={`dep-filling-doc-${index}`}
-                                                            className="hidden"
-                                                            onChange={(e) => handleDependencyFileUpload(index, e, 'filling')}
-                                                        />
-                                                        <label
-                                                            htmlFor={`dep-filling-doc-${index}`}
-                                                            className="flex items-center justify-center gap-2 bg-blue-600 text-white px-5 py-3 rounded-xl text-sm font-bold hover:bg-blue-700 transition-all cursor-pointer shadow-md active:scale-95"
-                                                        >
-                                                            <Upload size={16} />
-                                                            Upload Filling Document
-                                                        </label>
-
-                                                        {(dep.fillingDocuments?.length > 0 || dep.fillingDocumentId) ? (
-                                                            <div className="space-y-2 mt-2">
-                                                                {(dep.fillingDocuments || (dep.fillingDocumentId ? [{ id: dep.fillingDocumentId, name: dep.fillingDocumentName }] : [])).map((doc: any, i: number) => (
-                                                                    <div key={doc.id} className="flex items-center gap-3 bg-white px-4 py-3 rounded-2xl border border-blue-100 shadow-sm">
-                                                                        <div className="flex items-center justify-center w-8 h-8 bg-blue-50 text-blue-600 rounded-lg font-bold text-xs shrink-0">
-                                                                            {i + 1}
-                                                                        </div>
-                                                                        <div className="flex-1 min-w-0">
-                                                                            <div className="text-xs font-bold text-slate-700 truncate">{doc.name}</div>
-                                                                            <div className="flex items-center gap-3 mt-1.5 pt-1.5 border-t border-slate-50">
-                                                                                <button
-                                                                                    onClick={() => handlePreviewFile(doc.id)}
-                                                                                    className="flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:text-blue-800 transition-colors"
-                                                                                >
-                                                                                    <Eye size={12} />
-                                                                                    Preview
-                                                                                </button>
-                                                                                <button
-                                                                                    onClick={() => handleDependencyFileDelete(index, 'filling', doc.id)}
-                                                                                    className="flex items-center gap-1 text-[10px] font-bold text-rose-600 hover:text-rose-800 transition-colors ml-auto"
-                                                                                >
-                                                                                    <Trash2 size={12} />
-                                                                                    Delete
-                                                                                </button>
-                                                                            </div>
-                                                                        </div>
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-                                                        ) : (
-                                                            <div className="text-center py-4 border-2 border-dashed border-slate-100 rounded-xl">
-                                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">No filling document</p>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </div>
-
-                                                {/* Status & Approvals Section */}
-                                                <div>
-                                                    <h3 className="text-sm font-bold text-slate-800 border-b border-slate-100 pb-2 mb-4">Status & Approvals</h3>
-                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                        {/* Student Response */}
-                                                        <div className={`p-4 rounded-2xl border ${dep.studentStatus === 'accepted' ? 'bg-emerald-50 border-emerald-100' : dep.studentStatus === 'rejected' ? 'bg-rose-50 border-rose-100' : 'bg-slate-50 border-slate-100'}`}>
-                                                            <div className="flex justify-between items-center mb-2">
-                                                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Student Response</span>
-                                                                <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${dep.studentStatus === 'accepted' ? 'bg-emerald-100 text-emerald-600' : dep.studentStatus === 'rejected' ? 'bg-rose-100 text-rose-600' : 'bg-slate-200 text-slate-600'}`}>
-                                                                    {dep.studentStatus || 'Pending'}
-                                                                </span>
-                                                            </div>
-                                                            {dep.studentStatus === 'accepted' ? (
-                                                                <div className="flex gap-2 items-start mt-2 p-2 bg-white/50 rounded-lg border border-emerald-100">
-                                                                    <CheckCircle size={14} className="text-emerald-500 mt-0.5 shrink-0" />
-                                                                    <p className="text-xs text-emerald-600 font-bold">Approved by student.</p>
-                                                                </div>
-                                                            ) : dep.studentStatus === 'rejected' && dep.rejectionReason ? (
-                                                                <div className="flex gap-2 items-start mt-2 p-2 bg-white/50 rounded-lg border border-rose-100">
-                                                                    <AlertCircle size={14} className="text-rose-500 mt-0.5 shrink-0" />
-                                                                    <p className="text-xs text-rose-600 italic">"Rejected: {dep.rejectionReason}"</p>
-                                                                </div>
-                                                            ) : user?.role === 'Admin' || user?.role === 'Staff' ? (
-                                                                <button
-                                                                    onClick={() => {
-                                                                        if (window.confirm('Are you sure you want to approve this on behalf of the student?')) {
-                                                                            const newDeps = [...dsFormData.dependencies];
-                                                                            newDeps[index].studentStatus = 'accepted';
-                                                                            setDsFormData(prev => ({ ...prev, dependencies: newDeps }));
-                                                                        }
-                                                                    }}
-                                                                    className="w-full mt-2 flex items-center justify-center gap-2 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 hover:text-slate-800 rounded-lg text-xs font-bold transition-all"
-                                                                >
-                                                                    <UserCheck size={14} />
-                                                                    Approve on behalf
-                                                                </button>
-                                                            ) : null}
-                                                        </div>
-
-                                                        {/* Admin Status */}
-                                                        <div className={`p-4 rounded-2xl border ${dep.adminStatus === 'accepted' ? 'bg-emerald-50 border-emerald-100' : dep.adminStatus === 'rejected' ? 'bg-rose-50 border-rose-100' : 'bg-slate-50 border-slate-100'}`}>
-                                                            <div className="flex justify-between items-center mb-2">
-                                                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Admin Status</span>
-                                                                <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full ${dep.adminStatus === 'accepted' ? 'bg-emerald-100 text-emerald-600' : dep.adminStatus === 'rejected' ? 'bg-rose-100 text-rose-600' : 'bg-slate-200 text-slate-600'}`}>
-                                                                    {dep.adminStatus || 'Pending'}
-                                                                </span>
-                                                            </div>
-
-                                                            {user?.role === 'Admin' && (!dep.adminStatus || dep.adminStatus === 'pending') && (
-                                                                <div className="space-y-2 mt-2">
-                                                                    <div className="flex gap-2">
-                                                                        <button
-                                                                            onClick={() => handleDependencyChange(index, 'adminStatus', 'accepted')}
-                                                                            className="flex-1 bg-emerald-600 text-white py-1.5 rounded-lg font-bold text-xs hover:bg-emerald-700 transition-colors"
-                                                                        >
-                                                                            Accept
-                                                                        </button>
-                                                                        <button
-                                                                            onClick={() => handleDependencyChange(index, 'adminStatus', 'rejected')}
-                                                                            className="flex-1 bg-rose-600 text-white py-1.5 rounded-lg font-bold text-xs hover:bg-rose-700 transition-colors"
-                                                                        >
-                                                                            Reject
-                                                                        </button>
-                                                                    </div>
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    </div>
-
-                                                    {/* Confirmation Document Section - Shows only when both accepted */}
-                                                    {dep.studentStatus === 'accepted' && dep.adminStatus === 'accepted' && (
-                                                        <div className="bg-emerald-50/50 p-6 rounded-3xl border border-emerald-100 mt-4">
-                                                            <h3 className="text-sm font-bold text-emerald-800 mb-4 flex items-center gap-2">
-                                                                <ShieldCheck size={16} className="text-emerald-600" />
-                                                                Confirmation Document
-                                                            </h3>
-
-                                                            <div className="flex flex-col gap-3">
-                                                                <input
-                                                                    type="file"
-                                                                    id={`dep-confirmation-doc-${index}`}
-                                                                    className="hidden"
-                                                                    onChange={(e) => handleDependencyFileUpload(index, e, 'confirmation')}
-                                                                />
-                                                                <label
-                                                                    htmlFor={`dep-confirmation-doc-${index}`}
-                                                                    className="flex items-center justify-center gap-2 bg-emerald-600 text-white px-5 py-3 rounded-xl text-sm font-bold hover:bg-emerald-700 transition-all cursor-pointer shadow-md active:scale-95"
-                                                                >
-                                                                    <Upload size={16} />
-                                                                    Upload Confirmation
-                                                                </label>
-
-                                                                {dep.confirmationDocumentId ? (
-                                                                    <div className="flex items-center gap-3 bg-white px-4 py-3 rounded-2xl border border-emerald-100 shadow-sm mt-2">
-                                                                        <div className="flex items-center justify-center w-8 h-8 bg-emerald-50 text-emerald-600 rounded-lg font-bold text-xs shrink-0">
-                                                                            <CheckCircle size={14} />
-                                                                        </div>
-                                                                        <div className="flex-1 min-w-0">
-                                                                            <div className="text-xs font-bold text-slate-700 truncate">{dep.confirmationDocumentName}</div>
-                                                                            <div className="flex items-center gap-3 mt-1.5 pt-1.5 border-t border-slate-50">
-                                                                                <button
-                                                                                    onClick={() => handlePreviewFile(dep.confirmationDocumentId!)}
-                                                                                    className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 hover:text-emerald-800 transition-colors"
-                                                                                >
-                                                                                    <Eye size={12} />
-                                                                                    Preview
-                                                                                </button>
-                                                                                <button
-                                                                                    onClick={() => handleDependencyFileDelete(index, 'confirmation')}
-                                                                                    className="flex items-center gap-1 text-[10px] font-bold text-rose-600 hover:text-rose-800 transition-colors ml-auto"
-                                                                                >
-                                                                                    <Trash2 size={12} />
-                                                                                    Delete
-                                                                                </button>
-                                                                            </div>
-                                                                        </div>
-                                                                    </div>
-                                                                ) : (
-                                                                    <div className="text-center py-4 border-2 border-dashed border-emerald-100/50 rounded-xl bg-white/50">
-                                                                        <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">No confirmation uploaded</p>
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </div>
+                                        )}
+                                        <button
+                                            onClick={() => setDsGroups(prev => {
+                                                const next = [...prev];
+                                                next[gIdx] = { ...next[gIdx], minimized: !next[gIdx].minimized };
+                                                return next;
+                                            })}
+                                            className="p-3 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-all"
+                                        >
+                                            {group.minimized ? <ChevronDown size={24} /> : <ChevronUp size={24} />}
+                                        </button>
                                     </div>
-                                ))}
+                                </div>
 
-                                {dsFormData.dependencies.length === 0 && (
-                                    <div className="text-center py-8 border-2 border-dashed border-slate-100 rounded-2xl">
-                                        <p className="text-sm text-slate-400 font-bold">No dependencies added yet.</p>
-                                        <p className="text-xs text-slate-400 mt-1">Click "Add Dependency" to remove this empty state.</p>
+                                {!group.minimized && (
+                                    <div className="grid grid-cols-1 gap-8 pl-16 relative">
+                                        {/* Connector Line */}
+                                        <div className="absolute left-6 top-0 bottom-0 w-1 bg-gradient-to-b from-slate-200 to-transparent rounded-full"></div>
+
+                                        {/* Main Applicant */}
+                                        <div className="relative">
+                                            <div className="absolute -left-[2.75rem] top-10 w-6 h-1 bg-slate-200 rounded-full"></div>
+                                            {renderDsApplicant(gIdx, 0, group.main)}
+                                        </div>
+
+                                        {/* Dependents */}
+                                        {group.dependencies?.map((dep, dIdx) => (
+                                            <div key={dIdx} className="relative">
+                                                <div className="absolute -left-[2.75rem] top-10 w-6 h-1 bg-slate-200 rounded-full"></div>
+                                                {renderDsApplicant(gIdx, dIdx + 1, dep)}
+                                            </div>
+                                        ))}
+
+                                        {group.dependencies?.length === 0 && (
+                                            <button
+                                                onClick={() => handleAddDependency(gIdx)}
+                                                className="w-full py-8 border-2 border-dashed border-slate-100 rounded-[2rem] text-slate-400 font-bold hover:border-blue-200 hover:bg-blue-50/30 transition-all flex flex-col items-center justify-center gap-2 group"
+                                            >
+                                                <div className="p-3 bg-slate-50 text-slate-400 rounded-2xl group-hover:bg-blue-100 group-hover:text-blue-600 transition-all">
+                                                    <UsersIcon size={24} />
+                                                </div>
+                                                <span className="text-sm">No dependents added. Click to add a family member.</span>
+                                            </button>
+                                        )}
                                     </div>
                                 )}
                             </div>
+                        ))}
+                    </div>
 
-                            <div className="p-8 pt-0 flex justify-end gap-4 border-t border-slate-100 mt-8">
-                                <button
-                                    onClick={() => setStep('detail')}
-                                    className="px-6 py-2.5 text-slate-500 font-bold hover:bg-slate-50 rounded-lg transition-colors"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    onClick={handleSaveDs}
-                                    disabled={isSubmitting}
-                                    className="bg-blue-600 text-white px-10 py-2.5 rounded-lg font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 disabled:opacity-50"
-                                >
-                                    {isSubmitting ? 'Saving...' : 'Save DS-160 Details'}
-                                </button>
-                            </div>
-                        </div>
+                    {/* Footer - Fixed */}
+                    <div className="px-10 py-8 border-t border-slate-100 bg-slate-50/80 backdrop-blur-md flex justify-end gap-4">
+                        <button
+                            onClick={() => setStep('detail')}
+                            className="px-8 py-4 text-slate-500 font-black text-[10px] uppercase tracking-widest hover:bg-slate-100 rounded-2xl transition-all"
+                        >
+                            Cancel Changes
+                        </button>
+                        <button
+                            onClick={handleSaveDs}
+                            disabled={isSubmitting}
+                            className="px-12 py-4 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-700 transition-all shadow-xl shadow-blue-600/20 disabled:opacity-50 active:scale-95 flex items-center gap-2"
+                        >
+                            {isSubmitting ? (
+                                <>
+                                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                                    Saving...
+                                </>
+                            ) : (
+                                <>
+                                    <ShieldCheck size={18} />
+                                    Finalize All Persistence
+                                </>
+                            )}
+                        </button>
                     </div>
                 </div>
             </div>
@@ -2249,27 +1783,26 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                 <div className="flex gap-4 w-full md:w-auto">
                     <button
                         onClick={() => {
-                            setDsFormData({
-                                confirmationNumber: activeOp?.dsData?.confirmationNumber || '',
-                                securityQuestion: activeOp?.dsData?.securityQuestion || '',
-                                securityAnswer: activeOp?.dsData?.securityAnswer || '',
-                                surname: activeOp?.dsData?.surname || '',
-                                yearOfBirth: activeOp?.dsData?.yearOfBirth || '',
-                                startDate: activeOp?.dsData?.startDate || new Date().toISOString().split('T')[0],
-                                expiryDate: activeOp?.dsData?.expiryDate || calculateExpiry(activeOp?.dsData?.startDate || new Date().toISOString().split('T')[0]),
-                                basicDsBox: activeOp?.dsData?.basicDsBox || '',
-                                documentId: activeOp?.dsData?.documentId,
-                                documentName: activeOp?.dsData?.documentName || '',
-                                confirmationDocumentId: activeOp?.dsData?.confirmationDocumentId,
-                                confirmationDocumentName: activeOp?.dsData?.confirmationDocumentName || '',
-                                fillingDocuments: activeOp?.dsData?.fillingDocuments || (activeOp?.dsData?.fillingDocumentId ? [{ id: activeOp.dsData.fillingDocumentId, name: activeOp.dsData.fillingDocumentName || 'document.pdf' }] : []),
-                                studentStatus: activeOp?.dsData?.studentStatus || 'pending',
-                                adminStatus: activeOp?.dsData?.adminStatus || 'pending',
-                                rejectionReason: activeOp?.dsData?.rejectionReason || '',
-                                adminName: activeOp?.dsData?.adminName || '',
-                                internalDocuments: activeOp?.dsData?.internalDocuments || (activeOp?.dsData?.documentId ? [{ id: activeOp.dsData.documentId, name: activeOp.dsData.documentName || 'document.pdf' }] : []),
-                                dependencies: activeOp?.dsData?.dependencies || []
-                            });
+                            const dsData = activeOp?.dsData;
+                            let groups: any[] = [];
+                            if (Array.isArray(dsData)) {
+                                groups = dsData;
+                            } else if (dsData) {
+                                // Migrate legacy object
+                                const main = { ...dsData };
+                                const deps = main.dependencies || [];
+                                delete main.dependencies;
+                                groups = [{ main, dependencies: deps, minimized: false }];
+                            } else {
+                                // Default initial group
+                                groups = [{
+                                    main: createFlowTemplate(),
+                                    dependencies: [],
+                                    minimized: false
+                                }];
+                            }
+                            setDsGroups(groups);
+                            setMinimizedFlows(groups.map(g => [false, ...(g.dependencies || []).map(() => false)]));
                             setStep('ds');
                         }}
                         className="flex-1 md:flex-none px-8 py-3 bg-lyceum-blue text-white rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-lyceum-blue/20 flex items-center justify-center gap-2"
@@ -2352,30 +1885,7 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                                     DS-160 Status
                                 </h3>
                                 <button
-                                    onClick={() => {
-                                        setDsFormData({
-                                            confirmationNumber: activeOp?.dsData?.confirmationNumber || '',
-                                            securityQuestion: activeOp?.dsData?.securityQuestion || '',
-                                            securityAnswer: activeOp?.dsData?.securityAnswer || '',
-                                            surname: activeOp?.dsData?.surname || '',
-                                            yearOfBirth: activeOp?.dsData?.yearOfBirth || '',
-                                            startDate: activeOp?.dsData?.startDate || new Date().toISOString().split('T')[0],
-                                            expiryDate: activeOp?.dsData?.expiryDate || calculateExpiry(activeOp?.dsData?.startDate || new Date().toISOString().split('T')[0]),
-                                            basicDsBox: activeOp?.dsData?.basicDsBox || '',
-                                            documentId: activeOp?.dsData?.documentId,
-                                            documentName: activeOp?.dsData?.documentName || '',
-                                            confirmationDocumentId: activeOp?.dsData?.confirmationDocumentId,
-                                            confirmationDocumentName: activeOp?.dsData?.confirmationDocumentName,
-                                            fillingDocuments: activeOp?.dsData?.fillingDocuments || (activeOp?.dsData?.fillingDocumentId ? [{ id: activeOp.dsData.fillingDocumentId, name: activeOp.dsData.fillingDocumentName || 'document.pdf' }] : []),
-                                            studentStatus: activeOp?.dsData?.studentStatus || 'pending',
-                                            adminStatus: activeOp?.dsData?.adminStatus || 'pending',
-                                            rejectionReason: activeOp?.dsData?.rejectionReason || '',
-                                            adminName: activeOp?.dsData?.adminName || '',
-                                            internalDocuments: activeOp?.dsData?.internalDocuments || (activeOp?.dsData?.documentId ? [{ id: activeOp.dsData.documentId, name: activeOp.dsData.documentName || 'document.pdf' }] : []),
-                                            dependencies: activeOp?.dsData?.dependencies || []
-                                        });
-                                        setStep('ds');
-                                    }}
+                                    onClick={() => setStep('ds')}
                                     className="text-xs font-bold text-lyceum-blue hover:text-blue-700 flex items-center gap-1 bg-lyceum-blue/5 px-3 py-1.5 rounded-lg transition-colors"
                                 >
                                     Manage Workflow <ArrowRight size={12} />

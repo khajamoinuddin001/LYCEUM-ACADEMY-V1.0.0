@@ -1134,16 +1134,25 @@ export const updateVisaOperationDs160 = async (id: number, dsData: any): Promise
   });
 };
 
-export const uploadDs160Document = async (id: number, file: File, type: 'internal' | 'filling' | 'confirmation' = 'internal'): Promise<any> => {
+export const uploadDs160Document = async (
+  id: number,
+  file: File,
+  type: 'internal' | 'filling' | 'confirmation' = 'internal',
+  groupIndex?: number,
+  flowIndex?: number
+): Promise<any> => {
   const formData = new FormData();
   formData.append('file', file);
+  formData.append('type', type);
+  if (groupIndex !== undefined) formData.append('groupIndex', groupIndex.toString());
+  if (flowIndex !== undefined) formData.append('flowIndex', flowIndex.toString());
 
   const token = getToken();
   const headers: HeadersInit = {
     ...(token && { 'Authorization': `Bearer ${token}` }),
   };
 
-  const response = await fetch(`${API_BASE_URL}/visa-operations/${id}/ds-160/document?type=${type}`, {
+  const response = await fetch(`${API_BASE_URL}/visa-operations/${id}/ds-160/document`, {
     method: 'POST',
     headers,
     body: formData,
@@ -1171,7 +1180,13 @@ export const deleteVisaOperation = async (id: number): Promise<void> => {
 
 export const updateDs160Status = async (
   id: number,
-  data: { studentStatus?: string; adminStatus?: string; rejectionReason?: string }
+  data: { 
+    studentStatus?: string; 
+    adminStatus?: string; 
+    rejectionReason?: string;
+    groupIndex?: number;
+    flowIndex?: number;
+  }
 ): Promise<VisaOperation> => {
   return apiRequest<VisaOperation>(`/visa-operations/${id}/ds-160/status`, {
     method: 'PUT',
@@ -1179,45 +1194,8 @@ export const updateDs160Status = async (
   });
 };
 
-export const uploadDs160DependencyDocument = async (id: number, file: File, index: number, type: 'internal' | 'filling' | 'confirmation' = 'internal'): Promise<any> => {
-  const formData = new FormData();
-  formData.append('file', file);
-  formData.append('type', type);
-  formData.append('index', index.toString());
-
-  // We need to use raw fetch here because apiRequest handles JSON by default and doesn't support FormData automatically unless we customize it, 
-  // or maybe apiRequest DOES check for FormData? 
-  // Looking at other upload functions, they seem to use raw fetch or a customized call.
-  // Wait, the previous `uploadDs160Document` (if visible) might show how it's done. 
-  // But to be safe and consistent with the code I replaced (which was using raw fetch logic implicitly or explicitly), 
-  // I will use `apiRequest` but I need to make sure `apiRequest` handles FormData. 
-  // Actually, checking `uploadDs160Document` earlier (it wasn't fully visible but `uploadDs160Document` was imported).
-  // Let's assume `apiRequest` handles it if I don't set Content-Type header. 
-  // BUT the previous diff showed `uploadDs160DependencyDocument` using `apiRequest`... wait, no. 
-  // The snippet I removed in the PREVIOUS step had `const response = await fetch(...)`.
-  // So I should probably stick to `fetch` to be safe, OR fix `apiRequest`.
-  // The `uploadDs160Document` implementation (which I verified earlier uses `uploadDs160Document` in `visa_operations_view.tsx`) likely uses `fetch` or a special handler.
-
-  // Let's look at `uploadDs160Document` in `api.ts` if I can... 
-  // I'll stick to `fetch` pattern which was there before I messed it up, just to be safe.
-
-  const token = getToken();
-  const headers: HeadersInit = {
-    ...(token && { 'Authorization': `Bearer ${token}` }),
-  };
-
-  const response = await fetch(`${API_BASE_URL}/visa-operations/${id}/ds-160/dependency/document`, {
-    method: 'POST',
-    headers,
-    body: formData,
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Upload failed' }));
-    throw new Error(error.error || `HTTP ${response.status}`);
-  }
-
-  return response.json();
+export const uploadDs160DependencyDocument = async (id: number, file: File, index: number, type: 'internal' | 'filling' | 'confirmation' = 'internal', groupIndex: number = 0): Promise<any> => {
+  return uploadDs160Document(id, file, type, groupIndex, index + 1);
 };
 
 export const deleteDs160DependencyDocument = async (id: number, itemId: number): Promise<any> => {
