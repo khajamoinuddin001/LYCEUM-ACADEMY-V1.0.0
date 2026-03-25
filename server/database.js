@@ -1225,9 +1225,48 @@ export async function initDatabase() {
         name TEXT NOT NULL,
         key_hash TEXT UNIQUE NOT NULL,
         access_level TEXT DEFAULT 'read-only' CHECK (access_level IN ('read-only', 'read-write')),
+        status VARCHAR(20) DEFAULT 'active',
+        rate_limit INTEGER DEFAULT 60,
+        last_ip TEXT,
         last_used_at TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
+    `);
+
+    await client.query(`
+      ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'active';
+      ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS rate_limit INTEGER DEFAULT 60;
+      ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS last_ip TEXT;
+      ALTER TABLE api_key_logs ADD COLUMN IF NOT EXISTS user_agent TEXT;
+    `);
+
+    // API KEY LOGS
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS api_key_logs (
+        id SERIAL PRIMARY KEY,
+        key_id INTEGER REFERENCES api_keys(id) ON DELETE CASCADE,
+        endpoint TEXT NOT NULL,
+        method TEXT NOT NULL,
+        ip_address TEXT,
+        user_agent TEXT,
+        status_code INTEGER,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // SYSTEM SETTINGS (for Global Panic Switch)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS system_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      )
+    `);
+
+    // Initialize Global Panic Switch if not exists
+    await client.query(`
+      INSERT INTO system_settings (key, value)
+      VALUES ('global_api_panic', 'false')
+      ON CONFLICT (key) DO NOTHING
     `);
 
     // --- CONTACT DELETION FIXES (FOREIGN KEYS) ---

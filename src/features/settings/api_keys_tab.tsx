@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { KeyRound, Plus, Trash2, Copy, CheckCircle2, Clock, Shield, AlertCircle } from '@/components/common/icons';
+import { KeyRound, Plus, Trash2, Copy, CheckCircle2, Clock, Shield, AlertCircle, Zap, ZapOff } from '@/components/common/icons';
 import * as api from '@/utils/api';
 import type { ApiKey } from '@/types';
 
@@ -21,7 +21,7 @@ const ApiKeysTab: React.FC = () => {
         try {
             setIsLoading(true);
             const data = await api.getApiKeys();
-            setKeys(data);
+            setKeys(data.keys);
         } catch (err: any) {
             setError(err.message || 'Failed to fetch API keys');
         } finally {
@@ -56,6 +56,16 @@ const ApiKeysTab: React.FC = () => {
             setKeys(keys.filter(k => k.id !== id));
         } catch (err: any) {
             setError(err.message || 'Failed to delete API key');
+        }
+    };
+
+    const handleToggleKey = async (id: number) => {
+        try {
+            setError(null);
+            const { status } = await api.toggleApiKey(id);
+            setKeys(keys.map(k => k.id === id ? { ...k, status } : k));
+        } catch (err: any) {
+            setError(err.message || 'Failed to toggle API key');
         }
     };
 
@@ -183,7 +193,9 @@ const ApiKeysTab: React.FC = () => {
                             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                                 {keys.length > 0 ? keys.map(key => (
                                     <tr key={key.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
-                                        <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-800 dark:text-gray-100">{key.name}</td>
+                                        <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-800 dark:text-gray-100">
+                                            <span>{key.name}</span>
+                                        </td>
                                         <td className="px-4 py-4 whitespace-nowrap">
                                             <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
                                                 key.accessLevel === 'read-write'
@@ -200,13 +212,15 @@ const ApiKeysTab: React.FC = () => {
                                         </td>
                                         <td className="px-4 py-4 whitespace-nowrap text-xs text-gray-500 dark:text-gray-400">{new Date(key.createdAt).toLocaleDateString()}</td>
                                         <td className="px-4 py-4 whitespace-nowrap text-right text-sm">
-                                            <button
-                                                onClick={() => handleDeleteKey(key.id)}
-                                                className="p-1 px-2 text-gray-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
-                                                title="Revoke Link"
-                                            >
-                                                <Trash2 size={16} />
-                                            </button>
+                                            <div className="flex items-center justify-end gap-1">
+                                                <button
+                                                    onClick={() => handleDeleteKey(key.id)}
+                                                    className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md transition-colors"
+                                                    title="Revoke Permanently"
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 )) : (

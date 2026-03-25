@@ -6,6 +6,24 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// In-memory rate tracking: keyId -> { count: number }
+export const apiKeyUsage = new Map();
+
+// Reset usage counts every minute
+setInterval(() => {
+  apiKeyUsage.clear();
+}, 60000);
+
+export function getApiKeyUsage(keyId, limit) {
+  const usage = apiKeyUsage.get(keyId) || { count: 0 };
+  const currentLimit = limit || 60;
+  return {
+    count: usage.count,
+    remaining: Math.max(0, currentLimit - usage.count),
+    limit: currentLimit
+  };
+}
+
 const getSecret = () => {
   const secret = process.env.JWT_SECRET;
   if (!secret) {
@@ -41,8 +59,42 @@ export async function comparePassword(password, hash) {
   return bcrypt.compare(password, hash);
 }
 
+/**
+ * Global Panic Switch check
+ */
+async function isGlobalApiPanicked() {
+  try {
+    const { query } = await import('./database.js');
+    const result = await query("SELECT value FROM system_settings WHERE key = 'global_api_panic'");
+    return result.rows.length > 0 && result.rows[0].value === 'true';
+  } catch (e) {
+    console.error('Error checking global panic status:', e);
+    return false;
+  }
+}
+
+/**
+ * Log API Key Activity
+ */
+async function logApiKeyActivity(keyId, endpoint, method, ipAddress, statusCode, userAgent) {
+  try {
+    const { query } = await import('./database.js');
+    await query(
+      'INSERT INTO api_key_logs (key_id, endpoint, method, ip_address, status_code, user_agent) VALUES ($1, $2, $3, $4, $5, $6)',
+      [keyId, endpoint, method, ipAddress, statusCode, userAgent]
+    );
+  } catch (e) {
+    console.error('Error logging API key activity:', e);
+  }
+}
+
 export async function authenticateApiKey(req, res, next) {
   const apiKey = req.headers['x-api-key'];
+
+  // 1. Check for global panic switch
+  if (await isGlobalApiPanicked()) {
+    return res.status(503).json({});
+  }
 
   if (!apiKey) {
     return next(); // Proceed to check for token if no API key
@@ -66,10 +118,45 @@ export async function authenticateApiKey(req, res, next) {
     }
 
     const keyData = result.rows[0];
-    
-    // Update last used timestamp
-    await query('UPDATE api_keys SET last_used_at = NOW() WHERE id = $1', [keyData.id]);
 
+    if (keyData.status !== 'active') {
+      return res.status(403).json({});
+    }
+
+    // --- Access Level Enforcement ---
+    if (keyData.access_level === 'read-only') {
+      if (req.method !== 'GET') {
+        return res.status(403).json({ 
+          error: 'Read-only access: This API key is not authorized for write operations.' 
+        });
+      }
+    } else if (keyData.access_level !== 'read-write') {
+      // If it's not read-only and not read-write, block it for safety
+      return res.status(403).json({});
+    }
+
+    // --- Rate Limiting ---
+    const limit = keyData.rate_limit || 60;
+    const usage = apiKeyUsage.get(keyData.id) || { count: 0 };
+
+    if (usage.count >= limit) {
+      return res.status(429).json({
+        error: 'Too many requests'
+      });
+    }
+
+    // Increment usage
+    apiKeyUsage.set(keyData.id, { count: usage.count + 1 });
+
+    // Update last used info and IP
+    const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+    await query(
+      'UPDATE api_keys SET last_used_at = CURRENT_TIMESTAMP, last_ip = $1 WHERE id = $2',
+      [clientIp, keyData.id]
+    );
+
+    // Attach key data to request object
+    req.apiKey = keyData;
     req.user = {
       id: keyData.user_id,
       name: keyData.user_name,
@@ -78,6 +165,12 @@ export async function authenticateApiKey(req, res, next) {
       permissions: typeof keyData.user_permissions === 'string' ? JSON.parse(keyData.user_permissions) : (keyData.user_permissions || {}),
       apiKeyAccess: keyData.access_level
     };
+
+    // Log activity after response finishes
+    const userAgent = req.headers['user-agent'] || 'Unknown';
+    res.on('finish', () => {
+      logApiKeyActivity(keyData.id, req.originalUrl, req.method, clientIp, res.statusCode, userAgent);
+    });
 
     next();
   } catch (error) {

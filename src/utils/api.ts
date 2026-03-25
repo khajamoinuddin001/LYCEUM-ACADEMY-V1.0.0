@@ -201,15 +201,22 @@ export const addUser = async (newUser: Omit<User, 'id' | 'permissions'>): Promis
 };
 
 // API Keys
-export const getApiKeys = async (): Promise<ApiKey[]> => {
-  const result = await apiRequest<any[]>('/admin/api-keys');
-  return result.map(key => ({
-    id: key.id,
-    name: key.name,
-    accessLevel: key.access_level,
-    lastUsedAt: key.last_used_at,
-    createdAt: key.created_at
-  }));
+export const getApiKeys = async (): Promise<{ keys: ApiKey[], globalPanic: boolean }> => {
+  const result = await apiRequest<{ keys: any[], globalPanic: boolean }>('/admin/api-keys');
+  return {
+    globalPanic: result.globalPanic,
+    keys: result.keys.map(key => ({
+      id: key.id,
+      name: key.name,
+      accessLevel: key.access_level,
+      status: key.status,
+      rateLimit: key.rate_limit,
+      lastIp: key.last_ip,
+      usage: key.usage,
+      lastUsedAt: key.last_used_at,
+      createdAt: key.created_at
+    }))
+  };
 };
 
 export const createApiKey = async (name: string, accessLevel: 'read-only' | 'read-write'): Promise<ApiKey> => {
@@ -221,13 +228,38 @@ export const createApiKey = async (name: string, accessLevel: 'read-only' | 'rea
     id: result.id,
     name: result.name,
     accessLevel: result.access_level,
+    status: result.status,
+    rateLimit: result.rate_limit,
     key: result.key,
     createdAt: result.created_at
   };
 };
 
+export const setRateLimit = async (id: number, limit: number): Promise<{ id: number, rate_limit: number }> => {
+  return await apiRequest<{ id: number, rate_limit: number }>(`/admin/api-keys/${id}/rate-limit`, {
+    method: 'PATCH',
+    body: JSON.stringify({ limit }),
+  });
+};
+
 export const deleteApiKey = async (id: number): Promise<void> => {
   await apiRequest(`/admin/api-keys/${id}`, { method: 'DELETE' });
+};
+
+export const toggleGlobalPanic = async (enabled: boolean): Promise<boolean> => {
+  const result = await apiRequest<{ globalPanic: boolean }>('/admin/api-keys/panic', {
+    method: 'POST',
+    body: JSON.stringify({ enabled }),
+  });
+  return result.globalPanic;
+};
+
+export const getApiKeyLogs = async (id: number): Promise<any[]> => {
+  return await apiRequest<any[]>(`/admin/api-keys/${id}/logs`);
+};
+
+export const toggleApiKey = async (id: number): Promise<{ status: 'active' | 'disabled' }> => {
+  return await apiRequest<{ status: 'active' | 'disabled' }>(`/admin/api-keys/${id}/toggle`, { method: 'PATCH' });
 };
 
 // Document endpoints

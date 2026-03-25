@@ -803,7 +803,15 @@ export interface ApiKey {
     id: number;
     name: string;
     accessLevel: 'read-only' | 'read-write';
+    status: 'active' | 'disabled';
     key?: string; // Only present when newly created
+    rateLimit?: number;
+    lastIp?: string;
+    usage?: {
+        count: number;
+        remaining: number;
+        limit: number;
+    };
     lastUsedAt?: string;
     createdAt: string;
 }

@@ -1,7 +1,7 @@
 import express from 'express';
 import fetch from 'node-fetch';
 import { query, getClient } from '../database.js';
-import { authenticateToken, requireRole } from '../auth.js';
+import { authenticateToken, requireRole, getApiKeyUsage } from '../auth.js';
 import crypto from 'crypto';
 import { evaluateAutomation } from '../automation.js';
 import { sendAnnouncementEmail } from '../email.js';
@@ -535,11 +535,25 @@ router.put('/users/:id', authenticateToken, async (req, res) => {
 // API Key routes
 router.get('/admin/api-keys', authenticateToken, requireRole('Admin'), async (req, res) => {
   try {
+    // Get global panic status
+    const panicResult = await query("SELECT value FROM system_settings WHERE key = 'global_api_panic'");
+    const isPanicked = panicResult.rows.length > 0 && panicResult.rows[0].value === 'true';
+
     const result = await query(
-      'SELECT id, name, access_level, last_used_at, created_at FROM api_keys WHERE user_id = $1 ORDER BY created_at DESC',
+      'SELECT id, name, access_level, status, rate_limit, last_ip, last_used_at, created_at FROM api_keys WHERE user_id = $1 ORDER BY created_at DESC',
       [req.user.id]
     );
-    res.json(result.rows);
+    
+    // Enrich with usage data
+    const enrichedKeys = result.rows.map(key => ({
+      ...key,
+      usage: getApiKeyUsage(key.id, key.rate_limit)
+    }));
+    
+    res.json({
+      keys: enrichedKeys,
+      globalPanic: isPanicked
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -556,14 +570,82 @@ router.post('/admin/api-keys', authenticateToken, requireRole('Admin'), async (r
     const keyHash = crypto.createHash('sha256').update(rawKey).digest('hex');
 
     const result = await query(
-      'INSERT INTO api_keys (user_id, name, key_hash, access_level) VALUES ($1, $2, $3, $4) RETURNING id, name, access_level, created_at',
-      [req.user.id, name, keyHash, access_level]
+      'INSERT INTO api_keys (user_id, name, key_hash, access_level, status) VALUES ($1, $2, $3, $4, $5) RETURNING id, name, access_level, status, created_at',
+      [req.user.id, name, keyHash, access_level, 'active']
     );
 
     res.json({
       ...result.rows[0],
       key: rawKey // Only returned once
     });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.patch('/admin/api-keys/:id/toggle', authenticateToken, requireRole('Admin'), async (req, res) => {
+  try {
+    const { rows } = await query('SELECT status FROM api_keys WHERE id = $1', [req.params.id]);
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'API key not found' });
+    }
+    
+    const newStatus = rows[0].status === 'active' ? 'disabled' : 'active';
+    await query('UPDATE api_keys SET status = $1 WHERE id = $2', [newStatus, req.params.id]);
+    
+    res.json({ status: newStatus });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.patch('/admin/api-keys/:id/rate-limit', authenticateToken, requireRole('Admin'), async (req, res) => {
+  try {
+    const { limit } = req.body;
+    if (limit === undefined || limit < 0) {
+      return res.status(400).json({ error: 'Valid rate limit is required' });
+    }
+
+    const result = await query(
+      'UPDATE api_keys SET rate_limit = $1 WHERE id = $2 RETURNING id, rate_limit',
+      [limit, req.params.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'API key not found' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/admin/api-keys/panic', authenticateToken, requireRole('Admin'), async (req, res) => {
+  try {
+    const { enabled } = req.body;
+    if (enabled === undefined) {
+      return res.status(400).json({ error: 'Status is required' });
+    }
+
+    await query(
+      "UPDATE system_settings SET value = $1 WHERE key = 'global_api_panic'",
+      [enabled ? 'true' : 'false']
+    );
+
+    res.json({ globalPanic: enabled });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/admin/api-keys/:id/logs', authenticateToken, requireRole('Admin'), async (req, res) => {
+  try {
+    const result = await query(
+      'SELECT * FROM api_key_logs WHERE key_id = $1 ORDER BY created_at DESC LIMIT 1000',
+      [req.params.id]
+    );
+    res.json(result.rows);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
