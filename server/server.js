@@ -9,6 +9,7 @@ import cron from 'node-cron';
 import { initDatabase, closePool, query } from './database.js';
 import authRoutes from './routes/auth.js';
 import apiRoutes from './routes/api.js';
+import { authenticateApiKey, autoRequireApiKeyAccess } from './auth.js';
 import { generatePayrollForMonth } from './routes/api.js';
 
 const app = express();
@@ -195,7 +196,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Routes
 app.use('/api/auth', authRoutes);
-app.use('/api', apiRoutes);
+app.use('/api', authenticateApiKey, autoRequireApiKeyAccess, apiRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

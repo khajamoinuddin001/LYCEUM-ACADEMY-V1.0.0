@@ -41,7 +41,55 @@ export async function comparePassword(password, hash) {
   return bcrypt.compare(password, hash);
 }
 
+export async function authenticateApiKey(req, res, next) {
+  const apiKey = req.headers['x-api-key'];
+
+  if (!apiKey) {
+    return next(); // Proceed to check for token if no API key
+  }
+
+  try {
+    const { query } = await import('./database.js');
+    const crypto = await import('crypto');
+    const apiKeyHash = crypto.createHash('sha256').update(apiKey).digest('hex');
+
+    const result = await query(
+      'SELECT a.*, u.name as user_name, u.email as user_email, u.role as user_role, u.permissions as user_permissions ' +
+      'FROM api_keys a ' +
+      'JOIN users u ON a.user_id = u.id ' +
+      'WHERE a.key_hash = $1',
+      [apiKeyHash]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(403).json({ error: 'Invalid API key' });
+    }
+
+    const keyData = result.rows[0];
+    
+    // Update last used timestamp
+    await query('UPDATE api_keys SET last_used_at = NOW() WHERE id = $1', [keyData.id]);
+
+    req.user = {
+      id: keyData.user_id,
+      name: keyData.user_name,
+      email: keyData.user_email,
+      role: keyData.user_role,
+      permissions: typeof keyData.user_permissions === 'string' ? JSON.parse(keyData.user_permissions) : (keyData.user_permissions || {}),
+      apiKeyAccess: keyData.access_level
+    };
+
+    next();
+  } catch (error) {
+    console.error('API Key auth error:', error);
+    res.status(500).json({ error: 'Internal server error during authentication' });
+  }
+}
+
 export async function authenticateToken(req, res, next) {
+  // If already authenticated via API key, skip token check
+  if (req.user) return next();
+
   const authHeader = req.headers['authorization'];
   let token = authHeader && authHeader.split(' ')[1];
 
@@ -109,6 +157,27 @@ export async function authenticateToken(req, res, next) {
     req.user = decoded;
   }
 
+  next();
+}
+
+export function requireApiKeyAccess(level) {
+  return (req, res, next) => {
+    if (req.user && req.user.apiKeyAccess) {
+      if (level === 'read-write' && req.user.apiKeyAccess === 'read-only') {
+        return res.status(403).json({ error: 'API key has read-only access' });
+      }
+    }
+    next();
+  };
+}
+
+export function autoRequireApiKeyAccess(req, res, next) {
+  // Only enforce if authenticated via API key
+  if (req.user && req.user.apiKeyAccess) {
+    if (req.user.apiKeyAccess === 'read-only' && req.method !== 'GET') {
+      return res.status(403).json({ error: 'API key has read-only access for non-GET requests' });
+    }
+  }
   next();
 }
 

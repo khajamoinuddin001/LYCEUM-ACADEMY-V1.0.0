@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Bell, FileText, Edit, Trash2, Plus, User as UserIcon, Lock, Palette, DollarSign, CreditCard } from '@/components/common/icons';
+import { ArrowLeft, Bell, FileText, Edit, Trash2, Plus, User as UserIcon, Lock, Palette, DollarSign, CreditCard, KeyRound } from '@/components/common/icons';
+import ApiKeysTab from './api_keys_tab';
 import * as api from '@/utils/api';
 import type { QuotationTemplate, User, Coupon, LmsCourse } from '@/types';
 import QuotationTemplateModal from '@/features/finance/quotation_template_modal';
@@ -21,7 +22,7 @@ interface SettingsViewProps {
     courses: LmsCourse[];
 }
 
-type Tab = 'Profile' | 'Security' | 'Appearance' | 'Notifications' | 'Templates' | 'Coupons' | 'Payment';
+type Tab = 'Profile' | 'Security' | 'Appearance' | 'Notifications' | 'Templates' | 'Coupons' | 'Payment' | 'API Keys';
 
 const TABS: { name: Tab; icon: React.ReactNode; adminOnly?: boolean }[] = [
     { name: 'Profile', icon: <UserIcon size={18} /> },
@@ -31,6 +32,7 @@ const TABS: { name: Tab; icon: React.ReactNode; adminOnly?: boolean }[] = [
     { name: 'Templates', icon: <FileText size={18} /> },
     { name: 'Coupons', icon: <DollarSign size={18} /> },
     { name: 'Payment', icon: <CreditCard size={18} />, adminOnly: true },
+    { name: 'API Keys', icon: <KeyRound size={18} />, adminOnly: true },
 ];
 
 const inputClasses = "w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-lyceum-blue focus:border-lyceum-blue sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white";
@@ -475,6 +477,7 @@ const SettingsView: React.FC<SettingsViewProps> = (props) => {
             case 'Templates': return <TemplatesTab {...props} user={props.user} />;
             case 'Coupons': return <CouponsTab {...props} />;
             case 'Payment': return <PaymentTab />;
+            case 'API Keys': return <ApiKeysTab />;
             default: return null;
         }
     };

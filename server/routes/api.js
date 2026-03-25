@@ -2,6 +2,7 @@ import express from 'express';
 import fetch from 'node-fetch';
 import { query, getClient } from '../database.js';
 import { authenticateToken, requireRole } from '../auth.js';
+import crypto from 'crypto';
 import { evaluateAutomation } from '../automation.js';
 import { sendAnnouncementEmail } from '../email.js';
 
@@ -527,6 +528,60 @@ router.put('/users/:id', authenticateToken, async (req, res) => {
     res.json(user);
   } catch (error) {
     console.error('Error updating user:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// API Key routes
+router.get('/admin/api-keys', authenticateToken, requireRole('Admin'), async (req, res) => {
+  try {
+    const result = await query(
+      'SELECT id, name, access_level, last_used_at, created_at FROM api_keys WHERE user_id = $1 ORDER BY created_at DESC',
+      [req.user.id]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/admin/api-keys', authenticateToken, requireRole('Admin'), async (req, res) => {
+  try {
+    const { name, access_level } = req.body;
+    if (!name || !access_level) {
+      return res.status(400).json({ error: 'Name and access level are required' });
+    }
+
+    const rawKey = crypto.randomBytes(32).toString('hex');
+    const keyHash = crypto.createHash('sha256').update(rawKey).digest('hex');
+
+    const result = await query(
+      'INSERT INTO api_keys (user_id, name, key_hash, access_level) VALUES ($1, $2, $3, $4) RETURNING id, name, access_level, created_at',
+      [req.user.id, name, keyHash, access_level]
+    );
+
+    res.json({
+      ...result.rows[0],
+      key: rawKey // Only returned once
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete('/admin/api-keys/:id', authenticateToken, requireRole('Admin'), async (req, res) => {
+  try {
+    const result = await query(
+      'DELETE FROM api_keys WHERE id = $1 AND user_id = $2 RETURNING id',
+      [req.params.id, req.user.id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'API key not found' });
+    }
+
+    res.json({ success: true });
+  } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });

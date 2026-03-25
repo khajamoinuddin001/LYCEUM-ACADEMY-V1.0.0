@@ -798,3 +798,12 @@ export interface QuestionTemplate {
     questions: Question[];
     created_at: string;
 }
+
+export interface ApiKey {
+    id: number;
+    name: string;
+    accessLevel: 'read-only' | 'read-write';
+    key?: string; // Only present when newly created
+    lastUsedAt?: string;
+    createdAt: string;
+}

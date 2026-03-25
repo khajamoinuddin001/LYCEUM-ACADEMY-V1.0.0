@@ -1217,6 +1217,19 @@ export async function initDatabase() {
     `);
     // Ensure action_type comment is updated (constraint if it exists would need more complex migration, but literal check is usually in app code)
 
+    // API KEYS
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS api_keys (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        key_hash TEXT UNIQUE NOT NULL,
+        access_level TEXT DEFAULT 'read-only' CHECK (access_level IN ('read-only', 'read-write')),
+        last_used_at TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     // --- CONTACT DELETION FIXES (FOREIGN KEYS) ---
     // Ensure all tables referencing contacts(id) allow deletion (CASCADE or SET NULL)
     await client.query(`

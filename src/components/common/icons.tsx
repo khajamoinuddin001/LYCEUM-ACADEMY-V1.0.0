@@ -113,6 +113,7 @@ export {
   School,
   Globe2,
   Zap,
+  Shield,
   Cpu,
   FileUp,
   Megaphone,

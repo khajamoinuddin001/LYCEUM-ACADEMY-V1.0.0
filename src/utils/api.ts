@@ -1,6 +1,6 @@
 import type {
   CalendarEvent, Contact, CrmLead, AccountingTransaction, CrmStage, Quotation, User, UserRole, AppPermissions, ActivityLog, DocumentAnalysisResult, Document as Doc, ChecklistItem, QuotationTemplate, Visitor, TodoTask, Ticket, PaymentActivityLog, LmsCourse, LmsLesson, LmsModule, Coupon, ContactActivity, ContactActivityAction, DiscussionPost, DiscussionThread, RecordedSession, Channel, Notification, RecurringTask, VisaOperation,
-  UniversityCourse, Announcement, EmailTemplate
+  UniversityCourse, Announcement, EmailTemplate, ApiKey
 } from '../types';
 import { DEFAULT_PERMISSIONS, DEFAULT_CHECKLIST } from '@/lib/constants';
 
@@ -198,6 +198,36 @@ export const addUser = async (newUser: Omit<User, 'id' | 'permissions'>): Promis
   });
   const allUsers = await getUsers();
   return { allUsers, addedUser };
+};
+
+// API Keys
+export const getApiKeys = async (): Promise<ApiKey[]> => {
+  const result = await apiRequest<any[]>('/admin/api-keys');
+  return result.map(key => ({
+    id: key.id,
+    name: key.name,
+    accessLevel: key.access_level,
+    lastUsedAt: key.last_used_at,
+    createdAt: key.created_at
+  }));
+};
+
+export const createApiKey = async (name: string, accessLevel: 'read-only' | 'read-write'): Promise<ApiKey> => {
+  const result = await apiRequest<any>('/admin/api-keys', {
+    method: 'POST',
+    body: JSON.stringify({ name, access_level: accessLevel }),
+  });
+  return {
+    id: result.id,
+    name: result.name,
+    accessLevel: result.access_level,
+    key: result.key,
+    createdAt: result.created_at
+  };
+};
+
+export const deleteApiKey = async (id: number): Promise<void> => {
+  await apiRequest(`/admin/api-keys/${id}`, { method: 'DELETE' });
 };
 
 // Document endpoints
