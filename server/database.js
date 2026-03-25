@@ -1237,7 +1237,6 @@ export async function initDatabase() {
       ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'active';
       ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS rate_limit INTEGER DEFAULT 60;
       ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS last_ip TEXT;
-      ALTER TABLE api_key_logs ADD COLUMN IF NOT EXISTS user_agent TEXT;
     `);
 
     // API KEY LOGS
@@ -1252,6 +1251,10 @@ export async function initDatabase() {
         status_code INTEGER,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
+    `);
+
+    await client.query(`
+      ALTER TABLE api_key_logs ADD COLUMN IF NOT EXISTS user_agent TEXT;
     `);
 
     // SYSTEM SETTINGS (for Global Panic Switch)
