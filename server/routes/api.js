@@ -5900,6 +5900,17 @@ router.get('/attendance/me', authenticateToken, async (req, res) => {
   }
 });
 
+// Get Attendance History for Admin (Specific User)
+router.get('/attendance/history/:userId', authenticateToken, requireRole('Admin'), async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const result = await query('SELECT * FROM attendance_logs WHERE user_id = $1 ORDER BY date DESC', [userId]);
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // HOLIDAY ROUTES
 router.get('/holidays', authenticateToken, async (req, res) => {
   try {
@@ -5912,9 +5923,37 @@ router.get('/holidays', authenticateToken, async (req, res) => {
 
 router.post('/holidays', authenticateToken, requireRole('Admin'), async (req, res) => {
   try {
-    const { date, description } = req.body;
-    const result = await query('INSERT INTO holidays (date, description) VALUES ($1, $2) RETURNING *', [date, description]);
-    res.json(result.rows[0]);
+    const { date, endDate, description } = req.body;
+    
+    if (!endDate || endDate === date) {
+      const result = await query(
+        'INSERT INTO holidays (date, description) VALUES ($1, $2) ON CONFLICT (date) DO UPDATE SET description = EXCLUDED.description RETURNING *', 
+        [date, description]
+      );
+      return res.json(result.rows[0]);
+    }
+
+    // Handle range
+    let start = new Date(date);
+    let end = new Date(endDate);
+    
+    if (end < start) {
+        let temp = start;
+        start = end;
+        end = temp;
+    }
+
+    const inserted = [];
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      const dStr = d.toISOString().split('T')[0];
+      const result = await query(
+        'INSERT INTO holidays (date, description) VALUES ($1, $2) ON CONFLICT (date) DO UPDATE SET description = EXCLUDED.description RETURNING *',
+        [dStr, description]
+      );
+      inserted.push(result.rows[0]);
+    }
+    
+    res.json({ success: true, count: inserted.length, holidays: inserted });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -5963,6 +6002,45 @@ router.get('/leaves', authenticateToken, async (req, res) => {
 
     sql += ` ORDER BY l.created_at DESC`;
     const result = await query(sql, params);
+    
+    // If Admin, enrich with stats
+    if (req.user.role === 'Admin') {
+      const enriched = await Promise.all(result.rows.map(async (row) => {
+        const now = new Date();
+        const monthNum = now.getMonth() + 1;
+        const quarterStartMonth = Math.floor((monthNum - 1) / 3) * 3 + 1;
+        const accruedInQuarter = monthNum - quarterStartMonth + 1;
+
+        // Fetch all approved leaves for this user in this quarter
+        const prevLeavesRes = await query(`
+            SELECT start_date, end_date FROM leave_requests 
+            WHERE user_id = $1 AND status = 'Approved'
+        `, [row.user_id]);
+
+        const takenInQuarter = prevLeavesRes.rows.reduce((acc, l) => {
+            const lMonth = new Date(l.start_date).getUTCMonth() + 1;
+            if (lMonth >= quarterStartMonth && lMonth <= monthNum) {
+                const diff = Math.round((new Date(l.end_date) - new Date(l.start_date)) / (1000 * 3600 * 24)) + 1;
+                return acc + diff;
+            }
+            return acc;
+        }, 0);
+
+        const lastLeaveRes = await query(`
+            SELECT end_date FROM leave_requests 
+            WHERE user_id = $1 AND status = 'Approved' AND end_date < $2
+            ORDER BY end_date DESC LIMIT 1
+        `, [row.user_id, row.start_date]);
+
+        return {
+          ...row,
+          unclaimedLeaves: Math.max(0, accruedInQuarter - takenInQuarter),
+          lastLeaveDate: lastLeaveRes.rows[0]?.end_date || null
+        };
+      }));
+      return res.json(enriched);
+    }
+
     res.json(result.rows);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -5984,173 +6062,345 @@ router.put('/leaves/:id', authenticateToken, requireRole('Admin'), async (req, r
   }
 });
 
-// PAYROLL REPORT (Admin)
-router.get('/attendance/payroll', authenticateToken, requireRole('Admin'), async (req, res) => {
-  try {
-    const { month, year } = req.query; // e.g. month=1 (Jan), year=2024
+// ============================================================
+// PAYROLL HELPER - shared by on-demand report, generate+save, and cron
+// ============================================================
+export const generatePayrollForMonth = async (month, year) => {
+  const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+  const endDay = new Date(Number(year), Number(month), 0).getDate();
+  const endDate = `${year}-${String(month).padStart(2, '0')}-${endDay}`;
 
-    if (!month || !year) return res.status(400).json({ error: 'Month and Year required' });
+  // Fetch all non-student users with salary & shift info
+  const users = await query(
+    'SELECT id, name, base_salary, joining_date, shift_start, shift_end, working_days FROM users WHERE role != $1 AND role != $2',
+    ['Student', 'Student']
+  );
 
-    const startDate = `${year} -${String(month).padStart(2, '0')}-01`;
-    // Calculate end date (last day of month)
-    const endDay = new Date(Number(year), Number(month), 0).getDate();
-    const endDate = `${year} -${String(month).padStart(2, '0')} -${endDay} `;
+  const holidaysRes = await query(
+    'SELECT * FROM holidays WHERE date >= $1 AND date <= $2',
+    [startDate, endDate]
+  );
+  const holidaysCount = holidaysRes.rows.length;
 
-    // Fetch all users with salary info
-    const users = await query('SELECT id, name, base_salary, joining_date FROM users WHERE role != $1', ['Student']);
+  const logsRes = await query(
+    'SELECT * FROM attendance_logs WHERE date >= $1 AND date <= $2',
+    [startDate, endDate]
+  );
+  const logs = logsRes.rows;
 
-    // Fetch holidays in this month
-    const holidaysRes = await query('SELECT * FROM holidays WHERE date >= $1 AND date <= $2', [startDate, endDate]);
-    const holidaysCount = holidaysRes.rows.length;
-
-    // Fetch attendance logs for this month
-    const logsRes = await query('SELECT * FROM attendance_logs WHERE date >= $1 AND date <= $2', [startDate, endDate]);
-    const logs = logsRes.rows;
-
-    // Fetch APPROVED leaves overlapping this month
-    const leavesRes = await query(`
-SELECT * FROM leave_requests 
-        WHERE status = 'Approved' 
-        AND start_date <= $2 AND end_date >= $1
+  const leavesRes = await query(`
+    SELECT * FROM leave_requests
+    WHERE status = 'Approved'
+    AND start_date <= $2 AND end_date >= $1
   `, [startDate, endDate]);
-    const leaves = leavesRes.rows;
+  const leaves = leavesRes.rows;
 
-    const report = users.rows.map(user => {
-      const userLogs = logs.filter(l => l.user_id === user.id);
-      const presentDays = userLogs.length;
+  const report = users.rows.map(user => {
+    // --- USER SCHEDULE ---
+    const dayMap = { 'Sun': 0, 'Mon': 1, 'Tue': 2, 'Wed': 3, 'Thu': 4, 'Fri': 5, 'Sat': 6 };
+    let rawWorkingDays = user.working_days;
+    if (typeof rawWorkingDays === 'string') {
+      try { rawWorkingDays = JSON.parse(rawWorkingDays); } catch (e) { rawWorkingDays = null; }
+    }
+    
+    let workingDayIndices = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].map(d => dayMap[d]);
+    if (rawWorkingDays && Array.isArray(rawWorkingDays) && rawWorkingDays.length > 0) {
+      workingDayIndices = rawWorkingDays.map(d => dayMap[d]);
+    }
 
-      // Calculate Total Late Minutes (only where minutes > 15)
-      const totalLateMinutes = userLogs.reduce((acc, log) => {
-        // Only deduct if status is 'Late' and minutes > 15
-        if (log.status === 'Late' && log.late_minutes > 15) {
-          return acc + (log.late_minutes - 15);
+    // --- PRESENT DAYS (Only on scheduled working days) ---
+    const userLogs = logs.filter(l => l.user_id === user.id);
+    let missingCheckouts = 0;
+    const presentOnScheduledDays = userLogs.reduce((acc, log) => {
+      // Use middle of day to avoid timezone shifting for DATE strings
+      const logStr = typeof log.date === 'string' ? log.date.split('T')[0] : new Date(log.date).toISOString().split('T')[0];
+      const logDay = new Date(`${logStr}T12:00:00`).getDay();
+      
+      if (workingDayIndices.includes(logDay)) {
+        if (!log.check_out) {
+          missingCheckouts++;
+          return acc + 0.5; // Half day for missing checkout
         }
-        return acc;
-      }, 0);
-
-      // Calculate Working Days
-      let standardSundays = 0;
-      for (let d = 1; d <= endDay; d++) {
-        const date = new Date(Number(year), Number(month) - 1, d);
-        if (date.getDay() === 0) standardSundays++;
+        return acc + 1.0;
       }
+      return acc;
+    }, 0);
 
-      const standardWorkingDays = endDay - standardSundays - holidaysCount;
-      const baseSalary = parseFloat(user.base_salary) || 0;
-      // User requested formula: (Base Salary / 30 / 8 / 60)
-      const payPerMinute = baseSalary / 30 / 8 / 60;
-      const payPerDay = standardWorkingDays > 0 ? baseSalary / standardWorkingDays : 0;
+    // --- SHIFT HOURS ---
+    let shiftHours = 8;
+    if (user.shift_start && user.shift_end) {
+      const [sh, sm] = user.shift_start.split(':').map(Number);
+      const [eh, em] = user.shift_end.split(':').map(Number);
+      const totalMins = (eh * 60 + em) - (sh * 60 + sm);
+      if (totalMins > 0) shiftHours = totalMins / 60;
+    }
 
-      // Calculate Effective Working Days for User (Considering Join Date)
-      const joinDate = user.joining_date ? new Date(user.joining_date) : null;
-      let effectiveStartDay = 1;
-
-      if (joinDate && joinDate.getFullYear() === Number(year) && joinDate.getMonth() === Number(month) - 1) {
-        effectiveStartDay = joinDate.getDate();
+    // --- LATE MINUTES ---
+    const totalLateMinutes = userLogs.reduce((acc, log) => {
+      if (log.status === 'Late' && log.late_minutes > 15) {
+        return acc + (log.late_minutes - 15);
       }
+      return acc;
+    }, 0);
 
-      if (joinDate && (joinDate.getFullYear() > Number(year) || (joinDate.getFullYear() === Number(year) && joinDate.getMonth() > Number(month) - 1))) {
-        return { userId: user.id, name: user.name, baseSalary, workingDays: 0, presentDays: 0, lateDays: 0, finalSalary: 0 };
+    const baseSalary = parseFloat(user.base_salary) || 0;
+
+    // --- STANDARD MONTH WORKING DAYS ---
+    let totalScheduledDaysForUser = 0;
+    for (let d = 1; d <= endDay; d++) {
+      const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const dayOfWeek = new Date(`${dateStr}T12:00:00`).getDay();
+      if (workingDayIndices.includes(dayOfWeek)) {
+        const isHoliday = holidaysRes.rows.some(h => {
+           const hStr = typeof h.date === 'string' ? h.date.split('T')[0] : new Date(h.date).toISOString().split('T')[0];
+           return hStr === dateStr;
+        });
+        if (!isHoliday) totalScheduledDaysForUser++;
       }
+    }
+    const standardWorkingDaysInMonth = Math.max(1, totalScheduledDaysForUser);
 
-      let userSundays = 0;
-      for (let d = effectiveStartDay; d <= endDay; d++) {
-        const date = new Date(Number(year), Number(month) - 1, d);
-        if (date.getDay() === 0) userSundays++;
+    // --- USER-SPECIFIC ACTIVE WORKING DAYS ---
+    const joinDateStr = user.joining_date ? (typeof user.joining_date === 'string' ? user.joining_date.split('T')[0] : new Date(user.joining_date).toISOString().split('T')[0]) : null;
+    let effectiveStartDay = 1;
+
+    if (joinDateStr) {
+      const [jy, jm, jd] = joinDateStr.split('-').map(Number);
+      if (jy === Number(year) && jm === Number(month)) {
+        effectiveStartDay = jd;
+      } else if (jy > Number(year) || (jy === Number(year) && jm > Number(month))) {
+        return { userId: user.id, name: user.name, baseSalary, workingDays: 0, presentDays: 0, lateMinutes: 0, lateDeduction: 0, absentDeduction: 0, finalSalary: 0 };
       }
+    }
 
-      const validHolidays = holidaysRes.rows.filter(h => {
-        const hDate = new Date(h.date);
-        return hDate.getDate() >= effectiveStartDay;
-      }).length;
+    let activeScheduledDays = 0;
+    for (let d = effectiveStartDay; d <= endDay; d++) {
+      const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const dayOfWeek = new Date(`${dateStr}T12:00:00`).getDay();
+      if (workingDayIndices.includes(dayOfWeek)) {
+        const isHoliday = holidaysRes.rows.some(h => {
+           const hStr = typeof h.date === 'string' ? h.date.split('T')[0] : new Date(h.date).toISOString().split('T')[0];
+           return hStr === dateStr;
+        });
+        if (!isHoliday) activeScheduledDays++;
+      }
+    }
+    const userWorkingDays = activeScheduledDays;
 
-      const userLength = endDay - effectiveStartDay + 1;
-      const workingDays = Math.max(0, userLength - userSundays - validHolidays);
+    // --- QUARTERLY LEAVE LOGIC ---
+    const monthNum = Number(month);
+    const quarterStartMonth = Math.floor((monthNum - 1) / 3) * 3 + 1;
+    const accruedInQuarter = monthNum - quarterStartMonth + 1;
+    const takenBeforeThisMonth = leaves.filter(l => l.user_id === user.id).filter(l => {
+      const lMonth = new Date(l.start_date).getUTCMonth() + 1;
+      return lMonth >= quarterStartMonth && lMonth < monthNum;
+    }).reduce((acc, leave) => acc + Math.round((new Date(leave.end_date) - new Date(leave.start_date)) / (1000 * 3600 * 24)) + 1, 0);
+    const availablePaidLeaves = Math.max(0, accruedInQuarter - takenBeforeThisMonth);
+    const currentMonthLeaves = leaves.filter(l => l.user_id === user.id && (new Date(l.start_date).getUTCMonth() + 1) === monthNum);
 
-      // --- QUARTERLY LEAVE LOGIC ---
-      // 1 day per month accrued. Reset Jan 1, Apr 1, Jul 1, Oct 1.
-      const monthNum = Number(month);
-      const quarterStartMonth = Math.floor((monthNum - 1) / 3) * 3 + 1;
-      const accruedInQuarter = monthNum - quarterStartMonth + 1; // 1, 2, or 3 days
-
-      // Count leaves taken in this quarter BEFORE this month
-      const takenBeforeThisMonth = leaves.filter(l => {
-        if (l.user_id !== user.id) return false;
-        const lDate = new Date(l.start_date);
-        const lMonth = lDate.getMonth() + 1;
-        return lMonth >= quarterStartMonth && lMonth < monthNum;
-      }).reduce((acc, leave) => {
-        // Count days in quarter for this leave
-        // (Simplified: assuming leave doesn't cross months for now, or if it does, it's rare)
-        // For now, let's just count days within the quarter
-        return acc + Math.round((new Date(leave.end_date) - new Date(leave.start_date)) / (1000 * 3600 * 24)) + 1;
-      }, 0);
-
-      const availablePaidLeaves = Math.max(0, accruedInQuarter - takenBeforeThisMonth);
-
-      // Current month's approved leaves
-      const currentMonthLeaves = leaves.filter(l => {
-        if (l.user_id !== user.id) return false;
-        const lDate = new Date(l.start_date);
-        return (lDate.getMonth() + 1) === monthNum;
-      });
-
-      let paidLeaveDaysUsed = 0;
-      let unpaidLeaveDays = 0;
-
-      currentMonthLeaves.forEach(leave => {
-        const lStart = new Date(leave.start_date);
-        const lEnd = new Date(leave.end_date);
-
-        for (let d = new Date(lStart); d <= lEnd; d.setDate(d.getDate() + 1)) {
-          if (d.getMonth() === Number(month) - 1 && d.getFullYear() === Number(year) && d.getDate() >= effectiveStartDay && d.getDate() <= endDay) {
-            if (d.getDay() !== 0) {
-              const isHoliday = holidaysRes.rows.some(h => new Date(h.date).toDateString() === d.toDateString());
-              if (!isHoliday) {
-                if (paidLeaveDaysUsed < availablePaidLeaves) {
-                  paidLeaveDaysUsed++;
-                } else {
-                  unpaidLeaveDays++;
-                }
-              }
+    let paidLeaveDaysUsed = 0;
+    let unpaidLeaveDays = 0;
+    currentMonthLeaves.forEach(leave => {
+      // Use UTC dates for leave iteration to avoid local DST issues
+      for (let d = new Date(leave.start_date); d <= new Date(leave.end_date); d.setUTCDate(d.getUTCDate() + 1)) {
+        const dayDate = d.getUTCDate();
+        const dayMonth = d.getUTCMonth() + 1;
+        const dayYear = d.getUTCFullYear();
+        const dayOfWeek = d.getUTCDay();
+        
+        if (dayMonth === Number(month) && dayYear === Number(year) && dayDate >= effectiveStartDay) {
+          if (workingDayIndices.includes(dayOfWeek)) {
+            const dateStr = `${dayYear}-${String(dayMonth).padStart(2, '0')}-${String(dayDate).padStart(2, '0')}`;
+            const isHoliday = holidaysRes.rows.some(h => {
+                const hStr = typeof h.date === 'string' ? h.date.split('T')[0] : new Date(h.date).toISOString().split('T')[0];
+                return hStr === dateStr;
+            });
+            if (!isHoliday) {
+              if (paidLeaveDaysUsed < availablePaidLeaves) paidLeaveDaysUsed++;
+              else unpaidLeaveDays++;
             }
           }
         }
-      });
-
-      // Deductions
-      // Absent days = workingDays - presentDays - paidLeaveDaysUsed - unpaidLeaveDays
-      // Wait, if they take unpaid leave, it's already an absent day.
-      const absentDays = Math.max(0, workingDays - presentDays - paidLeaveDaysUsed - unpaidLeaveDays);
-      const absentDeduction = (absentDays + unpaidLeaveDays) * payPerDay;
-
-      // Late deduction: (late_minutes - 15) * (Base Salary / 30 / 8 / 60)
-      const lateDeduction = totalLateMinutes * payPerMinute;
-
-      const finalSalary = Math.round(Math.max(0, (baseSalary - absentDeduction - lateDeduction)));
-
-      return {
-        userId: user.id,
-        name: user.name,
-        baseSalary,
-        workingDays,
-        presentDays,
-        paidLeaveDays: paidLeaveDaysUsed,
-        unpaidLeaveDays,
-        lateMinutes: totalLateMinutes,
-        lateDeduction: Math.round(lateDeduction * 100) / 100,
-        absentDeduction: Math.round(absentDeduction * 100) / 100,
-        finalSalary
-      };
+      }
     });
 
+    // --- PAY RATES ---
+    const payPerDay = baseSalary / standardWorkingDaysInMonth;
+    const payPerMinute = payPerDay / shiftHours / 60;
+
+    // --- DEDUCTIONS ---
+    const absentDaysInsideTenure = Math.max(0, userWorkingDays - presentOnScheduledDays - paidLeaveDaysUsed - unpaidLeaveDays);
+    const daysBeforeJoined = standardWorkingDaysInMonth - userWorkingDays;
+    
+    const absentDeduction = (absentDaysInsideTenure + unpaidLeaveDays + daysBeforeJoined) * payPerDay;
+    const lateDeduction = totalLateMinutes * payPerMinute;
+    const finalSalary = Math.round(Math.max(0, baseSalary - absentDeduction - lateDeduction));
+
+    return {
+      userId: user.id,
+      name: user.name,
+      baseSalary,
+      workingDays: userWorkingDays,
+      presentDays: presentOnScheduledDays,
+      paidLeaveDays: paidLeaveDaysUsed,
+      unpaidLeaveDays,
+      absentDays: absentDaysInsideTenure,
+      lateMinutes: totalLateMinutes,
+      missingCheckouts,
+      shiftHours: Math.round(shiftHours * 100) / 100,
+      shiftStart: user.shift_start || '09:00',
+      shiftEnd: user.shift_end || '18:00',
+      lateDeduction: Math.round(lateDeduction * 100) / 100,
+      absentDeduction: Math.round(absentDeduction * 100) / 100,
+      finalSalary,
+      month: Number(month),
+      year: Number(year),
+      working_days: rawWorkingDays || ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']
+    };
+  });
+
+  return report;
+};
+
+// PAYROLL REPORT (Admin - on-demand preview, does not save)
+router.get('/attendance/payroll', authenticateToken, requireRole('Admin'), async (req, res) => {
+  try {
+    const { month, year } = req.query;
+    if (!month || !year) return res.status(400).json({ error: 'Month and Year required' });
+    const report = await generatePayrollForMonth(Number(month), Number(year));
     res.json(report);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// PAYSLIP STORAGE & RETRIEVAL
+// GENERATE & SAVE PAYROLL (Admin - persists to payslips table)
+router.post('/attendance/payroll/generate', authenticateToken, requireRole('Admin'), async (req, res) => {
+  try {
+    const { month, year } = req.body;
+    if (!month || !year) return res.status(400).json({ error: 'Month and Year required' });
+
+    const report = await generatePayrollForMonth(Number(month), Number(year));
+
+    // Upsert each user's payslip
+    for (const row of report) {
+      await query(`
+        INSERT INTO payslips (user_id, month, year, data, generated_at)
+        VALUES ($1, $2, $3, $4, NOW())
+        ON CONFLICT (user_id, month, year)
+        DO UPDATE SET data = $4, generated_at = NOW()
+      `, [row.userId, Number(month), Number(year), JSON.stringify(row)]);
+    }
+
+    res.json({ success: true, count: report.length, month, year });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// DELETE PAYSLIP (Admin only)
+router.delete('/attendance/payslips/:id', authenticateToken, requireRole('Admin'), async (req, res) => {
+  try {
+    await query('DELETE FROM payslips WHERE id = $1', [req.params.id]);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// UPDATE PAYSLIP ADJUSTMENTS (Bonus/Overtime)
+router.put('/attendance/payslips/:id', authenticateToken, requireRole('Admin'), async (req, res) => {
+  try {
+    const { bonus, overtime_hours } = req.body;
+    const slipRes = await query('SELECT * FROM payslips WHERE id = $1', [req.params.id]);
+    if (slipRes.rows.length === 0) return res.status(404).json({ error: 'Payslip not found' });
+
+    const slip = slipRes.rows[0];
+    let data = typeof slip.data === 'string' ? JSON.parse(slip.data) : slip.data;
+
+    const b = parseFloat(bonus) || 0;
+    const oth = parseFloat(overtime_hours) || 0;
+
+    // Recalculate based on existing base data
+    const standardDays = data.standardWorkingDaysInMonth || data.workingDays || 21; 
+    const shiftH = data.shiftHours || 8;
+    const dailyRate = data.baseSalary / standardDays;
+    const hourlyRate = dailyRate / shiftH;
+    const otPay = oth * hourlyRate;
+
+    // Update data object
+    data.bonus = b;
+    data.overtime_hours = oth;
+    data.overtime_pay = Math.round(otPay * 100) / 100;
+
+    // Recalculate final salary
+    // finalSalary = (baseSalary - absentDeduction - lateDeduction) + bonus + overtime_pay
+    const baseNet = (data.baseSalary - (data.absentDeduction || 0) - (data.lateDeduction || 0));
+    data.finalSalary = Math.round(baseNet + b + data.overtime_pay);
+
+    await query('UPDATE payslips SET data = $1 WHERE id = $2', [JSON.stringify(data), req.params.id]);
+    res.json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET PAYSLIPS (Admin: all | Staff: own only)
+router.get('/attendance/payslips', authenticateToken, async (req, res) => {
+  try {
+    let result;
+    if (req.user.role === 'Admin') {
+      result = await query(`
+        SELECT p.*, u.name as user_name, u.email as user_email
+        FROM payslips p
+        JOIN users u ON u.id = p.user_id
+        ORDER BY p.year DESC, p.month DESC, u.name ASC
+      `);
+    } else {
+      result = await query(`
+        SELECT p.*, u.name as user_name, u.email as user_email
+        FROM payslips p
+        JOIN users u ON u.id = p.user_id
+        WHERE p.user_id = $1
+        ORDER BY p.year DESC, p.month DESC
+      `, [req.user.id]);
+    }
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET PAYROLL SCHEDULE
+router.get('/settings/payroll-schedule', authenticateToken, requireRole('Admin'), async (req, res) => {
+  try {
+    const result = await query("SELECT value FROM system_settings WHERE key = 'PAYROLL_SCHEDULE'");
+    res.json(result.rows[0]?.value || { dayOfMonth: 1, hour: 0, minute: 0 });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// SAVE PAYROLL SCHEDULE
+router.post('/settings/payroll-schedule', authenticateToken, requireRole('Admin'), async (req, res) => {
+  try {
+    const { dayOfMonth, hour, minute } = req.body;
+    if (!dayOfMonth || dayOfMonth < 1 || dayOfMonth > 28) {
+      return res.status(400).json({ error: 'Day of month must be between 1 and 28' });
+    }
+    const value = { dayOfMonth: Number(dayOfMonth), hour: Number(hour || 0), minute: Number(minute || 0) };
+    await query(`
+      INSERT INTO system_settings (key, value)
+      VALUES ('PAYROLL_SCHEDULE', $1)
+      ON CONFLICT (key) DO UPDATE SET value = $1
+    `, [JSON.stringify(value)]);
+    res.json({ success: true, schedule: value });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
 router.get('/attendance/leaves/balance', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;

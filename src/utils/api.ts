@@ -911,16 +911,20 @@ export const getAttendanceHistory = async () => {
   return await apiRequest('/attendance/me', { method: 'GET' });
 };
 
+export const getStaffAttendanceHistory = async (userId: number) => {
+  return await apiRequest(`/attendance/history/${userId}`, { method: 'GET' });
+};
+
 export const getLeaveBalance = async () => {
   return await apiRequest<{ accrued: number; used: number; remaining: number; quarter: number }>('/attendance/leaves/balance', { method: 'GET' });
 };
 
 export const getHolidays = async () => {
-  return await apiRequest('/holidays', { method: 'GET' });
+  return await apiRequest<any[]>('/holidays', { method: 'GET' });
 };
 
-export const saveHoliday = async (holiday: { date: string; description: string }) => {
-  return await apiRequest('/holidays', {
+export const saveHoliday = async (holiday: { date: string; endDate?: string; description: string }) => {
+  return await apiRequest<any>('/holidays', {
     method: 'POST',
     body: JSON.stringify(holiday)
   });
@@ -965,6 +969,28 @@ export const saveBranch = async (branch: { name: string; lat: number; lng: numbe
 
 export const deleteBranch = async (id: number) => {
   return await apiRequest(`/attendance/branches/${id}`, { method: 'DELETE' });
+};
+
+export const getPayslips = async () => {
+  return await apiRequest<any[]>('/attendance/payslips', { method: 'GET' });
+};
+
+export const generateAndSavePayroll = async (month: number, year: number) => {
+  return await apiRequest<{ success: boolean; count: number }>('/attendance/payroll/generate', {
+    method: 'POST',
+    body: JSON.stringify({ month, year })
+  });
+};
+
+export const getPayrollSchedule = async () => {
+  return await apiRequest<{ dayOfMonth: number; hour: number; minute: number }>('/settings/payroll-schedule', { method: 'GET' });
+};
+
+export const savePayrollSchedule = async (schedule: { dayOfMonth: number; hour: number; minute: number }) => {
+  return await apiRequest<{ success: boolean; schedule: any }>('/settings/payroll-schedule', {
+    method: 'POST',
+    body: JSON.stringify(schedule)
+  });
 };
 
 export const getPaymentSettings = async () => {
@@ -1907,6 +1933,19 @@ export const chatWithAssistant = async (message: string, history: any[]): Promis
 export const getAutomationRules = async (): Promise<any[]> => {
   return apiRequest<any[]>('/automation-rules');
 };
+
+export const deletePayslip = async (id: number): Promise<{ success: boolean }> => {
+  return apiRequest(`/attendance/payslips/${id}`, { method: 'DELETE' });
+};
+
+export const updatePayslipAdjustments = async (id: number, adjustments: { bonus: number; overtime_hours: number }): Promise<any> => {
+  return apiRequest(`/attendance/payslips/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(adjustments)
+  });
+};
+
+
 
 export const createAutomationRule = async (rule: any): Promise<any> => {
   return apiRequest<any>('/automation-rules', {

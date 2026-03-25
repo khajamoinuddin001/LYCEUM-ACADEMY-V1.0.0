@@ -383,7 +383,7 @@ router.post('/logout', authenticateToken, async (req, res) => {
 router.get('/me', authenticateToken, async (req, res) => {
   try {
     const result = await query(
-      'SELECT id, name, email, role, permissions, must_reset_password FROM users WHERE id = $1',
+      'SELECT id, name, email, role, permissions, must_reset_password, shift_start, shift_end, working_days, joining_date, base_salary FROM users WHERE id = $1',
       [req.user.id]
     );
 

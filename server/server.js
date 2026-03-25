@@ -5,9 +5,11 @@ import { fileURLToPath } from 'url';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
-import { initDatabase, closePool } from './database.js';
+import cron from 'node-cron';
+import { initDatabase, closePool, query } from './database.js';
 import authRoutes from './routes/auth.js';
 import apiRoutes from './routes/api.js';
+import { generatePayrollForMonth } from './routes/api.js';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -149,7 +151,44 @@ try {
   process.exit(1);
 }
 
-// Static files
+// ============================================================
+// PAYROLL AUTO-GENERATION CRON
+// Runs every day at midnight. Checks if today matches the
+// admin-configured generation date+time. If so, generates
+// payslips for the previous month.
+// ============================================================
+cron.schedule('0 0 * * *', async () => {
+  try {
+    const result = await query("SELECT value FROM system_settings WHERE key = 'PAYROLL_SCHEDULE'");
+    const schedule = result.rows[0]?.value || { dayOfMonth: 1, hour: 0, minute: 0 };
+
+    const now = new Date();
+    const configuredDay = Number(schedule.dayOfMonth || 1);
+    const configuredHour = Number(schedule.hour || 0);
+
+    if (now.getDate() === configuredDay && now.getHours() === configuredHour) {
+      // Generate for the previous month
+      const prevMonth = now.getMonth() === 0 ? 12 : now.getMonth();
+      const prevYear = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
+
+      console.log(`📊 [Payroll Cron] Auto-generating payroll for ${prevMonth}/${prevYear}...`);
+      const report = await generatePayrollForMonth(prevMonth, prevYear);
+
+      for (const row of report) {
+        await query(`
+          INSERT INTO payslips (user_id, month, year, data, generated_at)
+          VALUES ($1, $2, $3, $4, NOW())
+          ON CONFLICT (user_id, month, year)
+          DO UPDATE SET data = $4, generated_at = NOW()
+        `, [row.userId, prevMonth, prevYear, JSON.stringify(row)]);
+      }
+      console.log(`✅ [Payroll Cron] Generated ${report.length} payslips for ${prevMonth}/${prevYear}`);
+    }
+  } catch (err) {
+    console.error('❌ [Payroll Cron] Error:', err.message);
+  }
+}, { timezone: 'Asia/Kolkata' });
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));

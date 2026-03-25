@@ -908,7 +908,20 @@ export async function initDatabase() {
       )
     `);
 
-    // PAYSLIPS    await client.query(`      CREATE TABLE IF NOT EXISTS payslips (        id SERIAL PRIMARY KEY,        user_id INTEGER REFERENCES users(id),        month INTEGER NOT NULL,        year INTEGER NOT NULL,        pdf_data BYTEA,        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP      )    `);
+
+    // PAYSLIPS - stores auto/manual generated payslips per employee per month
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS payslips (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        month INTEGER NOT NULL,
+        year INTEGER NOT NULL,
+        data JSONB NOT NULL,
+        generated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, month, year)
+      )
+    `);
+
 
     // Add columns to users if they don't exist
     const userColumns = ['joining_date', 'base_salary', 'shift_start', 'shift_end'];
