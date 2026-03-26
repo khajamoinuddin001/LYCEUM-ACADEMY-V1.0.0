@@ -3,6 +3,16 @@ import { createTransporter } from './email.js';
 import fetch from 'node-fetch';
 
 /**
+ * Check if a string looks like a valid email address
+ */
+function isValidEmail(email) {
+    if (!email || typeof email !== 'string') return false;
+    // Basic regex for email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email.trim());
+}
+
+/**
  * Replace template variables with payload data.
  * e.g. {{client_name}} -> payload.client_name
  */
@@ -171,35 +181,51 @@ export async function evaluateAutomation(triggerEvent, payload) {
                         const recipientEmails = new Set();
 
                         for (const type of recipientTypes) {
+                            let email = null;
+                            let sourceField = '';
+
                             if (type === 'student' || type === 'client') {
                                 // Priority 1: Direct from payload
-                                let email = payload.client_email || payload.student_email || payload.email || payload.contact_email;
+                                if (payload.client_email) { email = payload.client_email; sourceField = 'client_email'; }
+                                else if (payload.student_email) { email = payload.student_email; sourceField = 'student_email'; }
+                                else if (payload.email) { email = payload.email; sourceField = 'email'; }
+                                else if (payload.contact_email) { email = payload.contact_email; sourceField = 'contact_email'; }
 
                                 // Priority 2: Fallback to database lookup if contact_id exists
                                 const contactId = payload.contact_id || payload.contactId;
                                 if (!email && contactId) {
                                     try {
                                         const contactRes = await query("SELECT email FROM contacts WHERE id = $1", [contactId]);
-                                        if (contactRes.rows.length > 0) {
+                                        if (contactRes.rows.length > 0 && contactRes.rows[0].email) {
                                             email = contactRes.rows[0].email;
+                                            sourceField = 'database:contacts.email';
                                         }
                                     } catch (dbErr) {
                                         console.error('🤖 [Automation] Failed to fetch contact email from database:', dbErr);
                                     }
                                 }
-
-                                if (email) recipientEmails.add(email);
                             } else if (type === 'staff') {
-                                const email = payload.staff_email || payload.assigned_to_email;
-                                if (email) recipientEmails.add(email);
+                                if (payload.staff_email) { email = payload.staff_email; sourceField = 'staff_email'; }
+                                else if (payload.assigned_to_email) { email = payload.assigned_to_email; sourceField = 'assigned_to_email'; }
                             } else if (type === 'admin') {
                                 try {
                                     const admins = await query("SELECT email FROM users WHERE role = 'Admin'");
                                     admins.rows.forEach(row => {
-                                        if (row.email) recipientEmails.add(row.email);
+                                        if (isValidEmail(row.email)) {
+                                            recipientEmails.add(row.email);
+                                        }
                                     });
                                 } catch (adminErr) {
                                     console.error('🤖 [Automation] Failed to fetch admin emails:', adminErr);
+                                }
+                                continue; // Admin emails are handled internally in this block
+                            }
+
+                            if (email) {
+                                if (isValidEmail(email)) {
+                                    recipientEmails.add(email.trim());
+                                } else {
+                                    console.warn(`🤖 [Automation] Rejected invalid email candidate for rule ${rule.id} from field "${sourceField}": "${email}"`);
                                 }
                             }
                         }
