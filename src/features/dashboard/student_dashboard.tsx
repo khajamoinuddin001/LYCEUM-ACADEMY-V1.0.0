@@ -76,8 +76,6 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, courses, e
         };
     }, [isPaymentModalOpen]);
     const [docsLoading, setDocsLoading] = useState(true);
-    const [uploading, setUploading] = useState(false);
-    const fileInputRef = useRef<HTMLInputElement>(null);
     const [showChecklistDetails, setShowChecklistDetails] = useState(false);
     const [showUniversityDetails, setShowUniversityDetails] = useState(false);
     const [isAppointmentModalOpen, setIsAppointmentModalOpen] = useState(false);
@@ -166,24 +164,6 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, courses, e
         }
     };
 
-    const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
-        const file = event.target.files?.[0];
-        if (!file || !student) return;
-
-        try {
-            setUploading(true);
-            await api.uploadDocument(student.id, file);
-            await loadDocuments(student.id);
-        } catch (error) {
-            console.error('Failed to upload document:', error);
-            alert('Failed to upload document. Please try again.');
-        } finally {
-            setUploading(false);
-            if (fileInputRef.current) {
-                fileInputRef.current.value = '';
-            }
-        }
-    };
 
     const handleDownloadDocument = async (doc: any) => {
         try {
@@ -551,22 +531,13 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, courses, e
                         <p className="text-sm text-gray-600 dark:text-gray-300">
                             {docsLoading ? 'Loading documents...' : documents.length > 0 ? `${documents.length} document${documents.length > 1 ? 's' : ''}` : 'No documents uploaded yet.'}
                         </p>
-                        <div>
-                            <input
-                                type="file"
-                                ref={fileInputRef}
-                                onChange={handleFileSelect}
-                                className="hidden"
-                                id="student-doc-upload"
-                            />
-                            <label
-                                htmlFor="student-doc-upload"
-                                className={`inline-flex items-center px-3 py-1.5 text-xs font-semibold text-white bg-lyceum-blue rounded-md hover:bg-lyceum-blue-dark cursor-pointer ${uploading ? 'opacity-60 cursor-not-allowed' : ''}`}
-                            >
-                                <Upload size={14} className="mr-1.5" />
-                                {uploading ? 'Uploading...' : 'Upload'}
-                            </label>
-                        </div>
+                        <button
+                            onClick={() => onAppSelect('Document manager')}
+                            className="inline-flex items-center px-3 py-1.5 text-xs font-semibold text-white bg-lyceum-blue rounded-md hover:bg-lyceum-blue-dark transition-colors"
+                        >
+                            <Upload size={14} className="mr-1.5" />
+                            Upload
+                        </button>
                     </div>
                     {docsLoading ? (
                         <div className="text-center py-4">
