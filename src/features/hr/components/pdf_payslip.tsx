@@ -13,6 +13,8 @@ interface PayslipData {
     paidLeaveDays?: number;
     unpaidLeaveDays?: number;
     lateMinutes?: number;
+    lateViolations?: number;
+    missingCheckouts?: number;
     lateDeduction?: number;
     absentDeduction?: number;
     finalSalary?: number;
@@ -71,7 +73,8 @@ export const generatePayslipPDF = (data: PayslipData) => {
         ['Paid Leaves', (data.paidLeaveDays ?? 0).toString()],
         ['Unpaid Leaves', (data.unpaidLeaveDays ?? 0).toString()],
         ['Late Minutes', (data.lateMinutes ?? 0).toString()],
-        ['Missing Checkouts (Half-Day)', ((data as any).missingCheckouts || 0).toString()],
+        ['Late Check-ins (Half-Day)', ((data as any).lateViolations || 0).toString()],
+        ['Missing/Early Checkouts (Half-Day)', ((data as any).missingCheckouts || 0).toString()],
     ];
 
     autoTable(doc, {

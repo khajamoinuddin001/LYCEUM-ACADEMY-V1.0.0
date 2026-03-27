@@ -6248,17 +6248,38 @@ export const generatePayrollForMonth = async (month, year) => {
     // --- PRESENT DAYS (Only on scheduled working days) ---
     const userLogs = logs.filter(l => l.user_id === user.id);
     let missingCheckouts = 0;
+    let lateViolations = 0;
     const presentOnScheduledDays = userLogs.reduce((acc, log) => {
       // Use middle of day to avoid timezone shifting for DATE strings
       const logStr = typeof log.date === 'string' ? log.date.split('T')[0] : new Date(log.date).toISOString().split('T')[0];
       const logDay = new Date(`${logStr}T12:00:00`).getDay();
       
       if (workingDayIndices.includes(logDay)) {
+        let dailyPresence = 1.0;
+
+        // 1. Late check-in penalty (> 15 mins)
+        if (log.status === 'Late' && log.late_minutes > 15) {
+          lateViolations++;
+          dailyPresence -= 0.5;
+        }
+
+        // 2. Missing or Early check-out penalty
         if (!log.check_out) {
           missingCheckouts++;
-          return acc + 0.5; // Half day for missing checkout
+          dailyPresence -= 0.5;
+        } else if (user.shift_end) {
+          // Check for early check-out
+          const [shH, shM] = user.shift_end.split(':').map(Number);
+          const co = new Date(log.check_out);
+          const coH = co.getHours();
+          const coM = co.getMinutes();
+          
+          if (coH < shH || (coH === shH && coM < shM)) {
+            dailyPresence -= 0.5;
+          }
         }
-        return acc + 1.0;
+
+        return acc + Math.max(0, dailyPresence);
       }
       return acc;
     }, 0);
@@ -6272,10 +6293,10 @@ export const generatePayrollForMonth = async (month, year) => {
       if (totalMins > 0) shiftHours = totalMins / 60;
     }
 
-    // --- LATE MINUTES ---
+    // --- LATE MINUTES (For reporting) ---
     const totalLateMinutes = userLogs.reduce((acc, log) => {
-      if (log.status === 'Late' && log.late_minutes > 15) {
-        return acc + (log.late_minutes - 15);
+      if (log.status === 'Late') {
+        return acc + log.late_minutes;
       }
       return acc;
     }, 0);
@@ -6370,7 +6391,7 @@ export const generatePayrollForMonth = async (month, year) => {
     const daysBeforeJoined = standardWorkingDaysInMonth - userWorkingDays;
     
     const absentDeduction = (absentDaysInsideTenure + unpaidLeaveDays + daysBeforeJoined) * payPerDay;
-    const lateDeduction = totalLateMinutes * payPerMinute;
+    const lateDeduction = 0; // Replaced by half-day presence deduction for >15 min late
     const finalSalary = Math.round(Math.max(0, baseSalary - absentDeduction - lateDeduction));
 
     return {
@@ -6383,6 +6404,7 @@ export const generatePayrollForMonth = async (month, year) => {
       unpaidLeaveDays,
       absentDays: absentDaysInsideTenure,
       lateMinutes: totalLateMinutes,
+      lateViolations: lateViolations,
       missingCheckouts,
       shiftHours: Math.round(shiftHours * 100) / 100,
       shiftStart: user.shift_start || '09:00',
