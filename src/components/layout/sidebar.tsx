@@ -15,6 +15,7 @@ import {
   ConciergeBell,
   BookOpen,
   UserCheck,
+  Target,
   Trash2,
   TrendingUp,
   Megaphone
@@ -70,6 +71,7 @@ const DEFAULT_STAFF_NAV = [
   { name: 'Announcements', icon: <Megaphone size={20} /> },
   { name: 'Reception', icon: <ConciergeBell size={20} /> },
   { name: 'Live Session Monitor', icon: <UserCheck size={20} /> },
+  { name: 'Employee Performance', icon: <Target size={20} /> },
 ];
 
 const DEFAULT_STUDENT_NAV = [

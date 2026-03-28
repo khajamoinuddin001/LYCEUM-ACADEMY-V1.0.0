@@ -65,6 +65,8 @@ export {
   UserPlus,
   UserCheck,
   Send,
+  RotateCcw,
+  Star,
   Sun,
   Moon,
   ConciergeBell,

@@ -727,6 +727,42 @@ export async function initDatabase() {
       )
     `);
     
+    // --- PERFORMANCE & CLIENT SATISFACTION ---
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS client_satisfaction_reviews (
+        id SERIAL PRIMARY KEY,
+        staff_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        student_id INTEGER REFERENCES contacts(id) ON DELETE CASCADE,
+        rating INTEGER CHECK(rating >= 1 AND rating <= 10),
+        comment TEXT,
+        month INTEGER NOT NULL,
+        year INTEGER NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS staff_performance_records (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        month INTEGER NOT NULL,
+        year INTEGER NOT NULL,
+        attendance_score NUMERIC DEFAULT 0,
+        task_score NUMERIC DEFAULT 0,
+        client_score NUMERIC DEFAULT 0,
+        ticket_score NUMERIC DEFAULT 0,
+        total_score NUMERIC DEFAULT 0,
+        is_pip BOOLEAN DEFAULT FALSE,
+        pip_notes TEXT,
+        metrics_snapshot JSONB,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, month, year)
+      );
+    `);
+
+    // Migration: ensure metrics_snapshot exists in staff_performance_records
+    await client.query('ALTER TABLE staff_performance_records ADD COLUMN IF NOT EXISTS metrics_snapshot JSONB');
+
     // Migration: ensure all columns exist for mock_interview_questions
     await client.query('ALTER TABLE mock_interview_questions ADD COLUMN IF NOT EXISTS question_text TEXT');
     await client.query('ALTER TABLE mock_interview_questions ADD COLUMN IF NOT EXISTS category TEXT');

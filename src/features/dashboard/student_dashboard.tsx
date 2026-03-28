@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import type { Contact, LmsCourse, CalendarEvent, Visitor, User, AccountingTransaction, VisaOperation, Announcement } from '@/types';
-import { GraduationCap, BookOpen, CalendarClock, Paperclip, CheckCircle2, Circle, Trophy, Calendar, Upload, Download, User as UserIcon, ArrowLeft, DollarSign, Receipt, AlertCircle, X, Copy, CreditCard, Clock, Megaphone, Eye, Info } from '@/components/common/icons';
+import { GraduationCap, BookOpen, CalendarClock, Paperclip, CheckCircle2, Circle, Trophy, Calendar, Upload, Download, User as UserIcon, ArrowLeft, DollarSign, Receipt, AlertCircle, X, Copy, CreditCard, Clock, Megaphone, Eye, Info, Star, Send, RotateCcw } from '@/components/common/icons';
 import * as api from '@/utils/api';
 import StudentAppointmentModal from './student_appointment_modal';
 
@@ -25,6 +25,178 @@ const InfoCard: React.FC<{ icon: React.ReactNode; title: string; children: React
         {children}
     </div>
 );
+
+const ClientSatisfactionModule: React.FC<{ counselorName: string; staffId: number }> = ({ counselorName, staffId }) => {
+    const [selectedStaffId, setSelectedStaffId] = useState<number>(staffId);
+    const [selectedStaffName, setSelectedStaffName] = useState<string>(counselorName);
+    const [staffList, setStaffList] = useState<User[]>([]);
+    const [rating, setRating] = useState<number>(0);
+    const [hoverRating, setHoverRating] = useState<number>(0);
+    const [comment, setComment] = useState("");
+    const [submitted, setSubmitted] = useState(false);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchStaff = async () => {
+            try {
+                const users = await api.getUsers();
+                const filtered = users.filter(u => u.role === 'Staff' || u.role === 'Admin');
+                setStaffList(filtered);
+                
+                // If current selected is 0/falsy, pick from list
+                if ((!selectedStaffId || selectedStaffId === 0) && filtered.length > 0) {
+                    setSelectedStaffId(filtered[0].id);
+                    setSelectedStaffName(filtered[0].name);
+                } else if (filtered.length === 0 && !selectedStaffId) {
+                    setLoading(false);
+                }
+            } catch (error) {
+                console.error("Failed to fetch staff list:", error);
+                setLoading(false);
+            }
+        };
+        fetchStaff();
+    }, []);
+
+    useEffect(() => {
+        const checkStatus = async () => {
+            if (!selectedStaffId || selectedStaffId === 0) {
+                // If we still don't have a staff ID after staff list fetch attempt
+                if (staffList.length > 0) {
+                   setSelectedStaffId(staffList[0].id);
+                   setSelectedStaffName(staffList[0].name);
+                } else if (loading) {
+                   // Only stop loading if we have tried to fetch everything
+                }
+                return;
+            }
+            
+            setLoading(true);
+            try {
+                const status = await api.checkClientSatisfactionStatus(selectedStaffId, selectedStaffName);
+                if (status.submitted) {
+                    setSubmitted(true);
+                    setRating(status.lastRating || 0);
+                } else {
+                    setSubmitted(false);
+                    setRating(0);
+                }
+            } catch (error) {
+                console.error("Failed to check satisfaction status:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        checkStatus();
+    }, [selectedStaffId, selectedStaffName]);
+
+    const handleSubmit = async () => {
+        if (rating === 0 || !selectedStaffId) return;
+        setLoading(true);
+        try {
+            await api.submitClientSatisfaction(selectedStaffId, rating, comment, selectedStaffName);
+            setSubmitted(true);
+        } catch (error: any) {
+            console.error(error);
+            if (error.message.includes("429")) {
+                alert(`You can only submit one review per day for ${selectedStaffName}.`);
+            } else {
+                alert("Failed to submit feedback: " + error.message);
+            }
+        } finally {
+            setLoading(false);
+        }
+    };
+    return (
+        <div className="space-y-4 animate-fade-in">
+            <div className="flex flex-col gap-2">
+                <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Select Staff Member</label>
+                <select 
+                    value={selectedStaffId}
+                    onChange={(e) => {
+                        const id = Number(e.target.value);
+                        const staff = staffList.find(s => s.id === id);
+                        setSelectedStaffId(id);
+                        setSelectedStaffName(staff?.name || "");
+                    }}
+                    className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-3 text-sm font-bold text-gray-800 dark:text-gray-200 focus:ring-2 focus:ring-lyceum-blue outline-none appearance-none cursor-pointer"
+                >
+                    {staffList.map(s => (
+                        <option key={s.id} value={s.id}>
+                            {s.name} ({s.role})
+                        </option>
+                    ))}
+                    {staffList.every(s => s.id !== staffId) && staffId !== 0 && (
+                        <option value={staffId}>{counselorName} (Assigned)</option>
+                    )}
+                </select>
+            </div>
+
+            <p className="text-sm text-gray-600 dark:text-gray-300">
+                How satisfied are you with the support from <span className="font-bold text-lyceum-blue">{selectedStaffName}</span> this month?
+            </p>
+            
+            {loading ? (
+                <div className="flex items-center justify-center py-10 animate-pulse">
+                    <RotateCcw className="animate-spin text-lyceum-blue w-6 h-6" />
+                </div>
+            ) : submitted ? (
+                <div className="flex flex-col items-center justify-center py-10 text-center animate-fade-in bg-green-50 dark:bg-green-900/10 rounded-2xl border border-green-100 dark:border-green-900/20">
+                    <div className="w-16 h-16 bg-green-100 dark:bg-green-800 rounded-full flex items-center justify-center mb-4 shadow-inner">
+                        <CheckCircle2 className="text-green-600 dark:text-green-400 w-8 h-8" />
+                    </div>
+                    <h4 className="text-xl font-black text-gray-900 dark:text-white mb-2">Review Submitted!</h4>
+                    <div className="flex items-center gap-1 mb-3">
+                        <Star className="text-yellow-500 fill-yellow-500" size={16} />
+                        <span className="text-lg font-bold text-gray-800 dark:text-gray-200">{rating}/10</span>
+                    </div>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 max-w-[200px]">Thank you for helping us improve our service!</p>
+                </div>
+            ) : (
+                <>
+                    <div className="flex flex-wrap items-center justify-center gap-2 py-2">
+                        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
+                            <button
+                                key={num}
+                                onMouseEnter={() => setHoverRating(num)}
+                                onMouseLeave={() => setHoverRating(0)}
+                                onClick={() => setRating(num)}
+                                className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold transition-all duration-200 transform hover:scale-110 ${
+                                    (hoverRating || rating) >= num 
+                                        ? 'bg-lyceum-blue text-white shadow-md shadow-lyceum-blue/30' 
+                                        : 'bg-gray-100 dark:bg-gray-700 text-gray-400'
+                                }`}
+                            >
+                                {num}
+                            </button>
+                        ))}
+                    </div>
+
+                    <textarea
+                        value={comment}
+                        onChange={(e) => setComment(e.target.value)}
+                        placeholder="Add a comment (optional)..."
+                        className="w-full bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-700 rounded-xl p-4 text-sm focus:ring-2 focus:ring-lyceum-blue outline-none transition-all placeholder:text-gray-400 dark:text-white"
+                        rows={3}
+                    />
+
+                    <button
+                        onClick={handleSubmit}
+                        disabled={rating === 0 || loading}
+                        className={`w-full py-3 rounded-xl font-black text-sm flex items-center justify-center gap-2 transition-all transform active:scale-95 shadow-lg ${
+                            rating > 0 && !loading
+                            ? 'bg-lyceum-blue text-white hover:bg-lyceum-blue-dark shadow-blue-500/20' 
+                            : 'bg-gray-100 dark:bg-gray-800 text-gray-400 cursor-not-allowed'
+                        }`}
+                    >
+                        {loading ? <RotateCcw className="animate-spin w-4 h-4" /> : <Send size={16} />}
+                        Submit Satisfaction Rating
+                    </button>
+                </>
+            )}
+        </div>
+    );
+};
 
 const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, courses, events, onAppSelect }) => {
     const [visits, setVisits] = useState<Visitor[]>([]);
@@ -598,7 +770,7 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, courses, e
                                 </p>
                             </div>
                             <div className="p-2 bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-blue-100 dark:border-blue-800">
-                                <DollarSign className="text-blue-500" size={18} />
+                                <DollarSign className="w-5 h-5 text-blue-600" />
                             </div>
                         </div>
 
@@ -642,6 +814,13 @@ const StudentDashboard: React.FC<StudentDashboardProps> = ({ student, courses, e
                             <p>Please ensure all pending payments are cleared at time!</p>
                         </div>
                     )}
+                </InfoCard>
+
+                <InfoCard icon={<Star size={20} />} title="Client Satisfaction">
+                    <ClientSatisfactionModule 
+                        counselorName={student.counselorAssigned || 'Your Counselor'} 
+                        staffId={student.advisorId || 0} // Assuming advisorId exists on contact
+                    />
                 </InfoCard>
 
                 <InfoCard icon={<CalendarClock size={20} />} title="Upcoming Deadlines">

@@ -19,7 +19,7 @@ const ODOO_APPS = [
     'dashboard', 'Contacts', 'LMS', 'CRM', 'Calendar', 'Discuss',
     'Accounts', 'Analytics', 'Tasks', 'Tickets', 'Reception',
     'Settings', 'Access Control', 'Visitor Display', 'Department Dashboard',
-    'Attendance', 'University Application', 'Visa Operations', 'University Manager',
+    'Attendance & Payroll', 'University Application', 'Visa Operations', 'University Manager',
     'Live Session Monitor', 'Automation Engine', 'Document manager', 'Announcements', 'Mock Interview', 'Employee Performance'
 ];
 

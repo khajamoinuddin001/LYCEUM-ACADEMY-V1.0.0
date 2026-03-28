@@ -1048,6 +1048,39 @@ export const getPayrollSchedule = async () => {
   return await apiRequest<{ dayOfMonth: number; hour: number; minute: number }>('/settings/payroll-schedule', { method: 'GET' });
 };
 
+// Staff Performance
+export const getPerformanceStats = async (month?: number, year?: number, userId?: number) => {
+  let query = (month && year) ? `?month=${month}&year=${year}` : '';
+  if (userId) query += `${query ? '&' : '?'}userId=${userId}`;
+  return await apiRequest<any | any[]>(`/attendance/performance/stats${query}`, { method: 'GET' });
+};
+
+export const updatePipStatus = async (userId: number, month: number, year: number, isPip: boolean, notes: string) => {
+  return await apiRequest('/attendance/performance/pip', {
+    method: 'POST',
+    body: JSON.stringify({ userId, month, year, isPip, notes })
+  });
+};
+
+export const getPerformanceHistory = async (userId: number) => {
+  return await apiRequest<any[]>(`/attendance/performance/history/${userId}`, { method: 'GET' });
+};
+
+export const submitClientSatisfaction = async (staffId: number, rating: number, comment?: string, staffName?: string) => {
+    return await apiRequest('/attendance/client-satisfaction', {
+        method: 'POST',
+        body: JSON.stringify({ staffId, rating, comment, staffName })
+    });
+};
+
+export const checkClientSatisfactionStatus = async (staffId: number, staffName?: string) => {
+    let url = `/attendance/client-satisfaction/status?staffId=${staffId}`;
+    if (staffName) url += `&staffName=${encodeURIComponent(staffName)}`;
+    return await apiRequest<{ submitted: boolean; lastRating?: number }>(url, {
+        method: 'GET'
+    });
+};
+
 export const savePayrollSchedule = async (schedule: { dayOfMonth: number; hour: number; minute: number }) => {
   return await apiRequest<{ success: boolean; schedule: any }>('/settings/payroll-schedule', {
     method: 'POST',

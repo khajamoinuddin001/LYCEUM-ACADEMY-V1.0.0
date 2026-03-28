@@ -36,6 +36,33 @@ import {
   Megaphone
 } from '@/components/common/icons';
 
+const PerformanceLogo = ({ size = 36 }: { size?: number }) => (
+  <svg 
+    width={size} 
+    height={size} 
+    viewBox="0 0 100 100" 
+    fill="none" 
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    {/* Outer hover highlight arc */}
+    <path d="M 28 26 A 46 46 0 0 1 72 26" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    
+    {/* Main thick gauge body */}
+    <path d="M 10 75 A 40 40 0 0 1 90 75 L 75 75 A 25 25 0 0 0 25 75 Z" fill="#AAB5BC" stroke="currentColor" strokeWidth="2.5" strokeLinejoin="round" />
+    
+    {/* Bottom bounding dashes */}
+    <line x1="8" y1="79" x2="27" y2="79" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+    <line x1="73" y1="79" x2="92" y2="79" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+    
+    {/* Motion arcs */}
+    <path d="M 31 71 A 20 20 0 0 1 55 52" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    <path d="M 38 71 A 13 13 0 0 1 50 62" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    
+    {/* Orange Needle */}
+    <path d="M 46 75 L 86 18 L 93 23 L 56 75 Z" fill="#FBAA38" stroke="currentColor" strokeWidth="2.5" strokeLinejoin="round" />
+  </svg>
+);
+
 export const ODOO_APPS: OdooApp[] = [
   {
     name: 'dashboard',
@@ -136,7 +163,7 @@ export const ODOO_APPS: OdooApp[] = [
     iconColor: 'text-blue-600',
   },
   {
-    name: 'Attendance',
+    name: 'Attendance & Payroll',
     icon: <Clock size={36} />,
     bgColor: 'bg-pink-100',
     iconColor: 'text-pink-600',
@@ -185,9 +212,9 @@ export const ODOO_APPS: OdooApp[] = [
   },
   {
     name: 'Employee Performance',
-    icon: <Target size={36} />,
-    bgColor: 'bg-emerald-100',
-    iconColor: 'text-emerald-600',
+    icon: <PerformanceLogo size={36} />,
+    bgColor: 'bg-indigo-100',
+    iconColor: 'text-indigo-600',
   },
 ];
 
@@ -203,7 +230,7 @@ const adminPermissions = ODOO_APPS.reduce((acc, app) => {
   return acc;
 }, {} as { [appName: string]: AppPermissions });
 
-const employeeFullAccessApps = new Set(['Contacts', 'CRM', 'Calendar', 'Discuss', 'Tasks', 'Tickets', 'Reception', 'Sales', 'Analytics', 'LMS', 'Visitor Display', 'Department Dashboard', 'Attendance', 'University Application', 'University Manager', 'Document manager', 'Employee Performance']);
+const employeeFullAccessApps = new Set(['Contacts', 'CRM', 'Calendar', 'Discuss', 'Tasks', 'Tickets', 'Reception', 'Sales', 'Analytics', 'LMS', 'Visitor Display', 'Department Dashboard', 'Attendance & Payroll', 'University Application', 'University Manager', 'Document manager', 'Employee Performance']);
 const employeeReadOnlyApps = new Set(['dashboard', 'Accounts']);
 const employeePermissions: { [appName: string]: AppPermissions } = ODOO_APPS.reduce((acc, app) => {
   if (employeeFullAccessApps.has(app.name)) {

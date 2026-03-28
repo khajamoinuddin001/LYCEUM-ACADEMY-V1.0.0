@@ -71,6 +71,7 @@ import StudentTasksView from '@/features/students/student_tasks_view';
 import VisitorDisplay from '@/features/reception/visitor_display';
 import DepartmentDashboard from '@/features/dashboard/department_dashboard';
 import AttendanceView from '@/features/hr/attendance_view';
+import PerformanceDashboard from '@/features/hr/performance_dashboard';
 import { TermsView, PrivacyView, LandingDocumentsView } from '@/features/shared/legal_views';
 import StudentDocumentsView from '@/features/students/student_documents_view';
 import StudentDocumentManagerView from '@/features/students/student_document_manager_view';
@@ -2365,24 +2366,8 @@ const DashboardLayout: React.FC = () => {
         />
       );
       case 'Visitor Display': return <VisitorDisplay />;
-      case 'Attendance': return <AttendanceView user={currentUser} users={users} onUpdateUser={handleUpdateUser} />;
-      case 'Employee Performance': return (
-        <div className="p-8 h-full flex flex-col items-center justify-center bg-gray-50 dark:bg-gray-900/50 rounded-[2.5rem] border-2 border-dashed border-gray-200 dark:border-gray-800">
-          <div className="w-24 h-24 rounded-[2rem] bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-emerald-600 mb-8 shadow-inner transition-transform hover:scale-110 duration-500">
-            <Target size={48} />
-          </div>
-          <h2 className="text-4xl font-black text-gray-900 dark:text-white mb-4 tracking-tight text-center">Employee Performance</h2>
-          <p className="text-gray-500 dark:text-gray-400 text-center max-w-lg font-medium leading-relaxed mb-10">
-            We are crafting a state-of-the-art performance engine to help you visualize growth, manage kpi's and elevate your team's excellence.
-          </p>
-          <div className="relative">
-            <div className="absolute -inset-1 bg-gradient-to-r from-emerald-600 to-teal-500 rounded-full blur opacity-25"></div>
-            <div className="relative px-10 py-3 bg-emerald-500 text-white text-[10px] font-black uppercase tracking-[0.2em] rounded-full shadow-xl shadow-emerald-500/20">
-              Coming Soon
-            </div>
-          </div>
-        </div>
-      );
+      case 'Attendance & Payroll': return <AttendanceView user={currentUser} users={users} onUpdateUser={handleUpdateUser} />;
+      case 'Employee Performance': return <PerformanceDashboard userRole={currentUser?.role || 'Staff'} currentUser={currentUser} />;
       case 'Analytics': return <MarketingView />;
       case 'University Manager': return <UniversityManager user={currentUser} />;
       case 'Live Session Monitor': return <ActiveSessionsView currentUser={{ id: currentUser.id, role: currentUser.role }} />;

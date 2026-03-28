@@ -6202,6 +6202,262 @@ router.put('/leaves/:id', authenticateToken, requireRole('Admin'), async (req, r
 // ============================================================
 // PAYROLL HELPER - shared by on-demand report, generate+save, and cron
 // ============================================================
+// Helper for Performance Calculation
+const getWorkingHoursDuration = async (userId, fromTime, toTime) => {
+  if (!fromTime || !toTime) return 0;
+  const from = new Date(fromTime);
+  const to = new Date(toTime);
+  if (to <= from) return 0;
+
+  const fromStr = from.toISOString().split('T')[0];
+  const toStr = to.toISOString().split('T')[0];
+
+  const logs = (await query(
+    'SELECT check_in, check_out FROM attendance_logs WHERE user_id = $1 AND date >= $2::date AND date <= $3::date',
+    [userId, fromStr, toStr]
+  )).rows;
+
+  let totalMs = 0;
+  logs.forEach(log => {
+    if (!log.check_in) return;
+    const sessionStart = new Date(log.check_in);
+    const sessionEnd = log.check_out ? new Date(log.check_out) : new Date(); // If not checked out, assume still active or use current time
+
+    const overlapStart = Math.max(from.getTime(), sessionStart.getTime());
+    const overlapEnd = Math.min(to.getTime(), sessionEnd.getTime());
+
+    if (overlapEnd > overlapStart) {
+      totalMs += (overlapEnd - overlapStart);
+    }
+  });
+
+  return totalMs / 3600000; // Convert to hours
+};
+
+export const calculatePerformanceForUser = async (userId, month, year) => {
+  const startDate = new Date(year, month - 1, 1);
+  const endDate = new Date(year, month, 0);
+  const startDateStr = `${year}-${String(month).padStart(2, '0')}-01`;
+  const lastDay = endDate.getDate();
+  const endDateStr = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
+  // 1. Fetch User Data
+  const userRes = await query('SELECT * FROM users WHERE id = $1', [userId]);
+  if (userRes.rows.length === 0) return null;
+  const user = userRes.rows[0];
+
+  // 2. Attendance Score (25%)
+  const workingDays = Array.isArray(user.working_days) ? user.working_days : (typeof user.working_days === 'string' ? JSON.parse(user.working_days || '[]') : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']);
+  const workingDayIndices = workingDays.map(d => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(d));
+
+  const holidays = (await query('SELECT date FROM holidays WHERE date >= $1::date AND date <= $2::date', [startDateStr, endDateStr])).rows.map(h => new Date(h.date).toISOString().split('T')[0]);
+  const approvedLeaves = (await query('SELECT start_date, end_date FROM leave_requests WHERE user_id = $1 AND status = \'Approved\' AND ((start_date <= $2::date AND end_date >= $3::date))', [userId, endDateStr, startDateStr])).rows;
+
+  const now = new Date();
+  const isCurrentMonth = (year === now.getFullYear() && month === now.getMonth() + 1);
+  const evaluationEndDate = isCurrentMonth ? now : endDate;
+
+  let targetWorkingDays = 0;
+  for (let d = new Date(startDate); d <= evaluationEndDate; d.setDate(d.getDate() + 1)) {
+    const dateStr = d.toISOString().split('T')[0];
+    const dayIdx = d.getDay();
+    if (!workingDayIndices.includes(dayIdx)) continue;
+    if (holidays.includes(dateStr)) continue;
+    const isOnLeave = approvedLeaves.some(l => {
+      const s = new Date(l.start_date);
+      const e = new Date(l.end_date);
+      return d >= s && d <= e;
+    });
+    if (isOnLeave) continue;
+    
+    // If it's today, only count it as a target working day if a log exists or shift should have ended
+    if (isCurrentMonth && dateStr === now.toISOString().split('T')[0]) {
+      const todayLog = (await query('SELECT 1 FROM attendance_logs WHERE user_id = $1 AND date = $2::date', [userId, dateStr])).rows[0];
+      if (!todayLog) continue; // Don't penalize for today if haven't checked in yet or shift hasn't passed
+    }
+    
+    targetWorkingDays++;
+  }
+
+  const logs = (await query('SELECT * FROM attendance_logs WHERE user_id = $1 AND date >= $2::date AND date <= $3::date', [userId, startDateStr, endDateStr])).rows;
+  let actualPresence = 0;
+  logs.forEach(log => {
+    let daily = 1.0;
+    if (log.status === 'Late' && log.late_minutes > 15) daily -= 0.5;
+    if (!log.check_out) daily -= 0.5;
+    else if (user.shift_end) {
+      const [shH, shM] = user.shift_end.split(':').map(Number);
+      const co = new Date(log.check_out);
+      if (co.getHours() < shH || (co.getHours() === shH && co.getMinutes() < shM)) daily -= 0.5;
+    }
+    actualPresence += Math.max(0, daily);
+  });
+  const attendanceScore = targetWorkingDays > 0 ? Math.min(100, (actualPresence / targetWorkingDays) * 100) : 100;
+
+  // 3. Task Efficiency (25%) - 6 Working Hours Rule
+  const taskLogs = (await query(`
+    SELECT ttl.* 
+    FROM task_time_logs ttl
+    JOIN tasks t ON ttl.task_id = t.id
+    WHERE ttl.assigned_to = $1 AND ttl.end_time IS NOT NULL 
+    AND ttl.created_at >= $2::timestamp AND ttl.created_at <= ($3::date + interval '1 day')
+  `, [userId, startDateStr, endDateStr])).rows;
+
+  const taskTotals = {};
+  taskLogs.forEach(log => {
+    const durationHours = (new Date(log.end_time).getTime() - new Date(log.start_time).getTime()) / 3600000;
+    taskTotals[log.task_id] = (taskTotals[log.task_id] || 0) + durationHours;
+  });
+
+  const totalTasks = Object.keys(taskTotals).length;
+  let totalTaskPoints = 0;
+  let lateTasks = 0;
+  Object.values(taskTotals).forEach(hours => {
+    if (hours <= 6) {
+      totalTaskPoints += 1.0;
+    } else {
+      totalTaskPoints += 0.5;
+      lateTasks++;
+    }
+  });
+  const taskScore = totalTasks > 0 ? (totalTaskPoints / totalTasks) * 100 : 100;
+
+  // 4. Client Satisfaction (25%)
+  const reviews = (await query('SELECT rating, comment, created_at FROM client_satisfaction_reviews WHERE staff_id = $1 AND month = $2 AND year = $3', [userId, month, year])).rows;
+  const avgRating = reviews.length > 0 ? reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length : 10;
+  const clientScore = (avgRating / 10) * 100;
+  const recentReviews = reviews.map(r => ({ rating: r.rating, comment: r.comment, date: r.created_at }));
+
+  // 5. Ticket Resolution (25%) - 12 Working Hours Rule
+  const resolvedTicketsRes = (await query(`
+    SELECT created_at, solved_at 
+    FROM tickets 
+    WHERE assigned_to = $1 AND solved_at IS NOT NULL
+    AND solved_at >= $2::timestamp AND solved_at <= ($3::date + interval '1 day')
+  `, [userId, startDateStr, endDateStr])).rows;
+
+  const totalTicketsAssigned = (await query(`
+    SELECT count(*) as count 
+    FROM tickets 
+    WHERE assigned_to = $1 AND created_at >= $2::timestamp AND created_at <= ($3::date + interval '1 day')
+  `, [userId, startDateStr, endDateStr])).rows[0].count;
+
+  let totalTicketPoints = 0;
+  let resolvedTickets = 0;
+  for (const ticket of resolvedTicketsRes) {
+    const workingHours = await getWorkingHoursDuration(userId, ticket.created_at, ticket.solved_at);
+    if (workingHours <= 12) {
+      totalTicketPoints += 1.0;
+      resolvedTickets++;
+    } else {
+      totalTicketPoints += 0.5;
+    }
+  }
+  const ticketScore = totalTicketsAssigned > 0 ? (totalTicketPoints / totalTicketsAssigned) * 100 : 100;
+
+  const totalScore = (attendanceScore * 0.25) + (taskScore * 0.25) + (clientScore * 0.25) + (ticketScore * 0.25);
+
+  return {
+    userId,
+    userName: user.name,
+    month,
+    year,
+    attendanceScore: Math.round(attendanceScore),
+    taskScore: Math.round(taskScore),
+    clientScore: Math.round(clientScore),
+    ticketScore: Math.round(ticketScore),
+    totalScore: Math.round(totalScore),
+    metrics: {
+      targetWorkingDays,
+      actualPresence,
+      totalTasks,
+      lateTasks,
+      totalTickets: totalTicketsAssigned,
+      resolvedTickets,
+      reviewCount: reviews.length,
+      avgRating: Math.round(avgRating * 10) / 10,
+      recentReviews
+    }
+  };
+};
+
+async function finalizeMonthlyPerformance(month, year) {
+  try {
+    console.log(`📡 Finalizing performance for ${month}/${year}...`);
+    const users = (await query('SELECT id, name, role FROM users WHERE role != \'Student\'')).rows;
+    for (const u of users) {
+      const stats = await calculatePerformanceForUser(u.id, month, year);
+      if (!stats) continue;
+
+      await query(`
+        INSERT INTO staff_performance_records (
+          user_id, month, year, 
+          attendance_score, task_score, client_score, ticket_score, total_score,
+          metrics_snapshot
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        ON CONFLICT (user_id, month, year) 
+        DO UPDATE SET
+          attendance_score = EXCLUDED.attendance_score,
+          task_score = EXCLUDED.task_score,
+          client_score = EXCLUDED.client_score,
+          ticket_score = EXCLUDED.ticket_score,
+          total_score = EXCLUDED.total_score,
+          metrics_snapshot = EXCLUDED.metrics_snapshot
+      `, [
+        u.id, month, year,
+        stats.attendanceScore, stats.taskScore, stats.clientScore, stats.ticketScore, stats.totalScore,
+        JSON.stringify(stats.metrics)
+      ]);
+    }
+    console.log(`✅ Performance finalized for ${month}/${year}`);
+  } catch (err) {
+    console.error('Finalization error:', err);
+  }
+}
+
+async function checkAndFinalizePerformance() {
+  const now = new Date();
+  // Check if it's the 1st of the month
+  if (now.getDate() === 1) {
+    const prevMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const m = prevMonthDate.getMonth() + 1;
+    const y = prevMonthDate.getFullYear();
+    await finalizeMonthlyPerformance(m, y);
+  }
+}
+
+// Start scheduler
+setInterval(checkAndFinalizePerformance, 4 * 60 * 60 * 1000); // Every 4 hours
+setTimeout(checkAndFinalizePerformance, 10000);
+
+async function getPipConsecutiveMonths(userId, month, year) {
+  let count = 0;
+  let currM = month;
+  let currY = year;
+
+  // We check up to 12 months back for consecutive PIP status
+  for (let i = 0; i < 12; i++) {
+    const stats = await calculatePerformanceForUser(userId, currM, currY);
+    if (!stats) break;
+
+    const snap = (await query('SELECT is_pip FROM staff_performance_records WHERE user_id = $1 AND month = $2 AND year = $3', [userId, currM, currY])).rows[0];
+    const isPip = snap ? snap.is_pip : stats.totalScore < 60;
+
+    if (isPip) {
+      count++;
+      currM--;
+      if (currM === 0) {
+        currM = 12;
+        currY--;
+      }
+    } else {
+      break;
+    }
+  }
+  return count;
+}
+
 export const generatePayrollForMonth = async (month, year) => {
   const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
   const endDay = new Date(Number(year), Number(month), 0).getDate();
@@ -6214,13 +6470,13 @@ export const generatePayrollForMonth = async (month, year) => {
   );
 
   const holidaysRes = await query(
-    'SELECT * FROM holidays WHERE date >= $1 AND date <= $2',
+    'SELECT * FROM holidays WHERE date >= $1::date AND date <= $2::date',
     [startDate, endDate]
   );
   const holidaysCount = holidaysRes.rows.length;
 
   const logsRes = await query(
-    'SELECT * FROM attendance_logs WHERE date >= $1 AND date <= $2',
+    'SELECT * FROM attendance_logs WHERE date >= $1::date AND date <= $2::date',
     [startDate, endDate]
   );
   const logs = logsRes.rows;
@@ -6228,7 +6484,7 @@ export const generatePayrollForMonth = async (month, year) => {
   const leavesRes = await query(`
     SELECT * FROM leave_requests
     WHERE status = 'Approved'
-    AND start_date <= $2 AND end_date >= $1
+    AND start_date <= $2::date AND end_date >= $1::date
   `, [startDate, endDate]);
   const leaves = leavesRes.rows;
 
@@ -6433,6 +6689,234 @@ router.get('/attendance/payroll', authenticateToken, requireRole('Admin'), async
   }
 });
 
+router.post('/attendance/client-satisfaction', authenticateToken, async (req, res) => {
+  try {
+    let { staffId, rating, comment, staffName } = req.body;
+    if (!staffId && !staffName) return res.status(400).json({ error: 'Staff ID or Name required' });
+    if (!rating) return res.status(400).json({ error: 'Rating required' });
+
+    // Lookup staffId by name if not provided
+    if (!staffId && staffName) {
+      const staffRes = await query('SELECT id FROM users WHERE name = $1 AND role != \'Student\' LIMIT 1', [staffName]);
+      if (staffRes.rows.length > 0) {
+        staffId = staffRes.rows[0].id;
+      } else {
+        return res.status(404).json({ error: 'Counselor not found' });
+      }
+    }
+
+    // Lookup student_id from contacts table using req.user.id
+    const contactRes = await query('SELECT id FROM contacts WHERE user_id = $1 LIMIT 1', [req.user.id]);
+    if (contactRes.rows.length === 0) return res.status(404).json({ error: 'Student contact not found' });
+    const studentContactId = contactRes.rows[0].id;
+
+    // RULE: One review per 24 hours
+    const recentReview = await query(`
+      SELECT created_at FROM client_satisfaction_reviews 
+      WHERE student_id = $1 AND staff_id = $2 
+      AND created_at > NOW() - INTERVAL '24 hours'
+      LIMIT 1
+    `, [studentContactId, staffId]);
+
+    if (recentReview.rows.length > 0) {
+      return res.status(429).json({ error: 'You can only submit one review per day for this staff member.' });
+    }
+
+    const now = new Date();
+    const month = now.getMonth() + 1;
+    const year = now.getFullYear();
+
+    await query(`
+      INSERT INTO client_satisfaction_reviews (staff_id, student_id, rating, comment, month, year)
+      VALUES ($1, $2, $3, $4, $5, $6)
+    `, [staffId, studentContactId, rating, comment, month, year]);
+
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// CHECK REVIEW STATUS
+router.get('/attendance/client-satisfaction/status', authenticateToken, async (req, res) => {
+  try {
+    let { staffId, staffName } = req.query;
+    if (!staffId && !staffName) return res.status(400).json({ error: 'Staff ID or Name required' });
+
+    // Lookup staffId by name if not provided or 0
+    if ((!staffId || staffId === '0') && staffName) {
+      const staffRes = await query("SELECT id FROM users WHERE name = $1 AND role != 'Student' LIMIT 1", [staffName]);
+      if (staffRes.rows.length > 0) {
+        staffId = staffRes.rows[0].id;
+      } else {
+        return res.json({ submitted: false });
+      }
+    }
+
+    // Lookup student_id from contacts table
+    const contactRes = await query('SELECT id FROM contacts WHERE user_id = $1 LIMIT 1', [req.user.id]);
+    if (contactRes.rows.length === 0) return res.json({ submitted: false });
+    const studentContactId = contactRes.rows[0].id;
+
+    const recentReview = await query(`
+      SELECT rating FROM client_satisfaction_reviews 
+      WHERE student_id = $1 AND staff_id = $2 
+      AND created_at > NOW() - INTERVAL '24 hours'
+      LIMIT 1
+    `, [studentContactId, staffId]);
+
+    if (recentReview.rows.length > 0) {
+      return res.json({ submitted: true, lastRating: recentReview.rows[0].rating });
+    }
+
+    res.json({ submitted: false });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET PERFORMANCE STATS (Admin sees all, Staff sees own)
+router.get('/attendance/performance/stats', authenticateToken, async (req, res) => {
+  try {
+    const month = Number(req.query.month) || (new Date().getMonth() + 1);
+    const year = Number(req.query.year) || new Date().getFullYear();
+    const targetUserId = req.query.userId ? Number(req.query.userId) : null;
+
+    if (req.user.role === 'Admin' && !targetUserId) {
+      const users = (await query('SELECT id, name, role FROM users WHERE role != \'Student\'')).rows;
+      
+      // Check if we are looking at a past month that might be finalized
+      const now = new Date();
+      const isPastMonth = (year < now.getFullYear()) || (year === now.getFullYear() && month < (now.getMonth() + 1));
+      
+      // Fetch Snapshots
+      const snapshots = (await query('SELECT * FROM staff_performance_records WHERE month = $1 AND year = $2', [month, year])).rows;
+      
+      const enrichedReport = await Promise.all(users.map(async u => {
+        const snap = snapshots.find(s => s.user_id === u.id);
+        
+        // If snapshot exists and it's a past month, use it
+        if (snap && isPastMonth && snap.metrics_snapshot) {
+          return {
+            userId: u.id,
+            userName: u.name,
+            month, year,
+            attendanceScore: Number(snap.attendance_score),
+            taskScore: Number(snap.task_score),
+            clientScore: Number(snap.client_score),
+            ticketScore: Number(snap.ticket_score),
+            totalScore: Number(snap.total_score),
+            isPip: snap.is_pip,
+            pipNotes: snap.pip_notes || '',
+            pipCount: snap.is_pip ? await getPipConsecutiveMonths(u.id, month, year) : 0,
+            metrics: typeof snap.metrics_snapshot === 'string' ? JSON.parse(snap.metrics_snapshot) : snap.metrics_snapshot
+          };
+        }
+
+        // Otherwise calculate live
+        const r = await calculatePerformanceForUser(u.id, month, year);
+        const isPip = snap ? snap.is_pip : r.totalScore < 60;
+        const pipCount = isPip ? await getPipConsecutiveMonths(r.userId, month, year) : 0;
+        return {
+          ...r,
+          isPip,
+          pipNotes: snap ? snap.pip_notes : '',
+          pipCount
+        };
+      }));
+
+      res.json(enrichedReport);
+    } else {
+      const effectiveUserId = (req.user.role === 'Admin' && targetUserId) ? targetUserId : req.user.id;
+      const now = new Date();
+      const isPastMonth = (year < now.getFullYear()) || (year === now.getFullYear() && month < (now.getMonth() + 1));
+      
+      const snap = (await query('SELECT * FROM staff_performance_records WHERE user_id = $1 AND month = $2 AND year = $3', [effectiveUserId, month, year])).rows[0];
+      
+      let stats;
+      if (snap && isPastMonth && snap.metrics_snapshot) {
+        stats = {
+          userId: effectiveUserId,
+          month, year,
+          attendanceScore: Number(snap.attendance_score),
+          taskScore: Number(snap.task_score),
+          clientScore: Number(snap.client_score),
+          ticketScore: Number(snap.ticket_score),
+          totalScore: Number(snap.total_score),
+          metrics: typeof snap.metrics_snapshot === 'string' ? JSON.parse(snap.metrics_snapshot) : snap.metrics_snapshot
+        };
+      } else {
+        stats = await calculatePerformanceForUser(effectiveUserId, month, year);
+      }
+      
+      const isPip = snap ? snap.is_pip : stats.totalScore < 60;
+      const pipCount = isPip ? await getPipConsecutiveMonths(effectiveUserId, month, year) : 0;
+
+      // Fetch History (Last 6 Months)
+      const history = [];
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(year, month - 1 - i, 1);
+        const m = d.getMonth() + 1;
+        const y = d.getFullYear();
+        
+        // Try to get score from record first
+        const histSnap = (await query('SELECT total_score FROM staff_performance_records WHERE user_id = $1 AND month = $2 AND year = $3', [effectiveUserId, m, y])).rows[0];
+        if (histSnap) {
+          history.push({ month: m, year: y, score: Number(histSnap.total_score) });
+        } else {
+          const s = await calculatePerformanceForUser(effectiveUserId, m, y);
+          history.push({ month: m, year: y, score: s.totalScore });
+        }
+      }
+
+      res.json({
+        ...stats,
+        userName: stats.userName || (await query('SELECT name FROM users WHERE id = $1', [effectiveUserId])).rows[0]?.name,
+        isPip,
+        pipNotes: snap ? snap.pip_notes : '',
+        pipCount,
+        history
+      });
+    }
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// TOGGLE PIP (Admin only)
+router.post('/attendance/performance/pip', authenticateToken, requireRole('Admin'), async (req, res) => {
+  try {
+    const { userId, month, year, isPip, notes } = req.body;
+    
+    // UPSERT snapshot to record PIP status
+    await query(`
+      INSERT INTO staff_performance_records (user_id, month, year, is_pip, pip_notes)
+      VALUES ($1, $2, $3, $4, $5)
+      ON CONFLICT (user_id, month, year) 
+      DO UPDATE SET is_pip = $4, pip_notes = $5
+    `, [userId, month, year, isPip, notes]);
+
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET PERFORMANCE HISTORY (Admin or Self)
+router.get('/attendance/performance/history/:userId', authenticateToken, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    if (req.user.role !== 'Admin' && req.user.id !== Number(userId)) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const history = (await query('SELECT * FROM staff_performance_records WHERE user_id = $1 ORDER BY year DESC, month DESC LIMIT 12', [userId])).rows;
+    res.json(history);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // GENERATE & SAVE PAYROLL (Admin - persists to payslips table)
 router.post('/attendance/payroll/generate', authenticateToken, requireRole('Admin'), async (req, res) => {
   try {
@@ -6576,7 +7060,7 @@ router.get('/attendance/leaves/balance', authenticateToken, async (req, res) => 
     const userRes = await query('SELECT joining_date FROM users WHERE id = $1', [userId]);
     const joiningDate = userRes.rows[0]?.joining_date ? new Date(userRes.rows[0].joining_date) : null;
 
-    const holidaysRes = await query('SELECT date FROM holidays WHERE date >= $1 AND date <= $2', [quarterStartDate, quarterEndDate]);
+    const holidaysRes = await query('SELECT date FROM holidays WHERE date >= $1::date AND date <= $2::date', [quarterStartDate, quarterEndDate]);
     const holidayDates = holidaysRes.rows.map(h => new Date(h.date).toDateString());
 
     // 2. Calculate Accrued (Earned) Leaves
@@ -6596,7 +7080,7 @@ router.get('/attendance/leaves/balance', authenticateToken, async (req, res) => 
     const leavesRes = await query(`
             SELECT start_date, end_date FROM leave_requests 
             WHERE user_id = $1 AND status = 'Approved'
-            AND start_date <= $2 AND end_date >= $3
+            AND start_date <= $2::date AND end_date >= $3::date
         `, [userId, quarterEndDate, quarterStartDate]);
 
     let usedInQuarter = 0;
