@@ -668,6 +668,52 @@ router.delete('/admin/api-keys/:id', authenticateToken, requireRole('Admin'), as
   }
 });
 
+// ============================================
+// SYSTEM DATA EXPORT (BOTS / ADMINS)
+// ============================================
+
+router.get('/admin/export-all', authenticateToken, requireRole('Admin'), async (req, res) => {
+  try {
+    const data = {};
+
+    const users = await query('SELECT id, name, email, role, joining_date, working_days, created_at, is_verified FROM users');
+    data.users = users.rows;
+
+    const tasks = await query('SELECT * FROM tasks');
+    data.tasks = tasks.rows;
+
+    const tickets = await query('SELECT * FROM tickets');
+    data.tickets = tickets.rows;
+
+    const attendance = await query('SELECT * FROM attendance_logs');
+    data.attendance = attendance.rows;
+
+    const contacts = await query('SELECT * FROM contacts');
+    data.contacts = contacts.rows;
+
+    const leads = await query('SELECT * FROM leads');
+    data.leads = leads.rows;
+
+    const performanceRecords = await query('SELECT * FROM staff_performance_records');
+    data.performance_records = performanceRecords.rows;
+
+    const courses = await query('SELECT * FROM courses');
+    data.courses = courses.rows;
+
+    const announcements = await query('SELECT id, title, content, type, status, published_at FROM announcements');
+    data.announcements = announcements.rows;
+
+    const visaOperations = await query('SELECT * FROM visa_operations');
+    data.visa_operations = visaOperations.rows;
+
+    // Return massive structured dump
+    res.json(data);
+  } catch (error) {
+    console.error('Export All Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Helper function to transform contact from DB format to API format
 const transformContact = (dbContact) => {
   if (!dbContact) return null;
