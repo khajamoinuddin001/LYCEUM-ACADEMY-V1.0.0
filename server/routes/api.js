@@ -697,7 +697,7 @@ router.get('/admin/export-all', authenticateToken, requireRole('Admin'), async (
     const performanceRecords = await query('SELECT * FROM staff_performance_records');
     data.performance_records = performanceRecords.rows;
 
-    const courses = await query('SELECT * FROM courses');
+    const courses = await query('SELECT * FROM lms_courses');
     data.courses = courses.rows;
 
     const announcements = await query('SELECT id, title, content, type, status, published_at FROM announcements');
@@ -705,6 +705,12 @@ router.get('/admin/export-all', authenticateToken, requireRole('Admin'), async (
 
     const visaOperations = await query('SELECT * FROM visa_operations');
     data.visa_operations = visaOperations.rows;
+
+    const transactions = await query('SELECT * FROM transactions');
+    data.transactions = transactions.rows;
+
+    const websiteVisits = await query('SELECT * FROM website_visits');
+    data.website_visits = websiteVisits.rows;
 
     // Return massive structured dump
     res.json(data);
