@@ -458,7 +458,7 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
                         <table className="w-full border-separate border-spacing-0">
                             <thead className="sticky top-0 z-10 shadow-sm">
                                 <tr className="border-b border-gray-100 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-800/50">
-                                    <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider px-6 py-4">Key Name / IP</th>
+                                    <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider px-6 py-4">Key Name / Owner</th>
                                     <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider px-6 py-4">Access</th>
                                     <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider px-6 py-4">Status</th>
                                     <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider px-6 py-4">Limit & Usage</th>
@@ -476,7 +476,10 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
                                                 </div>
                                                 <div className="flex flex-col">
                                                     <span className="font-semibold text-gray-900 dark:text-white text-sm">{key.name}</span>
-                                                    <span className="text-[10px] font-mono text-gray-400 uppercase tracking-tighter">IP: {key.lastIp || 'None'}</span>
+                                                    <div className="flex items-center gap-1.5">
+                                                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400">👤 {key.owner_name || 'System'}</span>
+                                                        <span className="text-[10px] font-mono text-gray-400 tracking-tighter italic">{key.lastIp || 'No IP'}</span>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </td>

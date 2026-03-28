@@ -540,8 +540,10 @@ router.get('/admin/api-keys', authenticateToken, requireRole('Admin'), async (re
     const isPanicked = panicResult.rows.length > 0 && panicResult.rows[0].value === 'true';
 
     const result = await query(
-      'SELECT id, name, access_level, status, rate_limit, last_ip, last_used_at, created_at FROM api_keys WHERE user_id = $1 ORDER BY created_at DESC',
-      [req.user.id]
+      `SELECT k.id, k.name, k.access_level, k.status, k.rate_limit, k.last_ip, k.last_used_at, k.created_at, u.name as owner_name 
+       FROM api_keys k 
+       LEFT JOIN users u ON k.user_id = u.id 
+       ORDER BY k.created_at DESC`
     );
     
     // Enrich with usage data

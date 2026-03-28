@@ -813,5 +813,6 @@ export interface ApiKey {
         limit: number;
     };
     lastUsedAt?: string;
+    owner_name?: string;
     createdAt: string;
 }
