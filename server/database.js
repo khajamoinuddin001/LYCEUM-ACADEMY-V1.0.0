@@ -62,6 +62,7 @@ export async function initDatabase() {
         permissions JSONB DEFAULT '{}',
         must_reset_password BOOLEAN DEFAULT false,
         is_verified BOOLEAN DEFAULT false,
+        is_active BOOLEAN DEFAULT true,
         verification_token TEXT,
         google_id TEXT UNIQUE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -999,11 +1000,11 @@ export async function initDatabase() {
       console.log('Working days column might already exist');
     }
 
-    // Add phone column separately if it doesn't exist
     try {
       await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT');
+      await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true');
     } catch (e) {
-      console.log('Phone column might already exist');
+      console.log('User columns (phone/is_active) might already exist');
     }
 
     // SYSTEM SETTINGS (for Office Location etc)

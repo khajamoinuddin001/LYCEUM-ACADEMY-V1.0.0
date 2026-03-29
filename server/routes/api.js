@@ -412,10 +412,10 @@ router.get('/users', authenticateToken, async (req, res) => {
 
     let result;
     if (isAdminOrStaff) {
-      result = await query('SELECT id, name, email, phone, role, permissions, must_reset_password, created_at, shift_start, shift_end, working_days, joining_date, base_salary FROM users');
+      result = await query('SELECT id, name, email, phone, role, permissions, must_reset_password, created_at, shift_start, shift_end, working_days, joining_date, base_salary, is_active FROM users');
     } else {
       // Students should only see what is necessary for chat/identifying users
-      result = await query('SELECT id, name, email, role FROM users');
+      result = await query('SELECT id, name, email, role, is_active FROM users');
     }
 
     res.json(result.rows.map(user => ({
@@ -469,7 +469,7 @@ router.put('/users/:id', authenticateToken, async (req, res) => {
       return res.status(403).json({ error: 'Unauthorized' });
     }
 
-    const { name, email, phone, role, permissions, newPassword, joining_date, base_salary, shift_start, shift_end, working_days } = req.body;
+    const { name, email, phone, role, permissions, newPassword, joining_date, base_salary, shift_start, shift_end, working_days, is_active } = req.body;
 
     // If not admin, prevent role/permission/salary changes
     if (!isAdmin) {
@@ -499,6 +499,7 @@ router.put('/users/:id', authenticateToken, async (req, res) => {
 
       addUpdate('shift_end', shift_end);
       addUpdate('working_days', working_days ? JSON.stringify(working_days) : undefined);
+      addUpdate('is_active', is_active);
     }
 
     if (newPassword) {
@@ -513,7 +514,7 @@ router.put('/users/:id', authenticateToken, async (req, res) => {
 
     values.push(userIdToUpdate);
     const result = await query(
-      `UPDATE users SET ${updates.join(', ')} WHERE id = $${pCount} RETURNING id, name, email, role, permissions, must_reset_password, joining_date, base_salary, shift_start, shift_end, working_days`,
+      `UPDATE users SET ${updates.join(', ')} WHERE id = $${pCount} RETURNING id, name, email, role, permissions, must_reset_password, joining_date, base_salary, shift_start, shift_end, working_days, is_active`,
       values
     );
 

@@ -213,13 +213,19 @@ export async function authenticateToken(req, res, next) {
       return res.status(401).json({ error: 'Session expired' });
     }
 
-    // Fetch latest role, name and email from DB
-    const userResult = await query('SELECT name, email, role, permissions FROM users WHERE id = $1', [decoded.id]);
+    // Fetch latest role, name, email and active status from DB
+    const userResult = await query('SELECT name, email, role, permissions, is_active FROM users WHERE id = $1', [decoded.id]);
     if (userResult.rows.length === 0) {
       return res.status(401).json({ error: 'User no longer exists' });
     }
 
     const dbUser = userResult.rows[0];
+    
+    // Check if user is active
+    if (dbUser.is_active === false) {
+      return res.status(403).json({ error: 'Account deactivated' });
+    }
+
     req.user = {
       ...decoded,
       name: dbUser.name,

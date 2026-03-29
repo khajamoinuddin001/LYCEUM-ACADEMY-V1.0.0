@@ -299,6 +299,12 @@ router.post('/login', async (req, res) => {
       return res.status(403).json({ error: 'Email not verified. Please check your inbox.' });
     }
 
+    // Check active status
+    if (user.is_active === false) {
+      console.warn(`🔍 Login attempt blocked: Account deactivated for ${email}`);
+      return res.status(403).json({ error: 'Account deactivated. Please contact administrator.' });
+    }
+
     const { password: _, ...userWithoutPassword } = user;
     const { rememberMe } = req.body;
     const expiresIn = rememberMe ? '7d' : '24h';
@@ -725,6 +731,12 @@ router.post('/google', async (req, res) => {
       if (!user.google_id) {
         await query('UPDATE users SET google_id = $1, is_verified = true WHERE id = $2', [googleId, user.id]);
       }
+    }
+
+    // Check active status for Google login
+    if (user.is_active === false) {
+      console.warn(`🔍 Google login attempt blocked: Account deactivated for ${email}`);
+      return res.status(403).json({ error: 'Account deactivated. Please contact administrator.' });
     }
 
     const { password: _, ...userWithoutPassword } = user;

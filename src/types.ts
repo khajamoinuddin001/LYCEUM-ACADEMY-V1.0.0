@@ -567,6 +567,8 @@ export interface User {
   shiftStart?: string;
   shiftEnd?: string;
   workingDays?: string[];
+  is_active?: boolean;
+  isActive?: boolean;
 }
 
 export interface ActivityLog {

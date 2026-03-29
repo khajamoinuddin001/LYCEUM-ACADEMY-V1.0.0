@@ -276,6 +276,24 @@ const AccessControlView: React.FC<AccessControlViewProps> = ({ users, activityLo
         }
     };
 
+    const handleToggleActive = async (user: User) => {
+        const newStatus = !(user.is_active !== false);
+        const action = newStatus ? 'activate' : 'deactivate';
+        
+        if (!window.confirm(`Are you sure you want to ${action} ${user.name}?${!newStatus ? '\n\nThis will prevent them from logging in but keep all their data.' : ''}`)) {
+            return;
+        }
+
+        try {
+            await api.updateUser(user.id, { is_active: newStatus });
+            onUpdateUserDetails(user.id, { ...user, is_active: newStatus } as any);
+            alert(`✅ User ${action}d successfully`);
+        } catch (error) {
+            console.error(`Failed to ${action} user:`, error);
+            alert(`Failed to ${action} user`);
+        }
+    };
+
     const handleRoleChange = async (userId: number, newRole: UserRole) => {
         try {
             await api.updateUser(userId, { role: newRole });
@@ -335,7 +353,8 @@ const AccessControlView: React.FC<AccessControlViewProps> = ({ users, activityLo
         }
     };
 
-    const staffUsers = users.filter(u => STAFF_ROLES.includes(u.role));
+    const activeStaff = users.filter(u => STAFF_ROLES.includes(u.role) && u.is_active !== false);
+    const deactivatedStaff = users.filter(u => STAFF_ROLES.includes(u.role) && u.is_active === false);
 
     return (
         <>
@@ -389,84 +408,163 @@ const AccessControlView: React.FC<AccessControlViewProps> = ({ users, activityLo
                 </div>
 
                 {activeTab === 'staff' && (
-                    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
-                        {/* Table - Horizontal scroll on mobile */}
-                        <div className="overflow-x-auto -mx-4 md:mx-0">
-                            <div className="inline-block min-w-full align-middle">
-                                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                                    <thead className="bg-gray-50 dark:bg-gray-700/50">
-                                        <tr>
-                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Name</th>
-                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Role</th>
-                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">App Permissions</th>
-                                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                                        {staffUsers.map(user => (
-                                            <tr key={user.id}>
-                                                <td className="px-6 py-4 whitespace-nowrap">
-                                                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{user.name}</div>
-                                                    <div className="text-xs text-gray-500 dark:text-gray-400">{user.email}</div>
-                                                    {(user as any).phone && <div className="text-xs text-gray-400 dark:text-gray-500">{(user as any).phone}</div>}
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
-                                                    <select
-                                                        value={user.role}
-                                                        onChange={(e) => handleRoleChange(user.id, e.target.value as UserRole)}
-                                                        disabled={user.id === currentUser.id}
-                                                        className="w-full p-2 border border-gray-300 rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:ring-lyceum-blue focus:border-lyceum-blue disabled:opacity-50 disabled:cursor-not-allowed"
-                                                        aria-label={`Role for ${user.name}`}
-                                                    >
-                                                        {STAFF_ROLES.map(role => (
-                                                            <option key={role} value={role}>{role}</option>
-                                                        ))}
-                                                    </select>
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
-                                                    <button
-                                                        onClick={() => setModalUser(user)}
-                                                        disabled={user.id === currentUser.id}
-                                                        className="px-3 py-2 text-sm font-medium text-lyceum-blue bg-lyceum-blue/10 rounded-md hover:bg-lyceum-blue/20 dark:bg-lyceum-blue/20 dark:hover:bg-lyceum-blue/30 disabled:opacity-50 disabled:cursor-not-allowed"
-                                                    >
-                                                        Manage ({Object.keys(user.permissions || {}).length} Apps)
-                                                    </button>
-                                                </td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
-                                                    <div className="flex items-center gap-2">
-                                                        <button
-                                                            onClick={() => onStartImpersonation(user)}
-                                                            disabled={user.id === currentUser.id}
-                                                            className="flex items-center px-3 py-2 text-sm font-medium text-yellow-700 bg-yellow-100 rounded-md hover:bg-yellow-200 dark:bg-yellow-900/50 dark:text-yellow-300 dark:hover:bg-yellow-900/80 disabled:opacity-50 disabled:cursor-not-allowed"
-                                                            title={`Impersonate ${user.name}`}
-                                                        >
-                                                            <Eye size={16} className="mr-2" />
-                                                            Impersonate
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleEditClick(user)}
-                                                            className="p-2 text-gray-500 hover:text-lyceum-blue dark:hover:text-blue-400"
-                                                            title="Edit User Details"
-                                                        >
-                                                            <UserIcon size={18} />
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleDeleteUser(user.id, user.name)}
-                                                            disabled={user.id === currentUser.id}
-                                                            className="p-2 text-gray-500 hover:text-red-600 dark:hover:text-red-400 disabled:opacity-50 disabled:cursor-not-allowed"
-                                                            title={user.id === currentUser.id ? "Can't delete yourself" : `Delete ${user.name}`}
-                                                        >
-                                                            <Trash2 size={18} />
-                                                        </button>
-                                                    </div>
-                                                </td>
+                    <>
+                        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+                            {/* Table - Horizontal scroll on mobile */}
+                            <div className="overflow-x-auto -mx-4 md:mx-0">
+                                <div className="inline-block min-w-full align-middle">
+                                    <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                                        <thead className="bg-gray-50 dark:bg-gray-700/50">
+                                            <tr>
+                                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Name</th>
+                                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Role</th>
+                                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">App Permissions</th>
+                                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Status</th>
+                                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Actions</th>
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                        </thead>
+                                        <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                                            {activeStaff.map(user => (
+                                                <tr key={user.id}>
+                                                    <td className="px-6 py-4 whitespace-nowrap">
+                                                        <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{user.name}</div>
+                                                        <div className="text-xs text-gray-500 dark:text-gray-400">{user.email}</div>
+                                                        {(user as any).phone && <div className="text-xs text-gray-400 dark:text-gray-500">{(user as any).phone}</div>}
+                                                    </td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
+                                                        <select
+                                                            value={user.role}
+                                                            onChange={(e) => handleRoleChange(user.id, e.target.value as UserRole)}
+                                                            disabled={user.id === currentUser.id || currentUser.role !== 'Admin'}
+                                                            className="w-full p-2 border border-gray-300 rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:ring-lyceum-blue focus:border-lyceum-blue disabled:opacity-50 disabled:cursor-not-allowed"
+                                                            aria-label={`Role for ${user.name}`}
+                                                        >
+                                                            {STAFF_ROLES.map(role => (
+                                                                <option key={role} value={role}>{role}</option>
+                                                            ))}
+                                                        </select>
+                                                    </td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
+                                                        <button
+                                                            onClick={() => setModalUser(user)}
+                                                            disabled={user.id === currentUser.id || currentUser.role !== 'Admin'}
+                                                            className="px-3 py-2 text-sm font-medium text-lyceum-blue bg-lyceum-blue/10 rounded-md hover:bg-lyceum-blue/20 dark:bg-lyceum-blue/20 dark:hover:bg-lyceum-blue/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                        >
+                                                            Manage ({Object.keys(user.permissions || {}).length} Apps)
+                                                        </button>
+                                                    </td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
+                                                        {currentUser.role === 'Admin' && user.id !== currentUser.id ? (
+                                                            <button
+                                                                onClick={() => handleToggleActive(user)}
+                                                                className="flex items-center px-2 py-1 text-xs font-medium text-white bg-red-500 rounded-md hover:bg-red-600 transition-colors"
+                                                                title="Deactivate User"
+                                                            >
+                                                                Deactivate
+                                                            </button>
+                                                        ) : (
+                                                            <span className="px-2 py-1 text-xs font-medium text-green-700 bg-green-100 rounded-full dark:bg-green-900/30 dark:text-green-400">
+                                                                Active
+                                                            </span>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
+                                                        <div className="flex items-center gap-2">
+                                                            <button
+                                                                onClick={() => onStartImpersonation(user)}
+                                                                disabled={user.id === currentUser.id}
+                                                                className="flex items-center px-3 py-2 text-sm font-medium text-yellow-700 bg-yellow-100 rounded-md hover:bg-yellow-200 dark:bg-yellow-900/50 dark:text-yellow-300 dark:hover:bg-yellow-900/80 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                                title={`Impersonate ${user.name}`}
+                                                            >
+                                                                <Eye size={16} className="mr-2" />
+                                                                Impersonate
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleEditClick(user)}
+                                                                className="p-2 text-gray-500 hover:text-lyceum-blue dark:hover:text-blue-400"
+                                                                title="Edit User Details"
+                                                            >
+                                                                <UserIcon size={18} />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleDeleteUser(user.id, user.name)}
+                                                                disabled={user.id === currentUser.id}
+                                                                className="p-2 text-gray-500 hover:text-red-600 dark:hover:text-red-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                                title={user.id === currentUser.id ? "Can't delete yourself" : `Delete ${user.name}`}
+                                                            >
+                                                                <Trash2 size={18} />
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
                         </div>
-                    </div>
+
+                        {deactivatedStaff.length > 0 && (
+                            <div className="mt-8">
+                                <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100 mb-4 px-4 md:px-0 flex items-center gap-2">
+                                    <span className="p-1 px-2 bg-red-100 text-red-600 rounded text-xs uppercase tracking-wider">Deactivated Staff</span>
+                                </h3>
+                                <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+                                    <div className="overflow-x-auto -mx-4 md:mx-0">
+                                        <div className="inline-block min-w-full align-middle">
+                                            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                                                <thead className="bg-gray-50 dark:bg-gray-700/50">
+                                                    <tr>
+                                                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Name</th>
+                                                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Role</th>
+                                                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Status</th>
+                                                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Actions</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="bg-gray-50/50 dark:bg-gray-800/50 divide-y divide-gray-200 dark:divide-gray-700 opacity-75">
+                                                    {deactivatedStaff.map(user => (
+                                                        <tr key={user.id}>
+                                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                                <div className="text-sm font-medium text-gray-700 dark:text-gray-300">{user.name}</div>
+                                                                <div className="text-xs text-gray-400 dark:text-gray-500">{user.email}</div>
+                                                            </td>
+                                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
+                                                                {user.role}
+                                                            </td>
+                                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
+                                                                {currentUser.role === 'Admin' ? (
+                                                                    <button
+                                                                        onClick={() => handleToggleActive(user)}
+                                                                        className="flex items-center px-2 py-1 text-xs font-medium text-white bg-green-500 rounded-md hover:bg-green-600 transition-colors"
+                                                                        title="Activate User"
+                                                                    >
+                                                                        Activate
+                                                                    </button>
+                                                                ) : (
+                                                                    <span className="px-2 py-1 text-xs font-medium text-red-700 bg-red-100 rounded-full dark:bg-red-900/30 dark:text-red-400">
+                                                                        Inactive
+                                                                    </span>
+                                                                )}
+                                                            </td>
+                                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                                <button
+                                                                    onClick={() => handleDeleteUser(user.id, user.name)}
+                                                                    className="p-2 text-gray-400 hover:text-red-600 transition-colors"
+                                                                    title="Delete Permanently"
+                                                                >
+                                                                    <Trash2 size={18} />
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </>
                 )}
 
                 {activeTab === 'log' && (
