@@ -199,11 +199,11 @@ const PerformanceDashboard: React.FC<{ userRole: string; currentUser: any }> = (
                         {/* Metrics Breakdown */}
                         <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
                             {[
-                                { label: 'Attendance & Payroll', score: myStats?.attendanceScore, icon: <Calendar />, details: `${myStats?.metrics?.actualPresence || 0}/${myStats?.metrics?.targetWorkingDays || 0} days` },
-                                { label: 'Tasks', score: myStats?.taskScore, icon: <Clock />, details: `${myStats?.metrics?.lateTasks || 0} late out of ${myStats?.metrics?.totalTasks || 0}` },
-                                { label: 'Satisfaction', score: myStats?.clientScore, icon: <Star />, details: `${myStats?.metrics?.avgRating || 0}/10 (${myStats?.metrics?.reviewCount || 0} reviews)` },
-                                { label: 'Tickets', score: myStats?.ticketScore, icon: <CheckCircle2 />, details: `${myStats?.metrics?.resolvedTickets || 0}/${myStats?.metrics?.totalTickets || 0} resolved` },
-                            ].map((m, i) => (
+                                { label: 'Attendance & Payroll', score: myStats?.attendanceScore, icon: <Calendar />, details: `${myStats?.metrics?.actualPresence || 0}/${myStats?.metrics?.targetWorkingDays || 0} days`, active: myStats?.settings?.attendance !== false },
+                                { label: 'Tasks', score: myStats?.taskScore, icon: <Clock />, details: `${myStats?.metrics?.lateTasks || 0} late out of ${myStats?.metrics?.totalTasks || 0}`, active: myStats?.settings?.tasks !== false },
+                                { label: 'Satisfaction', score: myStats?.clientScore, icon: <Star />, details: `${myStats?.metrics?.avgRating || 0}/10 (${myStats?.metrics?.reviewCount || 0} reviews)`, active: myStats?.settings?.reviews !== false },
+                                { label: 'Tickets', score: myStats?.ticketScore, icon: <CheckCircle2 />, details: `${myStats?.metrics?.resolvedTickets || 0}/${myStats?.metrics?.totalTickets || 0} resolved`, active: myStats?.settings?.tickets !== false },
+                            ].filter(m => m.active).map((m, i) => (
                                 <div key={i} className="bg-white dark:bg-gray-800 p-6 rounded-2xl border border-gray-100 dark:border-gray-700 shadow-sm flex items-center gap-5 hover:border-lyceum-blue/30 transition-colors group">
                                     <div className="p-4 bg-lyceum-blue/10 text-lyceum-blue rounded-xl group-hover:bg-lyceum-blue group-hover:text-white transition-colors">
                                         {m.icon}
@@ -403,27 +403,43 @@ const PerformanceDashboard: React.FC<{ userRole: string; currentUser: any }> = (
                                                 </div>
                                             </td>
                                             <td className="px-6 py-5 text-center">
-                                                <span className={`text-[10px] font-black px-3 py-1 rounded-full ${getScoreColor(s.attendanceScore)}`}>
-                                                    {s.attendanceScore}%
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-5 text-center">
-                                                <span className={`text-[10px] font-black px-3 py-1 rounded-full ${getScoreColor(s.taskScore)}`}>
-                                                    {s.taskScore}%
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-5 text-center">
-                                                <span className={`text-[10px] font-black px-3 py-1 rounded-full ${getScoreColor(s.ticketScore)}`}>
-                                                    {s.ticketScore}%
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-5 text-center">
-                                                <div className="flex flex-col items-center">
-                                                    <span className={`text-[10px] font-black px-3 py-1 rounded-full ${getScoreColor(s.clientScore)}`}>
-                                                        {s.metrics.reviewCount > 0 ? `${s.metrics.avgRating}/10` : '100%'}
+                                                {s.settings?.attendance !== false ? (
+                                                    <span className={`text-[10px] font-black px-3 py-1 rounded-full ${getScoreColor(s.attendanceScore)}`}>
+                                                        {s.attendanceScore}%
                                                     </span>
-                                                    <span className="text-[9px] text-gray-400 mt-1.5 font-black uppercase tracking-widest">{s.metrics.reviewCount > 0 ? `${s.metrics.reviewCount} reviews` : 'Zero feedback'}</span>
-                                                </div>
+                                                ) : (
+                                                    <span className="text-[10px] font-black px-3 py-1 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-400">N/A</span>
+                                                )}
+                                            </td>
+                                            <td className="px-6 py-5 text-center">
+                                                {s.settings?.tasks !== false ? (
+                                                    <span className={`text-[10px] font-black px-3 py-1 rounded-full ${getScoreColor(s.taskScore)}`}>
+                                                        {s.taskScore}%
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-[10px] font-black px-3 py-1 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-400">N/A</span>
+                                                )}
+                                            </td>
+                                            <td className="px-6 py-5 text-center">
+                                                {s.settings?.tickets !== false ? (
+                                                    <span className={`text-[10px] font-black px-3 py-1 rounded-full ${getScoreColor(s.ticketScore)}`}>
+                                                        {s.ticketScore}%
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-[10px] font-black px-3 py-1 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-400">N/A</span>
+                                                )}
+                                            </td>
+                                            <td className="px-6 py-5 text-center">
+                                                {s.settings?.reviews !== false ? (
+                                                    <div className="flex flex-col items-center">
+                                                        <span className={`text-[10px] font-black px-3 py-1 rounded-full ${getScoreColor(s.clientScore)}`}>
+                                                            {s.metrics.reviewCount > 0 ? `${s.metrics.avgRating}/10` : '100%'}
+                                                        </span>
+                                                        <span className="text-[9px] text-gray-400 mt-1.5 font-black uppercase tracking-widest">{s.metrics.reviewCount > 0 ? `${s.metrics.reviewCount} reviews` : 'Zero feedback'}</span>
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-[10px] font-black px-3 py-1 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-400 flex justify-center w-fit mx-auto">N/A</span>
+                                                )}
                                             </td>
                                             <td className="px-6 py-5 text-center">
                                                 <div className="flex flex-col items-center">

@@ -569,6 +569,14 @@ export interface User {
   workingDays?: string[];
   is_active?: boolean;
   isActive?: boolean;
+  performance_settings?: {
+    enrolled: boolean;
+    attendance: boolean;
+    tasks: boolean;
+    reviews: boolean;
+    tickets: boolean;
+    pip_threshold?: number;
+  };
 }
 
 export interface ActivityLog {

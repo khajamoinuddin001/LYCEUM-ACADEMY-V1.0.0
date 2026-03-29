@@ -412,16 +412,17 @@ router.get('/users', authenticateToken, async (req, res) => {
 
     let result;
     if (isAdminOrStaff) {
-      result = await query('SELECT id, name, email, phone, role, permissions, must_reset_password, created_at, shift_start, shift_end, working_days, joining_date, base_salary, is_active FROM users');
+      result = await query('SELECT id, name, email, phone, role, permissions, must_reset_password, created_at, shift_start, shift_end, working_days, joining_date, base_salary, is_active, performance_settings FROM users');
     } else {
       // Students should only see what is necessary for chat/identifying users
-      result = await query('SELECT id, name, email, role, is_active FROM users');
+      result = await query('SELECT id, name, email, role, is_active, performance_settings FROM users');
     }
 
     res.json(result.rows.map(user => ({
       ...user,
       permissions: typeof user.permissions === 'string' ? JSON.parse(user.permissions || '{}') : (user.permissions || {}),
       workingDays: typeof user.working_days === 'string' ? JSON.parse(user.working_days || '[]') : (user.working_days || []),
+      performance_settings: typeof user.performance_settings === 'string' ? JSON.parse(user.performance_settings || '{}') : (user.performance_settings || null),
       shiftStart: user.shift_start,
       shiftEnd: user.shift_end,
       mustResetPassword: user.must_reset_password
@@ -469,7 +470,7 @@ router.put('/users/:id', authenticateToken, async (req, res) => {
       return res.status(403).json({ error: 'Unauthorized' });
     }
 
-    const { name, email, phone, role, permissions, newPassword, joining_date, base_salary, shift_start, shift_end, working_days, is_active } = req.body;
+    const { name, email, phone, role, permissions, newPassword, joining_date, base_salary, shift_start, shift_end, working_days, is_active, performance_settings } = req.body;
 
     // If not admin, prevent role/permission/salary changes
     if (!isAdmin) {
@@ -500,6 +501,7 @@ router.put('/users/:id', authenticateToken, async (req, res) => {
       addUpdate('shift_end', shift_end);
       addUpdate('working_days', working_days ? JSON.stringify(working_days) : undefined);
       addUpdate('is_active', is_active);
+      addUpdate('performance_settings', performance_settings ? JSON.stringify(performance_settings) : undefined);
     }
 
     if (newPassword) {
@@ -514,7 +516,7 @@ router.put('/users/:id', authenticateToken, async (req, res) => {
 
     values.push(userIdToUpdate);
     const result = await query(
-      `UPDATE users SET ${updates.join(', ')} WHERE id = $${pCount} RETURNING id, name, email, role, permissions, must_reset_password, joining_date, base_salary, shift_start, shift_end, working_days, is_active`,
+      `UPDATE users SET ${updates.join(', ')} WHERE id = $${pCount} RETURNING id, name, email, role, permissions, must_reset_password, joining_date, base_salary, shift_start, shift_end, working_days, is_active, performance_settings`,
       values
     );
 
@@ -6463,7 +6465,25 @@ export const calculatePerformanceForUser = async (userId, month, year) => {
   }
   const ticketScore = totalTicketsAssigned > 0 ? (totalTicketPoints / totalTicketsAssigned) * 100 : 100;
 
-  const totalScore = (attendanceScore * 0.25) + (taskScore * 0.25) + (clientScore * 0.25) + (ticketScore * 0.25);
+  const perfConfig = typeof user.performance_settings === 'string' ? JSON.parse(user.performance_settings || '{}') : (user.performance_settings || {});
+  const useAtt = perfConfig.attendance !== false;
+  const useTasks = perfConfig.tasks !== false;
+  const useRev = perfConfig.reviews !== false;
+  const useTix = perfConfig.tickets !== false;
+
+  let activeCount = 0;
+  if (useAtt) activeCount++;
+  if (useTasks) activeCount++;
+  if (useRev) activeCount++;
+  if (useTix) activeCount++;
+
+  const weight = activeCount > 0 ? (1 / activeCount) : 0;
+  
+  let totalScore = 0;
+  if (useAtt) totalScore += attendanceScore * weight;
+  if (useTasks) totalScore += taskScore * weight;
+  if (useRev) totalScore += clientScore * weight;
+  if (useTix) totalScore += ticketScore * weight;
 
   return {
     userId,
@@ -6475,6 +6495,7 @@ export const calculatePerformanceForUser = async (userId, month, year) => {
     clientScore: Math.round(clientScore),
     ticketScore: Math.round(ticketScore),
     totalScore: Math.round(totalScore),
+    settings: perfConfig,
     metrics: {
       targetWorkingDays,
       actualPresence,
@@ -6539,30 +6560,52 @@ async function checkAndFinalizePerformance() {
 setInterval(checkAndFinalizePerformance, 4 * 60 * 60 * 1000); // Every 4 hours
 setTimeout(checkAndFinalizePerformance, 10000);
 
-async function getPipConsecutiveMonths(userId, month, year) {
+async function getPipConsecutiveMonths(userId, month, year, pipThreshold = 60) {
   let count = 0;
   let currM = month;
   let currY = year;
+  const threshold = Number(pipThreshold);
 
-  // We check up to 12 months back for consecutive PIP status
-  for (let i = 0; i < 12; i++) {
-    const stats = await calculatePerformanceForUser(userId, currM, currY);
-    if (!stats) break;
-
-    const snap = (await query('SELECT is_pip FROM staff_performance_records WHERE user_id = $1 AND month = $2 AND year = $3', [userId, currM, currY])).rows[0];
-    const isPip = snap ? snap.is_pip : stats.totalScore < 60;
+  // We check back non-exhaustively to find the consecutive streak
+  for (let i = 0; i < 24; i++) { // Check up to 2 years back
+    // 1. Try to find a snapshot for this month
+    const snap = (await query('SELECT total_score, metrics_snapshot FROM staff_performance_records WHERE user_id = $1 AND month = $2 AND year = $3', [userId, currM, currY])).rows[0];
+    
+    let isPip = false;
+    if (snap && snap.total_score !== null && snap.metrics_snapshot) {
+      // Use the exact same rounding as the UI for consistency
+      const score = Math.round(Number(snap.total_score));
+      isPip = score < threshold;
+    } else {
+      // If no snapshot, calculate live if it's the current or past month
+      const now = new Date();
+      const isPastOrPresent = (currY < now.getFullYear()) || (currY === now.getFullYear() && currM <= (now.getMonth() + 1));
+      if (isPastOrPresent) {
+        const stats = await calculatePerformanceForUser(userId, currM, currY);
+        if (stats) {
+          const score = Math.round(Number(stats.totalScore));
+          isPip = score < threshold;
+        } else {
+          break;
+        }
+      } else {
+        break; // Future month, stop
+      }
+    }
 
     if (isPip) {
       count++;
+      // Move to previous month
       currM--;
       if (currM === 0) {
         currM = 12;
         currY--;
       }
     } else {
-      break;
+      break; // Streak broken
     }
   }
+
   return count;
 }
 
@@ -6818,16 +6861,16 @@ router.post('/attendance/client-satisfaction', authenticateToken, async (req, re
     if (contactRes.rows.length === 0) return res.status(404).json({ error: 'Student contact not found' });
     const studentContactId = contactRes.rows[0].id;
 
-    // RULE: One review per 24 hours
+    // RULE: One review per 7 days
     const recentReview = await query(`
       SELECT created_at FROM client_satisfaction_reviews 
       WHERE student_id = $1 AND staff_id = $2 
-      AND created_at > NOW() - INTERVAL '24 hours'
+      AND created_at > NOW() - INTERVAL '7 days'
       LIMIT 1
     `, [studentContactId, staffId]);
 
     if (recentReview.rows.length > 0) {
-      return res.status(429).json({ error: 'You can only submit one review per day for this staff member.' });
+      return res.status(429).json({ error: 'You can only submit one review per week for this staff member.' });
     }
 
     const now = new Date();
@@ -6869,7 +6912,7 @@ router.get('/attendance/client-satisfaction/status', authenticateToken, async (r
     const recentReview = await query(`
       SELECT rating FROM client_satisfaction_reviews 
       WHERE student_id = $1 AND staff_id = $2 
-      AND created_at > NOW() - INTERVAL '24 hours'
+      AND created_at > NOW() - INTERVAL '7 days'
       LIMIT 1
     `, [studentContactId, staffId]);
 
@@ -6891,7 +6934,7 @@ router.get('/attendance/performance/stats', authenticateToken, async (req, res) 
     const targetUserId = req.query.userId ? Number(req.query.userId) : null;
 
     if (req.user.role === 'Admin' && !targetUserId) {
-      const users = (await query('SELECT id, name, role FROM users WHERE role != \'Student\'')).rows;
+      const users = (await query('SELECT id, name, role, performance_settings FROM users WHERE role != \'Student\' AND performance_settings->>\'enrolled\' = \'true\'')).rows;
       
       // Check if we are looking at a past month that might be finalized
       const now = new Date();
@@ -6905,6 +6948,7 @@ router.get('/attendance/performance/stats', authenticateToken, async (req, res) 
         
         // If snapshot exists and it's a past month, use it
         if (snap && isPastMonth && snap.metrics_snapshot) {
+          const perfConfig = typeof u.performance_settings === 'string' ? JSON.parse(u.performance_settings || '{}') : (u.performance_settings || {});
           return {
             userId: u.id,
             userName: u.name,
@@ -6914,17 +6958,20 @@ router.get('/attendance/performance/stats', authenticateToken, async (req, res) 
             clientScore: Number(snap.client_score),
             ticketScore: Number(snap.ticket_score),
             totalScore: Number(snap.total_score),
-            isPip: snap.is_pip,
+            settings: perfConfig,
+            isPip: Math.round(Number(snap.total_score)) < Number(perfConfig.pip_threshold !== undefined ? perfConfig.pip_threshold : 60),
             pipNotes: snap.pip_notes || '',
-            pipCount: snap.is_pip ? await getPipConsecutiveMonths(u.id, month, year) : 0,
+            pipCount: (Math.round(Number(snap.total_score)) < Number(perfConfig.pip_threshold !== undefined ? perfConfig.pip_threshold : 60)) ? await getPipConsecutiveMonths(u.id, month, year, Number(perfConfig.pip_threshold !== undefined ? perfConfig.pip_threshold : 60)) : 0,
             metrics: typeof snap.metrics_snapshot === 'string' ? JSON.parse(snap.metrics_snapshot) : snap.metrics_snapshot
           };
         }
 
         // Otherwise calculate live
         const r = await calculatePerformanceForUser(u.id, month, year);
-        const isPip = snap ? snap.is_pip : r.totalScore < 60;
-        const pipCount = isPip ? await getPipConsecutiveMonths(r.userId, month, year) : 0;
+        const perfConfig = typeof u.performance_settings === 'string' ? JSON.parse(u.performance_settings || '{}') : (u.performance_settings || {});
+        const pipThreshold = Number(perfConfig.pip_threshold !== undefined ? perfConfig.pip_threshold : 60);
+        const isPip = Math.round(Number(r.totalScore)) < pipThreshold;
+        const pipCount = isPip ? await getPipConsecutiveMonths(r.userId, month, year, pipThreshold) : 0;
         return {
           ...r,
           isPip,
@@ -6941,6 +6988,9 @@ router.get('/attendance/performance/stats', authenticateToken, async (req, res) 
       
       const snap = (await query('SELECT * FROM staff_performance_records WHERE user_id = $1 AND month = $2 AND year = $3', [effectiveUserId, month, year])).rows[0];
       
+      const userRecord = (await query('SELECT name, performance_settings FROM users WHERE id = $1', [effectiveUserId])).rows[0] || {};
+      const perfConfig = typeof userRecord.performance_settings === 'string' ? JSON.parse(userRecord.performance_settings || '{}') : (userRecord.performance_settings || {});
+
       let stats;
       if (snap && isPastMonth && snap.metrics_snapshot) {
         stats = {
@@ -6951,14 +7001,16 @@ router.get('/attendance/performance/stats', authenticateToken, async (req, res) 
           clientScore: Number(snap.client_score),
           ticketScore: Number(snap.ticket_score),
           totalScore: Number(snap.total_score),
+          settings: perfConfig,
           metrics: typeof snap.metrics_snapshot === 'string' ? JSON.parse(snap.metrics_snapshot) : snap.metrics_snapshot
         };
       } else {
         stats = await calculatePerformanceForUser(effectiveUserId, month, year);
       }
       
-      const isPip = snap ? snap.is_pip : stats.totalScore < 60;
-      const pipCount = isPip ? await getPipConsecutiveMonths(effectiveUserId, month, year) : 0;
+      const pipThreshold = Number(perfConfig.pip_threshold !== undefined ? perfConfig.pip_threshold : 60);
+      const isPip = Math.round(Number(stats.totalScore)) < pipThreshold;
+      const pipCount = isPip ? await getPipConsecutiveMonths(effectiveUserId, month, year, pipThreshold) : 0;
 
       // Fetch History (Last 6 Months)
       const history = [];

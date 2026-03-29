@@ -40,7 +40,11 @@ const ClientSatisfactionModule: React.FC<{ counselorName: string; staffId: numbe
         const fetchStaff = async () => {
             try {
                 const users = await api.getUsers();
-                const filtered = users.filter(u => u.role === 'Staff' || u.role === 'Admin');
+                const filtered = users.filter(u => 
+                    (u.role === 'Staff' || u.role === 'Admin') && 
+                    u.performance_settings?.enrolled && 
+                    u.performance_settings?.reviews
+                );
                 setStaffList(filtered);
                 
                 // If current selected is 0/falsy, pick from list
@@ -99,7 +103,7 @@ const ClientSatisfactionModule: React.FC<{ counselorName: string; staffId: numbe
         } catch (error: any) {
             console.error(error);
             if (error.message.includes("429")) {
-                alert(`You can only submit one review per day for ${selectedStaffName}.`);
+                alert(`You can only submit one review per week for ${selectedStaffName}.`);
             } else {
                 alert("Failed to submit feedback: " + error.message);
             }
@@ -141,16 +145,19 @@ const ClientSatisfactionModule: React.FC<{ counselorName: string; staffId: numbe
                     <RotateCcw className="animate-spin text-lyceum-blue w-6 h-6" />
                 </div>
             ) : submitted ? (
-                <div className="flex flex-col items-center justify-center py-10 text-center animate-fade-in bg-green-50 dark:bg-green-900/10 rounded-2xl border border-green-100 dark:border-green-900/20">
-                    <div className="w-16 h-16 bg-green-100 dark:bg-green-800 rounded-full flex items-center justify-center mb-4 shadow-inner">
+                <div className="flex flex-col items-center justify-center py-10 text-center animate-fade-in bg-green-50 dark:bg-green-900/10 rounded-2xl border border-green-100 dark:border-green-900/20 shadow-sm shadow-green-500/5">
+                    <div className="w-16 h-16 bg-green-100 dark:bg-green-800 rounded-full flex items-center justify-center mb-4 shadow-inner ring-4 ring-green-50 dark:ring-green-900/20">
                         <CheckCircle2 className="text-green-600 dark:text-green-400 w-8 h-8" />
                     </div>
-                    <h4 className="text-xl font-black text-gray-900 dark:text-white mb-2">Review Submitted!</h4>
-                    <div className="flex items-center gap-1 mb-3">
-                        <Star className="text-yellow-500 fill-yellow-500" size={16} />
-                        <span className="text-lg font-bold text-gray-800 dark:text-gray-200">{rating}/10</span>
+                    <h4 className="text-xl font-black text-gray-900 dark:text-white mb-1">Thank You!</h4>
+                    <div className="flex items-center gap-1.5 mb-3 px-3 py-1 bg-lyceum-blue/5 dark:bg-lyceum-blue/10 rounded-lg border border-lyceum-blue/10">
+                        <Star className="text-yellow-500 fill-yellow-500" size={14} />
+                        <span className="text-sm font-black text-lyceum-blue">{rating}/10</span>
                     </div>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 max-w-[200px]">Thank you for helping us improve our service!</p>
+                    <p className="text-sm font-bold text-green-700 dark:text-green-400 px-4">
+                        Your valuable feedback for <span className="text-gray-900 dark:text-white">{selectedStaffName}</span> has been successfully recorded.
+                    </p>
+                    <p className="text-[10px] text-gray-400 mt-4 uppercase tracking-widest font-black">Refreshes in 7 days</p>
                 </div>
             ) : (
                 <>

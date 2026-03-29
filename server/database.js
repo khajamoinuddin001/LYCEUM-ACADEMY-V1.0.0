@@ -63,6 +63,7 @@ export async function initDatabase() {
         must_reset_password BOOLEAN DEFAULT false,
         is_verified BOOLEAN DEFAULT false,
         is_active BOOLEAN DEFAULT true,
+        performance_settings JSONB DEFAULT '{"enrolled": false, "attendance": true, "tasks": true, "reviews": true, "tickets": true}',
         verification_token TEXT,
         google_id TEXT UNIQUE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -1003,8 +1004,9 @@ export async function initDatabase() {
     try {
       await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT');
       await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true');
+      await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS performance_settings JSONB DEFAULT '{"enrolled": false, "attendance": true, "tasks": true, "reviews": true, "tickets": true}'`);
     } catch (e) {
-      console.log('User columns (phone/is_active) might already exist');
+      console.log('User columns (phone/is_active/performance_settings) might already exist');
     }
 
     // SYSTEM SETTINGS (for Office Location etc)
