@@ -3763,6 +3763,59 @@ contact_id = $1, customer_name = $2, date = $3, description = $4, type = $5, sta
   }
 });
 
+// PRIVATE ADMINISTRATIVE TRANSACTION TRACKER (Hidden from regular users)
+router.get('/admin/finance-tracker', authenticateToken, requireRole('Admin'), async (req, res) => {
+  try {
+    const result = await query(`
+      SELECT t.*, ipr.internal_status, ipr.notes, ipr.received_amount 
+      FROM transactions t
+      LEFT JOIN internal_payment_records ipr ON t.id = ipr.transaction_id
+      WHERE t.type IN ('Invoice', 'Income')
+      ORDER BY t.date DESC, t.created_at DESC
+    `);
+    const transactions = result.rows.map(t => ({
+      ...t,
+      contactId: t.contact_id,
+      customerName: t.customer_name,
+      paymentMethod: t.payment_method,
+      dueDate: t.due_date,
+      amount: Number(t.amount),
+      lineItems: typeof t.line_items === 'string' ? JSON.parse(t.line_items) : (t.line_items || []),
+      internalStatus: t.internal_status || 'Pending',
+      notes: t.notes || '',
+      receivedAmount: Number(t.received_amount) || 0
+    }));
+    res.json(transactions);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/admin/finance-tracker/:id', authenticateToken, requireRole('Admin'), async (req, res) => {
+  try {
+    const { status, notes, receivedAmount } = req.body;
+    
+    // If only notes or receivedAmount are provided, we don't need to validate status
+    if (status && !['Pending', 'Approved', 'Refused'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid status' });
+    }
+
+    await query(`
+      INSERT INTO internal_payment_records (transaction_id, internal_status, notes, received_amount, updated_at)
+      VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+      ON CONFLICT (transaction_id) 
+      DO UPDATE SET 
+        internal_status = COALESCE($2, internal_payment_records.internal_status),
+        notes = COALESCE($3, internal_payment_records.notes),
+        received_amount = COALESCE($4, internal_payment_records.received_amount),
+        updated_at = CURRENT_TIMESTAMP
+    `, [req.params.id, status || null, notes !== undefined ? notes : null, receivedAmount !== undefined ? receivedAmount : null]);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.delete('/transactions/:id', authenticateToken, async (req, res) => {
   try {
     const transactionId = req.params.id ? req.params.id.trim() : '';

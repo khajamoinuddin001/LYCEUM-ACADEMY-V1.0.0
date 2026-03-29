@@ -626,6 +626,20 @@ export async function initDatabase() {
       )
     `);
     await client.query('CREATE INDEX IF NOT EXISTS idx_token_blacklist_hash ON token_blacklist(token_hash)');
+    
+    // Internal Payment Records table (for private administrative tracking)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS internal_payment_records (
+        transaction_id TEXT PRIMARY KEY,
+        internal_status TEXT CHECK (internal_status IN ('Pending', 'Approved', 'Refused')) DEFAULT 'Pending',
+        notes TEXT,
+        received_amount NUMERIC(15,2) DEFAULT 0,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await client.query('ALTER TABLE internal_payment_records ADD COLUMN IF NOT EXISTS notes TEXT');
+    await client.query('ALTER TABLE internal_payment_records ADD COLUMN IF NOT EXISTS received_amount NUMERIC(15,2) DEFAULT 0');
+    await client.query('CREATE INDEX IF NOT EXISTS idx_internal_payment_status ON internal_payment_records(internal_status)');
 
     // ANNOUNCEMENTS
     await client.query(`

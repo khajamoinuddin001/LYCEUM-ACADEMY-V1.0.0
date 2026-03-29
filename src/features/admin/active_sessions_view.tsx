@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import * as XLSX from 'xlsx';
 import { getToken, getApiKeys, toggleApiKey, deleteApiKey, setRateLimit, toggleGlobalPanic, getApiKeyLogs } from '@/utils/api';
 import type { ApiKey } from '@/types';
 
@@ -19,6 +20,19 @@ interface ActiveSession {
 interface SessionHistory extends ActiveSession {
     end_time: string;
     reason: string;
+}
+
+interface FinanceTransaction {
+    id: string;
+    customerName: string;
+    date: string;
+    type: string;
+    status: string;
+    amount: number;
+    internalStatus: 'Pending' | 'Approved' | 'Refused';
+    notes: string;
+    receivedAmount: number;
+    lineItems?: any[];
 }
 
 function getDeviceIcon(ua: string) {
@@ -97,13 +111,19 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
     const [sessions, setSessions] = useState<ActiveSession[]>([]);
     const [history, setHistory] = useState<SessionHistory[]>([]);
     const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
-    const [view, setView] = useState<'active' | 'history' | 'api-keys'>('active');
+    const [view, setView] = useState<'active' | 'history' | 'api-keys' | 'finance-tracker'>('active');
+    const [financeTransactions, setFinanceTransactions] = useState<FinanceTransaction[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [terminating, setTerminating] = useState<number | null>(null);
     const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
     const [search, setSearch] = useState('');
     const [roleFilter, setRoleFilter] = useState<string>('All');
+    const [filterMonth, setFilterMonth] = useState<string>('All');
+    const [filterYear, setFilterYear] = useState<string>('All');
+    const [internalStatusFilter, setInternalStatusFilter] = useState<string>('All');
+    const [currentPage, setCurrentPage] = useState(1);
+    const ITEMS_PER_PAGE = 50;
     const [panicking, setPanicking] = useState(false);
     const [editingLimitId, setEditingLimitId] = useState<number | null>(null);
     const [newLimitValue, setNewLimitValue] = useState<number>(60);
@@ -111,6 +131,70 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
     const [selectedKeyForLogs, setSelectedKeyForLogs] = useState<number | null>(null);
     const [keyLogs, setKeyLogs] = useState<any[]>([]);
     const [isLogsLoading, setIsLogsLoading] = useState(false);
+    const [expandedTxId, setExpandedTxId] = useState<string | null>(null);
+    const [showApprovedDetails, setShowApprovedDetails] = useState(false);
+
+    const toggleTxExpand = (id: string) => {
+        setExpandedTxId(prev => prev === id ? null : id);
+    };
+
+    const filteredTxs = useMemo(() => {
+        return financeTransactions.filter(t => {
+            const matchSearch = t.id.toLowerCase().includes(search.toLowerCase()) || 
+                t.customerName?.toLowerCase().includes(search.toLowerCase());
+            if (!matchSearch) return false;
+
+            if (filterMonth !== 'All' || filterYear !== 'All') {
+                const txDate = new Date(t.date);
+                if (isNaN(txDate.getTime())) return matchSearch;
+                if (filterMonth !== 'All' && txDate.getMonth().toString() !== filterMonth) return false;
+                if (filterYear !== 'All' && txDate.getFullYear().toString() !== filterYear) return false;
+            }
+            if (internalStatusFilter !== 'All' && t.internalStatus !== internalStatusFilter) return false;
+
+            return true;
+        });
+    }, [financeTransactions, search, filterMonth, filterYear, internalStatusFilter]);
+
+    const handleExportExcel = () => {
+        const exportData = filteredTxs.map(t => ({
+            'Transaction ID': t.id,
+            'Customer Name': t.customerName || 'N/A',
+            'Date': new Date(t.date).toLocaleDateString(),
+            'Type': t.type,
+            'Status': t.status,
+            'Amount': t.amount,
+            'Internal Record': t.internalStatus,
+            'Received ₹': t.internalStatus === 'Approved' ? (t.receivedAmount || 0) : 0,
+            'Notes': t.notes || ''
+        }));
+
+        const worksheet = XLSX.utils.json_to_sheet(exportData);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Transactions");
+        
+        // Auto-size columns
+        const maxWidths = exportData.reduce((acc: any, row: any) => {
+            Object.keys(row).forEach((key, i) => {
+                const val = String(row[key]);
+                acc[i] = Math.max(acc[i] || 0, val.length, key.length);
+            });
+            return acc;
+        }, []);
+        worksheet['!cols'] = maxWidths.map((w: number) => ({ w: w + 2 }));
+
+        const fileName = `Transactions_${filterMonth === 'All' ? 'All_Months' : 'Month_' + (parseInt(filterMonth)+1)}_${filterYear === 'All' ? 'All_Years' : filterYear}.xlsx`;
+        XLSX.writeFile(workbook, fileName);
+    };
+
+    const totalReceived = useMemo(() => {
+        return filteredTxs.reduce((sum, tx) => {
+            if (tx.internalStatus === 'Approved') {
+                return sum + (tx.receivedAmount || 0);
+            }
+            return sum;
+        }, 0);
+    }, [filteredTxs]);
 
     const fetchHistory = useCallback(async () => {
         try {
@@ -158,6 +242,18 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
         }
     }, []);
 
+    const fetchFinanceTracker = useCallback(async () => {
+        try {
+            const token = getToken();
+            const res = await fetch(`${API_BASE}/admin/finance-tracker`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (res.ok) setFinanceTransactions(await res.json());
+        } catch (e) {
+            console.error('Failed to fetch finance tracker:', e);
+        }
+    }, []);
+
     const handleUpdateLimit = async (id: number) => {
         try {
             await setRateLimit(id, newLimitValue);
@@ -179,10 +275,12 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
             return () => clearInterval(interval);
         } else if (view === 'history') {
             fetchHistory();
-        } else {
+        } else if (view === 'api-keys') {
             fetchApiKeys();
+        } else if (view === 'finance-tracker') {
+            fetchFinanceTracker();
         }
-    }, [fetchSessions, fetchHistory, fetchApiKeys, view]);
+    }, [fetchSessions, fetchHistory, fetchApiKeys, fetchFinanceTracker, view]);
 
     const handleToggleKey = async (id: number) => {
         try {
@@ -228,6 +326,32 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
             setApiKeys(prev => prev.filter(k => k.id !== id));
         } catch (e) {
             alert('Failed to delete API key');
+        }
+    };
+
+    const handleUpdateFinanceTracker = async (transactionId: string, data: { status?: 'Approved' | 'Refused' | 'Pending', notes?: string, receivedAmount?: number }) => {
+        try {
+            const token = getToken();
+            const res = await fetch(`${API_BASE}/admin/finance-tracker/${transactionId}`, {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}` 
+                },
+                body: JSON.stringify(data)
+            });
+            if (res.ok) {
+                setFinanceTransactions(prev => prev.map(t => 
+                    t.id === transactionId ? { 
+                        ...t, 
+                        internalStatus: data.status || t.internalStatus,
+                        notes: data.notes !== undefined ? data.notes : t.notes,
+                        receivedAmount: data.receivedAmount !== undefined ? data.receivedAmount : t.receivedAmount
+                    } : t
+                ));
+            }
+        } catch (e) {
+            console.error('Failed to update tracker:', e);
         }
     };
 
@@ -368,20 +492,28 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
             </div>
 
             {/* Stats cards */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <div className={`grid gap-4 mb-6 ${view === 'finance-tracker' ? 'grid-cols-2 lg:grid-cols-5' : 'grid-cols-2 lg:grid-cols-4'}`}>
                 {[
                     { label: 'Total Online', value: counts.total, color: 'from-blue-500 to-indigo-600', icon: '👥' },
                     { label: 'Admins', value: counts.Admin, color: 'from-purple-500 to-purple-700', icon: '🛡️' },
                     { label: 'Staff', value: counts.Staff, color: 'from-blue-400 to-cyan-600', icon: '💼' },
                     { label: 'Students', value: counts.Student, color: 'from-emerald-400 to-teal-600', icon: '🎓' },
+                    ...(view === 'finance-tracker' ? [{ label: 'Total Approved', value: `₹${totalReceived.toLocaleString()}`, color: 'from-orange-500 to-red-600', icon: '💰' }] : [])
                 ].map(stat => (
-                    <div key={stat.label} className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 p-4 flex items-center gap-4">
+                    <div 
+                        key={stat.label} 
+                        className={`bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 p-4 flex items-center gap-4 ${stat.label === 'Total Approved' ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
+                        onClick={stat.label === 'Total Approved' ? () => setShowApprovedDetails(true) : undefined}
+                    >
                         <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${stat.color} flex items-center justify-center text-xl shadow-md`}>
                             {stat.icon}
                         </div>
                         <div>
                             <div className="text-2xl font-black text-gray-900 dark:text-white">{stat.value}</div>
                             <div className="text-xs text-gray-500 dark:text-gray-400 font-medium">{stat.label}</div>
+                            {stat.label === 'Total Approved' && (
+                                <div className="text-[9px] text-orange-500 font-bold uppercase mt-0.5 animate-pulse">Click to view all</div>
+                            )}
                         </div>
                     </div>
                 ))}
@@ -405,11 +537,15 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
                     {[
                         { id: 'active', label: '🟢 Live Sessions' },
                         { id: 'history', label: '📋 Audit Log' },
-                        { id: 'api-keys', label: '🔑 API Keys' }
+                        { id: 'api-keys', label: '🔑 API Keys' },
+                        { id: 'finance-tracker', label: '📊 Transaction Tracker' }
                     ].map(v => (
                         <button
                             key={v.id}
-                            onClick={() => setView(v.id as any)}
+                            onClick={() => {
+                                setView(v.id as any);
+                                setCurrentPage(1);
+                            }}
                             className={`px-4 py-2.5 rounded-xl text-sm font-bold border transition-all ${view === v.id
                                 ? 'bg-indigo-600 text-white border-indigo-600 shadow-md'
                                 : 'bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-indigo-300'
@@ -421,18 +557,77 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
                 </div>
                 <div className="w-px h-8 bg-gray-200 dark:bg-gray-800 mx-1 hidden sm:block self-center" />
                 <div className="flex gap-2">
-                    {['All', 'Admin', 'Staff', 'Student'].map(role => (
-                        <button
-                            key={role}
-                            onClick={() => setRoleFilter(role)}
-                            className={`px-4 py-2.5 rounded-xl text-sm font-medium border transition-all ${roleFilter === role
-                                ? 'bg-blue-600 text-white border-blue-600 shadow-md'
-                                : 'bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-blue-300'
-                                }`}
-                        >
-                            {role}
-                        </button>
-                    ))}
+                    {view !== 'finance-tracker' ? (
+                        ['All', 'Admin', 'Staff', 'Student'].map(role => (
+                            <button
+                                key={role}
+                                onClick={() => setRoleFilter(role)}
+                                className={`px-4 py-2.5 rounded-xl text-sm font-medium border transition-all ${roleFilter === role
+                                    ? 'bg-blue-600 text-white border-blue-600 shadow-md'
+                                    : 'bg-white dark:bg-gray-900 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-blue-300'
+                                    }`}
+                            >
+                                {role}
+                            </button>
+                        ))
+                    ) : (
+                        <>
+                            <select
+                                value={filterMonth}
+                                onChange={e => {
+                                    setFilterMonth(e.target.value);
+                                    setCurrentPage(1);
+                                }}
+                                className="px-4 py-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-medium text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500/40 appearance-none"
+                            >
+                                <option value="All">All Months</option>
+                                {Array.from({length: 12}).map((_, i) => (
+                                    <option key={i} value={i.toString()}>
+                                        {new Date(2000, i, 1).toLocaleString('default', { month: 'short' })}
+                                    </option>
+                                ))}
+                            </select>
+                            <select
+                                value={filterYear}
+                                onChange={e => {
+                                    setFilterYear(e.target.value);
+                                    setCurrentPage(1);
+                                }}
+                                className="px-4 py-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-medium text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500/40 appearance-none"
+                            >
+                                <option value="All">All Years</option>
+                                {Array.from(new Set(financeTransactions.map(t => new Date(t.date).getFullYear())))
+                                    .filter((y: unknown): y is number => typeof y === 'number' && !isNaN(y))
+                                    .sort((a, b) => (b as number) - (a as number))
+                                    .map(year => (
+                                        <option key={year} value={String(year)}>{String(year)}</option>
+                                ))}
+                            </select>
+                            <select
+                                value={internalStatusFilter}
+                                onChange={e => {
+                                    setInternalStatusFilter(e.target.value);
+                                    setCurrentPage(1);
+                                }}
+                                className="px-4 py-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-medium text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500/40 appearance-none"
+                            >
+                                <option value="All">All Status</option>
+                                <option value="Approved">Approved</option>
+                                <option value="Refused">Refused</option>
+                                <option value="Pending">Pending</option>
+                            </select>
+                            <button
+                                onClick={handleExportExcel}
+                                className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-bold hover:bg-emerald-700 transition-all shadow-sm group"
+                                title="Export current view to Excel"
+                            >
+                                <svg className="w-4 h-4 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                <span>Export</span>
+                            </button>
+                        </>
+                    )}
                 </div>
             </div>
 
@@ -600,6 +795,224 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
                                         </td>
                                     </tr>
                                 ))}
+                            </tbody>
+                        </table>
+                    </div>
+                ) : view === 'finance-tracker' ? (
+                    <div className="flex-1 overflow-auto">
+                        <table className="w-full border-separate border-spacing-0">
+                            <thead className="sticky top-0 z-10 shadow-sm">
+                                <tr className="border-b border-gray-100 dark:border-gray-800 bg-gray-50/70 dark:bg-gray-800/50">
+                                    <th className="w-10 px-4 py-4"></th>
+                                    <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider px-2 py-4">Transaction Details</th>
+                                    <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider px-6 py-4">Type / Status</th>
+                                    <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider px-6 py-4">Amount</th>
+                                    <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider px-6 py-4">Internal Record</th>
+                                    <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider px-6 py-4">Received ₹</th>
+                                    <th className="text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider px-6 py-4">Private Notes</th>
+                                    <th className="text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider px-6 py-4">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
+                                {(() => {
+                                    const totalPages = Math.ceil(filteredTxs.length / ITEMS_PER_PAGE);
+                                    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+                                    const paginatedTxs = filteredTxs.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+
+                                    return (
+                                        <>
+                                            {paginatedTxs.map(tx => (
+                                                <React.Fragment key={tx.id}>
+                                                    <tr className={`transition-colors hover:bg-gray-50/60 dark:hover:bg-gray-800/40 ${expandedTxId === tx.id ? 'bg-gray-50/80 dark:bg-gray-800/60' : ''}`}>
+                                                        <td className="px-4 py-4 text-center cursor-pointer" onClick={() => toggleTxExpand(tx.id)}>
+                                                            <button className="p-1 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 transition-colors">
+                                                                <svg className={`w-4 h-4 transition-transform duration-200 ${expandedTxId === tx.id ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                                                </svg>
+                                                            </button>
+                                                        </td>
+                                                        <td className="px-2 py-4">
+                                                            <div className="flex flex-col">
+                                                                <span className="font-bold text-gray-900 dark:text-white text-sm">{tx.id}</span>
+                                                                <span className="text-xs text-gray-500">{tx.customerName || 'N/A'}</span>
+                                                                <span className="text-[10px] text-gray-400">{new Date(tx.date).toLocaleDateString()}</span>
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            <div className="flex flex-col gap-1">
+                                                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase w-fit ${
+                                                                    tx.type === 'Invoice' ? 'bg-green-100 text-green-700' :
+                                                                    tx.type === 'Expense' ? 'bg-red-100 text-red-700' :
+                                                                    'bg-blue-100 text-blue-700'
+                                                                }`}>
+                                                                    {tx.type}
+                                                                </span>
+                                                                <span className="text-[10px] text-gray-400 italic">{tx.status}</span>
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-6 py-4 text-sm font-black text-gray-900 dark:text-white">
+                                                            ₹{tx.amount.toLocaleString()}
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            <span className={`px-2.5 py-1 rounded-lg text-xs font-bold ${
+                                                                tx.internalStatus === 'Approved' ? 'bg-green-500/10 text-green-600' :
+                                                                tx.internalStatus === 'Refused' ? 'bg-red-500/10 text-red-600' :
+                                                                'bg-gray-100 text-gray-500'
+                                                            }`}>
+                                                                {tx.internalStatus}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            {tx.internalStatus === 'Approved' ? (
+                                                                <div className="relative w-32">
+                                                                    <input
+                                                                        type="number"
+                                                                        defaultValue={tx.receivedAmount || 0}
+                                                                        onBlur={(e) => {
+                                                                            const val = parseFloat(e.target.value) || 0;
+                                                                            if (val !== tx.receivedAmount) {
+                                                                                handleUpdateFinanceTracker(tx.id, { receivedAmount: val });
+                                                                            }
+                                                                        }}
+                                                                        onKeyDown={(e) => {
+                                                                            if (e.key === 'Enter') {
+                                                                                (e.target as HTMLInputElement).blur();
+                                                                            }
+                                                                        }}
+                                                                        className="w-full bg-transparent border-b border-dashed border-orange-200 dark:border-orange-800 focus:border-orange-500 py-1 text-sm font-bold text-gray-900 dark:text-white outline-none transition-all tabular-nums"
+                                                                    />
+                                                                    <span className="absolute left-0 -top-3 text-[9px] text-orange-500 font-bold uppercase">Received</span>
+                                                                </div>
+                                                            ) : (
+                                                                <div className="text-xs text-gray-400 italic">
+                                                                    Approve to record...
+                                                                </div>
+                                                            )}
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            <div className="group relative w-48">
+                                                                <input
+                                                                    type="text"
+                                                                    defaultValue={tx.notes || ''}
+                                                                    onBlur={(e) => {
+                                                                        if (e.target.value !== tx.notes) {
+                                                                            handleUpdateFinanceTracker(tx.id, { notes: e.target.value });
+                                                                        }
+                                                                    }}
+                                                                    onKeyDown={(e) => {
+                                                                        if (e.key === 'Enter') {
+                                                                            (e.target as HTMLInputElement).blur();
+                                                                        }
+                                                                    }}
+                                                                    placeholder="Add private note..."
+                                                                    className="w-full bg-transparent border-b border-dashed border-gray-200 dark:border-gray-700 focus:border-blue-500 py-1 text-xs text-gray-600 dark:text-gray-400 outline-none transition-all placeholder:italic"
+                                                                />
+                                                                <svg className="absolute right-0 bottom-1.5 w-3 h-3 text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                                                </svg>
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-6 py-4 text-right">
+                                                            <div className="flex items-center justify-end gap-2">
+                                                                <button
+                                                                    onClick={() => handleUpdateFinanceTracker(tx.id, { status: 'Approved' })}
+                                                                    className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-bold hover:bg-green-700 transition-all shadow-sm"
+                                                                >
+                                                                    Approve
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => handleUpdateFinanceTracker(tx.id, { status: 'Refused' })}
+                                                                    className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-bold hover:bg-red-700 transition-all shadow-sm"
+                                                                >
+                                                                    Refuse
+                                                                </button>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                    {expandedTxId === tx.id && (
+                                                        <tr className="bg-gray-50/50 dark:bg-gray-800/30">
+                                                            <td colSpan={8} className="px-6 py-6 border-t border-gray-100 dark:border-gray-800">
+                                                                <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-4 shadow-sm ml-10">
+                                                                    <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4 border-b border-gray-100 dark:border-gray-800 pb-2">Complete Item Details</h4>
+                                                                    {(!tx.lineItems || tx.lineItems.length === 0) ? (
+                                                                        <div className="text-sm text-gray-500 flex items-center gap-2">
+                                                                            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                                                                            No line items recorded for this transaction.
+                                                                        </div>
+                                                                    ) : (
+                                                                        <div className="overflow-x-auto">
+                                                                            <table className="w-full text-sm">
+                                                                                <thead className="bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400">
+                                                                                    <tr>
+                                                                                        <th className="text-left px-3 py-2 font-medium">Item Description</th>
+                                                                                        <th className="text-right px-3 py-2 font-medium">Qty</th>
+                                                                                        <th className="text-right px-3 py-2 font-medium">Rate</th>
+                                                                                        <th className="text-right px-3 py-2 font-medium">Total</th>
+                                                                                    </tr>
+                                                                                </thead>
+                                                                                <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-gray-700 dark:text-gray-300">
+                                                                                    {tx.lineItems.map((item: any, idx: number) => (
+                                                                                        <tr key={idx} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/50">
+                                                                                            <td className="px-3 py-2.5">
+                                                                                                <div className="font-semibold">{item.name || item.description || 'Unnamed Item'}</div>
+                                                                                                {item.description && item.description !== item.name && (
+                                                                                                    <div className="text-xs text-gray-500 mt-0.5">{item.description}</div>
+                                                                                                )}
+                                                                                            </td>
+                                                                                            <td className="px-3 py-2.5 text-right tabular-nums">{item.quantity || 1}</td>
+                                                                                            <td className="px-3 py-2.5 text-right tabular-nums">₹{Number(item.rate || item.price || 0).toLocaleString()}</td>
+                                                                                            <td className="px-3 py-2.5 text-right font-medium tabular-nums">₹{Number(item.amount || ((item.quantity || 1) * (item.rate || item.price || 0))).toLocaleString()}</td>
+                                                                                        </tr>
+                                                                                    ))}
+                                                                                </tbody>
+                                                                                <tfoot className="border-t-2 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/80">
+                                                                                    <tr>
+                                                                                        <td colSpan={3} className="text-right px-3 py-3 font-bold text-gray-900 dark:text-white">Net Amount</td>
+                                                                                        <td className="text-right px-3 py-3 font-black text-blue-600 dark:text-blue-400 tabular-nums text-base">₹{tx.amount.toLocaleString()}</td>
+                                                                                    </tr>
+                                                                                </tfoot>
+                                                                            </table>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    )}
+                                                </React.Fragment>
+                                            ))}
+                                            {totalPages > 1 && (
+                                                <tr>
+                                                    <td colSpan={8} className="px-6 py-4 bg-gray-50 dark:bg-gray-800/50">
+                                                        <div className="flex items-center justify-between">
+                                                            <div className="text-xs text-gray-500 dark:text-gray-400">
+                                                                Showing <span className="font-bold text-gray-900 dark:text-white">{startIndex + 1}-{Math.min(startIndex + ITEMS_PER_PAGE, filteredTxs.length)}</span> of <span className="font-bold text-gray-900 dark:text-white">{filteredTxs.length}</span> transactions
+                                                            </div>
+                                                            <div className="flex items-center gap-2">
+                                                                <button
+                                                                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                                                                    disabled={currentPage === 1}
+                                                                    className="px-3 py-1.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-xs font-bold text-gray-700 dark:text-gray-300 disabled:opacity-50 transition-all hover:bg-gray-50"
+                                                                >
+                                                                    Previous
+                                                                </button>
+                                                                <div className="text-xs font-bold text-gray-900 dark:text-white px-3">
+                                                                    Page {currentPage} of {totalPages}
+                                                                </div>
+                                                                <button
+                                                                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                                                                    disabled={currentPage === totalPages}
+                                                                    className="px-3 py-1.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 disabled:opacity-50 transition-all hover:bg-gray-50"
+                                                                >
+                                                                    Next
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </>
+                                    );
+                                })()}
                             </tbody>
                         </table>
                     </div>
@@ -891,6 +1304,105 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
                                     </>
                                 );
                             })()}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Approved Transactions Detail Modal */}
+            {showApprovedDetails && (
+                <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-fade-in">
+                    <div className="bg-white dark:bg-gray-900 rounded-[32px] shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden border border-gray-100 dark:border-gray-800">
+                        {/* Header */}
+                        <div className="px-8 py-6 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between bg-gradient-to-r from-orange-50/50 to-red-50/50 dark:from-orange-950/20 dark:to-red-950/20">
+                            <div>
+                                <h3 className="text-2xl font-black text-gray-900 dark:text-white flex items-center gap-3">
+                                    <span className="w-10 h-10 bg-orange-500 text-white rounded-xl flex items-center justify-center shadow-lg">💰</span>
+                                    Approved Payments Detailed View
+                                </h3>
+                                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 font-medium">
+                                    Showing all {filteredTxs.filter(t => t.internalStatus === 'Approved').length} approved transactions for the selected period
+                                </p>
+                            </div>
+                            <button 
+                                onClick={() => setShowApprovedDetails(false)}
+                                className="p-3 hover:bg-white/80 dark:hover:bg-gray-800 rounded-2xl transition-all text-gray-400 hover:text-gray-900 dark:hover:text-white shadow-sm border border-transparent hover:border-gray-200"
+                            >
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+
+                        {/* Summary Bar */}
+                        <div className="px-8 py-4 bg-orange-500 text-white flex items-center justify-between shadow-inner">
+                            <div className="flex items-center gap-8">
+                                <div>
+                                    <div className="text-[10px] font-bold uppercase opacity-80">Total Combined Received</div>
+                                    <div className="text-2xl font-black">₹{totalReceived.toLocaleString()}</div>
+                                </div>
+                                <div className="w-px h-10 bg-white/20" />
+                                <div>
+                                    <div className="text-[10px] font-bold uppercase opacity-80">Transaction Count</div>
+                                    <div className="text-2xl font-black">{filteredTxs.filter(t => t.internalStatus === 'Approved').length}</div>
+                                </div>
+                            </div>
+                            <div className="hidden md:block">
+                                <span className="px-4 py-2 bg-white/20 rounded-xl text-sm font-bold backdrop-blur-md">
+                                    {filterMonth === 'All' ? 'All Months' : new Date(2000, parseInt(filterMonth), 1).toLocaleString('default', { month: 'long' })} {filterYear}
+                                </span>
+                            </div>
+                        </div>
+
+                        {/* List */}
+                        <div className="flex-1 overflow-auto p-8">
+                            <div className="grid gap-4">
+                                {filteredTxs.filter(t => t.internalStatus === 'Approved').map((tx) => (
+                                    <div 
+                                        key={tx.id} 
+                                        className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl p-5 flex items-center justify-between hover:border-orange-200 dark:hover:border-orange-900/40 transition-all hover:shadow-xl group relative overflow-hidden"
+                                    >
+                                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-orange-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                        
+                                        <div className="flex items-center gap-5">
+                                            <div className="w-14 h-14 rounded-2xl bg-orange-50 dark:bg-orange-900/20 text-orange-600 flex items-center justify-center font-black text-xs shadow-sm border border-orange-100 dark:border-orange-800 flex-shrink-0">
+                                                {new Date(tx.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                                            </div>
+                                            <div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-tight">{tx.id}</span>
+                                                    <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold uppercase ${
+                                                        tx.type === 'Invoice' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
+                                                    }`}>{tx.type}</span>
+                                                </div>
+                                                <div className="text-base font-bold text-gray-700 dark:text-gray-300 mt-0.5">{tx.customerName || 'No Name'}</div>
+                                                <div className="flex items-center gap-3 mt-1.5">
+                                                    <span className="flex items-center gap-1 text-[11px] text-gray-500 dark:text-gray-400 font-medium">
+                                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                                                        {tx.notes || 'No notes added'}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="text-right flex flex-col items-end gap-1">
+                                            <div className="text-xs text-gray-400 font-bold uppercase tracking-wider">Approved Receipt</div>
+                                            <div className="text-2xl font-black text-gray-900 dark:text-white">₹{(tx.receivedAmount || 0).toLocaleString()}</div>
+                                            <div className="text-[10px] text-gray-400 italic">Invoice Total: ₹{tx.amount.toLocaleString()}</div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Modal Footer */}
+                        <div className="px-8 py-5 bg-gray-50 dark:bg-gray-800/30 border-t border-gray-100 dark:border-gray-800 flex justify-end items-center">
+                            <button 
+                                onClick={() => setShowApprovedDetails(false)}
+                                className="px-8 py-3 bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-2xl text-sm font-black hover:bg-gray-800 dark:hover:bg-gray-100 transition-all shadow-lg active:scale-95"
+                            >
+                                Done Viewing
+                            </button>
                         </div>
                     </div>
                 </div>
