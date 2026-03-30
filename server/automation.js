@@ -186,17 +186,17 @@ export async function evaluateAutomation(triggerEvent, payload) {
 
                             if (type === 'student' || type === 'client') {
                                 // Priority 1: Direct from payload
-                                if (payload.client_email) { email = payload.client_email; sourceField = 'client_email'; }
-                                else if (payload.student_email) { email = payload.student_email; sourceField = 'student_email'; }
-                                else if (payload.email) { email = payload.email; sourceField = 'email'; }
-                                else if (payload.contact_email) { email = payload.contact_email; sourceField = 'contact_email'; }
+                                if (isValidEmail(payload.client_email)) { email = payload.client_email; sourceField = 'client_email'; }
+                                else if (isValidEmail(payload.student_email)) { email = payload.student_email; sourceField = 'student_email'; }
+                                else if (isValidEmail(payload.email)) { email = payload.email; sourceField = 'email'; }
+                                else if (isValidEmail(payload.contact_email)) { email = payload.contact_email; sourceField = 'contact_email'; }
 
                                 // Priority 2: Fallback to database lookup if contact_id exists
                                 const contactId = payload.contact_id || payload.contactId;
                                 if (!email && contactId) {
                                     try {
                                         const contactRes = await query("SELECT email FROM contacts WHERE id = $1", [contactId]);
-                                        if (contactRes.rows.length > 0 && contactRes.rows[0].email) {
+                                        if (contactRes.rows.length > 0 && isValidEmail(contactRes.rows[0].email)) {
                                             email = contactRes.rows[0].email;
                                             sourceField = 'database:contacts.email';
                                         }
@@ -205,9 +205,10 @@ export async function evaluateAutomation(triggerEvent, payload) {
                                     }
                                 }
                             } else if (type === 'staff') {
-                                if (payload.staff_email) { email = payload.staff_email; sourceField = 'staff_email'; }
-                                else if (payload.assigned_to_email) { email = payload.assigned_to_email; sourceField = 'assigned_to_email'; }
+                                if (isValidEmail(payload.staff_email)) { email = payload.staff_email; sourceField = 'staff_email'; }
+                                else if (isValidEmail(payload.assigned_to_email)) { email = payload.assigned_to_email; sourceField = 'assigned_to_email'; }
                             } else if (type === 'admin') {
+
                                 try {
                                     const admins = await query("SELECT email FROM users WHERE role = 'Admin'");
                                     admins.rows.forEach(row => {

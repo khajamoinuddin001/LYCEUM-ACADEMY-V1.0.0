@@ -548,13 +548,13 @@ router.get('/admin/api-keys', authenticateToken, requireRole('Admin'), async (re
        LEFT JOIN users u ON k.user_id = u.id 
        ORDER BY k.created_at DESC`
     );
-    
+
     // Enrich with usage data
     const enrichedKeys = result.rows.map(key => ({
       ...key,
       usage: getApiKeyUsage(key.id, key.rate_limit)
     }));
-    
+
     res.json({
       keys: enrichedKeys,
       globalPanic: isPanicked
@@ -594,10 +594,10 @@ router.patch('/admin/api-keys/:id/toggle', authenticateToken, requireRole('Admin
     if (rows.length === 0) {
       return res.status(404).json({ error: 'API key not found' });
     }
-    
+
     const newStatus = rows[0].status === 'active' ? 'disabled' : 'active';
     await query('UPDATE api_keys SET status = $1 WHERE id = $2', [newStatus, req.params.id]);
-    
+
     res.json({ status: newStatus });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -819,6 +819,7 @@ const transformVisaOperation = (row, user) => {
     vopNumber: row.vop_number,
     contactId: row.contact_id,
     name: row.c_name || row.name,
+
     phone: row.c_phone || row.phone,
     country: row.c_app_country || row.c_country || row.country,
     status: row.status,
@@ -2328,16 +2329,16 @@ router.put('/visa-operations/:id/ds-160', authenticateToken, async (req, res) =>
 
     const existingDsData = currentOp.rows[0].ds_data || {};
     let mergedDsData;
-    
+
     if (Array.isArray(dsData)) {
-        // If dsData is an array, it's the new Multi-Group format
-        mergedDsData = dsData;
+      // If dsData is an array, it's the new Multi-Group format
+      mergedDsData = dsData;
     } else if (dsData && dsData.dsGroups) {
-        // Handle case where it might be wrapped in an object with dsGroups key
-        mergedDsData = dsData.dsGroups;
+      // Handle case where it might be wrapped in an object with dsGroups key
+      mergedDsData = dsData.dsGroups;
     } else {
-        // Legacy single object merge
-        mergedDsData = { ...(typeof existingDsData === 'object' && !Array.isArray(existingDsData) ? existingDsData : {}), ...dsData };
+      // Legacy single object merge
+      mergedDsData = { ...(typeof existingDsData === 'object' && !Array.isArray(existingDsData) ? existingDsData : {}), ...dsData };
     }
 
     // Update both JSON and dedicated columns
@@ -2531,7 +2532,7 @@ router.post('/visa-operations/:id/ds-160/dependency/document', authenticateToken
     // Map 'index' (0-based for deps) to 'flowIndex' (1-based for the new unified route)
     const { index } = req.body;
     const flowIndex = index !== undefined ? parseInt(index) + 1 : 1;
-    
+
     // Construct a new request body for internal redirection or just call the logic
     // For simplicity, we'll just redirect the parameters to a shared function
     // But since this is a route, we'll just re-implement the call slightly
@@ -3754,7 +3755,7 @@ router.get('/admin/finance-tracker', authenticateToken, requireRole('Admin'), as
 router.post('/admin/finance-tracker/:id', authenticateToken, requireRole('Admin'), async (req, res) => {
   try {
     const { status, notes, receivedAmount } = req.body;
-    
+
     // If only notes or receivedAmount are provided, we don't need to validate status
     if (status && !['Pending', 'Approved', 'Refused'].includes(status)) {
       return res.status(400).json({ error: 'Invalid status' });
@@ -4795,7 +4796,7 @@ RETURNING *
       created_at: updatedTicket.createdAt ? new Date(updatedTicket.createdAt).toLocaleDateString() : 'N/A',
       solved_at: updatedTicket.solvedAt ? new Date(updatedTicket.solvedAt).toLocaleDateString() : 'N/A',
       client_name: updatedTicket.contactName || 'Client',
-      client_email: updatedTicket.contactEmail || 'N/A'
+      client_email: updatedTicket.contactEmail || null
     };
 
     // 1. General Update
@@ -5440,7 +5441,7 @@ VALUES($1, $2, 'Reception', $3)
 
     const payload = {
       ...v,
-      client_email: clientEmail || v.company,
+      client_email: clientEmail,
       visitor_name: v.name,
       visitor_phone: v.company,
       staff_email: v.staff_email,
@@ -5596,7 +5597,7 @@ name = $1,
 
     const payload = {
       ...v,
-      client_email: clientEmail || v.company,
+      client_email: clientEmail,
       visitor_name: v.name,
       visitor_phone: v.company,
       staff_email: v.staff_email,
@@ -6128,10 +6129,10 @@ router.get('/holidays', authenticateToken, async (req, res) => {
 router.post('/holidays', authenticateToken, requireRole('Admin'), async (req, res) => {
   try {
     const { date, endDate, description } = req.body;
-    
+
     if (!endDate || endDate === date) {
       const result = await query(
-        'INSERT INTO holidays (date, description) VALUES ($1, $2) ON CONFLICT (date) DO UPDATE SET description = EXCLUDED.description RETURNING *', 
+        'INSERT INTO holidays (date, description) VALUES ($1, $2) ON CONFLICT (date) DO UPDATE SET description = EXCLUDED.description RETURNING *',
         [date, description]
       );
       return res.json(result.rows[0]);
@@ -6140,11 +6141,11 @@ router.post('/holidays', authenticateToken, requireRole('Admin'), async (req, re
     // Handle range
     let start = new Date(date);
     let end = new Date(endDate);
-    
+
     if (end < start) {
-        let temp = start;
-        start = end;
-        end = temp;
+      let temp = start;
+      start = end;
+      end = temp;
     }
 
     const inserted = [];
@@ -6156,7 +6157,7 @@ router.post('/holidays', authenticateToken, requireRole('Admin'), async (req, re
       );
       inserted.push(result.rows[0]);
     }
-    
+
     res.json({ success: true, count: inserted.length, holidays: inserted });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -6206,7 +6207,7 @@ router.get('/leaves', authenticateToken, async (req, res) => {
 
     sql += ` ORDER BY l.created_at DESC`;
     const result = await query(sql, params);
-    
+
     // If Admin, enrich with stats
     if (req.user.role === 'Admin') {
       const enriched = await Promise.all(result.rows.map(async (row) => {
@@ -6222,12 +6223,12 @@ router.get('/leaves', authenticateToken, async (req, res) => {
         `, [row.user_id]);
 
         const takenInQuarter = prevLeavesRes.rows.reduce((acc, l) => {
-            const lMonth = new Date(l.start_date).getUTCMonth() + 1;
-            if (lMonth >= quarterStartMonth && lMonth <= monthNum) {
-                const diff = Math.round((new Date(l.end_date) - new Date(l.start_date)) / (1000 * 3600 * 24)) + 1;
-                return acc + diff;
-            }
-            return acc;
+          const lMonth = new Date(l.start_date).getUTCMonth() + 1;
+          if (lMonth >= quarterStartMonth && lMonth <= monthNum) {
+            const diff = Math.round((new Date(l.end_date) - new Date(l.start_date)) / (1000 * 3600 * 24)) + 1;
+            return acc + diff;
+          }
+          return acc;
         }, 0);
 
         const lastLeaveRes = await query(`
@@ -6336,13 +6337,13 @@ export const calculatePerformanceForUser = async (userId, month, year) => {
       return d >= s && d <= e;
     });
     if (isOnLeave) continue;
-    
+
     // If it's today, only count it as a target working day if a log exists or shift should have ended
     if (isCurrentMonth && dateStr === now.toISOString().split('T')[0]) {
       const todayLog = (await query('SELECT 1 FROM attendance_logs WHERE user_id = $1 AND date = $2::date', [userId, dateStr])).rows[0];
       if (!todayLog) continue; // Don't penalize for today if haven't checked in yet or shift hasn't passed
     }
-    
+
     targetWorkingDays++;
   }
 
@@ -6435,7 +6436,7 @@ export const calculatePerformanceForUser = async (userId, month, year) => {
   if (useTix) activeCount++;
 
   const weight = activeCount > 0 ? (1 / activeCount) : 0;
-  
+
   let totalScore = 0;
   if (useAtt) totalScore += attendanceScore * weight;
   if (useTasks) totalScore += taskScore * weight;
@@ -6527,7 +6528,7 @@ async function getPipConsecutiveMonths(userId, month, year, pipThreshold = 60) {
   for (let i = 0; i < 24; i++) { // Check up to 2 years back
     // 1. Try to find a snapshot for this month
     const snap = (await query('SELECT total_score, metrics_snapshot FROM staff_performance_records WHERE user_id = $1 AND month = $2 AND year = $3', [userId, currM, currY])).rows[0];
-    
+
     let isPip = false;
     if (snap && snap.total_score !== null && snap.metrics_snapshot) {
       // Use the exact same rounding as the UI for consistency
@@ -6603,7 +6604,7 @@ export const generatePayrollForMonth = async (month, year) => {
     if (typeof rawWorkingDays === 'string') {
       try { rawWorkingDays = JSON.parse(rawWorkingDays); } catch (e) { rawWorkingDays = null; }
     }
-    
+
     let workingDayIndices = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'].map(d => dayMap[d]);
     if (rawWorkingDays && Array.isArray(rawWorkingDays) && rawWorkingDays.length > 0) {
       workingDayIndices = rawWorkingDays.map(d => dayMap[d]);
@@ -6617,7 +6618,7 @@ export const generatePayrollForMonth = async (month, year) => {
       // Use middle of day to avoid timezone shifting for DATE strings
       const logStr = typeof log.date === 'string' ? log.date.split('T')[0] : new Date(log.date).toISOString().split('T')[0];
       const logDay = new Date(`${logStr}T12:00:00`).getDay();
-      
+
       if (workingDayIndices.includes(logDay)) {
         let dailyPresence = 1.0;
 
@@ -6637,7 +6638,7 @@ export const generatePayrollForMonth = async (month, year) => {
           const co = new Date(log.check_out);
           const coH = co.getHours();
           const coM = co.getMinutes();
-          
+
           if (coH < shH || (coH === shH && coM < shM)) {
             dailyPresence -= 0.5;
           }
@@ -6674,8 +6675,8 @@ export const generatePayrollForMonth = async (month, year) => {
       const dayOfWeek = new Date(`${dateStr}T12:00:00`).getDay();
       if (workingDayIndices.includes(dayOfWeek)) {
         const isHoliday = holidaysRes.rows.some(h => {
-           const hStr = typeof h.date === 'string' ? h.date.split('T')[0] : new Date(h.date).toISOString().split('T')[0];
-           return hStr === dateStr;
+          const hStr = typeof h.date === 'string' ? h.date.split('T')[0] : new Date(h.date).toISOString().split('T')[0];
+          return hStr === dateStr;
         });
         if (!isHoliday) totalScheduledDaysForUser++;
       }
@@ -6701,8 +6702,8 @@ export const generatePayrollForMonth = async (month, year) => {
       const dayOfWeek = new Date(`${dateStr}T12:00:00`).getDay();
       if (workingDayIndices.includes(dayOfWeek)) {
         const isHoliday = holidaysRes.rows.some(h => {
-           const hStr = typeof h.date === 'string' ? h.date.split('T')[0] : new Date(h.date).toISOString().split('T')[0];
-           return hStr === dateStr;
+          const hStr = typeof h.date === 'string' ? h.date.split('T')[0] : new Date(h.date).toISOString().split('T')[0];
+          return hStr === dateStr;
         });
         if (!isHoliday) activeScheduledDays++;
       }
@@ -6729,13 +6730,13 @@ export const generatePayrollForMonth = async (month, year) => {
         const dayMonth = d.getUTCMonth() + 1;
         const dayYear = d.getUTCFullYear();
         const dayOfWeek = d.getUTCDay();
-        
+
         if (dayMonth === Number(month) && dayYear === Number(year) && dayDate >= effectiveStartDay) {
           if (workingDayIndices.includes(dayOfWeek)) {
             const dateStr = `${dayYear}-${String(dayMonth).padStart(2, '0')}-${String(dayDate).padStart(2, '0')}`;
             const isHoliday = holidaysRes.rows.some(h => {
-                const hStr = typeof h.date === 'string' ? h.date.split('T')[0] : new Date(h.date).toISOString().split('T')[0];
-                return hStr === dateStr;
+              const hStr = typeof h.date === 'string' ? h.date.split('T')[0] : new Date(h.date).toISOString().split('T')[0];
+              return hStr === dateStr;
             });
             if (!isHoliday) {
               if (paidLeaveDaysUsed < availablePaidLeaves) paidLeaveDaysUsed++;
@@ -6753,7 +6754,7 @@ export const generatePayrollForMonth = async (month, year) => {
     // --- DEDUCTIONS ---
     const absentDaysInsideTenure = Math.max(0, userWorkingDays - presentOnScheduledDays - paidLeaveDaysUsed - unpaidLeaveDays);
     const daysBeforeJoined = standardWorkingDaysInMonth - userWorkingDays;
-    
+
     const absentDeduction = (absentDaysInsideTenure + unpaidLeaveDays + daysBeforeJoined) * payPerDay;
     const lateDeduction = 0; // Replaced by half-day presence deduction for >15 min late
     const finalSalary = Math.round(Math.max(0, baseSalary - absentDeduction - lateDeduction));
@@ -6892,17 +6893,17 @@ router.get('/attendance/performance/stats', authenticateToken, async (req, res) 
 
     if (req.user.role === 'Admin' && !targetUserId) {
       const users = (await query('SELECT id, name, role, performance_settings FROM users WHERE role != \'Student\' AND performance_settings->>\'enrolled\' = \'true\'')).rows;
-      
+
       // Check if we are looking at a past month that might be finalized
       const now = new Date();
       const isPastMonth = (year < now.getFullYear()) || (year === now.getFullYear() && month < (now.getMonth() + 1));
-      
+
       // Fetch Snapshots
       const snapshots = (await query('SELECT * FROM staff_performance_records WHERE month = $1 AND year = $2', [month, year])).rows;
-      
+
       const enrichedReport = await Promise.all(users.map(async u => {
         const snap = snapshots.find(s => s.user_id === u.id);
-        
+
         // If snapshot exists and it's a past month, use it
         if (snap && isPastMonth && snap.metrics_snapshot) {
           const perfConfig = typeof u.performance_settings === 'string' ? JSON.parse(u.performance_settings || '{}') : (u.performance_settings || {});
@@ -6942,9 +6943,9 @@ router.get('/attendance/performance/stats', authenticateToken, async (req, res) 
       const effectiveUserId = (req.user.role === 'Admin' && targetUserId) ? targetUserId : req.user.id;
       const now = new Date();
       const isPastMonth = (year < now.getFullYear()) || (year === now.getFullYear() && month < (now.getMonth() + 1));
-      
+
       const snap = (await query('SELECT * FROM staff_performance_records WHERE user_id = $1 AND month = $2 AND year = $3', [effectiveUserId, month, year])).rows[0];
-      
+
       const userRecord = (await query('SELECT name, performance_settings FROM users WHERE id = $1', [effectiveUserId])).rows[0] || {};
       const perfConfig = typeof userRecord.performance_settings === 'string' ? JSON.parse(userRecord.performance_settings || '{}') : (userRecord.performance_settings || {});
 
@@ -6964,7 +6965,7 @@ router.get('/attendance/performance/stats', authenticateToken, async (req, res) 
       } else {
         stats = await calculatePerformanceForUser(effectiveUserId, month, year);
       }
-      
+
       const pipThreshold = Number(perfConfig.pip_threshold !== undefined ? perfConfig.pip_threshold : 60);
       const isPip = Math.round(Number(stats.totalScore)) < pipThreshold;
       const pipCount = isPip ? await getPipConsecutiveMonths(effectiveUserId, month, year, pipThreshold) : 0;
@@ -6975,7 +6976,7 @@ router.get('/attendance/performance/stats', authenticateToken, async (req, res) 
         const d = new Date(year, month - 1 - i, 1);
         const m = d.getMonth() + 1;
         const y = d.getFullYear();
-        
+
         // Try to get score from record first
         const histSnap = (await query('SELECT total_score FROM staff_performance_records WHERE user_id = $1 AND month = $2 AND year = $3', [effectiveUserId, m, y])).rows[0];
         if (histSnap) {
@@ -7004,7 +7005,7 @@ router.get('/attendance/performance/stats', authenticateToken, async (req, res) 
 router.post('/attendance/performance/pip', authenticateToken, requireRole('Admin'), async (req, res) => {
   try {
     const { userId, month, year, isPip, notes } = req.body;
-    
+
     // UPSERT snapshot to record PIP status
     await query(`
       INSERT INTO staff_performance_records (user_id, month, year, is_pip, pip_notes)
@@ -7082,7 +7083,7 @@ router.put('/attendance/payslips/:id', authenticateToken, requireRole('Admin'), 
     const oth = parseFloat(overtime_hours) || 0;
 
     // Recalculate based on existing base data
-    const standardDays = data.standardWorkingDaysInMonth || data.workingDays || 21; 
+    const standardDays = data.standardWorkingDaysInMonth || data.workingDays || 21;
     const shiftH = data.shiftHours || 8;
     const dailyRate = data.baseSalary / standardDays;
     const hourlyRate = dailyRate / shiftH;
