@@ -24,6 +24,7 @@ import {
     Clock,
     Search,
     X,
+    XCircle,
     Lock,
     EyeOff,
     KeyRound,
@@ -762,14 +763,41 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                             </div>
                             <div className={`p-4 rounded-xl border ${data.adminStatus === 'accepted' ? 'bg-emerald-50 border-emerald-100' : 'bg-slate-50 border-slate-200'}`}>
                                 <span className="text-[10px] font-bold text-slate-500 uppercase block mb-2">Academy Director Verification</span>
-                                {data.adminStatus === 'accepted' ? (
+                                 {data.adminStatus === 'accepted' ? (
                                     <div className="flex items-center gap-2 text-emerald-600 font-bold text-xs">
                                         <ShieldCheck size={14} /> Verified
                                     </div>
+                                ) : data.adminStatus === 'rejected' ? (
+                                    <div className="space-y-2">
+                                        <div className="flex items-center gap-2 text-rose-600 font-bold text-xs">
+                                            <XCircle size={14} /> Rejected
+                                        </div>
+                                        {data.rejectionReason && (
+                                            <div className="text-[10px] font-medium text-rose-500 bg-rose-50 p-2 rounded-lg border border-rose-100">
+                                                Reason: {data.rejectionReason}
+                                            </div>
+                                        )}
+                                        <button 
+                                            onClick={() => handleDsStatusUpdate(groupIndex, flowIndex, { adminStatus: 'pending', rejectionReason: '' })}
+                                            className="w-full py-1 bg-white text-slate-500 border border-slate-200 rounded text-[8px] font-bold uppercase hover:bg-slate-50 transition-colors"
+                                        >
+                                            Reset Status
+                                        </button>
+                                    </div>
                                 ) : (
                                     <div className="flex gap-1.5">
-                                        <button onClick={() => handleDsStatusUpdate(groupIndex, flowIndex, { adminStatus: 'accepted' })} className="flex-1 py-1.5 bg-emerald-600 text-white rounded-lg text-[9px] font-bold uppercase hover:bg-emerald-700">Accept</button>
-                                        <button onClick={() => handleDsStatusUpdate(groupIndex, flowIndex, { adminStatus: 'rejected' })} className="flex-1 py-1.5 bg-rose-600 text-white rounded-lg text-[9px] font-bold uppercase hover:bg-rose-700">Reject</button>
+                                        <button onClick={() => handleDsStatusUpdate(groupIndex, flowIndex, { adminStatus: 'accepted', rejectionReason: '' })} className="flex-1 py-1.5 bg-emerald-600 text-white rounded-lg text-[9px] font-bold uppercase hover:bg-emerald-700">Accept</button>
+                                        <button 
+                                            onClick={() => {
+                                                const reason = window.prompt('Enter rejection reason:');
+                                                if (reason !== null) {
+                                                    handleDsStatusUpdate(groupIndex, flowIndex, { adminStatus: 'rejected', rejectionReason: reason });
+                                                }
+                                            }} 
+                                            className="flex-1 py-1.5 bg-rose-600 text-white rounded-lg text-[9px] font-bold uppercase hover:bg-rose-700"
+                                        >
+                                            Reject
+                                        </button>
                                     </div>
                                 )}
                             </div>

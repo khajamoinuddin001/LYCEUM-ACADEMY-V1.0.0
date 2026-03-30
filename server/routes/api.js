@@ -2619,7 +2619,7 @@ router.put('/visa-operations/:id/ds-160/status', authenticateToken, async (req, 
         SET ds_data = $1,
             student_status = COALESCE($3, student_status),
             admin_status = COALESCE($4, admin_status),
-            rejection_reason = COALESCE($5, rejection_reason),
+            rejection_reason = $5,
             admin_name = COALESCE($6, admin_name)
         WHERE id = $2
         RETURNING *
