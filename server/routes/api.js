@@ -828,7 +828,16 @@ const transformVisaOperation = (row, user) => {
     cgiData,
     slotBookingData,
     visaInterviewData,
-    dsData: Array.isArray(dsData) ? dsData : {
+    dsData: Array.isArray(dsData) ? dsData.map((g, i) => i === 0 ? {
+      ...g,
+      main: {
+        ...g.main,
+        studentStatus: row.student_status || g.main?.studentStatus || 'pending',
+        adminStatus: row.admin_status || g.main?.adminStatus || 'pending',
+        rejectionReason: row.rejection_reason || g.main?.rejectionReason,
+        adminName: row.admin_name || g.main?.adminName
+      }
+    } : g) : {
       ...dsData,
       confirmationDocumentId: row.confirmation_document_id || dsData?.confirmationDocumentId,
       confirmationDocumentName: row.confirmation_document_name || dsData?.confirmationDocumentName,

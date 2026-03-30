@@ -761,7 +761,7 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                                 )}
                             </div>
                             <div className={`p-4 rounded-xl border ${data.adminStatus === 'accepted' ? 'bg-emerald-50 border-emerald-100' : 'bg-slate-50 border-slate-200'}`}>
-                                <span className="text-[10px] font-bold text-slate-500 uppercase block mb-2">Staff Verification</span>
+                                <span className="text-[10px] font-bold text-slate-500 uppercase block mb-2">Academy Director Verification</span>
                                 {data.adminStatus === 'accepted' ? (
                                     <div className="flex items-center gap-2 text-emerald-600 font-bold text-xs">
                                         <ShieldCheck size={14} /> Verified
@@ -989,24 +989,38 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                                             </td>
                                             <td className="px-6 py-4 text-right">
                                                 <div className="flex items-center justify-end gap-2">
-                                                    {op.dsData?.studentStatus === 'accepted' && op.dsData?.adminStatus === 'pending' ||
-                                                        op.dsData?.dependencies?.some((d: any) => d.studentStatus === 'accepted' && d.adminStatus === 'pending') ? (
-                                                        <div className="flex items-center gap-1.5 px-2 py-1 bg-purple-50 border border-purple-200 rounded-md animate-pulse">
-                                                            <div className="w-1.5 h-1.5 bg-purple-500 rounded-full"></div>
-                                                            <span className="text-[9px] font-black text-purple-700 uppercase tracking-tighter">Waiting for Admin Approval</span>
-                                                        </div>
-                                                    ) : (op.dsData?.confirmationDocumentId &&
-                                                        (!op.dsData?.dependencies?.length || op.dsData.dependencies.every((d: any) => d.confirmationDocumentId))) ? (
-                                                        <div className="flex items-center gap-1.5 px-2 py-1 bg-emerald-50 border border-emerald-200 rounded-md">
-                                                            <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div>
-                                                            <span className="text-[9px] font-black text-emerald-700 uppercase tracking-tighter">Process Completed</span>
-                                                        </div>
-                                                    ) : op.dsData?.adminStatus === 'accepted' && (
-                                                        <div className="flex items-center gap-1.5 px-2 py-1 bg-lyceum-blue/5 border border-lyceum-blue/10 rounded-md">
-                                                            <div className="w-1.5 h-1.5 bg-lyceum-blue rounded-full animate-pulse"></div>
-                                                            <span className="text-[9px] font-black text-lyceum-blue uppercase tracking-tighter">Waiting for DS-160 Submission</span>
-                                                        </div>
-                                                    )}
+                                                    {(() => {
+                                                        const mainDsData = Array.isArray(op.dsData) ? op.dsData[0]?.main : op.dsData;
+                                                        const allDependencies = Array.isArray(op.dsData)
+                                                            ? op.dsData.flatMap((g: any) => g.dependencies || [])
+                                                            : (op.dsData?.dependencies || []);
+
+                                                        if ((mainDsData?.studentStatus === 'accepted' && mainDsData?.adminStatus === 'pending') ||
+                                                            allDependencies.some((d: any) => d.studentStatus === 'accepted' && d.adminStatus === 'pending')) {
+                                                            return (
+                                                                <div className="flex items-center gap-1.5 px-2 py-1 bg-purple-50 border border-purple-200 rounded-md animate-pulse">
+                                                                    <div className="w-1.5 h-1.5 bg-purple-500 rounded-full"></div>
+                                                                    <span className="text-[9px] font-black text-purple-700 uppercase tracking-tighter">Waiting for Admin Approval</span>
+                                                                </div>
+                                                            );
+                                                        } else if (mainDsData?.confirmationDocumentId &&
+                                                            (allDependencies.every((d: any) => d.confirmationDocumentId))) {
+                                                            return (
+                                                                <div className="flex items-center gap-1.5 px-2 py-1 bg-emerald-50 border border-emerald-200 rounded-md">
+                                                                    <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div>
+                                                                    <span className="text-[9px] font-black text-emerald-700 uppercase tracking-tighter">Process Completed</span>
+                                                                </div>
+                                                            );
+                                                        } else if (mainDsData?.adminStatus === 'accepted') {
+                                                            return (
+                                                                <div className="flex items-center gap-1.5 px-2 py-1 bg-lyceum-blue/5 border border-lyceum-blue/10 rounded-md">
+                                                                    <div className="w-1.5 h-1.5 bg-lyceum-blue rounded-full animate-pulse"></div>
+                                                                    <span className="text-[9px] font-black text-lyceum-blue uppercase tracking-tighter">Waiting for DS-160 Submission</span>
+                                                                </div>
+                                                            );
+                                                        }
+                                                        return null;
+                                                    })()}
                                                     <button
                                                         onClick={(e) => {
                                                             e.stopPropagation();
