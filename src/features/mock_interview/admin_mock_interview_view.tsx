@@ -104,9 +104,9 @@ const MockInterviewView: React.FC<MockInterviewViewProps> = ({ contacts = [] }) 
             // Trigger automation for mock interview approval/rejection
             let automationTrigger = '';
             if (session.overall_average >= 3.5) {
-                automationTrigger = 'Mock Interview Approved';
+                automationTrigger = 'Mock Interview Approved (>=3.5)';
             } else if (session.overall_average < 2.5) {
-                automationTrigger = 'Mock Interview Rejected';
+                automationTrigger = 'Mock Interview Rejected (<2.5)';
             } else if (session.verdict === 'Review Required') {
                 automationTrigger = 'Mock Interview Review Required';
             }
