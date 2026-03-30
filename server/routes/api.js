@@ -786,6 +786,62 @@ const transformContact = (dbContact) => {
   return contact;
 };
 
+// Helper function to transform visa operation from DB format to API format
+const transformVisaOperation = (row, user) => {
+  if (!row) return null;
+  const isStudent = user?.role === 'Student';
+  const showCgi = row.show_cgi_on_portal || !isStudent;
+
+  let cgiData = row.cgi_data || {};
+  let dsData = row.ds_data || [];
+  let slotBookingData = row.slot_booking_data || {};
+  let visaInterviewData = row.visa_interview_data || {};
+
+  // Ensure JSON parsing if they come as strings
+  if (typeof cgiData === 'string') try { cgiData = JSON.parse(cgiData); } catch (e) { cgiData = {}; }
+  if (typeof dsData === 'string') try { dsData = JSON.parse(dsData); } catch (e) { dsData = []; }
+  if (typeof slotBookingData === 'string') try { slotBookingData = JSON.parse(slotBookingData); } catch (e) { slotBookingData = {}; }
+  if (typeof visaInterviewData === 'string') try { visaInterviewData = JSON.parse(visaInterviewData); } catch (e) { visaInterviewData = {}; }
+
+  if (isStudent && !showCgi && cgiData) {
+    cgiData = {
+      ...cgiData,
+      username: '••••••••',
+      password: '••••••••',
+      securityAnswer1: '••••••••',
+      securityAnswer2: '••••••••',
+      securityAnswer3: '••••••••'
+    };
+  }
+
+  return {
+    id: row.id,
+    vopNumber: row.vop_number,
+    contactId: row.contact_id,
+    name: row.c_name || row.name,
+    phone: row.c_phone || row.phone,
+    country: row.c_app_country || row.c_country || row.country,
+    status: row.status,
+    userId: row.user_id,
+    createdAt: row.created_at,
+    cgiData,
+    slotBookingData,
+    visaInterviewData,
+    dsData: Array.isArray(dsData) ? dsData : {
+      ...dsData,
+      confirmationDocumentId: row.confirmation_document_id || dsData?.confirmationDocumentId,
+      confirmationDocumentName: row.confirmation_document_name || dsData?.confirmationDocumentName,
+      fillingDocuments: row.filling_documents?.length ? row.filling_documents : (dsData?.fillingDocuments || []),
+      studentStatus: row.student_status || dsData?.studentStatus || 'pending',
+      adminStatus: row.admin_status || dsData?.adminStatus || 'pending',
+      rejectionReason: row.rejection_reason || dsData?.rejectionReason,
+      adminName: row.admin_name || dsData?.adminName
+    },
+    showCgiOnPortal: !!row.show_cgi_on_portal
+  };
+};
+
+
 // Delete document
 router.delete('/documents/:id', authenticateToken, async (req, res) => {
   try {
@@ -2127,50 +2183,8 @@ router.get('/visa-operations', authenticateToken, async (req, res) => {
     sql += ' ORDER BY vo.created_at DESC';
 
     const result = await query(sql, params);
-    res.json(result.rows.map(row => {
-      const isStudent = req.user.role === 'Student';
-      const showCgi = row.show_cgi_on_portal || !isStudent;
+    res.json(result.rows.map(row => transformVisaOperation(row, req.user)));
 
-      let cgiData = row.cgi_data;
-      if (isStudent && !showCgi && cgiData) {
-        // Mask sensitive data for students if not permitted
-        cgiData = {
-          ...cgiData,
-          username: '••••••••',
-          password: '••••••••',
-          securityAnswer1: '••••••••',
-          securityAnswer2: '••••••••',
-          securityAnswer3: '••••••••'
-        };
-      }
-
-      return {
-        ...row,
-        name: row.c_name || row.name,
-        phone: row.c_phone || row.phone,
-        country: row.c_app_country || row.c_country || row.country,
-        cgiData,
-        slotBookingData: row.slot_booking_data,
-        visaInterviewData: row.visa_interview_data,
-        visaInterviewData: row.visa_interview_data,
-        dsData: Array.isArray(row.ds_data) ? row.ds_data : {
-          ...row.ds_data,
-          confirmationDocumentId: row.confirmation_document_id || row.ds_data?.confirmationDocumentId,
-          confirmationDocumentName: row.confirmation_document_name || row.ds_data?.confirmationDocumentName,
-          fillingDocuments: row.filling_documents?.length ? row.filling_documents : (row.ds_data?.fillingDocuments || []),
-          studentStatus: row.student_status || row.ds_data?.studentStatus || 'pending',
-          adminStatus: row.admin_status || row.ds_data?.adminStatus || 'pending',
-          rejectionReason: row.rejection_reason || row.ds_data?.rejectionReason,
-          adminName: row.admin_name || row.ds_data?.adminName
-        },
-        showCgiOnPortal: row.show_cgi_on_portal,
-        showCgiOnPortal: row.show_cgi_on_portal,
-        vopNumber: row.vop_number,
-        contactId: row.contact_id,
-        userId: row.user_id,
-        createdAt: row.created_at
-      };
-    }));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -2190,20 +2204,7 @@ router.put('/visa-operations/:id/cgi', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Operation not found' });
     }
 
-    const opRows = result.rows[0];
-    const cgiOutput = {
-      ...opRows,
-      cgiData: opRows.cgi_data,
-      slotBookingData: opRows.slot_booking_data,
-      visaInterviewData: opRows.visa_interview_data,
-      dsData: opRows.ds_data,
-      showCgiOnPortal: opRows.show_cgi_on_portal,
-      vopNumber: opRows.vop_number,
-      contactId: opRows.contact_id,
-      userId: opRows.user_id,
-      createdAt: opRows.created_at
-    };
-    res.json(cgiOutput);
+    res.json(transformVisaOperation(result.rows[0], req.user));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -2272,18 +2273,7 @@ router.put('/visa-operations/:id/slot-booking', authenticateToken, async (req, r
     }
 
     const opData = result.rows[0];
-    const slotResponse = {
-      ...opData,
-      cgiData: opData.cgi_data,
-      slotBookingData: opData.slot_booking_data,
-      visaInterviewData: opData.visa_interview_data,
-      dsData: opData.ds_data,
-      showCgiOnPortal: opData.show_cgi_on_portal,
-      vopNumber: opData.vop_number,
-      contactId: opData.contact_id,
-      userId: opData.user_id,
-      createdAt: opData.created_at
-    };
+    const slotResponse = transformVisaOperation(opData, req.user);
 
     // AUTOMATION Payload Helper
     const automationPayload = {
@@ -2374,18 +2364,7 @@ router.put('/visa-operations/:id/ds-160', authenticateToken, async (req, res) =>
     }
 
     const op = result.rows[0];
-    const dsResponse = {
-      ...op,
-      cgiData: op.cgi_data,
-      slotBookingData: op.slot_booking_data,
-      visaInterviewData: op.visa_interview_data,
-      dsData: op.ds_data,
-      showCgiOnPortal: op.show_cgi_on_portal,
-      vopNumber: op.vop_number,
-      contactId: op.contact_id,
-      userId: op.user_id,
-      createdAt: op.created_at
-    };
+    const dsResponse = transformVisaOperation(op, req.user);
 
     // DS-160 Submitted Trigger
     if (dsData.confirmationNumber && (!existingDsData.confirmationNumber || dsData.confirmationNumber !== existingDsData.confirmationNumber)) {
@@ -2493,12 +2472,7 @@ router.post('/visa-operations/:id/ds-160/document', authenticateToken, upload.si
     `, [JSON.stringify(dsData), req.params.id]);
 
     const op = result.rows[0];
-    const finalResponse = {
-      ...op,
-      dsData: op.ds_data,
-      vopNumber: op.vop_number,
-      contactId: op.contact_id
-    };
+    const finalResponse = transformVisaOperation(op, req.user);
 
     // Automation Triggers (simplified for brevity, mirroring original logic)
     if (uploadType === 'confirmation') evaluateAutomation('Visa Confirmation Document Uploaded', { ...finalResponse, document_name: req.file.originalname });
@@ -2544,7 +2518,7 @@ router.delete('/visa-operations/:id/ds-160/document/:itemId', authenticateToken,
     }
 
     const result = await query('UPDATE visa_operations SET ds_data = $1 WHERE id = $2 RETURNING *', [JSON.stringify(dsData), req.params.id]);
-    res.json(result.rows[0]);
+    res.json(transformVisaOperation(result.rows[0], req.user));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -2655,19 +2629,8 @@ router.put('/visa-operations/:id/ds-160/status', authenticateToken, async (req, 
 
     const result = await query(updateQuery, updateParams);
     const op = result.rows[0];
+    const finalResponse = transformVisaOperation(op, req.user);
 
-    const finalResponse = {
-      ...op,
-      cgiData: op.cgi_data,
-      slotBookingData: op.slot_booking_data,
-      visaInterviewData: op.visa_interview_data,
-      dsData: op.ds_data,
-      showCgiOnPortal: op.show_cgi_on_portal,
-      vopNumber: op.vop_number,
-      contactId: op.contact_id,
-      userId: op.user_id,
-      createdAt: op.created_at
-    };
 
     const automationPayload = {
       ...finalResponse,
@@ -2789,13 +2752,7 @@ router.post('/visa-operations', authenticateToken, async (req, res) => {
       visa_status: newOp.admin_status || newOp.student_status
     });
 
-    res.json({
-      ...newOp,
-      vopNumber: newOp.vop_number,
-      contactId: newOp.contact_id,
-      userId: newOp.user_id,
-      createdAt: newOp.created_at
-    });
+    res.json(transformVisaOperation(newOp, req.user));
   } catch (error) {
     console.error('Error creating visa operation:', error);
     res.status(500).json({ error: error.message });

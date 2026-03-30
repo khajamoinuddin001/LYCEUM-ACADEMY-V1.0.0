@@ -2380,8 +2380,6 @@ const DashboardLayout: React.FC = () => {
     return <Loader />;
   }
 
-
-
   // Password reset check - only if user is logged in
   if (storedCurrentUser && storedCurrentUser.mustResetPassword) {
     return <ResetPasswordView user={storedCurrentUser} onReset={handlePasswordReset} />;
