@@ -139,9 +139,47 @@ export async function initDatabase() {
     await migrateColumn('contacts', 'createdAt', 'created_at');
     // Ensure metadata column exists
     await client.query('ALTER TABLE contacts ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT \'{}\'');
-    await client.query('ALTER TABLE contacts ADD COLUMN IF NOT EXISTS counselor_assigned_2 TEXT');
     await client.query('ALTER TABLE contacts ADD COLUMN IF NOT EXISTS avatar_url TEXT');
     await client.query('ALTER TABLE contacts ADD COLUMN IF NOT EXISTS degree TEXT');
+
+    // LMS Courses
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS lms_courses (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        description TEXT,
+        instructor TEXT,
+        price REAL,
+        modules JSONB DEFAULT '[]',
+        discussions JSONB DEFAULT '[]',
+        is_live BOOLEAN DEFAULT false,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await client.query('ALTER TABLE lms_courses ADD COLUMN IF NOT EXISTS is_live BOOLEAN DEFAULT false');
+
+    // Class Sessions (Live classes)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS class_sessions (
+        id SERIAL PRIMARY KEY,
+        course_id TEXT REFERENCES lms_courses(id) ON DELETE CASCADE,
+        teacher_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        status TEXT NOT NULL DEFAULT 'live' CHECK (status IN ('live', 'ended')),
+        current_lesson_id TEXT,
+        current_slide_index INTEGER DEFAULT 0,
+        current_pdf_page INTEGER DEFAULT 1,
+        current_pdf_page_count INTEGER,
+        started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        ended_at TIMESTAMP
+      )
+    `);
+    
+    // Ensure existing class_sessions have all columns
+    await client.query('ALTER TABLE class_sessions ADD COLUMN IF NOT EXISTS teacher_id INTEGER REFERENCES users(id) ON DELETE SET NULL');
+    await client.query('ALTER TABLE class_sessions ADD COLUMN IF NOT EXISTS current_lesson_id TEXT');
+    await client.query('ALTER TABLE class_sessions ADD COLUMN IF NOT EXISTS current_slide_index INTEGER DEFAULT 0');
+    await client.query('ALTER TABLE class_sessions ADD COLUMN IF NOT EXISTS current_pdf_page INTEGER DEFAULT 1');
+    await client.query('ALTER TABLE class_sessions ADD COLUMN IF NOT EXISTS current_pdf_page_count INTEGER');
 
     // LEADS
     await client.query(`
@@ -305,15 +343,6 @@ export async function initDatabase() {
       await client.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT \'{}\'');
       await client.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS line_items JSONB');
       
-      // Ensure class_sessions has teacher_id and other fields
-      await client.query(`
-        ALTER TABLE class_sessions 
-        ADD COLUMN IF NOT EXISTS teacher_id INTEGER REFERENCES users(id),
-        ADD COLUMN IF NOT EXISTS current_lesson_id TEXT,
-        ADD COLUMN IF NOT EXISTS current_slide_index INTEGER DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS current_pdf_page INTEGER DEFAULT 1,
-        ADD COLUMN IF NOT EXISTS current_pdf_page_count INTEGER
-      `).catch(() => {});
 
       await client.query('ALTER TABLE tasks ADD COLUMN IF NOT EXISTS assigned_by INTEGER REFERENCES users(id)');
       await client.query('ALTER TABLE tasks ADD COLUMN IF NOT EXISTS priority TEXT DEFAULT \'Medium\'');
@@ -345,9 +374,6 @@ export async function initDatabase() {
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
       `);
-      await client.query('ALTER TABLE recurring_tasks ADD COLUMN IF NOT EXISTS task_id TEXT UNIQUE');
-
-      await client.query('ALTER TABLE recurring_tasks ADD COLUMN IF NOT EXISTS task_id TEXT');
       await client.query('ALTER TABLE recurring_tasks ADD COLUMN IF NOT EXISTS contact_id INTEGER REFERENCES contacts(id) ON DELETE CASCADE');
       await client.query('ALTER TABLE recurring_tasks ADD COLUMN IF NOT EXISTS assigned_to INTEGER REFERENCES users(id) ON DELETE SET NULL');
       try {
@@ -556,21 +582,6 @@ export async function initDatabase() {
 
     // LMS Courses (ensure createdAt)
 
-    // LMS Courses (ensure createdAt)
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS lms_courses (
-        id TEXT PRIMARY KEY,
-        title TEXT NOT NULL,
-        description TEXT,
-        instructor TEXT,
-        price REAL,
-        modules JSONB DEFAULT '[]',
-        discussions JSONB DEFAULT '[]',
-        is_live BOOLEAN DEFAULT false,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-    await client.query('ALTER TABLE lms_courses ADD COLUMN IF NOT EXISTS is_live BOOLEAN DEFAULT false');
     await migrateColumn('lms_courses', 'createdAt', 'created_at');
 
     // Payment Activity Log table
@@ -618,20 +629,6 @@ export async function initDatabase() {
     
     // --- OFFLINE CLASSES TABLES ---
 
-    // Class Sessions (Live classes)
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS class_sessions (
-        id SERIAL PRIMARY KEY,
-        course_id TEXT REFERENCES lms_courses(id) ON DELETE CASCADE,
-        teacher_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
-        status TEXT NOT NULL DEFAULT 'live' CHECK (status IN ('live', 'ended')),
-        current_lesson_id TEXT,
-        current_slide_index INTEGER DEFAULT 0,
-        current_pdf_page INTEGER DEFAULT 1,
-        started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        ended_at TIMESTAMP
-      )
-    `);
 
     // Session Attendance (Automated)
     await client.query(`
