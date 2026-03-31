@@ -18,6 +18,7 @@ import ReceptionView from '@/features/reception/reception_view';
 import Loader from '@/components/common/loader';
 import SearchModal from '@/features/shared/search_modal';
 import QuotationTemplateModal from '@/features/finance/quotation_template_modal';
+import { io } from 'socket.io-client';
 import QuickCreateModal from '@/features/shared/quick_create_modal';
 import NewContactForm from '@/features/students/new_contact_form';
 import ContactDocumentsView from '@/features/students/contact_documents_view';
@@ -470,11 +471,12 @@ const DashboardLayout: React.FC = () => {
             api.getVisitors(),
             api.getNotifications(),
             api.getTickets(),
-            api.getChannels()
+            api.getChannels(),
+            api.getLmsCourses()
           ]);
 
           const [
-            leadsRes, tasksRes, visitorsRes, notificationsRes, ticketsRes, channelsRes
+            leadsRes, tasksRes, visitorsRes, notificationsRes, ticketsRes, channelsRes, lmsCoursesRes
           ] = results.map(r => r.status === 'fulfilled' ? r.value : null);
 
           // Only update if we got fresh data
@@ -484,17 +486,37 @@ const DashboardLayout: React.FC = () => {
           if (notificationsRes) setNotifications(prev => JSON.stringify(prev) !== JSON.stringify(notificationsRes) ? notificationsRes : prev);
           if (ticketsRes) setTickets(prev => JSON.stringify(prev) !== JSON.stringify(ticketsRes) ? ticketsRes : prev);
           if (channelsRes) setChannels(prev => JSON.stringify(prev) !== JSON.stringify(channelsRes) ? channelsRes : prev);
+          if (lmsCoursesRes) setLmsCourses(prev => JSON.stringify(prev) !== JSON.stringify(lmsCoursesRes) ? lmsCoursesRes : prev);
 
         } catch (e) {
           console.log("Polling error silently ignored");
         }
       }
-    }, 30000); // 5 seconds
+    }, 10000); // 10 seconds
 
     return () => {
       clearInterval(pollInterval);
     };
   }, [currentUser?.id]); // Run once on mount (setup both initial load and interval)
+
+  useEffect(() => {
+    if (currentUser) {
+        const socketToken = api.getToken();
+        const socketBaseUrl = (api.API_BASE_URL || '').replace('/api', '');
+        const socket = io(`${socketBaseUrl}/lms`, {
+            auth: { token: socketToken }
+        });
+
+        socket.on('global-session-ended', ({ courseId }) => {
+            console.log('Global Socket: session-ended received for course', courseId);
+            handleLmsSessionChange(courseId, false);
+        });
+
+        return () => {
+            socket.disconnect();
+        };
+    }
+  }, [currentUser?.id]);
 
   useEffect(() => {
     if (currentUser) {

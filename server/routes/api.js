@@ -5532,14 +5532,22 @@ router.post('/lms/sessions/:id/end', authenticateToken, async (req, res) => {
       const sessionId = req.params.id;
 
       if (courseId) {
-        // End ALL sessions for this course AND update course status
-        await query('UPDATE class_sessions SET status = \'ended\', ended_at = NOW() WHERE course_id = $1 AND status = \'live\'', [courseId]);
-        await query('UPDATE lms_courses SET is_live = false WHERE id = $1', [courseId]);
+        // End ALL sessions for this course AND update course status (use TRIM for robustness)
+        await query('UPDATE class_sessions SET status = \'ended\', ended_at = NOW() WHERE TRIM(course_id) = TRIM($1) AND status = \'live\'', [courseId]);
+        await query('UPDATE lms_courses SET is_live = false WHERE TRIM(id) = TRIM($1)', [courseId]);
       } else {
         // End specific session
-        await query('UPDATE class_sessions SET status = \'ended\', ended_at = NOW() WHERE id = $1::integer', [sessionId]);
-        // Note: we don't update lms_courses.is_live here because there might be other active sessions
-        // but since we usually have only one, this is just a backup.
+        const sessionResult = await query('SELECT course_id FROM class_sessions WHERE id = $1::integer', [sessionId]);
+        if (sessionResult.rows.length > 0) {
+          const cId = sessionResult.rows[0].course_id;
+          await query('UPDATE class_sessions SET status = \'ended\', ended_at = NOW() WHERE id = $1::integer', [sessionId]);
+          
+          // Check if there are any STILL LIVE sessions for THIS course (use TRIM for robustness)
+          const otherSessions = await query('SELECT id FROM class_sessions WHERE TRIM(course_id) = TRIM($1) AND status = \'live\'', [cId]);
+          if (otherSessions.rows.length === 0) {
+            await query('UPDATE lms_courses SET is_live = false WHERE TRIM(id) = TRIM($1)', [cId]);
+          }
+        }
       }
 
       res.json({ success: true });

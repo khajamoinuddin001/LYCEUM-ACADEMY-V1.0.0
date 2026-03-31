@@ -51,8 +51,10 @@ export function initLmsSockets(server, allowedOrigins) {
     });
 
     // Teacher ends the session
-    socket.on('end-session', ({ sessionId }) => {
+    socket.on('end-session', ({ sessionId, courseId }) => {
       lmsNamespace.to(`session-${sessionId}`).emit('session-ended');
+      // Also broadcast globally so App.tsx and other views can react
+      lmsNamespace.emit('global-session-ended', { sessionId, courseId });
     });
 
     socket.on('disconnect', () => {

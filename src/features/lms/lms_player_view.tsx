@@ -355,6 +355,12 @@ const LmsPlayerView: React.FC<LmsPlayerViewProps> = (props) => {
                     if (session.current_slide_index !== undefined && session.current_slide_index !== currentSlideIndex) {
                         setCurrentSlideIndex(session.current_slide_index);
                     }
+                } else {
+                    // Session ended or no longer live - clear local state
+                    setLiveSession(null);
+                    setSubmissions([]);
+                    setAttendanceCount(0);
+                    if (onSessionChange) onSessionChange(course.id, false);
                 }
             }).catch(err => console.error('Background sync failed:', err));
         }, 5000); // Sync every 5 seconds
@@ -364,20 +370,14 @@ const LmsPlayerView: React.FC<LmsPlayerViewProps> = (props) => {
 
     // Live Session Management
     useEffect(() => {
-        // Find existing session on mount
         getActiveSession(course.id).then(session => {
             if (session) {
-                // For students, join automatically to keep them in sync
-                if (user.role === 'Student') {
-                    setLiveSession(session);
-                    setCurrentSlideIndex(session.current_slide_index || 0);
-                    setCurrentPdfPage(session.current_pdf_page || 1);
-                    setPdfPageCount(session.current_pdf_page_count || null);
-                    joinClassSession(session.id).catch(err => console.error(err));
-                }
-                // For teachers, we don't setLiveSession here. 
-                // They will see the "Start Live Session" button we added.
-                // When they click it, it will end this existing session and start a fresh one.
+                // Join automatically to keep in sync (both students and teachers)
+                setLiveSession(session);
+                setCurrentSlideIndex(session.current_slide_index || 0);
+                setCurrentPdfPage(session.current_pdf_page || 1);
+                setPdfPageCount(session.current_pdf_page_count || null);
+                joinClassSession(session.id).catch(err => console.error(err));
             }
         });
 
@@ -439,10 +439,28 @@ const LmsPlayerView: React.FC<LmsPlayerViewProps> = (props) => {
             }
         });
 
+        socket.on('global-session-ended', (data) => {
+            if (String(data.courseId) === String(course.id)) {
+                setLiveSession(null);
+                setSubmissions([]);
+                setAttendanceCount(0);
+                if (onSessionChange) onSessionChange(course.id, false);
+            }
+        });
+
         return () => {
             socket.disconnect();
         };
     }, [course.id]); // Stable connection for the course
+
+    // Sync local live state with parent prop (e.g. from polling or global socket in App.tsx)
+    useEffect(() => {
+        if (liveSession && !course.isLive) {
+            setLiveSession(null);
+            setSubmissions([]);
+            setAttendanceCount(0);
+        }
+    }, [course.isLive, liveSession?.id]);
 
     useEffect(() => {
         if (liveSession && socketRef.current) {
@@ -470,7 +488,7 @@ const LmsPlayerView: React.FC<LmsPlayerViewProps> = (props) => {
         const sessionId = liveSession.id;
         
         // Immediate local state reset & socket notification for responsiveness
-        socketRef.current?.emit('end-session', { sessionId });
+        socketRef.current?.emit('end-session', { sessionId, courseId: course.id });
         setAttendanceCount(0);
         setLiveSession(null);
         setSubmissions([]);
