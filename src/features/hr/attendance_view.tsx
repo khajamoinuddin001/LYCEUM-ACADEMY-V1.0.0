@@ -70,7 +70,7 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ user, users = [], onUpd
     const payslipToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [payrollSchedule, setPayrollSchedule] = useState<{ dayOfMonth: number; hour: number; minute: number }>({ dayOfMonth: 1, hour: 0, minute: 0 });
     const [savingSchedule, setSavingSchedule] = useState(false);
-    
+
     // Adjustments (Bonus/Overtime) state
     const [editingSlip, setEditingSlip] = useState<any | null>(null);
     const [adjustmentBonus, setAdjustmentBonus] = useState<string>('0');
@@ -187,8 +187,19 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ user, users = [], onUpd
         try {
             const logs = await api.getAttendanceHistory() as any[];
             setMyLogs(logs);
-            const todayStr = new Date().toISOString().split('T')[0];
-            const today = logs.find((l: any) => l.date.split('T')[0] === todayStr);
+
+            // Get today's local date components for matching
+            const now = new Date();
+
+            // Find today's log by comparing local date components (ignoring time)
+            const today = logs.find((l: any) => {
+                if (!l.date) return false;
+                const logDate = new Date(l.date);
+                return logDate.getFullYear() === now.getFullYear() &&
+                    logDate.getMonth() === now.getMonth() &&
+                    logDate.getDate() === now.getDate();
+            });
+
             setTodayLog(today);
             setIsCheckedIn(!!today && !today.check_out);
         } catch (error) {
@@ -290,7 +301,7 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ user, users = [], onUpd
     const handleSaveEditRadius = async (branch: any) => {
         setSavingEditRadius(true);
         try {
-            await api.saveBranch({ name: branch.name, lat: branch.lat, lng: branch.lng, radius: editRadius });
+            await api.saveBranch({ id: branch.id, name: branch.name, lat: branch.lat, lng: branch.lng, radius: editRadius });
             showGeoToast('success', `Radius for "${branch.name}" updated to ${editRadius}m.`);
             setEditingBranchId(null);
             fetchBranches();
@@ -354,10 +365,15 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ user, users = [], onUpd
                 }
             }
 
+            if (!selectedBranch) {
+                alert("Please select a branch first.");
+                return;
+            }
+
             await api.checkIn({
                 ...loc,
                 selfie: selfieData,
-                branch: selectedBranch || user.branch_name
+                branch: selectedBranch
             });
             setShowSelfie(false);
             await fetchMyAttendance();
@@ -367,10 +383,14 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ user, users = [], onUpd
     };
 
     const handleCheckOut = async () => {
+        if (!selectedBranch) {
+            alert("Please select a branch first.");
+            return;
+        }
         try {
             let loc;
             try { loc = await getLocation(); } catch (e) { }
-            await api.checkOut(loc);
+            await api.checkOut(loc, selectedBranch);
             await fetchMyAttendance();
         } catch (error: any) {
             alert(error.message || "Check-out failed");
@@ -524,7 +544,7 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ user, users = [], onUpd
                                 <div className="flex items-center gap-3">
                                     <Navigation className="w-5 h-5 text-gray-400" />
                                     <select
-                                        value={selectedBranch || user.branch_name || ''}
+                                        value={selectedBranch}
                                         onChange={(e) => setSelectedBranch(e.target.value)}
                                         className="bg-transparent border-b border-gray-300 dark:border-gray-600 focus:border-lyceum-blue outline-none py-1 text-sm font-bold text-gray-700 dark:text-gray-200"
                                     >
@@ -685,9 +705,9 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ user, users = [], onUpd
                                     <div className="p-2 bg-white dark:bg-gray-800 rounded-lg text-lyceum-blue shadow-sm">
                                         <History size={18} />
                                     </div>
-                                    <span className="text-xs font-bold text-gray-600 dark:text-gray-300">Hours Worked</span>
+                                    <span className="text-xs font-bold text-gray-600 dark:text-gray-300">Worked Days</span>
                                 </div>
-                                <span className="text-xl font-black text-lyceum-blue">{monthlyStats.totalHours}h</span>
+                                <span className="text-xl font-black text-lyceum-blue">{monthlyStats.totalHours}D</span>
                             </div>
                         </div>
                     </div>
@@ -869,7 +889,7 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ user, users = [], onUpd
                                         </div>
                                     </td>
                                     <td className="px-6 py-4 text-right">
-                                        <button 
+                                        <button
                                             onClick={() => handleViewStaffHistory(s)}
                                             className="p-2 text-lyceum-blue hover:bg-lyceum-blue/10 rounded-lg transition-colors"
                                         >
@@ -926,7 +946,7 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ user, users = [], onUpd
                                 </div>
                             </div>
                         </div>
-                        <button 
+                        <button
                             onClick={() => setViewingStaffHistory(null)}
                             className="p-3 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-2xl transition-all hover:rotate-90"
                         >
@@ -975,7 +995,7 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ user, users = [], onUpd
                                                     {logs.map((log: any) => (
                                                         <tr key={log.id} className="hover:bg-gray-50/50 dark:hover:bg-gray-700/20 transition-colors">
                                                             <td className="px-8 py-5">
-                                                                <div className="text-sm font-bold text-gray-700 dark:text-gray-200">{new Date(log.date).getDate()} {monthName.slice(0,3)}</div>
+                                                                <div className="text-sm font-bold text-gray-700 dark:text-gray-200">{new Date(log.date).getDate()} {monthName.slice(0, 3)}</div>
                                                                 <div className="text-[10px] text-gray-400 font-medium">{new Date(log.date).toLocaleString('default', { weekday: 'long' })}</div>
                                                             </td>
                                                             <td className="px-8 py-5">
@@ -1214,11 +1234,10 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ user, users = [], onUpd
         <div className="space-y-6 animate-fade-in pb-10 relative">
             {/* Toast Notification */}
             {geoToast && (
-                <div className={`fixed top-6 right-6 z-50 flex items-center gap-3 px-6 py-4 rounded-2xl shadow-2xl border transition-all duration-300 ${
-                    geoToast.type === 'success'
-                        ? 'bg-green-50 dark:bg-green-900/90 border-green-200 dark:border-green-700 text-green-800 dark:text-green-200'
-                        : 'bg-red-50 dark:bg-red-900/90 border-red-200 dark:border-red-700 text-red-800 dark:text-red-200'
-                }`}>
+                <div className={`fixed top-6 right-6 z-50 flex items-center gap-3 px-6 py-4 rounded-2xl shadow-2xl border transition-all duration-300 ${geoToast.type === 'success'
+                    ? 'bg-green-50 dark:bg-green-900/90 border-green-200 dark:border-green-700 text-green-800 dark:text-green-200'
+                    : 'bg-red-50 dark:bg-red-900/90 border-red-200 dark:border-red-700 text-red-800 dark:text-red-200'
+                    }`}>
                     {geoToast.type === 'success' ? <ShieldCheck size={20} /> : <AlertCircle size={20} />}
                     <span className="font-bold text-sm">{geoToast.msg}</span>
                     <button onClick={() => setGeoToast(null)} className="ml-2 opacity-60 hover:opacity-100 transition-opacity">
@@ -1482,7 +1501,7 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ user, users = [], onUpd
     // PAYSLIPS RENDERER
     // ============================================================
     const renderPayslips = () => {
-        const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+        const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
         const monthLabel = (m: number) => MONTHS[m - 1] ?? `Month ${m}`;
 
         const handleGeneratePayroll = async () => {
@@ -1504,7 +1523,7 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ user, users = [], onUpd
             setSavingSchedule(true);
             try {
                 await api.savePayrollSchedule(payrollSchedule);
-                showPayslipToast('success', `✅ Auto-payroll schedule saved: ${payrollSchedule.dayOfMonth}th of every month at ${String(payrollSchedule.hour).padStart(2,'0')}:${String(payrollSchedule.minute).padStart(2,'0')}`);
+                showPayslipToast('success', `✅ Auto-payroll schedule saved: ${payrollSchedule.dayOfMonth}th of every month at ${String(payrollSchedule.hour).padStart(2, '0')}:${String(payrollSchedule.minute).padStart(2, '0')}`);
             } catch (err: any) {
                 showPayslipToast('error', err.message || 'Failed to save schedule');
             } finally {
@@ -1518,7 +1537,7 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ user, users = [], onUpd
                 if (typeof slipData === 'string') {
                     slipData = JSON.parse(slipData);
                 }
-                
+
                 // Ensure the PDF generator has month/year from parent record if missing in data blob
                 const finalDataForPDF = {
                     ...slipData,
@@ -1566,17 +1585,17 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ user, users = [], onUpd
                 <div className="animate-fade-in space-y-6">
                     {/* Toast */}
                     {payslipToast && (
-                        <div className={`fixed top-5 right-5 z-50 flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-xl text-sm font-semibold text-white transition-all duration-300 ${ payslipToast.type === 'success' ? 'bg-gradient-to-r from-emerald-500 to-green-600' : 'bg-gradient-to-r from-red-500 to-rose-600'}`}>
+                        <div className={`fixed top-5 right-5 z-50 flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-xl text-sm font-semibold text-white transition-all duration-300 ${payslipToast.type === 'success' ? 'bg-gradient-to-r from-emerald-500 to-green-600' : 'bg-gradient-to-r from-red-500 to-rose-600'}`}>
                             {payslipToast.type === 'success' ? <CheckCircle size={18} /> : <AlertCircle size={18} />}
                             {payslipToast.msg}
-                            <button onClick={() => setPayslipToast(null)} className="ml-2 opacity-80 hover:opacity-100"><X size={14}/></button>
+                            <button onClick={() => setPayslipToast(null)} className="ml-2 opacity-80 hover:opacity-100"><X size={14} /></button>
                         </div>
                     )}
 
                     {/* Generate Payroll Card */}
                     <div className="bg-white dark:bg-gray-800 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden">
                         <div className="px-8 py-5 border-b border-gray-100 dark:border-gray-700 flex items-center gap-3">
-                            <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-900/40"><DollarSign size={20} className="text-indigo-600 dark:text-indigo-400"/></div>
+                            <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-900/40"><DollarSign size={20} className="text-indigo-600 dark:text-indigo-400" /></div>
                             <h2 className="text-lg font-bold text-gray-900 dark:text-white">Generate Payroll</h2>
                         </div>
                         <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1596,7 +1615,7 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ user, users = [], onUpd
                                         onChange={e => setPayslipYear(Number(e.target.value))}
                                         className="w-28 px-4 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none"
                                     >
-                                        {Array.from({length: 5}, (_, i) => new Date().getFullYear() - 2 + i).map(y => <option key={y}>{y}</option>)}
+                                        {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 + i).map(y => <option key={y}>{y}</option>)}
                                     </select>
                                 </div>
                                 <button
@@ -1604,7 +1623,7 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ user, users = [], onUpd
                                     disabled={generatingPayroll}
                                     className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white font-bold rounded-xl transition-all shadow-md disabled:opacity-60"
                                 >
-                                    {generatingPayroll ? <><Loader2 size={18} className="animate-spin"/> Generating...</> : <><DollarSign size={18}/> Generate & Save Payroll</>}
+                                    {generatingPayroll ? <><Loader2 size={18} className="animate-spin" /> Generating...</> : <><DollarSign size={18} /> Generate & Save Payroll</>}
                                 </button>
                             </div>
 
@@ -1617,7 +1636,7 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ user, users = [], onUpd
                                         <input
                                             type="number" min={1} max={28}
                                             value={payrollSchedule.dayOfMonth}
-                                            onChange={e => setPayrollSchedule(s => ({...s, dayOfMonth: Number(e.target.value)}))}
+                                            onChange={e => setPayrollSchedule(s => ({ ...s, dayOfMonth: Number(e.target.value) }))}
                                             className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none mt-1"
                                         />
                                     </div>
@@ -1626,7 +1645,7 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ user, users = [], onUpd
                                         <input
                                             type="number" min={0} max={23}
                                             value={payrollSchedule.hour}
-                                            onChange={e => setPayrollSchedule(s => ({...s, hour: Number(e.target.value)}))}
+                                            onChange={e => setPayrollSchedule(s => ({ ...s, hour: Number(e.target.value) }))}
                                             className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none mt-1"
                                         />
                                     </div>
@@ -1635,7 +1654,7 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ user, users = [], onUpd
                                         <input
                                             type="number" min={0} max={59}
                                             value={payrollSchedule.minute}
-                                            onChange={e => setPayrollSchedule(s => ({...s, minute: Number(e.target.value)}))}
+                                            onChange={e => setPayrollSchedule(s => ({ ...s, minute: Number(e.target.value) }))}
                                             className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none mt-1"
                                         />
                                     </div>
@@ -1645,7 +1664,7 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ user, users = [], onUpd
                                     disabled={savingSchedule}
                                     className="w-full flex items-center justify-center gap-2 px-5 py-3 border-2 border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300 font-bold rounded-xl hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-all disabled:opacity-60"
                                 >
-                                    {savingSchedule ? <><Loader2 size={16} className="animate-spin"/>Saving...</> : <><Check size={16}/> Save Auto-Schedule</>}
+                                    {savingSchedule ? <><Loader2 size={16} className="animate-spin" />Saving...</> : <><Check size={16} /> Save Auto-Schedule</>}
                                 </button>
                                 <p className="text-xs text-gray-400 dark:text-gray-500">💡 Auto-payroll generates for the previous month on the configured date at midnight.</p>
                             </div>
@@ -1656,14 +1675,14 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ user, users = [], onUpd
                     <div className="bg-white dark:bg-gray-800 rounded-3xl border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden">
                         <div className="px-8 py-5 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
                             <div className="flex items-center gap-3">
-                                <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-900/40"><FileText size={20} className="text-emerald-600 dark:text-emerald-400"/></div>
+                                <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-900/40"><FileText size={20} className="text-emerald-600 dark:text-emerald-400" /></div>
                                 <h2 className="text-lg font-bold text-gray-900 dark:text-white">All Payslips</h2>
                             </div>
                             <span className="text-sm text-gray-400">{payslips.length} record{payslips.length !== 1 ? 's' : ''}</span>
                         </div>
                         {payslips.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-20 text-gray-400">
-                                <FileText size={48} className="mb-4 opacity-30"/>
+                                <FileText size={48} className="mb-4 opacity-30" />
                                 <p className="font-semibold">No payslips generated yet</p>
                                 <p className="text-sm mt-1">Use the generator above to create the first payroll batch.</p>
                             </div>
@@ -1688,9 +1707,9 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ user, users = [], onUpd
                                                 acc[key].push(slip);
                                                 return acc;
                                             }, {} as Record<string, typeof payslips>);
-                                            
+
                                             const sortedKeys = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
-                                            
+
                                             return sortedKeys.map(key => {
                                                 const [year, month] = key.split('-').map(Number);
                                                 const monthSlips = grouped[key];
@@ -1735,7 +1754,7 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ user, users = [], onUpd
                                                                             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded-lg text-xs font-semibold hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-all"
                                                                             title="Download PDF"
                                                                         >
-                                                                            <Download size={13}/> PDF
+                                                                            <Download size={13} /> PDF
                                                                         </button>
                                                                         <button
                                                                             onClick={() => {
@@ -1746,7 +1765,7 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ user, users = [], onUpd
                                                                             className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded-lg transition-all"
                                                                             title="Edit Adjustments (Bonus/OT)"
                                                                         >
-                                                                            <Pencil size={15}/>
+                                                                            <Pencil size={15} />
                                                                         </button>
                                                                         <button
                                                                             onClick={async () => {
@@ -1763,7 +1782,7 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ user, users = [], onUpd
                                                                             className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-all"
                                                                             title="Delete Payslip"
                                                                         >
-                                                                            <Trash2 size={15}/>
+                                                                            <Trash2 size={15} />
                                                                         </button>
                                                                     </div>
                                                                 </td>
@@ -1785,13 +1804,13 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ user, users = [], onUpd
                             <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl border border-gray-100 dark:border-gray-700 w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
                                 <div className="px-8 py-5 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between bg-gray-50 dark:bg-gray-900/50">
                                     <div className="flex items-center gap-3">
-                                        <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-900/40"><Pencil size={18} className="text-indigo-600 dark:text-indigo-400"/></div>
+                                        <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-900/40"><Pencil size={18} className="text-indigo-600 dark:text-indigo-400" /></div>
                                         <div>
                                             <h3 className="font-bold text-gray-900 dark:text-white">Adjust Payslip</h3>
                                             <p className="text-[10px] text-gray-400 uppercase tracking-widest">{editingSlip.user_name} • {monthLabel(editingSlip.month)} {editingSlip.year}</p>
                                         </div>
                                     </div>
-                                    <button onClick={() => setEditingSlip(null)} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full transition-colors"><X size={18}/></button>
+                                    <button onClick={() => setEditingSlip(null)} className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full transition-colors"><X size={18} /></button>
                                 </div>
                                 <div className="p-8 space-y-6">
                                     <div className="space-y-2">
@@ -1828,7 +1847,7 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ user, users = [], onUpd
                                             disabled={savingAdjustments}
                                             className="flex-1 px-6 py-3 bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-bold rounded-xl shadow-lg hover:shadow-indigo-500/25 transition-all disabled:opacity-50"
                                         >
-                                            {savingAdjustments ? <Loader2 size={18} className="animate-spin inline mr-2"/> : <Check size={18} className="inline mr-2"/>}
+                                            {savingAdjustments ? <Loader2 size={18} className="animate-spin inline mr-2" /> : <Check size={18} className="inline mr-2" />}
                                             Save Changes
                                         </button>
                                     </div>
@@ -1844,13 +1863,13 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ user, users = [], onUpd
         return (
             <div className="animate-fade-in space-y-6">
                 {payslipToast && (
-                    <div className={`fixed top-5 right-5 z-50 flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-xl text-sm font-semibold text-white ${ payslipToast.type === 'success' ? 'bg-gradient-to-r from-emerald-500 to-green-600' : 'bg-gradient-to-r from-red-500 to-rose-600'}`}>
+                    <div className={`fixed top-5 right-5 z-50 flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-xl text-sm font-semibold text-white ${payslipToast.type === 'success' ? 'bg-gradient-to-r from-emerald-500 to-green-600' : 'bg-gradient-to-r from-red-500 to-rose-600'}`}>
                         {payslipToast.type === 'success' ? <CheckCircle size={18} /> : <AlertCircle size={18} />}
                         {payslipToast.msg}
                     </div>
                 )}
                 <div className="flex items-center gap-3 mb-2">
-                    <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-900/40"><FileText size={22} className="text-indigo-600 dark:text-indigo-400"/></div>
+                    <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-900/40"><FileText size={22} className="text-indigo-600 dark:text-indigo-400" /></div>
                     <div>
                         <h2 className="text-xl font-bold text-gray-900 dark:text-white">My Payslips</h2>
                         <p className="text-sm text-gray-400">Your salary statements auto-generated each month</p>
@@ -1858,7 +1877,7 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ user, users = [], onUpd
                 </div>
                 {payslips.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-20 bg-white dark:bg-gray-800 rounded-3xl border border-gray-100 dark:border-gray-700 text-gray-400">
-                        <FileText size={52} className="mb-4 opacity-25"/>
+                        <FileText size={52} className="mb-4 opacity-25" />
                         <p className="font-semibold text-lg">No payslips available yet</p>
                         <p className="text-sm mt-1">Payslips are generated automatically each month by your admin.</p>
                     </div>
@@ -1875,7 +1894,7 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ user, users = [], onUpd
                                         onClick={() => handleDownload(slip)}
                                         className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-xl text-sm font-semibold transition-all"
                                     >
-                                        <Download size={15}/> PDF
+                                        <Download size={15} /> PDF
                                     </button>
                                 </div>
                                 <div className="p-6 grid grid-cols-2 gap-4">

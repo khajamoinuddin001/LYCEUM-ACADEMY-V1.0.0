@@ -191,6 +191,61 @@ cron.schedule('0 0 * * *', async () => {
   }
 }, { timezone: 'Asia/Kolkata' });
 
+// ============================================================
+// AUTO CHECK-OUT CRON
+// Runs every hour. If a staff member has not checked out and
+// it is more than 6 hours past their shift_end time, the
+// system automatically checks them out AT their shift end
+// time and marks the attendance as 'Half Day'.
+// The payroll engine already deducts 0.5 day for missing
+// or early check-outs, so no additional payroll logic needed.
+// ============================================================
+cron.schedule('0 * * * *', async () => {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const nowIndia = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+
+    // Fetch all today's logs where check_out is still NULL
+    const logsRes = await query(`
+      SELECT al.id, al.user_id, al.date, al.check_in, u.shift_end
+      FROM attendance_logs al
+      JOIN users u ON u.id = al.user_id
+      WHERE al.date = $1 AND al.check_out IS NULL AND u.shift_end IS NOT NULL
+    `, [today]);
+
+    let autoCount = 0;
+    for (const log of logsRes.rows) {
+      const [endH, endM] = log.shift_end.split(':').map(Number);
+
+      // Build shift_end as a Date in IST for today
+      const shiftEndTime = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+      shiftEndTime.setHours(endH, endM, 0, 0);
+
+      // How many hours since shift ended?
+      const hoursSinceEnd = (nowIndia - shiftEndTime) / (1000 * 60 * 60);
+
+      if (hoursSinceEnd >= 6) {
+        // Auto check-out at the shift_end time (not NOW)
+        const checkoutTimestamp = `${today} ${log.shift_end}:00`;
+        await query(`
+          UPDATE attendance_logs
+          SET check_out = $1::timestamp AT TIME ZONE 'Asia/Kolkata',
+              status    = 'Half Day'
+          WHERE id = $2
+        `, [checkoutTimestamp, log.id]);
+        autoCount++;
+        console.log(`🕐 [Auto Check-out] User ${log.user_id} auto checked-out at ${log.shift_end} (Half Day)`);
+      }
+    }
+
+    if (autoCount > 0) {
+      console.log(`✅ [Auto Check-out] Auto checked-out ${autoCount} staff member(s).`);
+    }
+  } catch (err) {
+    console.error('❌ [Auto Check-out Cron] Error:', err.message);
+  }
+}, { timezone: 'Asia/Kolkata' });
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));

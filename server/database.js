@@ -982,6 +982,8 @@ export async function initDatabase() {
       )
     `);
 
+    await client.query('ALTER TABLE attendance_logs ADD COLUMN IF NOT EXISTS selfie_data BYTEA');
+    await client.query('ALTER TABLE attendance_logs ADD COLUMN IF NOT EXISTS selfie_mimetype TEXT');
     await client.query('ALTER TABLE attendance_logs ADD COLUMN IF NOT EXISTS late_minutes INTEGER DEFAULT 0');
     await client.query('ALTER TABLE attendance_logs ADD COLUMN IF NOT EXISTS base_salary_at_time NUMERIC');
     await client.query('ALTER TABLE attendance_logs ADD COLUMN IF NOT EXISTS branch TEXT');

@@ -6115,13 +6115,23 @@ router.get('/attendance/branches', authenticateToken, async (req, res) => {
 
 router.post('/attendance/branches', authenticateToken, requireRole('Admin'), async (req, res) => {
   try {
-    const { name, lat, lng, radius } = req.body;
-    const result = await query(`
-      INSERT INTO branches (name, lat, lng, radius)
-      VALUES ($1, $2, $3, $4)
-      ON CONFLICT (name) DO UPDATE SET lat = $2, lng = $3, radius = $4
-      RETURNING *
-    `, [name, lat, lng, radius || 50]);
+    const { id, name, lat, lng, radius } = req.body;
+    let result;
+    if (id) {
+      result = await query(`
+        UPDATE branches 
+        SET name = $1, lat = $2, lng = $3, radius = $4
+        WHERE id = $5 
+        RETURNING *
+      `, [name, lat, lng, radius || 50, id]);
+    } else {
+      result = await query(`
+        INSERT INTO branches (name, lat, lng, radius)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (name) DO UPDATE SET lat = $2, lng = $3, radius = $4
+        RETURNING *
+      `, [name, lat, lng, radius || 50]);
+    }
     res.json(result.rows[0]);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -6226,7 +6236,7 @@ router.post('/attendance/check-in', authenticateToken, async (req, res) => {
     let geofenceTarget = null;
 
     if (branch) {
-      const branchRes = await query('SELECT * FROM branches WHERE name = $1', [branch]);
+      const branchRes = await query('SELECT * FROM branches WHERE LOWER(name) = LOWER($1)', [branch.trim()]);
       if (branchRes.rows.length > 0) {
         geofenceTarget = branchRes.rows[0];
       }
@@ -6309,28 +6319,75 @@ router.post('/attendance/check-in', authenticateToken, async (req, res) => {
 // Check-out
 router.post('/attendance/check-out', authenticateToken, async (req, res) => {
   try {
-    const { lat, lng } = req.body;
+    const { lat, lng, branch: requestBranch } = req.body;
 
-    // Check Geofence (Optional for Check-out? User said "mark attendence", implies both. Let's strict.)
-    const settingsRes = await query('SELECT value FROM system_settings WHERE key = $1', ['OFFICE_LOCATION']);
-    if (settingsRes.rows.length > 0) {
-      const office = settingsRes.rows[0].value;
-      if (!lat || !lng) {
-        return res.status(400).json({ error: 'Location required to mark attendance' });
-      }
-      const dist = getDistance(lat, lng, office.lat, office.lng);
-      if (dist > 50) {
-        return res.status(400).json({ error: `You are ${(dist - 50).toFixed(0)}m away.Must be within 50m.` });
+    const today = new Date().toISOString().split('T')[0];
+
+    // 1. Fetch today's check-in log to determine branch
+    const logRes = await query('SELECT * FROM attendance_logs WHERE user_id = $1 AND date = $2 AND check_out IS NULL', [req.user.id, today]);
+    if (logRes.rows.length === 0) {
+      return res.status(400).json({ error: 'No active check-in found for today' });
+    }
+
+    const log = logRes.rows[0];
+    let geofenceTarget = null;
+    // Prioritize branch from request (user's current selection), fallback to check-in branch
+    let branchName = requestBranch || log.branch;
+
+    // 2. Determine Geofence Target (Branch or Legacy or No-Geofence)
+    if (branchName) {
+      const branchRes = await query('SELECT * FROM branches WHERE LOWER(name) = LOWER($1)', [branchName.trim()]);
+      if (branchRes.rows.length > 0) {
+        geofenceTarget = branchRes.rows[0];
       }
     }
 
-    const today = new Date().toISOString().split('T')[0];
+    if (!geofenceTarget) {
+      const settingsRes = await query('SELECT value FROM system_settings WHERE key = $1', ['OFFICE_LOCATION']);
+      if (settingsRes.rows.length > 0) {
+        geofenceTarget = settingsRes.rows[0].value;
+      }
+    }
+
+    // 3. Perform Geofence Check
+    if (geofenceTarget) {
+      if (!lat || !lng) {
+        return res.status(400).json({ error: 'Location required for check-out' });
+      }
+      
+      let dist = getDistance(lat, lng, geofenceTarget.lat, geofenceTarget.lng);
+      let allowedRadius = geofenceTarget.radius || 50;
+
+      // If outside the primary branch, check if they are in ANY other branch
+      if (dist > allowedRadius) {
+        const allBranches = await query('SELECT * FROM branches');
+        let foundOther = false;
+        
+        for (const b of allBranches.rows) {
+          const d = getDistance(lat, lng, b.lat, b.lng);
+          const r = b.radius || 50;
+          if (d <= r) {
+             foundOther = true;
+             geofenceTarget = b;
+             branchName = b.name;
+             dist = d;
+             allowedRadius = r;
+             break;
+          }
+        }
+
+        if (!foundOther) {
+          return res.status(400).json({ error: `You are ${(dist - allowedRadius).toFixed(0)}m away from ${branchName || 'office'}. Must be within ${allowedRadius}m of any branch.` });
+        }
+      }
+    }
+
     const result = await query(`
       UPDATE attendance_logs 
       SET check_out = NOW()
-      WHERE user_id = $1 AND date = $2 AND check_out IS NULL
-RETURNING *
-  `, [req.user.id, today]);
+      WHERE id = $1
+      RETURNING *
+    `, [log.id]);
 
     if (result.rows.length === 0) {
       return res.status(400).json({ error: 'No active check-in found for today' });

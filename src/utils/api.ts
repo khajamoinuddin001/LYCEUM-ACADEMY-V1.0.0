@@ -962,10 +962,10 @@ export const checkIn = async (data?: { lat?: number; lng?: number; selfie?: stri
   });
 };
 
-export const checkOut = async (location?: { lat: number; lng: number }) => {
+export const checkOut = async (location?: { lat: number; lng: number }, branch?: string) => {
   return await apiRequest('/attendance/check-out', {
     method: 'POST',
-    body: JSON.stringify(location || {})
+    body: JSON.stringify({ ...(location || {}), branch })
   });
 };
 
@@ -1022,7 +1022,7 @@ export const getBranches = async () => {
   return await apiRequest<any[]>('/attendance/branches', { method: 'GET' });
 };
 
-export const saveBranch = async (branch: { name: string; lat: number; lng: number; radius?: number }) => {
+export const saveBranch = async (branch: { id?: number; name: string; lat: number; lng: number; radius?: number }) => {
   return await apiRequest('/attendance/branches', {
     method: 'POST',
     body: JSON.stringify(branch)
