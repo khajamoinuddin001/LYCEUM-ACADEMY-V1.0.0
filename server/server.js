@@ -11,6 +11,7 @@ import authRoutes from './routes/auth.js';
 import apiRoutes from './routes/api.js';
 import { authenticateApiKey, autoRequireApiKeyAccess } from './auth.js';
 import { generatePayrollForMonth } from './routes/api.js';
+import { initLmsSockets } from './sockets/lms.js';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -238,21 +239,42 @@ const server = app.listen(PORT, () => {
   console.log(`🔐 JWT Secret: ${secret ? 'Set (starts with ' + secret.substring(0, 3) + '...)' : 'MISSING (Using default!)'}`);
 });
 
+// Initialize Sockets
+initLmsSockets(server, allowedOrigins);
+
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   console.log('SIGTERM signal received: closing HTTP server');
+  
+  // Force exit after 5s if connections don't close gracefully
+  const forceExitTimeout = setTimeout(() => {
+    console.log('⚠️ Forced shutdown after 5s timeout');
+    process.exit(1);
+  }, 5000);
+  forceExitTimeout.unref();
+
   server.close(async () => {
     console.log('HTTP server closed');
     await closePool();
+    clearTimeout(forceExitTimeout);
     process.exit(0);
   });
 });
 
 process.on('SIGINT', async () => {
   console.log('SIGINT signal received: closing HTTP server');
+
+  // Force exit after 5s if connections don't close gracefully
+  const forceExitTimeout = setTimeout(() => {
+    console.log('⚠️ Forced shutdown after 5s timeout');
+    process.exit(1);
+  }, 5000);
+  forceExitTimeout.unref();
+
   server.close(async () => {
     console.log('HTTP server closed');
     await closePool();
+    clearTimeout(forceExitTimeout);
     process.exit(0);
   });
 });

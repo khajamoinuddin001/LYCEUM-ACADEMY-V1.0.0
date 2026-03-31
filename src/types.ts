@@ -291,18 +291,27 @@ export interface LessonAttachment {
   url: string;
 }
 
+export type QuizQuestionType = 'mcq' | 'fill-in-blanks' | 'true-false';
+
 export interface QuizQuestion {
   id: string;
   question: string;
-  options: string[];
-  correctAnswerIndex: number;
+  options?: string[];
+  correctAnswerIndex?: number;
+  type: QuizQuestionType;
+  correctAnswer?: string;
 }
 
 export interface LmsLesson {
   id: string;
   title: string;
   content: string;
+  type?: 'lesson' | 'quiz';
   videoUrl?: string;
+  slides?: string[]; // Legacy text-based slides
+  presentationId?: number; // New: ID of the file in lms_attachments
+  presentationType?: 'pdf' | 'video' | 'image';
+  presentationUrl?: string;
   attachments?: LessonAttachment[];
   quiz?: QuizQuestion[];
 }
@@ -321,6 +330,44 @@ export interface LmsCourse {
   modules: LmsModule[];
   price?: number;
   discussions?: DiscussionThread[];
+  isLive?: boolean;
+}
+
+export interface ClassSession {
+  id: number;
+  courseId: string;
+  teacherId: number;
+  status: 'live' | 'ended';
+  currentLessonId: string;
+  currentSlideIndex: number;
+  currentPdfPage?: number;
+  // Database fields (snake_case)
+  current_lesson_id?: string;
+  current_slide_index?: number;
+  current_pdf_page?: number;
+  current_pdf_page_count?: number;
+  startedAt: string;
+  endedAt?: string;
+}
+
+export interface SessionAttendance {
+  id: number;
+  sessionId: number;
+  studentId: number;
+  joinTime: string;
+  lastActivityAt: string;
+}
+
+export interface ActivitySubmission {
+  id: number;
+  sessionId: number;
+  lessonId: string;
+  activityId: string;
+  studentId: number;
+  answer: any;
+  grade?: string;
+  feedback?: string;
+  submittedAt: string;
 }
 
 export type ContactActivityAction = 'created' | 'note' | 'status' | 'checklist' | 'video_add' | 'video_remove';

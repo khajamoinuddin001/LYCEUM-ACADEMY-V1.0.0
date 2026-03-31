@@ -1,6 +1,6 @@
 import type {
   CalendarEvent, Contact, CrmLead, AccountingTransaction, CrmStage, Quotation, User, UserRole, AppPermissions, ActivityLog, DocumentAnalysisResult, Document as Doc, ChecklistItem, QuotationTemplate, Visitor, TodoTask, Ticket, PaymentActivityLog, LmsCourse, LmsLesson, LmsModule, Coupon, ContactActivity, ContactActivityAction, DiscussionPost, DiscussionThread, RecordedSession, Channel, Notification, RecurringTask, VisaOperation,
-  UniversityCourse, Announcement, EmailTemplate, ApiKey
+  UniversityCourse, Announcement, EmailTemplate, ApiKey, ClassSession, SessionAttendance, ActivitySubmission
 } from '../types';
 import { DEFAULT_PERMISSIONS, DEFAULT_CHECKLIST } from '@/lib/constants';
 
@@ -1580,6 +1580,26 @@ export const deleteCoupon = async (code: string): Promise<Coupon[]> => {
   return getCoupons();
 };
 
+export const uploadLmsAsset = async (file: File): Promise<{ id: number; name: string; url: string; contentType: string; size: number }> => {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const response = await fetch(`${API_BASE_URL}/lms/upload`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${getToken()}`
+    },
+    body: formData
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Failed to upload LMS asset' }));
+    throw new Error(error.error || 'Failed to upload LMS asset');
+  }
+
+  return response.json();
+};
+
 // LMS Courses
 export const getLmsCourses = async (): Promise<LmsCourse[]> => {
   return apiRequest<LmsCourse[]>('/lms-courses');
@@ -2231,4 +2251,54 @@ export const deleteMockInterviewSession = async (contactId: string | number, ses
   await apiRequest(`/api/contacts/${contactId}/mock-interview-sessions/${sessionId}`, {
     method: 'DELETE'
   });
+};
+
+// --- LMS Offline Classes ---
+export const startClassSession = async (courseId: string, lessonId: string): Promise<ClassSession> => {
+  return apiRequest<ClassSession>('/lms/sessions', {
+    method: 'POST',
+    body: JSON.stringify({ courseId, lessonId })
+  });
+};
+
+export const joinClassSession = async (sessionId: number): Promise<ClassSession> => {
+  return apiRequest<ClassSession>(`/lms/sessions/${sessionId}/join`, {
+    method: 'POST'
+  });
+};
+
+export const updateSlideIndex = async (sessionId: number, lessonId: string, slideIndex: number): Promise<void> => {
+  await apiRequest(`/lms/sessions/${sessionId}/slide`, {
+    method: 'POST',
+    body: JSON.stringify({ lessonId, slideIndex })
+  });
+};
+
+export const updatePdfPage = async (sessionId: number, lessonId: string, pdfPage: number, pdfPageCount?: number): Promise<void> => {
+  await apiRequest(`/lms/sessions/${sessionId}/pdf-page`, {
+    method: 'POST',
+    body: JSON.stringify({ lessonId, pdfPage, pdfPageCount })
+  });
+};
+
+export const submitActivityAnswer = async (sessionId: number, lessonId: string, activityId: string, answer: any): Promise<ActivitySubmission> => {
+  return apiRequest<ActivitySubmission>(`/lms/sessions/${sessionId}/submit`, {
+    method: 'POST',
+    body: JSON.stringify({ lessonId, activityId, answer })
+  });
+};
+
+export const gradeActivitySubmission = async (submissionId: number, grade: string, feedback: string): Promise<ActivitySubmission> => {
+  return apiRequest<ActivitySubmission>(`/lms/submissions/${submissionId}/grade`, {
+    method: 'PUT',
+    body: JSON.stringify({ grade, feedback })
+  });
+};
+
+export const getActiveSession = async (courseId: string): Promise<ClassSession | null> => {
+  return apiRequest<ClassSession | null>(`/lms/courses/${courseId}/active-session`);
+};
+
+export const endClassSession = async (sessionId: number, courseId?: string): Promise<void> => {
+  await apiRequest(`/lms/sessions/${sessionId}/end${courseId ? `?courseId=${courseId}` : ''}`, { method: 'POST' });
 };

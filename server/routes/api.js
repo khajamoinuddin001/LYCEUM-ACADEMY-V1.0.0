@@ -5170,7 +5170,54 @@ router.delete('/coupons/:code', authenticateToken, async (req, res) => {
 router.get('/lms-courses', authenticateToken, async (req, res) => {
   try {
     const result = await query('SELECT * FROM lms_courses');
-    res.json(result.rows);
+    res.json(result.rows.map(row => ({
+      ...row,
+      isLive: !!row.is_live // explicitly ensure boolean
+    })));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Upload LMS Presentation Asset
+router.post('/lms/upload', authenticateToken, upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const result = await query(`
+      INSERT INTO lms_attachments(filename, content_type, file_data, file_size)
+      VALUES($1, $2, $3, $4)
+      RETURNING id, filename, content_type, file_size
+    `, [req.file.originalname, req.file.mimetype, req.file.buffer, req.file.size]);
+
+    const attachment = result.rows[0];
+    res.json({
+      id: attachment.id,
+      name: attachment.filename,
+      contentType: attachment.content_type,
+      size: attachment.file_size,
+      url: `/lms/attachments/${attachment.id}`
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Serve LMS Presentation Asset
+router.get('/lms/attachments/:id', authenticateToken, async (req, res) => {
+  try {
+    const result = await query('SELECT filename, content_type, file_data FROM lms_attachments WHERE id = $1', [req.params.id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Attachment not found' });
+    }
+
+    const doc = result.rows[0];
+    res.setHeader('Content-Type', doc.content_type);
+    res.setHeader('Content-Disposition', `inline; filename="${doc.filename}"`);
+    res.send(doc.file_data);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -5308,6 +5355,197 @@ router.delete('/lms-courses/:id', authenticateToken, async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
+});
+
+// --- OFFLINE CLASSES (Live Sessions) ---
+
+// Start a new live session
+router.post('/lms/sessions', authenticateToken, async (req, res) => {
+  try {
+    const { courseId, lessonId } = req.body;
+    if (req.user.role !== 'Admin' && req.user.role !== 'Staff') {
+      return res.status(403).json({ error: 'Only teachers can start sessions' });
+    }
+
+    // End any existing live sessions for this course to prevent duplicates/zombies
+    await query('UPDATE class_sessions SET status = \'ended\', ended_at = NOW() WHERE course_id = $1 AND status = \'live\'', [courseId]);
+
+    const result = await query(`
+      INSERT INTO class_sessions (course_id, teacher_id, current_lesson_id)
+      VALUES ($1, $2, $3)
+      RETURNING *
+    `, [courseId, req.user.id, lessonId]);
+
+    // Explicitly update course live status
+    await query('UPDATE lms_courses SET is_live = true WHERE id = $1', [courseId]);
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Join a live session (marks attendance)
+router.post('/lms/sessions/:id/join', authenticateToken, async (req, res) => {
+  try {
+    const sessionId = req.params.id;
+    let contactId = req.user.contactId;
+
+    if (!contactId) {
+      const contactResult = await query('SELECT id FROM contacts WHERE email = $1', [req.user.email]);
+      if (contactResult.rows.length === 0) {
+        return res.status(404).json({ error: 'Student contact record not found' });
+      }
+      contactId = contactResult.rows[0].id;
+    }
+
+    // Check if already marked present
+    const existing = await query('SELECT id FROM session_attendance WHERE session_id = $1 AND student_id = $2', [sessionId, contactId]);
+    
+    if (existing.rows.length === 0) {
+      await query(`
+        INSERT INTO session_attendance (session_id, student_id)
+        VALUES ($1, $2)
+      `, [sessionId, contactId]);
+    } else {
+      await query('UPDATE session_attendance SET last_activity_at = NOW() WHERE id = $1', [existing.rows[0].id]);
+    }
+
+    // Get current session state
+    const session = await query('SELECT * FROM class_sessions WHERE id = $1', [sessionId]);
+    res.json(session.rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update current slide (Teacher only)
+router.post('/lms/sessions/:id/slide', authenticateToken, async (req, res) => {
+  try {
+    const { lessonId, slideIndex } = req.body;
+    if (req.user.role !== 'Admin' && req.user.role !== 'Staff') {
+        return res.status(403).json({ error: 'Unauthorized' });
+    }
+
+    await query(`
+      UPDATE class_sessions 
+      SET current_lesson_id = $1, current_slide_index = $2 
+      WHERE id = $3
+    `, [lessonId, slideIndex, req.params.id]);
+
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update current PDF page (Teacher only)
+router.post('/lms/sessions/:id/pdf-page', authenticateToken, async (req, res) => {
+  try {
+    const { lessonId, pdfPage, pdfPageCount } = req.body;
+    if (req.user.role !== 'Admin' && req.user.role !== 'Staff') {
+        return res.status(403).json({ error: 'Unauthorized' });
+    }
+
+    await query(`
+      UPDATE class_sessions 
+      SET current_lesson_id = $1, current_pdf_page = $2, current_pdf_page_count = $3
+      WHERE id = $4
+    `, [lessonId, pdfPage, pdfPageCount, req.params.id]);
+
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Submit Activity Answer
+router.post('/lms/sessions/:id/submit', authenticateToken, async (req, res) => {
+  try {
+    const { lessonId, activityId, answer } = req.body;
+    const sessionId = req.params.id;
+    let contactId = req.user.contactId;
+
+    if (!contactId) {
+      const contactResult = await query('SELECT id FROM contacts WHERE email = $1', [req.user.email]);
+      if (contactResult.rows.length > 0) contactId = contactResult.rows[0].id;
+    }
+
+    if (!contactId) return res.status(400).json({ error: 'Only students can submit answers' });
+
+    const result = await query(`
+      INSERT INTO activity_submissions (session_id, lesson_id, activity_id, student_id, answer)
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING *
+    `, [sessionId, lessonId, activityId, contactId, JSON.stringify(answer)]);
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Grade Submission (Teacher only)
+router.put('/lms/submissions/:id/grade', authenticateToken, async (req, res) => {
+  try {
+    const { grade, feedback } = req.body;
+    if (req.user.role !== 'Admin' && req.user.role !== 'Staff') {
+        return res.status(403).json({ error: 'Unauthorized' });
+    }
+
+    const result = await query(`
+      UPDATE activity_submissions 
+      SET grade = $1, feedback = $2 
+      WHERE id = $3
+      RETURNING *
+    `, [grade, feedback, req.params.id]);
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get active session for a course
+router.get('/lms/courses/:courseId/active-session', authenticateToken, async (req, res) => {
+  try {
+    const result = await query(`
+      SELECT * FROM class_sessions 
+      WHERE course_id = $1 AND status = 'live'
+      ORDER BY started_at DESC LIMIT 1
+    `, [req.params.courseId]);
+
+    res.json(result.rows[0] || null);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// End Live Session
+router.post('/lms/sessions/:id/end', authenticateToken, async (req, res) => {
+    try {
+      if (req.user.role !== 'Admin' && req.user.role !== 'Staff') {
+          return res.status(403).json({ error: 'Unauthorized' });
+      }
+      
+      const courseId = req.query.courseId;
+      const sessionId = req.params.id;
+
+      if (courseId) {
+        // End ALL sessions for this course AND update course status
+        await query('UPDATE class_sessions SET status = \'ended\', ended_at = NOW() WHERE course_id = $1 AND status = \'live\'', [courseId]);
+        await query('UPDATE lms_courses SET is_live = false WHERE id = $1', [courseId]);
+      } else {
+        // End specific session
+        await query('UPDATE class_sessions SET status = \'ended\', ended_at = NOW() WHERE id = $1::integer', [sessionId]);
+        // Note: we don't update lms_courses.is_live here because there might be other active sessions
+        // but since we usually have only one, this is just a backup.
+      }
+
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
 });
 
 // Visitors routes

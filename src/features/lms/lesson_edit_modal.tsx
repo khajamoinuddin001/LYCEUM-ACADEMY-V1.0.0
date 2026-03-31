@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { X, Plus, Trash2 } from '@/components/common/icons';
+import React, { useState, useEffect, useRef } from 'react';
+import { X, Trash2, FileUp, Video, FileText, Image as ImageIcon, Loader2 } from '@/components/common/icons';
 import type { LmsLesson, LessonAttachment, QuizQuestion } from '@/types';
+import * as api from '@/utils/api';
 
 interface LessonEditModalProps {
   lesson: Omit<LmsLesson, 'id'> | LmsLesson | null;
@@ -11,12 +12,11 @@ interface LessonEditModalProps {
 const LessonEditModal: React.FC<LessonEditModalProps> = ({ lesson, onClose, onSave }) => {
   const [localLesson, setLocalLesson] = useState<Partial<LmsLesson>>({});
   const [error, setError] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
   const isNew = !lesson || !('id' in lesson);
 
   useEffect(() => {
     const initialData = lesson ? JSON.parse(JSON.stringify(lesson)) : {};
-    if (!initialData.attachments) initialData.attachments = [];
-    if (!initialData.quiz) initialData.quiz = [];
     setLocalLesson(initialData);
     setError('');
   }, [lesson]);
@@ -27,47 +27,6 @@ const LessonEditModal: React.FC<LessonEditModalProps> = ({ lesson, onClose, onSa
       return;
     }
     onSave(localLesson as LmsLesson);
-  };
-  const handleAttachmentChange = (index: number, field: keyof LessonAttachment, value: string) => {
-    setLocalLesson(prev => {
-        const newAttachments = [...(prev.attachments || [])];
-        newAttachments[index] = { ...newAttachments[index], [field]: value };
-        return { ...prev, attachments: newAttachments };
-    });
-  };
-  const addAttachment = () => {
-    setLocalLesson(prev => ({...prev, attachments: [...(prev.attachments || []), {id: `att-${Date.now()}`, name:'', url:''}]}));
-  };
-  const removeAttachment = (index: number) => {
-    setLocalLesson(prev => ({...prev, attachments: (prev.attachments || []).filter((_, i) => i !== index)}));
-  };
-  const handleQuestionChange = (qIndex: number, value: string) => {
-    setLocalLesson(prev => {
-        const newQuiz = [...(prev.quiz || [])];
-        newQuiz[qIndex].question = value;
-        return { ...prev, quiz: newQuiz };
-    });
-  };
-   const handleOptionChange = (qIndex: number, optIndex: number, value: string) => {
-    setLocalLesson(prev => {
-        const newQuiz = [...(prev.quiz || [])];
-        newQuiz[qIndex].options[optIndex] = value;
-        return { ...prev, quiz: newQuiz };
-    });
-  };
-  const setCorrectAnswer = (qIndex: number, optIndex: number) => {
-     setLocalLesson(prev => {
-        const newQuiz = [...(prev.quiz || [])];
-        newQuiz[qIndex].correctAnswerIndex = optIndex;
-        return { ...prev, quiz: newQuiz };
-    });
-  };
-   const addQuestion = () => {
-    const newQuestion: QuizQuestion = { id: `q-${Date.now()}`, question: '', options: ['', '', '', ''], correctAnswerIndex: 0 };
-    setLocalLesson(prev => ({...prev, quiz: [...(prev.quiz || []), newQuestion]}));
-  };
-  const removeQuestion = (qIndex: number) => {
-    setLocalLesson(prev => ({...prev, quiz: (prev.quiz || []).filter((_, i) => i !== qIndex)}));
   };
   
   const inputClasses = "w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-lyceum-blue focus:border-lyceum-blue sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white";
@@ -95,46 +54,87 @@ const LessonEditModal: React.FC<LessonEditModalProps> = ({ lesson, onClose, onSa
             </div>
           </div>
           
-           {}
-          <div>
-            <h3 className={sectionHeaderClasses}>Attachments / Resources</h3>
-            <div className="space-y-3">
-              {(localLesson.attachments || []).map((att, index) => (
-                <div key={att.id || index} className="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-700/50 rounded-md">
-                  <input type="text" placeholder="File Name" value={att.name} onChange={e => handleAttachmentChange(index, 'name', e.target.value)} className={`${inputClasses} flex-grow`} />
-                  <input type="text" placeholder="File URL" value={att.url} onChange={e => handleAttachmentChange(index, 'url', e.target.value)} className={`${inputClasses} flex-grow`} />
-                  <button onClick={() => removeAttachment(index)} className="p-2 text-gray-500 hover:text-red-500"><Trash2 size={16} /></button>
-                </div>
-              ))}
-            </div>
-            <button onClick={addAttachment} className="mt-3 inline-flex items-center text-sm font-medium text-lyceum-blue hover:underline"><Plus size={16} className="mr-1" /> Add Attachment</button>
-          </div>
           
-          {}
+          {/* Live Presentation File */}
           <div>
-            <h3 className={sectionHeaderClasses}>Knowledge Check / Quiz</h3>
-            <div className="space-y-4">
-              {(localLesson.quiz || []).map((q, qIndex) => (
-                <div key={q.id || qIndex} className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg border dark:border-gray-600">
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Question {qIndex + 1}</label>
-                    <button onClick={() => removeQuestion(qIndex)} className="p-1 text-gray-500 hover:text-red-500"><Trash2 size={16} /></button>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className={sectionHeaderClasses + " mb-0"}>Live Presentation File</h3>
+              <p className="text-[10px] text-gray-500">PDF, Video, or Image for live class</p>
+            </div>
+            
+            {localLesson.presentationUrl ? (
+              <div className="p-4 bg-lyceum-blue/5 dark:bg-lyceum-blue/10 rounded-lg border border-lyceum-blue/20 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-white dark:bg-gray-700 rounded-md shadow-sm">
+                    {localLesson.presentationType === 'pdf' && <FileText className="text-red-500" size={20} />}
+                    {localLesson.presentationType === 'video' && <Video className="text-blue-500" size={20} />}
+                    {localLesson.presentationType === 'image' && <ImageIcon className="text-green-500" size={20} />}
                   </div>
-                  <textarea rows={2} placeholder="Enter the question text..." value={q.question} onChange={e => handleQuestionChange(qIndex, e.target.value)} className={inputClasses}/>
-                  <div className="mt-3 space-y-2">
-                    <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Options (select correct answer)</label>
-                    {q.options.map((opt, optIndex) => (
-                      <div key={optIndex} className="flex items-center gap-2">
-                        <input type="radio" name={`correct-answer-${q.id}`} checked={q.correctAnswerIndex === optIndex} onChange={() => setCorrectAnswer(qIndex, optIndex)} className="h-4 w-4 text-lyceum-blue focus:ring-lyceum-blue" />
-                        <input type="text" placeholder={`Option ${optIndex + 1}`} value={opt} onChange={e => handleOptionChange(qIndex, optIndex, e.target.value)} className={inputClasses} />
-                      </div>
-                    ))}
+                  <div>
+                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100 uppercase">{localLesson.presentationType} Presentation</p>
+                    <a href={localLesson.presentationUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-lyceum-blue hover:underline">View Asset</a>
                   </div>
                 </div>
-              ))}
-            </div>
-             <button onClick={addQuestion} className="mt-3 inline-flex items-center text-sm font-medium text-lyceum-blue hover:underline"><Plus size={16} className="mr-1" /> Add Question</button>
+                <button 
+                  onClick={() => setLocalLesson(p => ({...p, presentationId: undefined, presentationType: undefined, presentationUrl: undefined}))}
+                  className="p-2 text-gray-400 hover:text-red-500 transition-colors"
+                >
+                  <Trash2 size={18} />
+                </button>
+              </div>
+            ) : (
+              <div className="relative">
+                <input
+                  type="file"
+                  accept="application/pdf,video/*,image/*"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    
+                    setIsUploading(true);
+                    try {
+                      const result = await api.uploadLmsAsset(file);
+                      let type: 'pdf' | 'video' | 'image' = 'pdf';
+                      if (file.type.startsWith('video/')) type = 'video';
+                      else if (file.type.startsWith('image/')) type = 'image';
+                      
+                      setLocalLesson(p => ({
+                        ...p,
+                        presentationId: result.id,
+                        presentationUrl: result.url,
+                        presentationType: type
+                      }));
+                    } catch (err: any) {
+                      setError(err.message || 'Failed to upload presentation file.');
+                    } finally {
+                      setIsUploading(false);
+                    }
+                  }}
+                  className="hidden"
+                  id="presentation-upload"
+                  disabled={isUploading}
+                />
+                <label
+                  htmlFor="presentation-upload"
+                  className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors ${isUploading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  {isUploading ? (
+                    <div className="flex flex-col items-center">
+                      <Loader2 size={32} className="text-lyceum-blue animate-spin mb-2" />
+                      <span className="text-sm text-gray-500">Uploading...</span>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center">
+                      <FileUp size={32} className="text-gray-400 mb-2" />
+                      <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Click to upload PDF, Video, or Image</span>
+                      <span className="text-xs text-gray-400 mt-1">Recommended for live presentation</span>
+                    </div>
+                  )}
+                </label>
+              </div>
+            )}
           </div>
+
 
           {error && <p className="text-sm text-center text-red-500">{error}</p>}
         </div>

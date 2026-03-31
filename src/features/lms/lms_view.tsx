@@ -70,8 +70,16 @@ const CourseCard: React.FC<{
             )}
             <div className="flex-grow">
                 <div className="flex items-start justify-between">
-                    <h3 className="font-bold text-gray-800 dark:text-gray-100 text-lg mb-2 group-hover:text-lyceum-blue pr-8">{course.title}</h3>
-                    <div className="p-2 rounded-full bg-lyceum-blue/10 dark:bg-lyceum-blue/20 text-lyceum-blue">
+                    <div className="flex flex-col">
+                        {course.isLive && (
+                            <div className="flex items-center gap-1.5 mb-2">
+                                <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.5)]"></span>
+                                <span className="text-[10px] font-black text-red-500 uppercase tracking-widest bg-red-500/10 px-2 py-0.5 rounded-sm">Live Now</span>
+                            </div>
+                        )}
+                        <h3 className="font-bold text-gray-800 dark:text-gray-100 text-lg mb-2 group-hover:text-lyceum-blue pr-8 leading-tight">{course.title}</h3>
+                    </div>
+                    <div className="p-2 rounded-full bg-lyceum-blue/10 dark:bg-lyceum-blue/20 text-lyceum-blue flex-shrink-0">
                         <BookOpen size={20} />
                     </div>
                 </div>
@@ -79,7 +87,7 @@ const CourseCard: React.FC<{
                 <p className="text-xs text-gray-500 dark:text-gray-500">Instructor: {course.instructor}</p>
             </div>
             
-            {isStudent && !isEnrolled && course.price !== undefined ? (
+            {isStudent && !isEnrolled && course.price != null ? (
                 <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
                     <p className="text-2xl font-bold text-gray-800 dark:text-gray-100 flex items-center">
                         <IndianRupee size={20} className="mr-1 text-gray-500 dark:text-gray-400" />

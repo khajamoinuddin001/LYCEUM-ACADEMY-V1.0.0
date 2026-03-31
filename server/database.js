@@ -304,6 +304,17 @@ export async function initDatabase() {
       await client.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS due_date TEXT');
       await client.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT \'{}\'');
       await client.query('ALTER TABLE transactions ADD COLUMN IF NOT EXISTS line_items JSONB');
+      
+      // Ensure class_sessions has teacher_id and other fields
+      await client.query(`
+        ALTER TABLE class_sessions 
+        ADD COLUMN IF NOT EXISTS teacher_id INTEGER REFERENCES users(id),
+        ADD COLUMN IF NOT EXISTS current_lesson_id TEXT,
+        ADD COLUMN IF NOT EXISTS current_slide_index INTEGER DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS current_pdf_page INTEGER DEFAULT 1,
+        ADD COLUMN IF NOT EXISTS current_pdf_page_count INTEGER
+      `).catch(() => {});
+
       await client.query('ALTER TABLE tasks ADD COLUMN IF NOT EXISTS assigned_by INTEGER REFERENCES users(id)');
       await client.query('ALTER TABLE tasks ADD COLUMN IF NOT EXISTS priority TEXT DEFAULT \'Medium\'');
       await client.query('ALTER TABLE tasks ADD COLUMN IF NOT EXISTS completed_by INTEGER REFERENCES users(id)');
@@ -531,15 +542,19 @@ export async function initDatabase() {
       )
     `);
 
-    // Coupons table
+    // LMS attachments table
     await client.query(`
-      CREATE TABLE IF NOT EXISTS coupons (
-        code TEXT PRIMARY KEY,
-        discount_percentage REAL NOT NULL,
-        is_active BOOLEAN DEFAULT true,
-        applicable_course_ids JSONB DEFAULT '[]'
+      CREATE TABLE IF NOT EXISTS lms_attachments (
+        id SERIAL PRIMARY KEY,
+        filename TEXT NOT NULL,
+        content_type TEXT,
+        file_data BYTEA,
+        file_size INTEGER,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    // LMS Courses (ensure createdAt)
 
     // LMS Courses (ensure createdAt)
     await client.query(`
@@ -551,9 +566,11 @@ export async function initDatabase() {
         price REAL,
         modules JSONB DEFAULT '[]',
         discussions JSONB DEFAULT '[]',
+        is_live BOOLEAN DEFAULT false,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    await client.query('ALTER TABLE lms_courses ADD COLUMN IF NOT EXISTS is_live BOOLEAN DEFAULT false');
     await migrateColumn('lms_courses', 'createdAt', 'created_at');
 
     // Payment Activity Log table
@@ -598,6 +615,49 @@ export async function initDatabase() {
     `);
     await client.query('CREATE INDEX IF NOT EXISTS idx_active_sessions_user_id ON active_sessions(user_id)');
     await client.query('CREATE INDEX IF NOT EXISTS idx_active_sessions_token_hash ON active_sessions(token_hash)');
+    
+    // --- OFFLINE CLASSES TABLES ---
+
+    // Class Sessions (Live classes)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS class_sessions (
+        id SERIAL PRIMARY KEY,
+        course_id TEXT REFERENCES lms_courses(id) ON DELETE CASCADE,
+        teacher_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        status TEXT NOT NULL DEFAULT 'live' CHECK (status IN ('live', 'ended')),
+        current_lesson_id TEXT,
+        current_slide_index INTEGER DEFAULT 0,
+        current_pdf_page INTEGER DEFAULT 1,
+        started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        ended_at TIMESTAMP
+      )
+    `);
+
+    // Session Attendance (Automated)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS session_attendance (
+        id SERIAL PRIMARY KEY,
+        session_id INTEGER REFERENCES class_sessions(id) ON DELETE CASCADE,
+        student_id INTEGER REFERENCES contacts(id) ON DELETE CASCADE,
+        join_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        last_activity_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Activity Submissions (Live responses and grading)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS activity_submissions (
+        id SERIAL PRIMARY KEY,
+        session_id INTEGER REFERENCES class_sessions(id) ON DELETE CASCADE,
+        lesson_id TEXT,
+        activity_id TEXT,
+        student_id INTEGER REFERENCES contacts(id) ON DELETE CASCADE,
+        answer JSONB NOT NULL,
+        grade TEXT, -- 'correct', 'partial', 'incorrect'
+        feedback TEXT,
+        submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
 
     // Ensure new columns exist in existing table
     await client.query('ALTER TABLE active_sessions ADD COLUMN IF NOT EXISTS device_info TEXT');

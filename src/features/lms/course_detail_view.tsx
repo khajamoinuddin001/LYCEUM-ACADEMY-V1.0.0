@@ -16,11 +16,12 @@ interface CourseDetailViewProps {
     users: User[];
     contacts: Contact[];
     onSelectLesson: (lesson: LmsLesson) => void;
+    onStartLive: (lesson: LmsLesson) => void;
     onBack: () => void;
     onModuleCreate: (courseId: string, title: string) => void;
     onModuleUpdate: (courseId: string, moduleId: string, newTitle: string) => void;
     onModuleDelete: (courseId: string, moduleId: string) => void;
-    onLessonCreate: (moduleId: string) => void;
+    onLessonCreate: (moduleId: string, type?: 'lesson' | 'quiz') => void;
     onLessonUpdate: (lesson: LmsLesson) => void;
     onLessonDelete: (courseId: string, lessonId: string) => void;
     onViewCertificate: (course: LmsCourse) => void;
@@ -56,19 +57,24 @@ const ModuleEditor: React.FC<{
                 className="bg-transparent text-gray-800 dark:text-gray-100 font-semibold focus:ring-1 focus:ring-lyceum-blue focus:outline-none rounded-md px-1 -ml-1"
                 autoFocus
             />
-            <button onClick={handleSave} className="p-1 text-green-600 hover:bg-green-100 rounded-full"><CheckCircle2 size={16} /></button>
-            <button onClick={() => setIsEditing(false)} className="p-1 text-red-600 hover:bg-red-100 rounded-full"><X size={16} /></button>
+            <button type="button" onClick={(e) => { e.stopPropagation(); handleSave(); }} className="p-1 text-green-600 hover:bg-green-100 rounded-full"><CheckCircle2 size={16} /></button>
+            <button type="button" onClick={(e) => { e.stopPropagation(); setIsEditing(false); }} className="p-1 text-red-600 hover:bg-red-100 rounded-full"><X size={16} /></button>
         </div>
     ) : (
         <div className="flex items-center gap-2 group">
             <h3 className="font-semibold text-gray-800 dark:text-gray-100">{module.title}</h3>
-            <button onClick={(e) => { e.stopPropagation(); setIsEditing(true); }} className="p-1 text-gray-400 hover:text-lyceum-blue opacity-0 group-hover:opacity-100 transition-opacity"><Edit size={16} /></button>
-            <button onClick={(e) => { e.stopPropagation(); onModuleDelete(courseId, module.id); }} className="p-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={16} /></button>
+            <button type="button" onClick={(e) => { e.stopPropagation(); setIsEditing(true); }} className="p-1 text-gray-400 hover:text-lyceum-blue opacity-0 group-hover:opacity-100 transition-opacity"><Edit size={16} /></button>
+            <button type="button" onClick={(e) => { e.stopPropagation(); e.preventDefault(); onModuleDelete(courseId, module.id); }} className="p-1 text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={16} /></button>
         </div>
     );
 };
 
-const CourseEnrollmentView: React.FC<{ course: LmsCourse; onPurchase: () => void; }> = ({ course, onPurchase }) => {
+const CourseEnrollmentView: React.FC<{ 
+    course: LmsCourse; 
+    onPurchase: () => void;
+    user: User;
+    onSelectLesson: (lesson: LmsLesson) => void;
+}> = ({ course, onPurchase, user, onSelectLesson }) => {
     const totalLessons = course.modules.reduce((acc, mod) => acc + mod.lessons.length, 0);
     const totalAttachments = course.modules.reduce((acc, mod) => acc + mod.lessons.reduce((lAcc, l) => lAcc + (l.attachments?.length || 0), 0), 0);
     const totalQuizzes = course.modules.reduce((acc, mod) => acc + mod.lessons.reduce((lAcc, l) => lAcc + (l.quiz?.length ? 1 : 0), 0), 0);
@@ -82,9 +88,24 @@ const CourseEnrollmentView: React.FC<{ course: LmsCourse; onPurchase: () => void
                         {course.modules.map((module, index) => (
                             <div key={module.id} className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
                                 <h4 className="font-semibold text-gray-700 dark:text-gray-200">Module {index + 1}: {module.title}</h4>
-                                <ul className="mt-2 ml-4 list-disc list-inside text-sm text-gray-600 dark:text-gray-400 space-y-1">
+                                <ul className="mt-2 space-y-2">
                                     {module.lessons.map(lesson => (
-                                        <li key={lesson.id}>{lesson.title}</li>
+                                        <li key={lesson.id}>
+                                            {(user.role === 'Admin' || user.role === 'Staff') ? (
+                                                <button 
+                                                    onClick={() => onSelectLesson(lesson)}
+                                                    className="w-full text-left p-2 rounded hover:bg-lyceum-blue/5 text-sm text-gray-600 dark:text-gray-400 flex items-center group/lesson"
+                                                >
+                                                    <div className="h-1.5 w-1.5 rounded-full bg-gray-400 group-hover/lesson:bg-lyceum-blue mr-2"></div>
+                                                    <span className="group-hover/lesson:text-lyceum-blue transition-colors">{lesson.title}</span>
+                                                </button>
+                                            ) : (
+                                                <div className="px-2 py-1 text-sm text-gray-600 dark:text-gray-400 flex items-center">
+                                                    <div className="h-1.5 w-1.5 rounded-full bg-gray-400 mr-2"></div>
+                                                    {lesson.title}
+                                                </div>
+                                            )}
+                                        </li>
                                     ))}
                                 </ul>
                             </div>
@@ -115,7 +136,7 @@ const CourseEnrollmentView: React.FC<{ course: LmsCourse; onPurchase: () => void
 };
 
 const CourseDetailView: React.FC<CourseDetailViewProps> = (props) => {
-    const { course, student, user, users, contacts, onSelectLesson, onBack, onModuleCreate, onModuleUpdate, onModuleDelete, onLessonCreate, onLessonUpdate, onLessonDelete, onViewCertificate, onInitiatePurchase, onSavePost, onManualEnroll } = props;
+    const { course, student, user, users, contacts, onSelectLesson, onStartLive, onBack, onModuleCreate, onModuleUpdate, onModuleDelete, onLessonCreate, onLessonUpdate, onLessonDelete, onViewCertificate, onInitiatePurchase, onSavePost, onManualEnroll } = props;
     const [openModuleId, setOpenModuleId] = useState<string | null>(course.modules[0]?.id || null);
     const [newModuleTitle, setNewModuleTitle] = useState('');
     const [viewMode, setViewMode] = useState<'content' | 'analytics' | 'discussions'>('content');
@@ -150,35 +171,29 @@ const CourseDetailView: React.FC<CourseDetailViewProps> = (props) => {
                     <ArrowLeft size={16} className="mr-2" />
                     Back to Courses
                 </button>
-                <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
-                    <div className="p-6">
-                        <div className="flex items-start justify-between">
-                            <div>
-                                <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-100">{course.title}</h1>
-                                <p className="text-gray-500 dark:text-gray-400 mt-1">
-                                    Taught by <span className="font-medium text-gray-700 dark:text-gray-300">{course.instructor}</span>
-                                </p>
-                                <p className="text-sm text-gray-600 dark:text-gray-300 mt-2 max-w-2xl">{course.description}</p>
-                            </div>
-                            <div className="p-3 rounded-full bg-lyceum-blue/10 dark:bg-lyceum-blue/20 text-lyceum-blue ml-4 flex-shrink-0">
-                                <GraduationCap size={24} />
+                <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+                    <div className="p-8 bg-lyceum-blue-dark text-white relative overflow-hidden">
+                        <div className="relative z-10">
+                            <span className="px-3 py-1 bg-lyceum-blue text-[10px] font-bold uppercase tracking-widest rounded-full">New Course</span>
+                            <h2 className="text-4xl font-black mt-4 mb-2">{course.title}</h2>
+                            <p className="text-lyceum-blue-light text-lg max-w-2xl opacity-90">{course.description}</p>
+                            <div className="flex items-center mt-6 gap-6">
+                                <div className="flex items-center gap-2">
+                                    <div className="h-10 w-10 rounded-full bg-white/10 flex items-center justify-center font-bold text-lyceum-blue-light">{course.instructor?.charAt(0)}</div>
+                                    <div>
+                                        <span className="block text-[10px] uppercase opacity-50 font-bold">Instructor</span>
+                                        <span className="font-bold">{course.instructor}</span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
+                        <div className="absolute top-0 right-0 -mr-16 -mt-16 h-64 w-64 bg-white/5 rounded-full blur-3xl"></div>
+                        <div className="absolute bottom-0 right-0 mr-12 mb-12 h-32 w-32 bg-lyceum-blue/20 rounded-full blur-2xl animate-pulse"></div>
                     </div>
-
-                    <CourseEnrollmentView course={course} onPurchase={() => onInitiatePurchase(course)} />
+                    <CourseEnrollmentView course={course} onPurchase={() => onInitiatePurchase(course)} user={user} onSelectLesson={onSelectLesson} />
                 </div>
-                <style>{`
-                    @keyframes fade-in {
-                        from { opacity: 0; transform: translateY(10px); }
-                        to { opacity: 1; transform: translateY(0); }
-                    }
-                    .animate-fade-in {
-                        animation: fade-in 0.3s ease-out forwards;
-                    }
-                `}</style>
             </div>
-        )
+        );
     }
 
     const courseContent = (
@@ -206,7 +221,9 @@ const CourseDetailView: React.FC<CourseDetailViewProps> = (props) => {
                                     return (
                                         <li key={lesson.id} className="group flex items-center pr-4">
                                             <button onClick={() => onSelectLesson(lesson)} className="w-full flex items-center p-4 pl-16 text-left hover:bg-lyceum-blue/5 dark:hover:bg-lyceum-blue/10 flex-grow">
-                                                {isCompleted ? <CheckCircle2 size={18} className="text-green-500 mr-3 flex-shrink-0" /> : <Circle size={18} className="text-gray-300 dark:text-gray-600 mr-3 flex-shrink-0" />}
+                                                {isCompleted ? <CheckCircle2 size={18} className="text-green-500 mr-3 flex-shrink-0" /> : 
+                                                 lesson.type === 'quiz' ? <FileQuestion size={18} className="text-lyceum-blue mr-3 flex-shrink-0" /> :
+                                                 <Circle size={18} className="text-gray-300 dark:text-gray-600 mr-3 flex-shrink-0" />}
                                                 <span className={`text-sm ${isCompleted ? 'text-gray-500 dark:text-gray-400 line-through' : 'text-gray-700 dark:text-gray-200'}`}>
                                                     {lesson.title}
                                                 </span>
@@ -218,8 +235,8 @@ const CourseDetailView: React.FC<CourseDetailViewProps> = (props) => {
                                             </button>
                                             {isAdmin && (
                                                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                    <button onClick={() => onLessonUpdate(lesson)} className="p-1 text-gray-400 hover:text-lyceum-blue"><Edit size={16} /></button>
-                                                    <button onClick={() => onLessonDelete(course.id, lesson.id)} className="p-1 text-gray-400 hover:text-red-500"><Trash2 size={16} /></button>
+                                                    <button type="button" onClick={(e) => { e.stopPropagation(); e.preventDefault(); onLessonUpdate(lesson); }} className="p-1 text-gray-400 hover:text-lyceum-blue"><Edit size={16} /></button>
+                                                    <button type="button" onClick={(e) => { e.stopPropagation(); e.preventDefault(); onLessonDelete(course.id, lesson.id); }} className="p-1 text-gray-400 hover:text-red-500"><Trash2 size={16} /></button>
                                                 </div>
                                             )}
                                         </li>
@@ -227,9 +244,12 @@ const CourseDetailView: React.FC<CourseDetailViewProps> = (props) => {
                                 })}
                             </ul>
                             {isAdmin && (
-                                <div className="p-4 pl-16">
-                                    <button onClick={() => onLessonCreate(module.id)} className="flex items-center text-sm font-medium text-lyceum-blue hover:underline">
+                                <div className="p-4 pl-16 flex items-center gap-4">
+                                    <button onClick={() => onLessonCreate(module.id, 'lesson')} className="flex items-center text-sm font-medium text-lyceum-blue hover:underline">
                                         <Plus size={16} className="mr-2" /> Add Lesson
+                                    </button>
+                                    <button onClick={() => onLessonCreate(module.id, 'quiz')} className="flex items-center text-sm font-medium text-lyceum-blue hover:underline">
+                                        <FileQuestion size={16} className="mr-2" /> Knowledge/Quiz
                                     </button>
                                 </div>
                             )}
@@ -269,7 +289,7 @@ const CourseDetailView: React.FC<CourseDetailViewProps> = (props) => {
                             <p className="text-gray-500 dark:text-gray-400 mt-1">
                                 Taught by <span className="font-medium text-gray-700 dark:text-gray-300">{course.instructor}</span>
                             </p>
-                            {course.price !== undefined && (
+                            {course.price != null && (
                                 <p className="mt-2 text-3xl font-bold text-lyceum-blue-dark dark:text-lyceum-blue flex items-center">
                                     <IndianRupee size={28} className="mr-2" />
                                     {course.price.toLocaleString('en-IN')}
@@ -281,6 +301,19 @@ const CourseDetailView: React.FC<CourseDetailViewProps> = (props) => {
                             <div className="p-3 rounded-full bg-lyceum-blue/10 dark:bg-lyceum-blue/20 text-lyceum-blue">
                                 <BookOpen size={24} />
                             </div>
+                            {(user.role === 'Admin' || user.role === 'Staff') && (
+                                <button
+                                    onClick={() => {
+                                        const firstLesson = course.modules[0]?.lessons[0];
+                                        if (firstLesson) onStartLive(firstLesson);
+                                        else alert('Please add at least one lesson to the course before entering the classroom.');
+                                    }}
+                                    className="inline-flex items-center px-4 py-2 text-sm font-bold text-white bg-lyceum-blue rounded-md shadow-sm hover:bg-lyceum-blue-dark transition-all transform hover:scale-105"
+                                >
+                                    <Video size={16} className="mr-2" />
+                                    Enter Classroom
+                                </button>
+                            )}
                             {user.role === 'Student' && isCourseCompleted && (
                                 <button
                                     onClick={() => onViewCertificate(course)}
@@ -303,18 +336,18 @@ const CourseDetailView: React.FC<CourseDetailViewProps> = (props) => {
                     </div>
                 </div>
                 {isAdmin && (
-                    <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
+                    <div className="px-6 pb-6 pt-0 border-b border-gray-100 dark:border-gray-700/50 flex">
                         <button
                             onClick={() => setShowEnrollModal(true)}
-                            className="flex items-center gap-2 px-4 py-2 bg-lyceum-blue text-white rounded-lg hover:bg-lyceum-blue-dark transition-colors text-sm font-medium"
+                            className="flex items-center gap-2 px-4 py-2 bg-lyceum-blue/10 text-lyceum-blue rounded-lg hover:bg-lyceum-blue/20 transition-colors text-xs font-bold uppercase tracking-wider"
                         >
-                            <UserPlus size={16} />
+                            <UserPlus size={14} />
                             Enroll Student Manually
                         </button>
                     </div>
                 )}
 
-                <div className="border-b border-t border-gray-200 dark:border-gray-700">
+                <div className="border-b border-gray-200 dark:border-gray-700">
                     <nav className="-mb-px flex space-x-4 px-6">
                         <button
                             onClick={() => setViewMode('content')}
@@ -342,23 +375,21 @@ const CourseDetailView: React.FC<CourseDetailViewProps> = (props) => {
                 {viewMode === 'analytics' && isAdmin ? (
                     <CourseAnalyticsView course={course} enrolledStudents={enrolledStudents} />
                 ) : viewMode === 'discussions' ? (
-                    <CourseDiscussionsView course={course} user={user} users={users} onSavePost={props.onSavePost} />
+                    <CourseDiscussionsView course={course} user={user} users={users} onSavePost={onSavePost} />
                 ) : (
                     courseContent
                 )}
             </div>
 
-            {
-                showEnrollModal && (
-                    <ManualEnrollmentModal
-                        isOpen={showEnrollModal}
-                        onClose={() => setShowEnrollModal(false)}
-                        onEnroll={onManualEnroll}
-                        contacts={contacts}
-                        course={course}
-                    />
-                )
-            }
+            {showEnrollModal && (
+                <ManualEnrollmentModal
+                    isOpen={showEnrollModal}
+                    onClose={() => setShowEnrollModal(false)}
+                    onEnroll={onManualEnroll}
+                    contacts={contacts}
+                    course={course}
+                />
+            )}
 
             <style>{`
                 @keyframes fade-in {
@@ -369,7 +400,7 @@ const CourseDetailView: React.FC<CourseDetailViewProps> = (props) => {
                     animation: fade-in 0.3s ease-out forwards;
                 }
             `}</style>
-        </div >
+        </div>
     );
 };
 

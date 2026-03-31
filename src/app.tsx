@@ -57,6 +57,7 @@ import CourseDetailView from '@/features/lms/course_detail_view';
 import CourseEditModal from '@/features/lms/course_edit_modal';
 import CouponEditModal from '@/features/finance/coupon_edit_modal';
 import LessonEditModal from '@/features/lms/lesson_edit_modal';
+import QuizEditModal from '@/features/lms/quiz_edit_modal';
 import CertificateView from '@/features/lms/certificate_view';
 import PaymentGatewayView from '@/features/finance/payment_gateway_view';
 import LmsPlayerView from '@/features/lms/lms_player_view';
@@ -85,6 +86,7 @@ import AnouncementView from '@/features/announcement/announcement_view';
 import StudentAnnouncementsView from '@/features/students/student_announcements_view';
 import AdminMockInterviewView from '@/features/mock_interview/admin_mock_interview_view';
 import StudentMockInterviewView from '@/features/students/student_mock_interview_view';
+import ConfirmationModal from '@/components/common/confirmation_modal';
 import {
   DndContext,
   closestCenter,
@@ -179,6 +181,12 @@ const DashboardLayout: React.FC = () => {
   const [taskFilters, setTaskFilters] = useState<{ userId?: number; all?: boolean }>({});
   const taskFiltersRef = useRef(taskFilters);
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void | Promise<void>;
+  }>({ isOpen: false, title: '', message: '', onConfirm: () => {} });
 
   // Keep ref in sync with state
   useEffect(() => {
@@ -194,6 +202,7 @@ const DashboardLayout: React.FC = () => {
   const [emailTargetContact, setEmailTargetContact] = useState<Contact | null>(null);
   const [activeCourse, setActiveCourse] = useState<LmsCourse | null>(null);
   const [activeLesson, setActiveLesson] = useState<LmsLesson | null>(null);
+  const [isLmsLiveMode, setIsLmsLiveMode] = useState(false);
   const [editingCourse, setEditingCourse] = useState<LmsCourse | 'new' | null>(null);
   const [editingLessonInfo, setEditingLessonInfo] = useState<{ courseId: string; moduleId: string; lesson: LmsLesson | 'new' } | null>(null);
   const [viewingCertificateForCourse, setViewingCertificateForCourse] = useState<LmsCourse | null>(null);
@@ -1246,23 +1255,26 @@ const DashboardLayout: React.FC = () => {
       const contact = contacts.find(c => (c as any).metadata?.accountsReceivable?.some((ar: any) => ar.id === arId));
 
       if (contact) {
-        if (!window.confirm('Are you sure you want to delete this approved quotation record? This does not delete the quotation itself, only this accounting entry.')) {
-          return;
-        }
+        setConfirmModal({
+          isOpen: true,
+          title: 'Delete Transaction',
+          message: 'Are you sure you want to delete this approved quotation record? This does not delete the quotation itself, only this accounting entry.',
+          onConfirm: async () => {
+            const updatedMetadata = { ...((contact as any).metadata || {}) };
+            updatedMetadata.accountsReceivable = updatedMetadata.accountsReceivable.filter((ar: any) => ar.id !== arId);
+            const updatedContact = { ...contact, metadata: updatedMetadata };
 
-        const updatedMetadata = { ...((contact as any).metadata || {}) };
-        updatedMetadata.accountsReceivable = updatedMetadata.accountsReceivable.filter((ar: any) => ar.id !== arId);
-        const updatedContact = { ...contact, metadata: updatedMetadata };
-
-        try {
-          await api.saveContact(updatedContact, false);
-          setContacts(prev => prev.map(c => c.id === contact.id ? updatedContact : c));
-          addNotification({ title: 'Success', description: 'Transaction record deleted.', type: 'success' });
-          logActivity(`Deleted AR transaction ${id} for contact ${contact.name}`);
-        } catch (e) {
-          console.error("Failed to delete AR entry", e);
-          addNotification({ title: 'Error', description: 'Failed to delete transaction.', type: 'error' });
-        }
+            try {
+              await api.saveContact(updatedContact, false);
+              setContacts(prev => prev.map(c => c.id === contact.id ? updatedContact : c));
+              addNotification({ title: 'Success', description: 'Transaction record deleted.', type: 'success' });
+              logActivity(`Deleted AR transaction ${id} for contact ${contact.name}`);
+            } catch (e) {
+              console.error("Failed to delete AR entry", e);
+              addNotification({ title: 'Error', description: 'Failed to delete transaction.', type: 'error' });
+            }
+          }
+        });
       }
       return;
     }
@@ -1398,29 +1410,27 @@ const DashboardLayout: React.FC = () => {
   };
 
   const handleDeleteLead = async (leadId: number) => {
-    console.log('🗑️ handleDeleteLead called for ID:', leadId);
-    if (currentUser?.role !== 'Admin' && !currentUser?.permissions['CRM']?.delete) {
-      console.log('❌ Permission denied');
-      addNotification({ title: 'Permission Denied', description: 'You do not have permission to delete leads.', type: 'error' });
-      return;
-    }
+    setConfirmModal({
+      isOpen: true,
+      title: 'Delete Lead',
+      message: 'Are you sure you want to delete this lead? This action cannot be undone.',
+      onConfirm: async () => {
+        if (currentUser?.role !== 'Admin' && !currentUser?.permissions['CRM']?.delete) {
+          addNotification({ title: 'Permission Denied', description: 'You do not have permission to delete leads.', type: 'error' });
+          return;
+        }
 
-    if (!window.confirm('Are you sure you want to delete this lead? This action cannot be undone.')) {
-      console.log('❌ Deletion cancelled by user');
-      return;
-    }
-
-    try {
-      console.log('🚀 Calling api.deleteLead...');
-      await api.deleteLead(leadId);
-      console.log('✅ api.deleteLead success');
-      setLeads(prev => prev.filter(l => l.id !== leadId));
-      addNotification({ title: 'Lead Deleted', description: 'The lead has been successfully deleted.', type: 'success' });
-      logActivity(`Deleted lead ID ${leadId}`);
-    } catch (error) {
-      console.error('❌ Failed to delete lead:', error);
-      addNotification({ title: 'Error', description: 'Failed to delete lead.', type: 'error' });
-    }
+        try {
+          await api.deleteLead(leadId);
+          setLeads(prev => prev.filter(l => l.id !== leadId));
+          addNotification({ title: 'Lead Deleted', description: 'The lead has been successfully deleted.', type: 'success' });
+          logActivity(`Deleted lead ID ${leadId}`);
+        } catch (error) {
+          console.error('❌ Failed to delete lead:', error);
+          addNotification({ title: 'Error', description: 'Failed to delete lead.', type: 'error' });
+        }
+      }
+    });
   };
 
   const handleUpdateLeadStage = async (leadId: number, newStage: CrmStage) => {
@@ -1619,13 +1629,20 @@ const DashboardLayout: React.FC = () => {
   const handleDeleteQuotationTemplate = async (templateId: number) => {
     const templateToDelete = quotationTemplates.find(t => t.id === templateId);
     if (templateToDelete) {
-      const updatedTemplates = await api.deleteQuotationTemplate(templateId);
-      setQuotationTemplates(updatedTemplates);
-      logActivity(`Deleted quotation template: "${templateToDelete.title}".`);
-      addNotification({
-        title: 'Template Deleted',
-        description: `Quotation template "${templateToDelete.title}" has been removed.`,
-        recipientRoles: ['Admin', 'Staff']
+      setConfirmModal({
+        isOpen: true,
+        title: 'Delete Template',
+        message: `Are you sure you want to delete the quotation template "${templateToDelete.title}"?`,
+        onConfirm: async () => {
+          const updatedTemplates = await api.deleteQuotationTemplate(templateId);
+          setQuotationTemplates(updatedTemplates);
+          logActivity(`Deleted quotation template: "${templateToDelete.title}".`);
+          addNotification({
+            title: 'Template Deleted',
+            description: `Quotation template "${templateToDelete.title}" has been removed.`,
+            recipientRoles: ['Admin', 'Staff']
+          });
+        }
       });
     }
   };
@@ -1642,16 +1659,21 @@ const DashboardLayout: React.FC = () => {
   };
 
   const handleDeleteCoupon = async (couponCode: string) => {
-    if (window.confirm(`Are you sure you want to delete the coupon "${couponCode}"?`)) {
-      const updatedCoupons = await api.deleteCoupon(couponCode);
-      setCoupons(updatedCoupons);
-      logActivity(`Deleted coupon: "${couponCode}".`);
-      addNotification({
-        title: 'Coupon Deleted',
-        description: `Coupon code "${couponCode}" has been deleted.`,
-        recipientRoles: ['Admin']
-      });
-    }
+    setConfirmModal({
+      isOpen: true,
+      title: 'Delete Coupon',
+      message: `Are you sure you want to delete the coupon "${couponCode}"?`,
+      onConfirm: async () => {
+        const updatedCoupons = await api.deleteCoupon(couponCode);
+        setCoupons(updatedCoupons);
+        logActivity(`Deleted coupon: "${couponCode}".`);
+        addNotification({
+          title: 'Coupon Deleted',
+          description: `Coupon code "${couponCode}" has been deleted.`,
+          recipientRoles: ['Admin']
+        });
+      }
+    });
   };
 
   const handleAnalyzeDocument = async (doc: Doc) => {
@@ -1841,11 +1863,16 @@ const DashboardLayout: React.FC = () => {
       addNotification({ title: 'Permission Denied', description: 'You do not have permission to delete visitors.', type: 'error' });
       return;
     }
-    if (window.confirm('Are you sure you want to delete this visitor?')) {
-      const updatedVisitors = await api.deleteVisitor(visitorId);
-      setVisitors(updatedVisitors);
-      addNotification({ title: 'Visitor Deleted', description: 'The visitor record has been permanently deleted.', type: 'info' });
-    }
+    setConfirmModal({
+      isOpen: true,
+      title: 'Delete Visitor',
+      message: 'Are you sure you want to delete this visitor?',
+      onConfirm: async () => {
+        const updatedVisitors = await api.deleteVisitor(visitorId);
+        setVisitors(updatedVisitors);
+        addNotification({ title: 'Visitor Deleted', description: 'The visitor record has been permanently deleted.', type: 'info' });
+      }
+    });
   };
 
   const handleRecordPayment = async (transactionId: string) => {
@@ -2054,10 +2081,19 @@ const DashboardLayout: React.FC = () => {
   };
 
   const handleLmsCourseDelete = async (courseId: string) => {
-    if (window.confirm("Are you sure you want to delete this course and all its content? This cannot be undone.")) {
-      const updatedCourses = await api.deleteLmsCourse(courseId);
-      setLmsCourses(updatedCourses);
-    }
+    setConfirmModal({
+      isOpen: true,
+      title: 'Delete Course',
+      message: 'Are you sure you want to delete this course and all its content? This cannot be undone.',
+      onConfirm: async () => {
+        const updatedCourses = await api.deleteLmsCourse(courseId);
+        setLmsCourses(updatedCourses);
+        if (activeCourse?.id === courseId) {
+          setActiveCourse(null);
+          setActiveLesson(null);
+        }
+      }
+    });
   };
 
   const handleLmsModuleCreate = async (courseId: string, moduleTitle: string) => {
@@ -2072,10 +2108,15 @@ const DashboardLayout: React.FC = () => {
   };
 
   const handleLmsModuleDelete = async (courseId: string, moduleId: string) => {
-    if (window.confirm("Are you sure you want to delete this module and all its lessons?")) {
-      const updatedCourses = await api.deleteLmsModule(courseId, moduleId);
-      setLmsCourses(updatedCourses);
-    }
+    setConfirmModal({
+      isOpen: true,
+      title: 'Delete Module',
+      message: 'Are you sure you want to delete this module and all its lessons?',
+      onConfirm: async () => {
+        const updatedCourses = await api.deleteLmsModule(courseId, moduleId);
+        setLmsCourses(updatedCourses);
+      }
+    });
   };
 
   const handleLmsLessonSave = async (lessonData: Omit<LmsLesson, 'id' | 'videoUrl'> | LmsLesson) => {
@@ -2088,15 +2129,29 @@ const DashboardLayout: React.FC = () => {
   };
 
   const handleLmsLessonDelete = async (courseId: string, lessonId: string) => {
-    if (window.confirm("Are you sure you want to delete this lesson?")) {
-      const updatedCourses = await api.deleteLmsLesson(courseId, lessonId);
-      setLmsCourses(updatedCourses);
-    }
+    setConfirmModal({
+      isOpen: true,
+      title: 'Delete Lesson',
+      message: 'Are you sure you want to delete this lesson?',
+      onConfirm: async () => {
+        const updatedCourses = await api.deleteLmsLesson(courseId, lessonId);
+        setLmsCourses(updatedCourses);
+      }
+    });
   };
 
   const handleUpdateLessonVideo = async (courseId: string, lessonId: string, videoUrl: string) => {
     const updatedCourses = await api.updateLessonVideo(courseId, lessonId, videoUrl);
     setLmsCourses(updatedCourses);
+  };
+
+  const handleLmsSessionChange = (courseId: string, isLive: boolean) => {
+    setLmsCourses(courses => courses.map(c => 
+      String(c.id) === String(courseId) ? { ...c, isLive, is_live: isLive } : c
+    ));
+    if (activeCourse && String(activeCourse.id) === String(courseId)) {
+        setActiveCourse(prev => prev ? { ...prev, isLive, is_live: isLive } : null);
+    }
   };
 
   const handleCreateGroupChannel = async (name: string, memberIds: number[]) => {
@@ -2270,11 +2325,53 @@ const DashboardLayout: React.FC = () => {
       );
       case 'LMS':
         const isEnrolled = activeCourse && studentContact && studentContact.lmsProgress?.[activeCourse.id];
-        if (isEnrolled) {
-          return <LmsPlayerView course={activeCourse} student={studentContact} user={currentUser} users={users} onBack={() => { setActiveCourse(null); setActiveLesson(null); }} onMarkComplete={handleMarkLessonComplete} onSaveNote={handleSaveNote} onSavePost={handleSaveDiscussionPost} />;
+        const isStaff = currentUser?.role === 'Admin' || currentUser?.role === 'Staff';
+        
+        if (isEnrolled || (activeCourse && activeLesson && isStaff)) {
+          return (
+            <LmsPlayerView 
+              course={activeCourse} 
+              student={studentContact} 
+              user={currentUser} 
+              users={users} 
+              isLiveMode={isLmsLiveMode}
+              onBack={() => { 
+                setActiveCourse(null); 
+                setActiveLesson(null); 
+                setIsLmsLiveMode(false);
+              }} 
+              onMarkComplete={handleMarkLessonComplete} 
+              onSaveNote={handleSaveNote} 
+              onSavePost={handleSaveDiscussionPost} 
+              onSessionChange={handleLmsSessionChange}
+            />
+          );
         }
         if (activeCourse) {
-          return <CourseDetailView course={activeCourse} student={studentContact} contacts={contacts} user={currentUser} users={users} onSelectLesson={() => { }} onBack={() => { setActiveCourse(null); setActiveLesson(null); setViewingCertificateForCourse(null); }} onModuleCreate={handleLmsModuleCreate} onModuleUpdate={handleLmsModuleUpdate} onModuleDelete={handleLmsModuleDelete} onLessonCreate={(moduleId) => setEditingLessonInfo({ courseId: activeCourse.id, moduleId, lesson: 'new' })} onLessonUpdate={(lesson) => setEditingLessonInfo({ courseId: activeCourse.id, moduleId: '', lesson })} onLessonDelete={handleLmsLessonDelete} onViewCertificate={setViewingCertificateForCourse} onInitiatePurchase={handleInitiatePurchase} onSavePost={handleSaveDiscussionPost} onManualEnroll={handleManualEnroll} />;
+          return <CourseDetailView 
+            course={activeCourse} 
+            student={studentContact} 
+            contacts={contacts} 
+            user={currentUser} 
+            users={users} 
+            onSelectLesson={(lesson) => { setActiveLesson(lesson); setIsLmsLiveMode(false); }} 
+            onStartLive={(lesson) => { setActiveLesson(lesson); setIsLmsLiveMode(true); }}
+            onBack={() => { setActiveCourse(null); setActiveLesson(null); setViewingCertificateForCourse(null); }} 
+            onModuleCreate={handleLmsModuleCreate} 
+            onModuleUpdate={handleLmsModuleUpdate} 
+            onModuleDelete={handleLmsModuleDelete} 
+            onLessonCreate={(moduleId, type) => setEditingLessonInfo({ 
+              courseId: activeCourse.id, 
+              moduleId, 
+              lesson: type === 'quiz' ? { title: '', content: '', type: 'quiz', quiz: [] } as any : 'new' 
+            })} 
+            onLessonUpdate={(lesson) => setEditingLessonInfo({ courseId: activeCourse.id, moduleId: '', lesson })} 
+            onLessonDelete={handleLmsLessonDelete} 
+            onViewCertificate={setViewingCertificateForCourse} 
+            onInitiatePurchase={handleInitiatePurchase} 
+            onSavePost={handleSaveDiscussionPost} 
+            onManualEnroll={handleManualEnroll} 
+          />;
         }
         return <LmsView courses={lmsCourses} onCourseSelect={setActiveCourse} user={currentUser} contacts={contacts} onNewCourse={() => setEditingCourse('new')} onEditCourse={setEditingCourse} onDeleteCourse={handleLmsCourseDelete} onInitiatePurchase={handleInitiatePurchase} />;
       case 'Contacts':
@@ -2284,7 +2381,7 @@ const DashboardLayout: React.FC = () => {
           if (contactData && contactViewMode === 'visaFiling') return <ContactVisaView user={currentUser} contact={contactData} onNavigateBack={() => setContactViewMode('details')} onSave={handleSaveContact} />;
           if (contactData && contactViewMode === 'checklist') return <ContactChecklistView user={currentUser} contact={contactData} onNavigateBack={() => setContactViewMode('details')} onUpdateChecklistItem={handleUpdateChecklistItem} onSave={handleSaveContact} />;
           if (contactData && contactViewMode === 'visits') return <ContactVisitsView user={currentUser} contact={contactData} onNavigateBack={() => setContactViewMode('details')} onSaveTask={handleSaveTask} />;
-          if (contactData && contactViewMode === 'crm') return <ContactCrmView contact={contactData} leads={leads} onNavigateBack={() => setContactViewMode('details')} user={currentUser} onSaveTask={handleSaveTask} onSaveQuotation={handleSaveContactQuotation} quotationTemplates={quotationTemplates} onSaveTemplate={handleSaveQuotationTemplate} onDeleteTemplate={handleDeleteQuotationTemplate} onDeleteContact={handleDeleteContact} onApproveQuotation={handleApproveQuotation} onManualAcceptQuotation={handleManualAcceptQuotation} onDeleteQuotation={async (leadId, quotationId) => { if (window.confirm('Are you sure you want to delete this quotation? This action cannot be undone.')) { const updatedLeads = await api.deleteQuotation(leadId, quotationId); setLeads(updatedLeads); const updatedContacts = await api.getContacts(); setContacts(updatedContacts); } }} />;
+          if (contactData && contactViewMode === 'crm') return <ContactCrmView contact={contactData} leads={leads} onNavigateBack={() => setContactViewMode('details')} user={currentUser} onSaveTask={handleSaveTask} onSaveQuotation={handleSaveContactQuotation} quotationTemplates={quotationTemplates} onSaveTemplate={handleSaveQuotationTemplate} onDeleteTemplate={handleDeleteQuotationTemplate} onDeleteContact={handleDeleteContact} onApproveQuotation={handleApproveQuotation} onManualAcceptQuotation={handleManualAcceptQuotation} onDeleteQuotation={async (leadId, quotationId) => { setConfirmModal({ isOpen: true, title: 'Delete Quotation', message: 'Are you sure you want to delete this quotation? This action cannot be undone.', onConfirm: async () => { const updatedLeads = await api.deleteQuotation(leadId, quotationId); setLeads(updatedLeads); const updatedContacts = await api.getContacts(); setContacts(updatedContacts); } }); }} />;
           if (contactData && contactViewMode === 'tasks') return <ContactTasksView contact={contactData} tasks={tasks} user={currentUser} onNavigateBack={() => setContactViewMode('details')} onSaveTask={handleSaveTask} />;
           if (contactData && contactViewMode === 'courses') return <ContactCoursesView contact={contactData} user={currentUser} onNavigateBack={() => setContactViewMode('details')} courses={lmsCourses} />;
 
@@ -2688,9 +2785,30 @@ const DashboardLayout: React.FC = () => {
             <AIEmailComposerModal isOpen={isEmailComposerOpen} onClose={() => { setIsEmailComposerOpen(false); setEmailDraft(''); setEmailTargetContact(null); }} onGenerate={(prompt) => emailTargetContact && handleGenerateEmailDraft(prompt, emailTargetContact)} draft={emailDraft} contactName={emailTargetContact?.name || ''} />
             {isEventModalOpen && (<EventModal isOpen={isEventModalOpen} onClose={handleCloseEventModal} onSave={handleSaveEvent} onDelete={handleDeleteEvent} eventInfo={selectedEventInfo} user={currentUser} />)}
             {editingCourse && (<CourseEditModal course={editingCourse === 'new' ? null : editingCourse} onClose={() => setEditingCourse(null)} onSave={handleLmsCourseSave} />)}
-            {editingLessonInfo && (<LessonEditModal lesson={editingLessonInfo.lesson === 'new' ? null : editingLessonInfo.lesson} onClose={() => setEditingLessonInfo(null)} onSave={handleLmsLessonSave} />)}
+            {editingLessonInfo && (
+              (typeof editingLessonInfo.lesson === 'object' && editingLessonInfo.lesson.type === 'quiz') ? (
+                <QuizEditModal 
+                  lesson={editingLessonInfo.lesson} 
+                  onClose={() => setEditingLessonInfo(null)} 
+                  onSave={handleLmsLessonSave} 
+                />
+              ) : (
+                <LessonEditModal 
+                  lesson={editingLessonInfo.lesson === 'new' ? null : editingLessonInfo.lesson} 
+                  onClose={() => setEditingLessonInfo(null)} 
+                  onSave={handleLmsLessonSave} 
+                />
+              )
+            )}
           </>
         )}
+        <ConfirmationModal 
+          isOpen={confirmModal.isOpen}
+          title={confirmModal.title}
+          message={confirmModal.message}
+          onConfirm={confirmModal.onConfirm}
+          onClose={() => setConfirmModal(p => ({ ...p, isOpen: false }))}
+        />
       </div>
       <DragOverlay dropAnimation={{ duration: 250, easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)' }}>
         {activeDragId ? (
