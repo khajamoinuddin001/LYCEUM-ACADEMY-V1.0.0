@@ -5401,7 +5401,7 @@ router.post('/lms/sessions/:id/join', authenticateToken, async (req, res) => {
 
     // Check if already marked present
     const existing = await query('SELECT id FROM session_attendance WHERE session_id = $1 AND student_id = $2', [sessionId, contactId]);
-    
+
     if (existing.rows.length === 0) {
       await query(`
         INSERT INTO session_attendance (session_id, student_id)
@@ -5424,7 +5424,7 @@ router.post('/lms/sessions/:id/slide', authenticateToken, async (req, res) => {
   try {
     const { lessonId, slideIndex } = req.body;
     if (req.user.role !== 'Admin' && req.user.role !== 'Staff') {
-        return res.status(403).json({ error: 'Unauthorized' });
+      return res.status(403).json({ error: 'Unauthorized' });
     }
 
     await query(`
@@ -5444,7 +5444,7 @@ router.post('/lms/sessions/:id/pdf-page', authenticateToken, async (req, res) =>
   try {
     const { lessonId, pdfPage, pdfPageCount } = req.body;
     if (req.user.role !== 'Admin' && req.user.role !== 'Staff') {
-        return res.status(403).json({ error: 'Unauthorized' });
+      return res.status(403).json({ error: 'Unauthorized' });
     }
 
     await query(`
@@ -5490,7 +5490,7 @@ router.put('/lms/submissions/:id/grade', authenticateToken, async (req, res) => 
   try {
     const { grade, feedback } = req.body;
     if (req.user.role !== 'Admin' && req.user.role !== 'Staff') {
-        return res.status(403).json({ error: 'Unauthorized' });
+      return res.status(403).json({ error: 'Unauthorized' });
     }
 
     const result = await query(`
@@ -5523,37 +5523,37 @@ router.get('/lms/courses/:courseId/active-session', authenticateToken, async (re
 
 // End Live Session
 router.post('/lms/sessions/:id/end', authenticateToken, async (req, res) => {
-    try {
-      if (req.user.role !== 'Admin' && req.user.role !== 'Staff') {
-          return res.status(403).json({ error: 'Unauthorized' });
-      }
-      
-      const courseId = req.query.courseId;
-      const sessionId = req.params.id;
+  try {
+    if (req.user.role !== 'Admin' && req.user.role !== 'Staff') {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
 
-      if (courseId) {
-        // End ALL sessions for this course AND update course status (use TRIM for robustness)
-        await query('UPDATE class_sessions SET status = \'ended\', ended_at = NOW() WHERE TRIM(course_id) = TRIM($1) AND status = \'live\'', [courseId]);
-        await query('UPDATE lms_courses SET is_live = false WHERE TRIM(id) = TRIM($1)', [courseId]);
-      } else {
-        // End specific session
-        const sessionResult = await query('SELECT course_id FROM class_sessions WHERE id = $1::integer', [sessionId]);
-        if (sessionResult.rows.length > 0) {
-          const cId = sessionResult.rows[0].course_id;
-          await query('UPDATE class_sessions SET status = \'ended\', ended_at = NOW() WHERE id = $1::integer', [sessionId]);
-          
-          // Check if there are any STILL LIVE sessions for THIS course (use TRIM for robustness)
-          const otherSessions = await query('SELECT id FROM class_sessions WHERE TRIM(course_id) = TRIM($1) AND status = \'live\'', [cId]);
-          if (otherSessions.rows.length === 0) {
-            await query('UPDATE lms_courses SET is_live = false WHERE TRIM(id) = TRIM($1)', [cId]);
-          }
+    const courseId = req.query.courseId;
+    const sessionId = req.params.id;
+
+    if (courseId) {
+      // End ALL sessions for this course AND update course status (use TRIM for robustness)
+      await query('UPDATE class_sessions SET status = \'ended\', ended_at = NOW() WHERE TRIM(course_id) = TRIM($1) AND status = \'live\'', [courseId]);
+      await query('UPDATE lms_courses SET is_live = false WHERE TRIM(id) = TRIM($1)', [courseId]);
+    } else {
+      // End specific session
+      const sessionResult = await query('SELECT course_id FROM class_sessions WHERE id = $1::integer', [sessionId]);
+      if (sessionResult.rows.length > 0) {
+        const cId = sessionResult.rows[0].course_id;
+        await query('UPDATE class_sessions SET status = \'ended\', ended_at = NOW() WHERE id = $1::integer', [sessionId]);
+
+        // Check if there are any STILL LIVE sessions for THIS course (use TRIM for robustness)
+        const otherSessions = await query('SELECT id FROM class_sessions WHERE TRIM(course_id) = TRIM($1) AND status = \'live\'', [cId]);
+        if (otherSessions.rows.length === 0) {
+          await query('UPDATE lms_courses SET is_live = false WHERE TRIM(id) = TRIM($1)', [cId]);
         }
       }
-
-      res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: error.message });
     }
+
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // Visitors routes
@@ -6362,7 +6362,7 @@ router.post('/attendance/check-out', authenticateToken, async (req, res) => {
       if (!lat || !lng) {
         return res.status(400).json({ error: 'Location required for check-out' });
       }
-      
+
       let dist = getDistance(lat, lng, geofenceTarget.lat, geofenceTarget.lng);
       let allowedRadius = geofenceTarget.radius || 50;
 
@@ -6370,17 +6370,17 @@ router.post('/attendance/check-out', authenticateToken, async (req, res) => {
       if (dist > allowedRadius) {
         const allBranches = await query('SELECT * FROM branches');
         let foundOther = false;
-        
+
         for (const b of allBranches.rows) {
           const d = getDistance(lat, lng, b.lat, b.lng);
           const r = b.radius || 50;
           if (d <= r) {
-             foundOther = true;
-             geofenceTarget = b;
-             branchName = b.name;
-             dist = d;
-             allowedRadius = r;
-             break;
+            foundOther = true;
+            geofenceTarget = b;
+            branchName = b.name;
+            dist = d;
+            allowedRadius = r;
+            break;
           }
         }
 
@@ -6663,14 +6663,9 @@ export const calculatePerformanceForUser = async (userId, month, year) => {
   let actualPresence = 0;
   logs.forEach(log => {
     let daily = 1.0;
-    if (log.status === 'Late' && log.late_minutes > 15) daily -= 0.5;
-    if (!log.check_out) daily -= 0.5;
-    else if (user.shift_end) {
-      const [shH, shM] = user.shift_end.split(':').map(Number);
-      const co = new Date(log.check_out);
-      if (co.getHours() < shH || (co.getHours() === shH && co.getMinutes() < shM)) daily -= 0.5;
-    }
-    actualPresence += Math.max(0, daily);
+    // Simplified: 100% if both start/end marked, 50% if only start marked
+    if (!log.check_out) daily = 0.5;
+    actualPresence += daily;
   });
   const attendanceScore = targetWorkingDays > 0 ? Math.min(100, (actualPresence / targetWorkingDays) * 100) : 100;
 
