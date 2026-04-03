@@ -387,6 +387,7 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ user, users = [], onUpd
             alert("Please select a branch first.");
             return;
         }
+        if (!confirm("Are you sure you want to END YOUR SHIFT?")) return;
         try {
             let loc;
             try { loc = await getLocation(); } catch (e) { }
