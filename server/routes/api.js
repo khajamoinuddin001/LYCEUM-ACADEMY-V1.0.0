@@ -2460,8 +2460,8 @@ router.post('/visa-operations/:id/ds-160/document', authenticateToken, upload.si
     if (uploadType === 'filling') {
       if (!flow.fillingDocuments) flow.fillingDocuments = [];
       flow.fillingDocuments.push({ id: itemId, name: req.file.originalname });
-      flow.studentStatus = 'pending';
-      flow.adminStatus = 'pending';
+      flow.studentStatus = 'none';
+      flow.adminStatus = 'none';
     } else if (uploadType === 'confirmation') {
       flow.confirmationDocumentId = itemId;
       flow.confirmationDocumentName = req.file.originalname;
@@ -2474,12 +2474,24 @@ router.post('/visa-operations/:id/ds-160/document', authenticateToken, upload.si
 
     dsData[gIdx] = group;
 
-    const result = await query(`
-      UPDATE visa_operations
-      SET ds_data = $1
-      WHERE id = $2
-      RETURNING *
-    `, [JSON.stringify(dsData), req.params.id]);
+    // Determine query: Update main columns if Group 0 Flow 0
+    let updateQuery, updateParams;
+    if (gIdx === 0 && fIdx === 0 && uploadType === 'filling') {
+      updateQuery = `
+        UPDATE visa_operations
+        SET ds_data = $1,
+            student_status = 'none',
+            admin_status = 'none'
+        WHERE id = $2
+        RETURNING *
+      `;
+      updateParams = [JSON.stringify(dsData), req.params.id];
+    } else {
+      updateQuery = `UPDATE visa_operations SET ds_data = $1 WHERE id = $2 RETURNING *`;
+      updateParams = [JSON.stringify(dsData), req.params.id];
+    }
+
+    const result = await query(updateQuery, updateParams);
 
     const op = result.rows[0];
     const finalResponse = transformVisaOperation(op, req.user);
