@@ -2302,3 +2302,10 @@ export const getActiveSession = async (courseId: string): Promise<ClassSession |
 export const endClassSession = async (sessionId: number, courseId?: string): Promise<void> => {
   await apiRequest(`/lms/sessions/${sessionId}/end${courseId ? `?courseId=${courseId}` : ''}`, { method: 'POST' });
 };
+
+export const updateSessionLesson = async (sessionId: string | number, lessonId: string): Promise<void> => {
+  await apiRequest(`/lms/sessions/${sessionId}/lesson`, {
+    method: 'POST',
+    body: JSON.stringify({ lessonId }),
+  });
+};

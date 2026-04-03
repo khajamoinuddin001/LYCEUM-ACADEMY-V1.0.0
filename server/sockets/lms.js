@@ -46,8 +46,9 @@ export function initLmsSockets(server, allowedOrigins) {
     });
 
     // Teacher switching lessons during a session
-    socket.on('switch-lesson', ({ sessionId, lessonId }) => {
-      lmsNamespace.to(`session-${sessionId}`).emit('lesson-switched', { lessonId });
+    socket.on('switch-lesson', ({ sessionId, courseId, lessonId }) => {
+      // Broadcast to ALL in the namespace, but include courseId for instant matching
+      lmsNamespace.emit('lesson-switched', { sessionId, courseId, lessonId });
     });
 
     // Teacher ends the session

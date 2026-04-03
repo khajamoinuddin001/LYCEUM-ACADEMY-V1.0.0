@@ -5439,11 +5439,21 @@ router.post('/lms/sessions/:id/slide', authenticateToken, async (req, res) => {
       return res.status(403).json({ error: 'Unauthorized' });
     }
 
-    await query(`
+    const result = await query(`
       UPDATE class_sessions 
       SET current_lesson_id = $1, current_slide_index = $2 
       WHERE id = $3
+      RETURNING course_id
     `, [lessonId, slideIndex, req.params.id]);
+ 
+    const io = req.app.get('io');
+    if (io && result.rows.length > 0) {
+      io.of('/lms').to(`session-${req.params.id}`).emit('slide-updated', { 
+        courseId: result.rows[0].course_id,
+        lessonId, 
+        slideIndex 
+      });
+    }
 
     res.json({ success: true });
   } catch (error) {
@@ -5459,11 +5469,51 @@ router.post('/lms/sessions/:id/pdf-page', authenticateToken, async (req, res) =>
       return res.status(403).json({ error: 'Unauthorized' });
     }
 
-    await query(`
+    const result = await query(`
       UPDATE class_sessions 
       SET current_lesson_id = $1, current_pdf_page = $2, current_pdf_page_count = $3
       WHERE id = $4
+      RETURNING course_id
     `, [lessonId, pdfPage, pdfPageCount, req.params.id]);
+ 
+    const io = req.app.get('io');
+    if (io && result.rows.length > 0) {
+      io.of('/lms').to(`session-${req.params.id}`).emit('pdf-page-updated', { 
+        courseId: result.rows[0].course_id,
+        lessonId, 
+        pdfPage, 
+        pdfPageCount 
+      });
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});// Update current lesson only (Teacher only)
+router.post('/lms/sessions/:id/lesson', authenticateToken, async (req, res) => {
+  try {
+    const { lessonId } = req.body;
+    if (req.user.role !== 'Admin' && req.user.role !== 'Staff') {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+
+    const result = await query(`
+      UPDATE class_sessions 
+      SET current_lesson_id = $1, current_slide_index = 0, current_pdf_page = 1
+      WHERE id = $2
+      RETURNING course_id
+    `, [lessonId, req.params.id]);
+
+    const io = req.app.get('io');
+    if (io && result.rows.length > 0) {
+      const courseId = result.rows[0].course_id;
+      io.of('/lms').emit('lesson-switched', { 
+        sessionId: req.params.id, 
+        courseId,
+        lessonId 
+      });
+    }
 
     res.json({ success: true });
   } catch (error) {
