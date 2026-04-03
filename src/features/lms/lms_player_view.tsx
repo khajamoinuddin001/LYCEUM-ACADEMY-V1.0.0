@@ -778,7 +778,7 @@ const LmsPlayerView: React.FC<LmsPlayerViewProps> = (props) => {
                                             <div className="space-y-4 h-full">
                                                 <div 
                                                     ref={presentationRef}
-                                                    className={`bg-gray-100 dark:bg-gray-900 rounded-lg flex items-center justify-center border border-dashed border-gray-300 dark:border-gray-700 overflow-hidden relative group ${isFullscreen ? 'fixed inset-0 z-[9999] bg-black border-none rounded-none w-screen h-screen' : 'aspect-[16/9] h-full'}`}
+                                                    className={`bg-gray-100 dark:bg-gray-900 rounded-lg flex items-center justify-center border border-dashed border-gray-300 dark:border-gray-700 overflow-hidden relative group ${isFullscreen ? 'fixed inset-0 z-[9999] bg-black border-none rounded-none w-screen h-screen' : 'aspect-[16/9] h-full shadow-inner'}`}
                                                 >
                                                     {/* Fullscreen Button */}
                                                     <button 
@@ -801,7 +801,7 @@ const LmsPlayerView: React.FC<LmsPlayerViewProps> = (props) => {
                                                                     {activeLesson.presentationType === 'pdf' ? (
                                                                         <iframe 
                                                                             key={`${presentationBlobUrl}-${currentPdfPage}`}
-                                                                            src={`${presentationBlobUrl}#page=${currentPdfPage}${user.role === 'Student' ? '&toolbar=0&navpanes=0&scrollbar=0' : ''}&view=FitH`} 
+                                                                            src={`${presentationBlobUrl}#page=${currentPdfPage}${user.role === 'Student' ? '&toolbar=0&navpanes=0&scrollbar=0' : ''}${user.role === 'Student' ? '&view=Fit' : '&view=FitH'}`} 
                                                                             className={`w-full h-full border-none ${user.role === 'Student' ? 'pointer-events-none' : ''}`}
                                                                             title="PDF Presentation"
                                                                         />

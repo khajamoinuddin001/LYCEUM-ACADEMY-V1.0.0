@@ -8,132 +8,154 @@ Lyceum Academy is a massive, multi-tenant Educational ERP and Learning Managemen
 
 ---
 
-## 🌍 The Feature Encyclopedia (100+ Features)
+## 🌍 The Application Encyclopedia (All Modules & Features)
 
-### 📊 1. Advanced CRM & Sales Pipeline
-- **Smart Kanban Board**: Drag-and-drop lead management across custom stages (New, Qualified, Proposal, Won, Lost).
-- **Enquiry Capture**: Automated lead generation from public website forms and direct manual entry.
-- **Cascading Name Sync**: Proprietary logic to update contact names across Users, CRM, Finance, and Visitors simultaneously.
-- **Contact Merging**: Intelligent deduplication tool to merge two contacts while preserving all history and documents.
-- **Lead-to-Contact Conversion**: One-click workflow to transform prospects into full student profiles.
-- **Activity Timeline**: Auto-generated chronological logs for every lead interaction.
-- **Revenue Forecasting**: Real-time value calculation based on lead pipeline stages.
-- **Note Repository**: Rich-text notes for internal team collaboration on specific opportunities.
+Lyceum Academy is an ecosystem of interconnected applications. Each module is designed to handle a specific domain of institutional management.
 
-### 📜 2. Intelligent Quotation & Document Engine
-- **Template Builder**: Create and save reusable quotation templates for different services.
-- **Dynamic PDF Generation**: Professional, branded PDF exports for all quotations and invoices.
-- **Tax Configuration**: Automated GST/Tax calculations integrated into the quotation workflow.
-- **AI Document Analysis**: Integrated Gemini AI to summarize and extract data from student uploads.
-- **Private Vaulting**: Gated document storage with an "Admin-Only" private flag.
-- **Avatar Management**: Direct photo capture or upload with automatic server-side resizing and storage.
-- **Category-Based Filing**: Organize documents into Visa, Academic, Financial, and Legal categories.
+### 💰 1. Enterprise Finance & Accounting
+*The backbone of the institution's financial health.*
+- **Quotation Management**: Build reusable templates, generate professional PDFs, and track quotation status.
+- **Invoice & Billing**: Automated invoicing linked to student profiles with support for partial/installment payments.
+- **Accounts Receivable (AR)**: Real-time tracking of pending student fees with automated balance updates.
+- **Expense & Purchase Tracking**: Manage vendor payments, utility bills, and internal office expenses.
+- **QR Payment Bridge**: Dynamic UPI QR code generation for instant, contactless student payments.
+- **Profit & Loss Analytics**: Automated monthly and yearly financial reports for strategic planning.
+- **Tax & GST Engine**: Configurable tax rules integrated into every financial transaction.
+- **Coupon & Discount Logic**: Create percentage-based or fixed-value discounts for course enrollments.
+- **Vendor Registry**: Database of all external suppliers with transaction history.
 
-### 📚 3. Global Learning Management System (LMS)
-- **High-Performance Player**: Custom video engine optimized for smooth learning experiences.
-- **Multi-Level Hierarchy**: Organize content by Course → Module → Lesson.
-- **FIFO Progress Tracking**: Systematic lesson completion logic ensures students follow correct learning paths.
-- **Coupon Engine**: Flexible discount system (percentage-based) with activation/deactivation toggles.
-- **Student Performance Analytics**: Visual dashboards for instructors to track student completion rates.
-- **Certificate Automation**: Automated PDF certificate issuance upon 100% course completion.
-- **Discussion Threads**: Dedicated social space for every course lesson.
-- **Manual & Auto Enrollment**: Support for both administrative enrollment and student self-purchase.
-- **Course Metadata**: Support for prerequisites, instructors, and pricing tiers.
+### 📚 2. Global Learning Management System (LMS)
+*A high-performance learning environment for students and teachers.*
+- **Advanced Course Player**: Optimized video delivery engine with progress tracking and persistence.
+- **Course & Module Builder**: Multi-level hierarchy (Course → Module → Lesson) with rich content support.
+- **Interactive Quizzes**: Build assessments with multiple question types and automated grading.
+- **Live Class Sync**: Real-time synchronization for virtual classrooms (slides, navigation, and attendance).
+- **Certificate Automation**: Instant PDF certificate generation upon 100% course completion.
+- **Discussion Forums**: Social learning threads integrated into every lesson for peer-to-peer support.
+- **Course Analytics**: Visual dashboards for instructors to monitor student completion and engagement.
+- **Manual & Auto Enrollment**: Secure administrative enrollment or student self-purchasing workflows.
 
-### 💰 4. Enterprise Accounting & Finance
-- **Accounts Receivable (AR) Automation**: Invoices linked to contacts automatically deduct from the AR balance.
-- **Multi-Type Transactions**: Support for Invoices, Bills, Income, and Expenses.
-- **Vendor Management**: Comprehensive database for external suppliers and partners.
-- **Expense Payee Tracking**: Categorized spending logs with default category mapping.
-- **Status Lifecycle**: Track financial entities through Pending, Paid, Partially Paid, and Overdue states.
-- **QR Payment Bridge**: Dynamic generation of UPI QR codes for instant student payments.
-- **Profit & Loss Reports**: Automated monthly financial health checkups.
-- **Transaction Printing**: Print-ready thermal and standard views for all receipts.
-- **Partial Payment Support**: Logic to handle installment-based payments (Partial status).
+### 📊 3. CRM & Sales Pipeline
+*Turning enquiries into enrollments.*
+- **Smart Kanban Board**: Drag-and-drop lead management across custom stages (New, Qualified, Won, Lost).
+- **Automated Enquiry Capture**: Leads from website forms and external triggers are piped directly into the CRM.
+- **Contact Merging**: Intelligent deduplication tool to merge student profiles while preserving documents.
+- **Cascading Name Sync**: Proprietary logic to sync updates across CRM, Finance, and Security modules.
+- **Revenue Forecasting**: Real-time pipeline value calculation based on lead probability and course costs.
 
-### 🏢 5. Operational Excellence & Support
-- **Ticket Desk**: Enterprise-grade support system with priority levels (Low, Medium, High).
-- **Ticket Threading**: Real-time messaging conversation within support tickets.
-- **File Attachments**: Support for multiple file uploads within support requests.
-- **Task-Ticket Linking**: Ability to link development/ops tasks directly to support tickets.
-- **Knowledge Base**: (Implicit) Integrated documentation and support history.
-- **Visitor Registry**: Digital check-in/out with daily sequence numbers for high-traffic environments.
-- **Host Notification**: Automatic mapping of visitors to staff members for efficient reception.
-- **Global Search**: "Command + K" style modal to find any contact, lead, or task instantly.
+### 👷 4. Human Resources & Payroll
+*Managing staff performance and compensation.*
+- **Geofenced Biometric Attendance**: Secure check-in/out requiring staff to be within 50m of office coordinates.
+- **Automated Payroll Engine**: Calculates net salary by factoring base pay, attendance, LOP, and holidays.
+- **Performance Dashboards**: Track individual and department-level efficiency and attendance streaks.
+- **Leave Management**: Full digital workflow for staff time-off requests and approvals.
+- **Shift & Holiday Config**: Granular control over working hours and system-wide public holidays.
 
-### 👷 6. HR, Attendance & Payroll
-- **Geofenced Check-in**: Biometric-level security requiring staff to be within 50m of office coordinates.
-- **Punctuality Engine**: Status mapping (Present/Late) based on individual shift start times.
-- **Automated Payroll**: Calculates net salary by factoring base pay, attendance, LOP (Loss of Pay), and holidays.
-- **Leave Workflow**: Full Apply → Review → Approve/Reject cycle for staff time-off.
-- **Shift Management**: Granular control over shift timings (Start/End) and working day selections.
-- **Public Holiday Calendar**: System-wide holidays that automatically adjust payroll and deadlines.
-- **Time Logs**: Active task tracking with start/end time duration calculation.
+### 🛂 5. Visa Operations & University Portal
+*Global education logistics management.*
+- **Application Tracking**: End-to-end management of university applications and visa filing status.
+- **DS-160 Support**: Automated tracking and document management for US Visa applications.
+- **Destination Portal**: Manage university databases and application requirements for different countries.
+- **Document Vault**: Secure, gated storage for sensitive student documents (Passport, Bank Statements).
 
-### 🔐 7. Security & Administration
-- **RBAC (Role-Based Access Control)**: Granular permission gates for Admin, Staff, and Students.
-- **User Impersonation**: Secure administrative tool to view the system as any specific user.
-- **JWT Protection**: Secure API communication with individual route-level token validation.
-- **Rate Limiting**: Protection against brute-force and DDoS attacks at the API level.
-- **Security Headers**: Helmet.js integration for CSP, XSS protection, and frameguard.
-- **Password Hygiene**: "Must Reset Password" flag for new user provisioning.
-- **Password Recovery**: Secure forgot/reset password workflow with token validation.
+### 🤖 6. Automation & AI Engine
+*Smart workflows and intelligent insights.*
+- **Rule Builder**: Create custom "If-This-Then-That" triggers for automated notifications and status updates.
+- **Email Template Library**: Rich-text template builder for automated student communications.
+- **Gemini AI Integration**: Automated document summary and data extraction from student uploads.
+- **Task Automation**: Auto-assignment of tasks based on lead or application status changes.
 
-### 🎨 8. Premium UI/UX & Aesthetics
-- **Glassmorphism Design**: Modern, translucent UI components for a premium feel.
-- **Framer Motion Animations**: Smooth page transitions and micro-interactions.
-- **Multi-Theme Support**: Sleek, eye-friendly Dark Mode and High-Contrast Light Mode.
-- **Ultra-Responsive**: Fluid grid system ensuring 100% usability on phones, tablets, and desktops.
-- **Contextual Loaders**: Custom skeletons and loaders for seamless data fetching.
-- **Quick-Create Modal**: Global entry point for adding Leads, Contacts, or Tasks from any page.
+### 🛎️ 7. Reception & Visitor Management
+*The digital front-office.*
+- **Digital Guestbook**: Register visitors, track entry/exit times, and assign digital sequence numbers.
+- **Appointment Scheduling**: Digital calendar for managing walk-ins and pre-booked meetings.
+- **Host Notifications**: Automatic alerts to staff members when their guest arrives at reception.
+
+### 🎯 8. Mock Interviews & Question Bank
+*Preparing students for success.*
+- **Session Scheduling**: Manage mock interview slots for various career paths or visa types.
+- **Question Repository**: A categorized bank of standard interview questions and model answers.
+- **Feedback Forms**: Detailed assessment criteria for instructors to evaluate student performance.
 
 ---
 
-## 🛠 Tech Stack Details
+## 🛠 Technical Architecture
 
-| Layer | Technologies |
-| :--- | :--- |
-| **Frontend** | React 19, TypeScript, Vite, Tailwind CSS, Framer Motion, Lucide |
-| **Backend** | Node.js, Express, Multer, Bcrypt, JWT, Helmet |
-| **Database** | PostgreSQL with advanced JSONB optimization & Connection Pooling |
-| **AI** | Google Gemini 1.5 Integration |
-| **DevOps** | PM2, Nginx, Shell Scripts (Production Deployment) |
+### Frontend (React 19)
+- **Vite**: High-speed build tool and development server.
+- **Zustand**: Lightweight, high-performance state management.
+- **Framer Motion**: Premium micro-animations and page transitions.
+- **Socket.io-Client**: Real-time bidirectional communication for LMS and Notifications.
+- **Lucide Icons**: Consistent, scalable vector icons.
+- **Tailwind CSS**: Utility-first CSS for responsive, modern UI design.
+
+### Backend (Node.js & Express)
+- **PostgreSQL**: Relational database with JSONB optimization for flexible data structures.
+- **JWT (JSON Web Tokens)**: Secure, stateless authentication.
+- **Helmet.js**: Production-grade security headers (CSP, XSS protection).
+- **Express-Rate-Limit**: Protection against brute-force and DDoS attacks.
+- **Multer**: Secure file upload handling and storage.
+
+---
+
+## 📂 Project Structure
+```text
+├── src/
+│   ├── features/       # Modular application logic (LMS, HR, CRM, etc.)
+│   ├── components/     # Shared UI components (Modals, Buttons, Tables)
+│   ├── store/          # Zustand state definitions
+│   ├── hooks/          # Shared React hooks
+│   ├── utils/          # API services and helpers
+│   └── app.tsx         # Main routing and navigation
+├── server/
+│   ├── routes/         # Express API endpoints
+│   ├── database.js     # DB Connection and Migration logic
+│   ├── automation.js   # Automation engine core
+│   ├── sockets/        # Real-time socket event handlers
+│   └── server.js       # Entry point for Node.js
+└── deployment/         # Nginx configs and PM2 ecosystem files
+```
 
 ---
 
 ## 🚀 Installation & Setup
 
-### Requirements
-- **Node.js** v18.0.0+
-- **PostgreSQL** v15.0.0+
+### Prerequisites
+- **Node.js** v18+ 
+- **PostgreSQL** v15+ 
 
 ### Step-by-Step
-1. **Clone & Install**:
+1. **Repository Installation**:
    ```bash
    npm install
    cd server && npm install
    ```
-2. **Environment**:
-   Configure `server/.env` with your `DATABASE_URL`, `JWT_SECRET`, and `AI_GATEWAY_TOKEN`.
-3. **Database Setup**:
-   The system auto-migrates on cold start. Simply run the server.
-4. **Development Launch**:
+2. **Environment Configuration**:
+   Create a `.env` in the `server/` directory:
+   ```env
+   DATABASE_URL=postgresql://user:pass@localhost:5432/lyceum
+   JWT_SECRET=your_super_secret_key
+   PORT=5000
+   AI_GATEWAY_TOKEN=your_google_ai_token
+   ```
+3. **Database Launch**:
+   The system auto-migrates on start. Simply run the server.
+4. **Launch Development**:
    ```bash
-   # Root directory
+   # Terminal 1: Client
    npm run dev
-   # Server directory
-   npm run dev
+   # Terminal 2: Server
+   cd server && npm run dev
    ```
 
 ---
 
-## 🔐 Support & Security
-
-- **Security Audits**: The code is audited for common vulnerabilities (SQLi, XSS).
-- **Default Admin**: `admin@lyceum.com` / `admin123` (Change immediately!)
+## 🔐 Security & Access Control
+- **RBAC**: Multi-tenant support with Admin, Staff, and Student roles.
+- **User Impersonation**: Administrative tool to debug issues by viewing the system as a specific user.
+- **Secure Provisioning**: Mandatory "Password Reset" flag for all new system-generated accounts.
 
 ---
 
 ## 📄 License
-
 **Private Intellectual Property** - All rights reserved. 2026 Lyceum Academy.
