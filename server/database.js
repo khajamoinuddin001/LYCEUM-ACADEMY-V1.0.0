@@ -66,9 +66,17 @@ export async function initDatabase() {
         performance_settings JSONB DEFAULT '{"enrolled": false, "attendance": true, "tasks": true, "reviews": true, "tickets": true}',
         verification_token TEXT,
         google_id TEXT UNIQUE,
+        failed_login_attempts INTEGER DEFAULT 0,
+        is_locked BOOLEAN DEFAULT false,
+        unlock_otp TEXT,
+        unlock_otp_expires_at TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_login_attempts INTEGER DEFAULT 0');
+    await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS is_locked BOOLEAN DEFAULT false');
+    await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS unlock_otp TEXT');
+    await client.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS unlock_otp_expires_at TIMESTAMP');
     await migrateColumn('users', 'createdAt', 'created_at');
 
     // CONTACTS

@@ -287,10 +287,61 @@ router.post('/login', async (req, res) => {
     }
 
     const user = result.rows[0];
+
+    // Check if account is locked
+    if (user.is_locked) {
+      // Check if OTP has expired (optional: we could allow resending or just keep it locked)
+      console.warn(`🔍 Login attempt blocked: Account locked for ${email}`);
+      return res.status(403).json({ 
+        error: 'Account locked due to too many failed attempts. Please verify your identity with the 6-digit code sent to your email.',
+        isLocked: true 
+      });
+    }
+
     const valid = await comparePassword(password, user.password);
+    
     if (!valid) {
       console.warn(`🔍 Login attempt failed: Incorrect password for ${email}`);
-      return res.status(401).json({ error: 'Invalid credentials' });
+      
+      const newAttempts = (user.failed_login_attempts || 0) + 1;
+      
+      if (newAttempts >= 5) {
+        // Lock the account
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+
+        await query(
+          'UPDATE users SET is_locked = true, failed_login_attempts = $1, unlock_otp = $2, unlock_otp_expires_at = $3 WHERE id = $4',
+          [newAttempts, otp, expiresAt, user.id]
+        );
+
+        try {
+          const { sendUnlockOtpEmail } = await import('../email.js');
+          await sendUnlockOtpEmail(user.email, user.name, otp);
+        } catch (emailErr) {
+          console.error('Failed to send unlock OTP email:', emailErr.message);
+        }
+
+        return res.status(403).json({ 
+          error: 'Too many failed attempts. Your account has been locked. A 6-digit verification code has been sent to your email.',
+          isLocked: true
+        });
+      } else {
+        // Increment attempts
+        await query('UPDATE users SET failed_login_attempts = $1 WHERE id = $2', [newAttempts, user.id]);
+        return res.status(401).json({ 
+          error: `Invalid credentials. ${5 - newAttempts} attempts remaining before account lock.`,
+          remainingAttempts: 5 - newAttempts
+        });
+      }
+    }
+
+    // Success - Reset all locking fields
+    if (user.failed_login_attempts > 0 || user.is_locked || user.unlock_otp) {
+      await query(
+        'UPDATE users SET failed_login_attempts = 0, is_locked = false, unlock_otp = NULL, unlock_otp_expires_at = NULL WHERE id = $1',
+        [user.id]
+      );
     }
 
     // Check verification status
@@ -353,6 +404,99 @@ router.post('/login', async (req, res) => {
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ error: 'Login failed' });
+  }
+});
+
+// Verify Unlock OTP
+router.post('/verify-unlock-otp', async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      return res.status(400).json({ error: 'Email and verification code are required' });
+    }
+
+    const result = await query(
+      'SELECT * FROM users WHERE email = $1 AND is_locked = true',
+      [email.toLowerCase()]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Account not found or not locked.' });
+    }
+
+    const user = result.rows[0];
+
+    // Check OTP and expiry
+    if (user.unlock_otp !== otp) {
+      return res.status(400).json({ error: 'Invalid verification code.' });
+    }
+
+    if (new Date() > new Date(user.unlock_otp_expires_at)) {
+      return res.status(400).json({ error: 'Verification code has expired.' });
+    }
+
+    // Unlock account
+    await query(
+      'UPDATE users SET is_locked = false, failed_login_attempts = 0, unlock_otp = NULL, unlock_otp_expires_at = NULL WHERE id = $1',
+      [user.id]
+    );
+
+    console.log(`🔓 Account unlocked successfully for ${email}`);
+    res.json({ success: true, message: 'Account unlocked successfully. You can now log in.' });
+  } catch (error) {
+    console.error('Unlock error:', error);
+    res.status(500).json({ error: 'Failed to unlock account.' });
+  }
+});
+
+// Resend Unlock OTP
+router.post('/resend-unlock-otp', async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
+    const result = await query(
+      'SELECT id, name, email, is_locked FROM users WHERE email = $1',
+      [email.toLowerCase()]
+    );
+
+    if (result.rows.length === 0) {
+      // Return success to avoid email enumeration
+      return res.json({ success: true, message: 'If the account is locked, a new verification code has been sent.' });
+    }
+
+    const user = result.rows[0];
+
+    if (!user.is_locked) {
+      return res.status(400).json({ error: 'Account is not locked.' });
+    }
+
+    // Generate new OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+
+    await query(
+      'UPDATE users SET unlock_otp = $1, unlock_otp_expires_at = $2 WHERE id = $3',
+      [otp, expiresAt, user.id]
+    );
+
+    try {
+      const { sendUnlockOtpEmail } = await import('../email.js');
+      await sendUnlockOtpEmail(user.email, user.name, otp);
+      console.log(`🔄 Unlock OTP resent to ${email}`);
+    } catch (emailErr) {
+      console.error('Failed to resend unlock OTP email:', emailErr.message);
+      return res.status(500).json({ error: 'Failed to send email. Please try again later.' });
+    }
+
+    res.json({ success: true, message: 'A new verification code has been sent to your email.' });
+  } catch (error) {
+    console.error('Resend OTP error:', error);
+    res.status(500).json({ error: 'Failed to process request.' });
   }
 });
 

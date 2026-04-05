@@ -322,3 +322,93 @@ export const sendAnnouncementEmail = async (email, name, title, content, attachm
     return { success: false, error: error.message };
   }
 };
+
+// Send unlock account OTP email
+export const sendUnlockOtpEmail = async (email, name, otp) => {
+  console.log(`📧 Attempting to send unlock OTP email to: ${email}`);
+  try {
+    const { transporter, from } = createTransporter();
+
+    const mailOptions = {
+      from: from,
+      to: email,
+      subject: 'Security Alert: Account Locked - Lyceum Academy',
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Account Locked</title>
+        </head>
+        <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f4f4f4;">
+          <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f4f4f4; padding: 20px;">
+            <tr>
+              <td align="center">
+                <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                  <!-- Header -->
+                  <tr>
+                    <td style="background: linear-gradient(135deg, #e63946 0%, #ba2d38 100%); padding: 40px 20px; text-align: center;">
+                      <h1 style="color: #ffffff; margin: 0; font-size: 28px;">Lyceum Academy</h1>
+                      <p style="color: #e0e0e0; margin: 10px 0 0 0; font-size: 14px;">Security Notification</p>
+                    </td>
+                  </tr>
+                  
+                  <!-- Content -->
+                  <tr>
+                    <td style="padding: 40px 30px;">
+                      <h2 style="color: #333333; margin: 0 0 20px 0; font-size: 24px;">Your Account Has Been Locked</h2>
+                      <p style="color: #666666; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
+                        Hi ${name},
+                      </p>
+                      <p style="color: #666666; font-size: 16px; line-height: 1.6; margin: 0 0 20px 0;">
+                        For your security, your account has been locked due to multiple failed login attempts. To unlock your account, please use the following 6-digit verification code:
+                      </p>
+                      
+                      <!-- OTP Code -->
+                      <div style="background-color: #f8f9fa; border: 1px dashed #e63946; padding: 20px; text-align: center; margin: 30px 0;">
+                        <span style="font-size: 36px; font-weight: bold; letter-spacing: 8px; color: #e63946;">${otp}</span>
+                      </div>
+                      
+                      <div style="background-color: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0;">
+                        <p style="color: #856404; font-size: 14px; margin: 0; line-height: 1.6;">
+                          <strong>⏰ This code is valid for 15 minutes.</strong>
+                        </p>
+                      </div>
+                      
+                      <p style="color: #999999; font-size: 14px; line-height: 1.6; margin: 20px 0 0 0;">
+                        If you did not attempt to log in, please contact our support team immediately.
+                      </p>
+                    </td>
+                  </tr>
+                  
+                  <!-- Footer -->
+                  <tr>
+                    <td style="background-color: #f8f9fa; padding: 30px; text-align: center; border-top: 1px solid #e9ecef;">
+                      <p style="color: #999999; font-size: 14px; margin: 0 0 10px 0;">
+                        Best regards,<br>
+                        <strong>Lyceum Academy Security Team</strong>
+                      </p>
+                      <p style="color: #cccccc; font-size: 12px; margin: 0;">
+                        © ${new Date().getFullYear()} Lyceum Academy. All rights reserved.
+                      </p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </body>
+        </html>
+      `,
+      text: `Hi ${name},\n\nYour Lyceum Academy account has been locked due to multiple failed login attempts.\n\nTo unlock your account, please use the following 6-digit verification code:\n\n${otp}\n\nThis code is valid for 15 minutes.\n\nIf you did not attempt to log in, please contact our support team immediately.\n\nBest regards,\nLyceum Academy Security Team`.trim(),
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    console.log('✅ Unlock OTP email sent:', info.messageId);
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    console.error('❌ Error sending unlock OTP email:', error);
+    return { success: false, error: error.message };
+  }
+};

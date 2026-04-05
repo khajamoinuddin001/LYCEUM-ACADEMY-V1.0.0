@@ -73,8 +73,13 @@ export async function apiRequest<T>(endpoint: string, options: RequestInit = {})
       removeToken();
       window.location.href = '/';
     }
-    const error = await response.json().catch(() => ({ error: 'Request failed' }));
-    throw new Error(error.error || `HTTP ${response.status}`);
+    const errorData = await response.json().catch(() => ({ error: 'Request failed' }));
+    
+    // Create a rich error object
+    const error = new Error(errorData.error || `HTTP ${response.status}`) as any;
+    error.status = response.status;
+    error.isLocked = errorData.isLocked;
+    throw error;
   }
 
   const text = await response.text();
@@ -124,6 +129,20 @@ export const registerStudent = async (name: string, email: string, password: str
 
 export const resendVerificationEmail = async (email: string): Promise<{ success: boolean; message: string }> => {
   return apiRequest<{ success: boolean; message: string }>('/auth/resend-verification', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+};
+
+export const verifyUnlockOtp = async (email: string, otp: string): Promise<{ success: boolean; message: string }> => {
+  return apiRequest<{ success: boolean; message: string }>('/auth/verify-unlock-otp', {
+    method: 'POST',
+    body: JSON.stringify({ email, otp }),
+  });
+};
+
+export const resendUnlockOtp = async (email: string): Promise<{ success: boolean; message: string }> => {
+  return apiRequest<{ success: boolean; message: string }>('/auth/resend-unlock-otp', {
     method: 'POST',
     body: JSON.stringify({ email }),
   });

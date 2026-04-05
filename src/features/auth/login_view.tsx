@@ -48,6 +48,13 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, users, onRegister, onFor
     const [registeredEmail, setRegisteredEmail] = useState('');
     const [isResending, setIsResending] = useState(false);
 
+    // Account Unlock State
+    const [isLockedAccount, setIsLockedAccount] = useState(false);
+    const [unlockOtp, setUnlockOtp] = useState('');
+    const [unlockSuccess, setUnlockSuccess] = useState('');
+    const [isUnlocking, setIsUnlocking] = useState(false);
+    const [lockedEmail, setLockedEmail] = useState('');
+
     useEffect(() => {
         if (initialIsRegister !== undefined) {
             setIsRegisterView(initialIsRegister);
@@ -75,9 +82,52 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, users, onRegister, onFor
         try {
             await onLogin(email, password, rememberMe);
         } catch (error: any) {
+            if (error.isLocked) {
+                setLockedEmail(email);
+                setIsLockedAccount(true);
+                setResendCountdown(60); // Longer countdown for security
+            }
             setError(error.message || 'Invalid email or password.');
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const handleUnlockSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setError('');
+        if (!unlockOtp || unlockOtp.length !== 6) {
+            setError('Please enter a valid 6-digit code.');
+            return;
+        }
+
+        setIsUnlocking(true);
+        try {
+            const result = await api.verifyUnlockOtp(lockedEmail, unlockOtp);
+            if (result.success) {
+                setUnlockSuccess('Account unlocked successfully! You can now sign in.');
+                setIsLockedAccount(false);
+                setUnlockOtp('');
+                setError('');
+            }
+        } catch (err: any) {
+            setError(err.message || 'Failed to unlock account. Please check the code.');
+        } finally {
+            setIsUnlocking(false);
+        }
+    };
+
+    const handleResendUnlockCode = async () => {
+        if (!lockedEmail) return;
+        setIsResending(true);
+        try {
+            await api.resendUnlockOtp(lockedEmail);
+            setResendCountdown(60);
+            alert('A new verification code has been sent to your email.');
+        } catch (error: any) {
+            setError(error.message || 'Failed to resend unlock code.');
+        } finally {
+            setIsResending(false);
         }
     };
 
@@ -162,14 +212,72 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, users, onRegister, onFor
                     </div>
                     <h1 className="text-3xl font-black text-center text-lyceum-blue tracking-tighter">lyceum</h1>
                     <h2 className="mt-2 text-xl font-semibold text-center text-gray-800 dark:text-gray-100">
-                        {verificationSent ? 'Account Created' : isRegisterView ? 'Create Student Account' : 'Welcome Back!'}
+                        {verificationSent ? 'Account Created' : isLockedAccount ? 'Account Locked' : isRegisterView ? 'Create Student Account' : 'Welcome Back!'}
                     </h2>
                     <p className="mt-1 text-sm text-center text-gray-500 dark:text-gray-400">
-                        {verificationSent ? 'Please verify your email' : isRegisterView ? 'Register to start your journey' : 'Sign in to continue'}
+                        {verificationSent ? 'Please verify your email' : isLockedAccount ? 'Security Verification Required' : isRegisterView ? 'Register to start your journey' : 'Sign in to continue'}
                     </p>
                 </div>
 
-                {isRegisterView && !verificationSent ? (
+                {isLockedAccount ? (
+                    <div className="mt-8 space-y-6">
+                        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/50 rounded-xl p-4 text-center">
+                            <div className="flex justify-center mb-4">
+                                <div className="p-3 bg-red-100 dark:bg-red-900/40 rounded-full">
+                                    <Lock size={32} className="text-red-600 dark:text-red-400" />
+                                </div>
+                            </div>
+                            <p className="text-sm text-red-800 dark:text-red-200 leading-relaxed">
+                                For your security, this account has been locked due to too many failed attempts. 
+                                We've sent a 6-digit verification code to <strong>{lockedEmail}</strong>.
+                            </p>
+                        </div>
+
+                        <form onSubmit={handleUnlockSubmit} className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                    Verification Code
+                                </label>
+                                <input
+                                    type="text"
+                                    maxLength={6}
+                                    placeholder="Enter 6-digit code"
+                                    value={unlockOtp}
+                                    onChange={(e) => setUnlockOtp(e.target.value.replace(/\D/g, ''))}
+                                    className="block w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg text-center text-2xl font-bold tracking-[0.5em] focus:ring-2 focus:ring-lyceum-blue focus:border-transparent dark:bg-gray-700 dark:text-white"
+                                    required
+                                />
+                            </div>
+
+                            {error && <p className="text-sm text-center text-red-500">{error}</p>}
+
+                            <button
+                                type="submit"
+                                disabled={isUnlocking || unlockOtp.length !== 6}
+                                className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-bold text-white bg-lyceum-blue hover:bg-lyceum-blue-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-lyceum-blue disabled:opacity-50 transition-all"
+                            >
+                                {isUnlocking ? 'Verifying...' : 'Unlock Account'}
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={handleResendUnlockCode}
+                                disabled={isResending || resendCountdown > 0}
+                                className="w-full py-2 text-sm text-lyceum-blue font-medium hover:text-lyceum-blue-dark disabled:text-gray-400"
+                            >
+                                {isResending ? 'Sending...' : resendCountdown > 0 ? `Resend code in ${resendCountdown}s` : 'Did not receive code? Resend'}
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={() => setIsLockedAccount(false)}
+                                className="w-full py-2 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                            >
+                                Back to Sign In
+                            </button>
+                        </form>
+                    </div>
+                ) : isRegisterView && !verificationSent ? (
                     <form className="mt-8 space-y-6" onSubmit={handleRegisterSubmit}>
                         <div>
                             <label htmlFor="name" className="sr-only">Full Name</label>
@@ -330,6 +438,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, users, onRegister, onFor
                             </div>
                         </div>
 
+                        {unlockSuccess && <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3 text-center text-sm text-green-600 dark:text-green-400 mb-4">{unlockSuccess}</div>}
                         {error && <p className="text-sm text-center text-red-500">{error}</p>}
 
                         <div>

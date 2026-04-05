@@ -667,7 +667,10 @@ const DashboardLayout: React.FC = () => {
         setActiveApp('dashboard');
       }
     } catch (error: any) {
-      throw new Error(error.message || 'Login failed');
+      // Preserve isLocked flag if present
+      const richError = new Error(error.message || 'Login failed') as any;
+      if (error.isLocked) richError.isLocked = true;
+      throw richError;
     }
   };
 
