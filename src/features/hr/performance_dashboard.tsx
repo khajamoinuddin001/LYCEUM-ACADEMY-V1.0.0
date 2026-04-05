@@ -271,6 +271,11 @@ const PerformanceDashboard: React.FC<{ userRole: string; currentUser: any }> = (
                                                         ))}
                                                     </div>
                                                     <span className="text-[10px] font-black text-gray-800 dark:text-gray-200 ml-1">{r.rating}/10</span>
+                                                    {r.clientName && (
+                                                        <span className="text-[10px] font-bold text-lyceum-blue ml-2 border-l border-gray-200 dark:border-gray-700 pl-2">
+                                                            {r.clientName}
+                                                        </span>
+                                                    )}
                                                 </div>
                                                 <span className="text-[9px] font-black text-gray-400 uppercase">{new Date(r.date).toLocaleDateString()}</span>
                                             </div>

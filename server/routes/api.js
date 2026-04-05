@@ -6757,7 +6757,7 @@ const getWorkingHoursDuration = async (userId, fromTime, toTime) => {
   return totalMs / 3600000; // Convert to hours
 };
 
-export const calculatePerformanceForUser = async (userId, month, year) => {
+export const calculatePerformanceForUser = async (userId, month, year, isAdmin = false) => {
   const startDate = new Date(year, month - 1, 1);
   const endDate = new Date(year, month, 0);
   const startDateStr = `${year}-${String(month).padStart(2, '0')}-01`;
@@ -6841,10 +6841,19 @@ export const calculatePerformanceForUser = async (userId, month, year) => {
   const taskScore = totalTasks > 0 ? (totalTaskPoints / totalTasks) * 100 : 100;
 
   // 4. Client Satisfaction (25%)
-  const reviews = (await query('SELECT rating, comment, created_at FROM client_satisfaction_reviews WHERE staff_id = $1 AND month = $2 AND year = $3', [userId, month, year])).rows;
+  const reviewsQuery = isAdmin 
+    ? 'SELECT r.rating, r.comment, r.created_at, c.name as "clientName" FROM client_satisfaction_reviews r LEFT JOIN contacts c ON r.student_id = c.id WHERE r.staff_id = $1 AND r.month = $2 AND r.year = $3'
+    : 'SELECT rating, comment, created_at FROM client_satisfaction_reviews WHERE staff_id = $1 AND month = $2 AND year = $3';
+    
+  const reviews = (await query(reviewsQuery, [userId, month, year])).rows;
   const avgRating = reviews.length > 0 ? reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length : 10;
   const clientScore = (avgRating / 10) * 100;
-  const recentReviews = reviews.map(r => ({ rating: r.rating, comment: r.comment, date: r.created_at }));
+  const recentReviews = reviews.map(r => ({ 
+    rating: r.rating, 
+    comment: r.comment, 
+    date: r.created_at,
+    clientName: r.clientName || undefined 
+  }));
 
   // 5. Ticket Resolution (25%) - 12 Working Hours Rule
   const resolvedTicketsRes = (await query(`
@@ -7375,7 +7384,7 @@ router.get('/attendance/performance/stats', authenticateToken, async (req, res) 
         }
 
         // Otherwise calculate live
-        const r = await calculatePerformanceForUser(u.id, month, year);
+        const r = await calculatePerformanceForUser(u.id, month, year, true);
         const perfConfig = typeof u.performance_settings === 'string' ? JSON.parse(u.performance_settings || '{}') : (u.performance_settings || {});
         const pipThreshold = Number(perfConfig.pip_threshold !== undefined ? perfConfig.pip_threshold : 60);
         const isPip = Math.round(Number(r.totalScore)) < pipThreshold;
@@ -7413,7 +7422,7 @@ router.get('/attendance/performance/stats', authenticateToken, async (req, res) 
           metrics: typeof snap.metrics_snapshot === 'string' ? JSON.parse(snap.metrics_snapshot) : snap.metrics_snapshot
         };
       } else {
-        stats = await calculatePerformanceForUser(effectiveUserId, month, year);
+        stats = await calculatePerformanceForUser(effectiveUserId, month, year, req.user.role === 'Admin');
       }
 
       const pipThreshold = Number(perfConfig.pip_threshold !== undefined ? perfConfig.pip_threshold : 60);
@@ -7432,7 +7441,7 @@ router.get('/attendance/performance/stats', authenticateToken, async (req, res) 
         if (histSnap) {
           history.push({ month: m, year: y, score: Number(histSnap.total_score) });
         } else {
-          const s = await calculatePerformanceForUser(effectiveUserId, m, y);
+          const s = await calculatePerformanceForUser(effectiveUserId, m, y, req.user.role === 'Admin');
           history.push({ month: m, year: y, score: s.totalScore });
         }
       }
