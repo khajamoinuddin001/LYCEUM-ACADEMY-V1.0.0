@@ -1334,6 +1334,19 @@ export const updateDs160Status = async (
   });
 };
 
+
+export const addDs160DocumentReview = async (
+  id: number, 
+  itemId: number, 
+  data: { role: string; status: 'Approved' | 'Rejected'; comment: string }
+): Promise<VisaOperation> => {
+  return apiRequest<VisaOperation>(`/visa-operations/${id}/ds-160/document/${itemId}/review`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+};
+
+
 export const uploadDs160DependencyDocument = async (id: number, file: File, index: number, type: 'internal' | 'filling' | 'confirmation' = 'internal', groupIndex: number = 0): Promise<any> => {
   return uploadDs160Document(id, file, type, groupIndex, index + 1);
 };

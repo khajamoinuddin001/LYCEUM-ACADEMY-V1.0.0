@@ -2566,6 +2566,87 @@ router.post('/visa-operations/:id/ds-160/dependency/document', authenticateToken
   }
 });
 
+
+router.post('/visa-operations/:id/ds-160/document/:itemId/review', authenticateToken, async (req, res) => {
+  try {
+    const { role, status, comment } = req.body;
+    const itemId = parseInt(req.params.itemId);
+
+    if (status === 'Rejected' && !comment) {
+      return res.status(400).json({ error: 'A sentence is required when rejecting a document.' });
+    }
+
+    const opResult = await query('SELECT ds_data FROM visa_operations WHERE id = $1', [req.params.id]);
+    if (opResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Operation not found' });
+    }
+
+    let dsData = opResult.rows[0].ds_data;
+    if (!Array.isArray(dsData)) {
+      if (dsData && typeof dsData === 'object' && Object.keys(dsData).length > 0) {
+        // Legacy single object: wrap it
+        dsData = [{ main: dsData, dependencies: dsData.dependencies || [] }];
+      } else {
+        dsData = [];
+      }
+    }
+
+    let found = false;
+    const newReview = {
+      role,
+      userName: req.user.name,
+      userId: req.user.id,
+      status,
+      comment: comment || '',
+      timestamp: new Date().toISOString()
+    };
+
+    // Traverse dsData to find the document
+    for (let gIdx = 0; gIdx < dsData.length; gIdx++) {
+      const group = dsData[gIdx];
+      
+      // Check main
+      if (group.main && group.main.fillingDocuments) {
+        const doc = group.main.fillingDocuments.find(d => d.id === itemId);
+        if (doc) {
+          if (!doc.reviews) doc.reviews = [];
+          doc.reviews.push(newReview);
+          doc.lastStatus = status;
+          found = true;
+        }
+      }
+
+      // Check dependencies
+      if (!found && group.dependencies) {
+        for (let dIdx = 0; dIdx < group.dependencies.length; dIdx++) {
+          const dep = group.dependencies[dIdx];
+          if (dep && dep.fillingDocuments) {
+            const doc = dep.fillingDocuments.find(d => d.id === itemId);
+            if (doc) {
+              if (!doc.reviews) doc.reviews = [];
+              doc.reviews.push(newReview);
+              doc.lastStatus = status;
+              found = true;
+              break;
+            }
+          }
+        }
+      }
+      if (found) break;
+    }
+
+    if (!found) {
+      return res.status(404).json({ error: 'Document not found in this operation' });
+    }
+
+    const result = await query('UPDATE visa_operations SET ds_data = $1 WHERE id = $2 RETURNING *', [JSON.stringify(dsData), req.params.id]);
+    res.json(transformVisaOperation(result.rows[0], req.user));
+  } catch (error) {
+    console.error('Document Review Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.put('/visa-operations/:id/ds-160/status', authenticateToken, async (req, res) => {
   try {
     const { studentStatus, adminStatus, rejectionReason, groupIndex, flowIndex } = req.body;

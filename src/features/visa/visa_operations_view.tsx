@@ -30,7 +30,7 @@ import {
     KeyRound,
     Trash2
 } from 'lucide-react';
-import { createVisaOperation, updateVisaOperationCgi, updateVisaOperationSlotBooking, updateVisaOperationDs160, uploadDs160Document, deleteDs160Document, updateDs160Status, downloadDocument, downloadVisaOperationItem, getToken, API_BASE_URL, uploadDs160DependencyDocument, deleteDs160DependencyDocument, deleteVisaOperation, uploadDocument, deleteDocument } from '@/utils/api';
+import { createVisaOperation, updateVisaOperationCgi, updateVisaOperationSlotBooking, updateVisaOperationDs160, uploadDs160Document, deleteDs160Document, updateDs160Status, downloadDocument, downloadVisaOperationItem, getToken, API_BASE_URL, uploadDs160DependencyDocument, deleteDs160DependencyDocument, deleteVisaOperation, uploadDocument, deleteDocument, addDs160DocumentReview } from '@/utils/api';
 import type { Contact, VisaOperation, User } from '@/types';
 
 interface VisaOperationsViewProps {
@@ -89,6 +89,8 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
     const [activeOp, setActiveOp] = useState<VisaOperation | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [operations, setOperations] = useState<VisaOperation[]>(existingOperations);
+    const [expandedDocs, setExpandedDocs] = useState<Set<number>>(new Set());
+    const [reviewComments, setReviewComments] = useState<Record<number, string>>({});
 
     // Sync state with props
     React.useEffect(() => {
@@ -568,6 +570,52 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
         }
     };
 
+    const handleReviewSubmit = async (itemId: number, status: 'Approved' | 'Rejected') => {
+        if (!activeOp) return;
+        const comment = reviewComments[itemId] || '';
+        if (status === 'Rejected' && !comment.trim()) {
+            alert('Please provide a reason for rejection.');
+            return;
+        }
+
+        setIsSubmitting(true);
+        try {
+            const role = user?.role === 'Student' ? 'Client' : 'Academy Director';
+            const updatedOp = await addDs160DocumentReview(activeOp.id, itemId, {
+                role,
+                status,
+                comment
+            });
+            setActiveOp(updatedOp);
+            setOperations(prev => prev.map(op => op.id === updatedOp.id ? updatedOp : op));
+            
+            // Sync local state if needed (dsGroups)
+            // The useEffect for dsGroups will handle it if step is 'ds'
+            
+            // Clear current comment
+            setReviewComments(prev => {
+                const next = { ...prev };
+                delete next[itemId];
+                return next;
+            });
+            alert(`Document ${status.toLowerCase()} successfully!`);
+        } catch (error) {
+            console.error('Failed to submit review:', error);
+            alert('Failed to submit review. Please try again.');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const toggleDocExpansion = (itemId: number) => {
+        setExpandedDocs(prev => {
+            const next = new Set(prev);
+            if (next.has(itemId)) next.delete(itemId);
+            else next.add(itemId);
+            return next;
+        });
+    };
+
     const handlePreviewFile = async (documentId: number) => {
         try {
             const token = getToken();
@@ -733,14 +781,82 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                             </label>
                             <div className="space-y-2">
                                 {data.fillingDocuments?.map((doc: any) => (
-                                    <div key={doc.id} className="flex items-center justify-between bg-white/60 p-2 rounded-lg border border-blue-100">
-                                        <span className="text-xs font-bold text-blue-700 truncate max-w-[150px]">{doc.name}</span>
-                                        <div className="flex items-center gap-1">
-                                            <button onClick={() => handlePreviewFile(doc.id)} className="p-1 text-blue-600 hover:bg-white rounded"><Eye size={12} /></button>
-                                            <button onClick={() => handleDsFileDelete(groupIndex, flowIndex, doc.id)} className="p-1 text-rose-500 hover:bg-white rounded"><Trash2 size={12} /></button>
+                                    <div key={doc.id} className="space-y-2">
+                                        <div className="flex items-center justify-between bg-white/60 p-2 rounded-lg border border-blue-100">
+                                            <div className="flex items-center gap-2 overflow-hidden">
+                                                <button 
+                                                    onClick={() => toggleDocExpansion(doc.id)}
+                                                    className="p-1 text-blue-600 hover:bg-white rounded transition-colors"
+                                                >
+                                                    {expandedDocs.has(doc.id) ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                                                </button>
+                                                <span className="text-xs font-bold text-blue-700 truncate max-w-[150px]">{doc.name}</span>
+                                            </div>
+                                            <div className="flex items-center gap-1">
+                                                <button onClick={() => handlePreviewFile(doc.id)} className="p-1 text-blue-600 hover:bg-white rounded"><Eye size={12} /></button>
+                                                <button onClick={() => handleDsFileDelete(groupIndex, flowIndex, doc.id)} className="p-1 text-rose-500 hover:bg-white rounded"><Trash2 size={12} /></button>
+                                            </div>
                                         </div>
+
+                                        {expandedDocs.has(doc.id) && (
+                                            <div className="bg-white/40 p-4 rounded-xl border border-blue-50 space-y-4 animate-in slide-in-from-top-2 duration-200">
+                                                {/* History */}
+                                                <div className="space-y-3">
+                                                    <div className="text-[10px] font-bold text-blue-600 uppercase flex items-center gap-1.5">
+                                                        <Clock size={12} /> Response History
+                                                    </div>
+                                                    {doc.reviews && doc.reviews.length > 0 ? (
+                                                        <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1 custom-scrollbar">
+                                                            {doc.reviews.map((rev: any, idx: number) => (
+                                                                <div key={idx} className="bg-white p-3 rounded-lg border border-slate-100 shadow-sm">
+                                                                    <div className="flex items-center justify-between mb-1">
+                                                                        <span className="text-[10px] font-bold text-slate-500">{rev.userName} • {rev.role}</span>
+                                                                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${rev.status === 'Approved' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
+                                                                            {rev.status}
+                                                                        </span>
+                                                                    </div>
+                                                                    {rev.comment && <p className="text-xs text-slate-600 italic">"{rev.comment}"</p>}
+                                                                    <div className="text-[9px] text-slate-400 mt-1">{new Date(rev.timestamp).toLocaleString()}</div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    ) : (
+                                                        <div className="text-center py-4 bg-white/50 rounded-lg border border-dashed border-slate-200 text-slate-400 text-[10px] font-medium">
+                                                            No history available
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                {/* Review Controls */}
+                                                <div className="space-y-3 pt-2 border-t border-blue-50">
+                                                    <div className="text-[10px] font-bold text-slate-500 uppercase">Write a response</div>
+                                                    <textarea
+                                                        value={reviewComments[doc.id] || ''}
+                                                        onChange={(e) => setReviewComments(prev => ({ ...prev, [doc.id]: e.target.value }))}
+                                                        placeholder={user?.role === 'Student' ? "Your response..." : "Academic Director's response..."}
+                                                        className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-medium focus:border-blue-500 outline-none transition-all resize-none"
+                                                        rows={2}
+                                                    />
+                                                    <div className="flex gap-2">
+                                                        <button 
+                                                            onClick={() => handleReviewSubmit(doc.id, 'Approved')}
+                                                            className="flex-1 py-1.5 bg-emerald-600 text-white rounded-lg text-[10px] font-bold uppercase hover:bg-emerald-700 transition-all flex items-center justify-center gap-1.5 shadow-sm"
+                                                        >
+                                                            <CheckCircle size={12} /> Approve
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => handleReviewSubmit(doc.id, 'Rejected')}
+                                                            className="flex-1 py-1.5 bg-rose-600 text-white rounded-lg text-[10px] font-bold uppercase hover:bg-rose-700 transition-all flex items-center justify-center gap-1.5 shadow-sm"
+                                                        >
+                                                            <XCircle size={12} /> Reject
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 ))}
+
                             </div>
                         </div>
 
