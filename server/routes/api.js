@@ -6983,16 +6983,28 @@ async function getPipConsecutiveMonths(userId, month, year, pipThreshold = 60) {
   let currY = year;
   const threshold = Number(pipThreshold);
 
+  const cutoffDate = new Date(2026, 3, 1); // April 1st, 2026 (Module Introduction)
+
   // We check back non-exhaustively to find the consecutive streak
   for (let i = 0; i < 24; i++) { // Check up to 2 years back
+    const currentMonthDate = new Date(currY, currM - 1, 1);
+    if (currentMonthDate < cutoffDate) break;
+
     // 1. Try to find a snapshot for this month
     const snap = (await query('SELECT total_score, metrics_snapshot FROM staff_performance_records WHERE user_id = $1 AND month = $2 AND year = $3', [userId, currM, currY])).rows[0];
 
     let isPip = false;
+    let hasActivity = false;
+
     if (snap && snap.total_score !== null && snap.metrics_snapshot) {
-      // Use the exact same rounding as the UI for consistency
-      const score = Math.round(Number(snap.total_score));
-      isPip = score < threshold;
+      const metrics = typeof snap.metrics_snapshot === 'string' ? JSON.parse(snap.metrics_snapshot) : snap.metrics_snapshot;
+      // Define what counts as "Activity" in the system
+      hasActivity = Number(metrics.actualPresence) > 0 || Number(metrics.totalTasks) > 0 || Number(metrics.totalTickets) > 0 || Number(metrics.reviewCount) > 0;
+      
+      if (hasActivity) {
+        const score = Math.round(Number(snap.total_score));
+        isPip = score < threshold;
+      }
     } else {
       // If no snapshot, calculate live if it's the current or past month
       const now = new Date();
@@ -7000,17 +7012,17 @@ async function getPipConsecutiveMonths(userId, month, year, pipThreshold = 60) {
       if (isPastOrPresent) {
         const stats = await calculatePerformanceForUser(userId, currM, currY);
         if (stats) {
-          const score = Math.round(Number(stats.totalScore));
-          isPip = score < threshold;
-        } else {
-          break;
+          hasActivity = Number(stats.metrics.actualPresence) > 0 || Number(stats.metrics.totalTasks) > 0 || Number(stats.metrics.totalTickets) > 0 || Number(stats.metrics.reviewCount) > 0;
+          
+          if (hasActivity) {
+            const score = Math.round(Number(stats.totalScore));
+            isPip = score < threshold;
+          }
         }
-      } else {
-        break; // Future month, stop
       }
     }
 
-    if (isPip) {
+    if (hasActivity && isPip) {
       count++;
       // Move to previous month
       currM--;
