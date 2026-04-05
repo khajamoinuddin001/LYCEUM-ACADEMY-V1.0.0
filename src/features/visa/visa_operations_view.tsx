@@ -780,7 +780,7 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                                 <Upload size={14} /> {data.fillingDocuments?.length ? 'Add Another' : 'Upload Filling'}
                             </label>
                             <div className="space-y-2">
-                                {data.fillingDocuments?.map((doc: any) => (
+                                {(data.fillingDocuments || []).map((doc: any, index: number) => ({ ...doc, displayIndex: index + 1 })).reverse().map((doc: any) => (
                                     <div key={doc.id} className="space-y-2">
                                         <div className="flex items-center justify-between bg-white/60 p-2 rounded-lg border border-blue-100">
                                             <div className="flex items-center gap-2 overflow-hidden">
@@ -790,7 +790,12 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                                                 >
                                                     {expandedDocs.has(doc.id) ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                                                 </button>
-                                                <span className="text-xs font-bold text-blue-700 truncate max-w-[150px]">{doc.name}</span>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-[10px] font-black bg-blue-100 text-blue-700 w-5 h-5 flex items-center justify-center rounded-full shrink-0">
+                                                        {doc.displayIndex}
+                                                    </span>
+                                                    <span className="text-xs font-bold text-blue-700 truncate max-w-[150px]">{doc.name}</span>
+                                                </div>
                                             </div>
                                             <div className="flex items-center gap-1">
                                                 <button onClick={() => handlePreviewFile(doc.id)} className="p-1 text-blue-600 hover:bg-white rounded"><Eye size={12} /></button>
