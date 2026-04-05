@@ -6822,16 +6822,16 @@ export const calculatePerformanceForUser = async (userId, month, year) => {
   `, [userId, startDateStr, endDateStr])).rows;
 
   const taskTotals = {};
-  taskLogs.forEach(log => {
-    const durationHours = (new Date(log.end_time).getTime() - new Date(log.start_time).getTime()) / 3600000;
+  for (const log of taskLogs) {
+    const durationHours = await getWorkingHoursDuration(userId, log.start_time, log.end_time);
     taskTotals[log.task_id] = (taskTotals[log.task_id] || 0) + durationHours;
-  });
+  }
 
   const totalTasks = Object.keys(taskTotals).length;
   let totalTaskPoints = 0;
   let lateTasks = 0;
   Object.values(taskTotals).forEach(hours => {
-    if (hours <= 6) {
+    if (hours <= 10) {
       totalTaskPoints += 1.0;
     } else {
       totalTaskPoints += 0.5;
@@ -6864,7 +6864,7 @@ export const calculatePerformanceForUser = async (userId, month, year) => {
   let resolvedTickets = 0;
   for (const ticket of resolvedTicketsRes) {
     const workingHours = await getWorkingHoursDuration(userId, ticket.created_at, ticket.solved_at);
-    if (workingHours <= 12) {
+    if (workingHours <= 20) {
       totalTicketPoints += 1.0;
       resolvedTickets++;
     } else {
