@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import type { Contact, Document as Doc, User } from '@/types';
 import { Paperclip, Upload, Download, ArrowLeft, Sparkles, Trash2, Eye, X } from '@/components/common/icons';
 import * as api from '@/utils/api';
@@ -12,56 +13,62 @@ interface ContactDocumentsViewProps {
 }
 
 const PreviewModal = ({ url, filename, type, onClose }: { url: string; filename: string; type: string; onClose: () => void }) => {
-  return (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[9999] p-4 sm:p-8 animate-fade-in">
-      <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-5xl h-full flex flex-col shadow-2xl overflow-hidden relative">
-        <div className="bg-gray-50 dark:bg-gray-900 px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-lyceum-blue/10 rounded-lg text-lyceum-blue">
-              <Eye size={20} />
+  return createPortal(
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[10000] p-4 sm:p-8 animate-fade-in-fast">
+      <div className="bg-white dark:bg-gray-800 rounded-[32px] w-full max-w-6xl h-full flex flex-col shadow-2xl overflow-hidden relative border border-white/20 animate-scale-in">
+        <div className="bg-white/80 dark:bg-gray-900/80 backdrop-blur-md px-8 py-5 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between shrink-0 z-10">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-lyceum-blue/10 rounded-2xl flex items-center justify-center text-lyceum-blue shadow-inner">
+              <Eye size={24} />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 leading-tight truncate max-w-[200px] sm:max-w-md">
+              <h3 className="text-xl font-black text-gray-900 dark:text-gray-100 leading-tight tracking-tight truncate max-w-[200px] sm:max-w-md">
                 {filename}
               </h3>
-              <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">Document Preview</p>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <p className="text-[10px] text-gray-400 dark:text-gray-500 font-black uppercase tracking-widest">Document Preview Live</p>
+              </div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <a
               href={url}
               download={filename}
-              className="p-2 text-gray-500 hover:text-lyceum-blue hover:bg-lyceum-blue/10 rounded-xl transition-all"
+              className="flex items-center gap-2 px-5 py-2.5 bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:text-lyceum-blue hover:bg-lyceum-blue/10 rounded-2xl transition-all font-bold text-sm border border-gray-100 dark:border-gray-700"
               title="Download"
             >
-              <Download size={24} />
+              <Download size={18} />
+              <span className="hidden sm:inline">Download</span>
             </a>
             <button
               onClick={onClose}
-              className="p-2 text-gray-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-all"
-              title="Close"
+              className="w-12 h-12 flex items-center justify-center text-gray-400 hover:text-white hover:bg-red-500 rounded-2xl transition-all shadow-sm border border-gray-100 dark:border-gray-700 hover:border-red-500"
+              title="Close (Esc)"
             >
               <X size={24} />
             </button>
           </div>
         </div>
 
-        <div className="flex-grow bg-gray-100 dark:bg-gray-900/50 overflow-hidden flex items-center justify-center relative">
+        <div className="flex-grow bg-slate-50 dark:bg-gray-900/90 overflow-hidden flex items-center justify-center relative inner-shadow">
           {type.includes('image') ? (
-            <img src={url} alt={filename} className="max-w-full max-h-full object-contain shadow-lg" />
+            <div className="w-full h-full p-8 flex items-center justify-center overflow-auto">
+                <img src={url} alt={filename} className="max-w-full max-h-full object-contain rounded-xl shadow-2xl border-4 border-white dark:border-gray-800" />
+            </div>
           ) : type.includes('pdf') ? (
             <iframe src={url} className="w-full h-full border-none" title={filename} />
           ) : (
-            <div className="text-center p-8 bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700">
-              <div className="w-16 h-16 bg-lyceum-blue/10 text-lyceum-blue rounded-2xl flex items-center justify-center mx-auto mb-4">
-                <Paperclip size={32} />
+            <div className="text-center p-12 bg-white dark:bg-gray-800 rounded-[40px] shadow-2xl border border-gray-100 dark:border-gray-700 max-w-sm mx-auto">
+              <div className="w-24 h-24 bg-lyceum-blue/10 text-lyceum-blue rounded-[32px] flex items-center justify-center mx-auto mb-6 shadow-inner">
+                <Paperclip size={48} />
               </div>
-              <p className="text-gray-900 dark:text-gray-100 font-bold text-lg mb-2">Preview Not Available</p>
-              <p className="text-gray-500 dark:text-gray-400 mb-6">This file type cannot be previewed directly.</p>
+              <p className="text-gray-900 dark:text-gray-100 font-black text-2xl mb-2 tracking-tight">Preview Not Available</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-8 font-medium px-4">This specific file format cannot be rendered in the browser preview.</p>
               <a
                 href={url}
                 download={filename}
-                className="inline-flex items-center px-6 py-3 bg-lyceum-blue text-white rounded-xl font-bold hover:bg-lyceum-blue-dark transition-all shadow-lg shadow-lyceum-blue/20"
+                className="inline-flex items-center px-8 py-4 bg-lyceum-blue text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-lyceum-blue-dark transition-all shadow-xl shadow-lyceum-blue/30 active:scale-95"
               >
                 <Download size={18} className="mr-2" />
                 Download to View
@@ -70,7 +77,27 @@ const PreviewModal = ({ url, filename, type, onClose }: { url: string; filename:
           )}
         </div>
       </div>
-    </div>
+      <style>{`
+        .inner-shadow {
+            box-shadow: inset 0 2px 20px 0 rgba(0,0,0,0.05);
+        }
+        @keyframes scale-in {
+            from { opacity: 0; transform: scale(0.95) translateY(20px); }
+            to { opacity: 1; transform: scale(1) translateY(0); }
+        }
+        .animate-scale-in {
+            animation: scale-in 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        }
+        @keyframes fade-in-fast {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        .animate-fade-in-fast {
+            animation: fade-in-fast 0.2s ease-out forwards;
+        }
+      `}</style>
+    </div>,
+    document.body
   );
 };
 
@@ -558,7 +585,7 @@ const ContactDocumentsView: React.FC<ContactDocumentsViewProps> = ({ contact, on
       <style>{`
         @keyframes fade-in {
             from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
+            to { opacity: 1; transform: none; }
         }
         .animate-fade-in {
             animation: fade-in 0.3s ease-out forwards;
