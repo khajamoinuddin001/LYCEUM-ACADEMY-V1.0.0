@@ -1417,30 +1417,59 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                         <div className="space-y-6">
                             <h3 className="text-lg font-bold text-slate-800 border-b border-slate-100 pb-2">Security Questions</h3>
                             <div className="grid gap-6">
-                                {[1, 2, 3].map(num => (
-                                    <div key={num} className="grid grid-cols-2 gap-6 bg-slate-50 p-6 rounded-2xl border border-slate-100">
-                                        <div className="space-y-2">
-                                            <label className="text-xs font-bold text-slate-500 uppercase">Question {num}</label>
-                                            <input
-                                                type="text"
-                                                value={(cgiFormData as any)[`securityQuestion${num}`]}
-                                                onChange={(e) => setCgiFormData(prev => ({ ...prev, [`securityQuestion${num}`]: e.target.value }))}
-                                                className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg focus:border-orange-500 outline-none transition-all text-sm font-medium"
-                                                placeholder={`Enter Security Question ${num}`}
-                                            />
+                                {[1, 2, 3].map(num => {
+                                    const questionSet1 = [
+                                        "What is your mother's maiden name?",
+                                        "What was the name of your first/current/favorite pet?",
+                                        "What was your first car?",
+                                        "What elementary school did you attend?",
+                                        "What is the name of the town/city where you were born?"
+                                    ];
+                                    const questionSet2 = [
+                                        "What is the name of the road/street you grew up on?",
+                                        "What is your least favorite food?",
+                                        "What was the first company that you worked for?",
+                                        "What is your favorite food?",
+                                        "What high school did you attend?"
+                                    ];
+                                    const questionSet3 = [
+                                        "Where did you meet your spouse?",
+                                        "What is your sibling's middle name?",
+                                        "Who was your childhood hero?",
+                                        "In what city or town was your first job?",
+                                        "What is the name of a college you applied to but didn't attend?"
+                                    ];
+                                    
+                                    const currentSet = num === 1 ? questionSet1 : num === 2 ? questionSet2 : questionSet3;
+
+                                    return (
+                                        <div key={num} className="grid grid-cols-2 gap-6 bg-slate-50 p-6 rounded-2xl border border-slate-100">
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-bold text-slate-500 uppercase">Question {num}</label>
+                                                <select
+                                                    value={(cgiFormData as any)[`securityQuestion${num}`]}
+                                                    onChange={(e) => setCgiFormData(prev => ({ ...prev, [`securityQuestion${num}`]: e.target.value }))}
+                                                    className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg focus:border-orange-500 outline-none transition-all text-sm font-medium"
+                                                >
+                                                    <option value="">Select Security Question {num}</option>
+                                                    {currentSet.map((q, i) => (
+                                                        <option key={i} value={q}>{q}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <label className="text-xs font-bold text-slate-500 uppercase">Answer {num}</label>
+                                                <input
+                                                    type="text"
+                                                    value={(cgiFormData as any)[`securityAnswer${num}`]}
+                                                    onChange={(e) => setCgiFormData(prev => ({ ...prev, [`securityAnswer${num}`]: e.target.value }))}
+                                                    className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg focus:border-orange-500 outline-none transition-all text-sm font-medium"
+                                                    placeholder={`Enter Answer ${num}`}
+                                                />
+                                            </div>
                                         </div>
-                                        <div className="space-y-2">
-                                            <label className="text-xs font-bold text-slate-500 uppercase">Answer {num}</label>
-                                            <input
-                                                type="text"
-                                                value={(cgiFormData as any)[`securityAnswer${num}`]}
-                                                onChange={(e) => setCgiFormData(prev => ({ ...prev, [`securityAnswer${num}`]: e.target.value }))}
-                                                className="w-full px-4 py-2 bg-white border border-slate-200 rounded-lg focus:border-orange-500 outline-none transition-all text-sm font-medium"
-                                                placeholder={`Enter Answer ${num}`}
-                                            />
-                                        </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         </div>
 
