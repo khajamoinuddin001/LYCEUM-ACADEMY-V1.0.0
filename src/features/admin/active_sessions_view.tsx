@@ -32,6 +32,7 @@ interface FinanceTransaction {
     internalStatus: 'Pending' | 'Approved' | 'Refused';
     notes: string;
     receivedAmount: number;
+    joiningDate?: string;
     lineItems?: any[];
     metadata?: any;
     subTransactions?: FinanceTransaction[];
@@ -148,7 +149,7 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
 
     const filteredTxs = useMemo(() => {
         return financeTransactions.filter(t => {
-            const matchSearch = t.id.toLowerCase().includes(search.toLowerCase()) || 
+            const matchSearch = t.id.toLowerCase().includes(search.toLowerCase()) ||
                 t.customerName?.toLowerCase().includes(search.toLowerCase());
             if (!matchSearch) return false;
 
@@ -166,23 +167,45 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
 
     const hierarchicalTxs = useMemo(() => {
         if (view !== 'finance-tracker') return [];
-        
+
         // 1. Identify all Quotations
         const items = [...filteredTxs];
         const quotes = items.filter(t => t.type === 'Quotation');
-        const others = items.filter(t => t.type !== 'Quotation');
-        
-        // 2. Map others to quotes
+        // Use the full pool for others to ensure links work even if sub-txs are filtered by search
+        const others = financeTransactions.filter(t => t.type !== 'Quotation');
+
+        // 2. Map others to quotes with multi-layered matching
         const grouped = quotes.map(q => ({
             ...q,
-            subTransactions: others.filter(o => String(o.metadata?.linkedQuotationId) === String(q.id))
+            subTransactions: others.filter(o => {
+                const metadata = o.metadata || {};
+                
+                // Tier 1: Direct ID Match
+                if (String(metadata.linkedQuotationId) === String(q.id)) return true;
+                
+                // Tier 2: AR ID Match
+                if (metadata.linkedArId && (String(metadata.linkedArId) === String(q.id) || String(metadata.linkedArId) === String(q.metadata?.ar_id))) return true;
+
+                // Tier 3: Line Item Match (Shared DNA)
+                const oLines = o.lineItems || o.line_items || [];
+                const qLines = q.lineItems || q.line_items || [];
+                
+                if (oLines.length > 0 && qLines.length > 0) {
+                    return oLines.some((oli: any) => 
+                        qLines.some((qli: any) => 
+                            qli.id === oli.id || 
+                            qli.id === oli.linkedQuotationLineItemId ||
+                            qli.linkedQuotationLineItemId === oli.linkedQuotationLineItemId
+                        )
+                    );
+                }
+
+                return false;
+            })
         }));
-        
-        // 3. Keep unlinked ones at top level? 
-        // User said "remove this income showing first", implying they want a Quote-centric view.
-        // I will only show Quotes as the top level for now as requested.
+
         return grouped;
-    }, [filteredTxs, view]);
+    }, [filteredTxs, financeTransactions, view]);
 
     const handleExportExcel = () => {
         const exportData = filteredTxs.map(t => ({
@@ -202,7 +225,7 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
         const worksheet = XLSX.utils.json_to_sheet(exportData);
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "Transactions");
-        
+
         // Auto-size columns
         const maxWidths = exportData.reduce((acc: any, row: any) => {
             Object.keys(row).forEach((key, i) => {
@@ -213,7 +236,7 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
         }, []);
         worksheet['!cols'] = maxWidths.map((w: number) => ({ w: w + 2 }));
 
-        const fileName = `Transactions_${filterMonth === 'All' ? 'All_Months' : 'Month_' + (parseInt(filterMonth)+1)}_${filterYear === 'All' ? 'All_Years' : filterYear}.xlsx`;
+        const fileName = `Transactions_${filterMonth === 'All' ? 'All_Months' : 'Month_' + (parseInt(filterMonth) + 1)}_${filterYear === 'All' ? 'All_Years' : filterYear}.xlsx`;
         XLSX.writeFile(workbook, fileName);
     };
 
@@ -287,10 +310,10 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
     const handleUpdateLimit = async (id: number) => {
         try {
             await setRateLimit(id, newLimitValue);
-            setApiKeys(apiKeys.map(k => k.id === id ? { 
-                ...k, 
-                rateLimit: newLimitValue, 
-                usage: k.usage ? { ...k.usage, limit: newLimitValue, remaining: Math.max(0, newLimitValue - k.usage.count) } : undefined 
+            setApiKeys(apiKeys.map(k => k.id === id ? {
+                ...k,
+                rateLimit: newLimitValue,
+                usage: k.usage ? { ...k.usage, limit: newLimitValue, remaining: Math.max(0, newLimitValue - k.usage.count) } : undefined
             } : k));
             setEditingLimitId(null);
         } catch (e) {
@@ -322,11 +345,11 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
     };
 
     const handleTogglePanic = async () => {
-        const msg = globalPanic 
-            ? "This will enable the API system again. Are you sure?" 
+        const msg = globalPanic
+            ? "This will enable the API system again. Are you sure?"
             : "🚨 GLOBAL PANIC SWITCH\n\nThis will instantly disable ALL API keys system-wide. No external application will be able to fetch data. ARE YOU SURE?";
         if (!confirm(msg)) return;
-        
+
         try {
             const newState = await toggleGlobalPanic(!globalPanic);
             setGlobalPanic(newState);
@@ -364,16 +387,16 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
             const token = getToken();
             const res = await fetch(`${API_BASE}/admin/finance-tracker/${transactionId}`, {
                 method: 'POST',
-                headers: { 
+                headers: {
                     'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}` 
+                    Authorization: `Bearer ${token}`
                 },
                 body: JSON.stringify(data)
             });
             if (res.ok) {
-                setFinanceTransactions(prev => prev.map(t => 
-                    t.id === transactionId ? { 
-                        ...t, 
+                setFinanceTransactions(prev => prev.map(t =>
+                    t.id === transactionId ? {
+                        ...t,
                         internalStatus: data.status || t.internalStatus,
                         notes: data.notes !== undefined ? data.notes : t.notes,
                         receivedAmount: data.receivedAmount !== undefined ? data.receivedAmount : t.receivedAmount
@@ -530,8 +553,8 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
                     { label: 'Students', value: counts.Student, color: 'from-emerald-400 to-teal-600', icon: '🎓' },
                     ...(view === 'finance-tracker' ? [{ label: 'Total Approved', value: `₹${totalReceived.toLocaleString()}`, color: 'from-orange-500 to-red-600', icon: '💰' }] : [])
                 ].map(stat => (
-                    <div 
-                        key={stat.label} 
+                    <div
+                        key={stat.label}
                         className={`bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-800 p-4 flex items-center gap-4 ${stat.label === 'Total Approved' ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
                         onClick={stat.label === 'Total Approved' ? () => setShowApprovedDetails(true) : undefined}
                     >
@@ -611,7 +634,7 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
                                 className="px-4 py-2.5 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-medium text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500/40 appearance-none"
                             >
                                 <option value="All">All Months</option>
-                                {Array.from({length: 12}).map((_, i) => (
+                                {Array.from({ length: 12 }).map((_, i) => (
                                     <option key={i} value={i.toString()}>
                                         {new Date(2000, i, 1).toLocaleString('default', { month: 'short' })}
                                     </option>
@@ -631,7 +654,7 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
                                     .sort((a, b) => (b as number) - (a as number))
                                     .map(year => (
                                         <option key={year} value={String(year)}>{String(year)}</option>
-                                ))}
+                                    ))}
                             </select>
                             <select
                                 value={internalStatusFilter}
@@ -709,11 +732,10 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
                                             </div>
                                         </td>
                                         <td className="px-6 py-4">
-                                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${
-                                                key.accessLevel === 'read-write' 
-                                                    ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300' 
-                                                    : 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
-                                            }`}>
+                                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase ${key.accessLevel === 'read-write'
+                                                ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300'
+                                                : 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
+                                                }`}>
                                                 {key.accessLevel === 'read-write' ? 'R/W' : 'RO'}
                                             </span>
                                         </td>
@@ -738,13 +760,13 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
                                                         onChange={e => setNewLimitValue(parseInt(e.target.value) || 0)}
                                                         autoFocus
                                                     />
-                                                    <button 
+                                                    <button
                                                         onClick={() => handleUpdateLimit(key.id)}
                                                         className="text-blue-500 hover:text-blue-600 font-bold text-xs"
                                                     >
                                                         Save
                                                     </button>
-                                                    <button 
+                                                    <button
                                                         onClick={() => setEditingLimitId(null)}
                                                         className="text-gray-400 hover:text-gray-500 text-xs"
                                                     >
@@ -755,10 +777,10 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
                                                 <div className="flex flex-col gap-1">
                                                     <div className="flex items-center justify-between gap-4">
                                                         <span className="text-xs font-bold text-gray-700 dark:text-gray-300">
-                                                            {key.usage?.remaining ?? key.rateLimit ?? 60} / {key.rateLimit ?? 60} 
+                                                            {key.usage?.remaining ?? key.rateLimit ?? 60} / {key.rateLimit ?? 60}
                                                             <span className="ml-1 font-normal text-gray-400 uppercase text-[10px]">Rem</span>
                                                         </span>
-                                                        <button 
+                                                        <button
                                                             onClick={() => {
                                                                 setEditingLimitId(key.id);
                                                                 setNewLimitValue(key.rateLimit ?? 100);
@@ -769,10 +791,9 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
                                                         </button>
                                                     </div>
                                                     <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 overflow-hidden">
-                                                        <div 
-                                                            className={`h-full transition-all duration-500 ${
-                                                                (key.usage?.remaining ?? 1) / (key.rateLimit ?? 1) < 0.2 ? 'bg-red-500 animate-pulse' : 'bg-blue-500'
-                                                            }`}
+                                                        <div
+                                                            className={`h-full transition-all duration-500 ${(key.usage?.remaining ?? 1) / (key.rateLimit ?? 1) < 0.2 ? 'bg-red-500 animate-pulse' : 'bg-blue-500'
+                                                                }`}
                                                             style={{ width: `${Math.min(100, ((key.usage?.remaining ?? 60) / (key.rateLimit ?? 60)) * 100)}%` }}
                                                         />
                                                     </div>
@@ -805,11 +826,10 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
                                                 </button>
                                                 <button
                                                     onClick={() => handleToggleKey(key.id)}
-                                                    className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-all ${
-                                                        (key.status || 'active') === 'active'
-                                                            ? 'bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100'
-                                                            : 'bg-green-50 text-green-600 border-green-200 hover:bg-green-100'
-                                                    }`}
+                                                    className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-all ${(key.status || 'active') === 'active'
+                                                        ? 'bg-amber-50 text-amber-600 border-amber-200 hover:bg-amber-100'
+                                                        : 'bg-green-50 text-green-600 border-green-200 hover:bg-green-100'
+                                                        }`}
                                                 >
                                                     {(key.status || 'active') === 'active' ? 'Choke' : 'Live'}
                                                 </button>
@@ -864,8 +884,15 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
                                                         <td className="px-2 py-4">
                                                             <div className="flex flex-col">
                                                                 <span className="font-bold text-gray-900 dark:text-white text-sm">{tx.id}</span>
-                                                                <span className="text-xs text-gray-500">{tx.customerName || 'N/A'}</span>
-                                                                <span className="text-[10px] text-gray-400">{new Date(tx.date).toLocaleDateString()}</span>
+                                                                <span className="text-xs text-gray-500 font-medium">{tx.customerName || 'N/A'}</span>
+                                                                <div className="flex flex-col mt-1 gap-0.5">
+                                                                    <span className="text-[10px] text-gray-400">Quo Date: {new Date(tx.date).toLocaleDateString()}</span>
+                                                                    {tx.joiningDate && (
+                                                                        <span className="text-[9px] text-blue-600 dark:text-blue-400 font-bold bg-blue-50 dark:bg-blue-900/20 px-1 py-0.5 rounded w-fit mt-0.5">
+                                                                            Joined: {new Date(tx.joiningDate).toLocaleDateString()}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
                                                             </div>
                                                         </td>
                                                         <td className="px-6 py-4">
@@ -887,11 +914,10 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
                                                             ₹{tx.amount.toLocaleString()}
                                                         </td>
                                                         <td className="px-6 py-4">
-                                                            <span className={`px-2.5 py-1 rounded-lg text-xs font-bold ${
-                                                                tx.internalStatus === 'Approved' ? 'bg-green-500/10 text-green-600' :
+                                                            <span className={`px-2.5 py-1 rounded-lg text-xs font-bold ${tx.internalStatus === 'Approved' ? 'bg-green-500/10 text-green-600' :
                                                                 tx.internalStatus === 'Refused' ? 'bg-red-500/10 text-red-600' :
-                                                                'bg-gray-100 text-gray-500'
-                                                            }`}>
+                                                                    'bg-gray-100 text-gray-500'
+                                                                }`}>
                                                                 {tx.internalStatus || 'Pending'}
                                                             </span>
                                                         </td>
@@ -966,7 +992,7 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
                                                                             {tx.metadata?.phone && <span className="text-emerald-500">{tx.metadata.phone}</span>}
                                                                         </div>
                                                                     </div>
-                                                                    
+
                                                                     {(!tx.subTransactions || tx.subTransactions.length === 0) ? (
                                                                         <div className="p-8 text-center">
                                                                             <p className="text-xs text-gray-400 italic">No paid invoices found for this quotation.</p>
@@ -980,8 +1006,6 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
                                                                                     <th className="text-left px-2 py-2 font-semibold">Date</th>
                                                                                     <th className="text-left px-2 py-2 font-semibold">Type</th>
                                                                                     <th className="text-right px-2 py-2 font-semibold">Amount</th>
-                                                                                    <th className="text-center px-2 py-2 font-semibold">Record</th>
-                                                                                    <th className="text-right px-4 py-2 font-semibold text-orange-500">Received ₹</th>
                                                                                 </tr>
                                                                             </thead>
                                                                             <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
@@ -1001,40 +1025,11 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
                                                                                                 {subTx.type}
                                                                                             </td>
                                                                                             <td className="px-2 py-2 text-right font-bold text-gray-900 dark:text-white">₹{subTx.amount.toLocaleString()}</td>
-                                                                                            <td className="px-2 py-2 text-center">
-                                                                                                <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold ${
-                                                                                                    subTx.internalStatus === 'Approved' ? 'text-green-500 bg-green-500/10' : 
-                                                                                                    subTx.internalStatus === 'Refused' ? 'text-red-500 bg-red-500/10' :
-                                                                                                    'text-gray-400 bg-gray-100'
-                                                                                                }`}>
-                                                                                                    {subTx.internalStatus === 'Refused' ? 'Rejected' : (subTx.internalStatus || 'Pending')}
-                                                                                                </span>
-                                                                                            </td>
-                                                                                            <td className="px-4 py-2 text-right tabular-nums">
-                                                                                                {subTx.internalStatus === 'Approved' ? (
-                                                                                                    <div className="flex items-center justify-end gap-1">
-                                                                                                        <span className="text-[10px] text-orange-400">₹</span>
-                                                                                                        <input
-                                                                                                            type="number"
-                                                                                                            defaultValue={subTx.receivedAmount || 0}
-                                                                                                            onBlur={(e) => {
-                                                                                                                const val = parseFloat(e.target.value) || 0;
-                                                                                                                if (val !== subTx.receivedAmount) {
-                                                                                                                    handleUpdateFinanceTracker(subTx.id, { receivedAmount: val });
-                                                                                                                }
-                                                                                                            }}
-                                                                                                            className="w-20 bg-transparent border-b border-orange-100 text-right text-xs font-bold text-orange-600 outline-none"
-                                                                                                        />
-                                                                                                    </div>
-                                                                                                ) : (
-                                                                                                    <span className="text-gray-300 italic">Pending...</span>
-                                                                                                )}
-                                                                                            </td>
                                                                                         </tr>
 
                                                                                         {expandedSubTxId === subTx.id && (
                                                                                             <tr className="bg-gray-50/10 dark:bg-gray-900/20">
-                                                                                                <td colSpan={7} className="px-8 py-3">
+                                                                                                <td colSpan={5} className="px-8 py-3">
                                                                                                     {(!subTx.lineItems || subTx.lineItems.length === 0) ? (
                                                                                                         <div className="text-[10px] text-gray-400 italic">No line items recorded.</div>
                                                                                                     ) : (
@@ -1278,7 +1273,7 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
                                 </h3>
                                 <p className="text-xs text-gray-500 mt-1">Showing last 1000 requests for key ID: {selectedKeyForLogs}</p>
                             </div>
-                            <button 
+                            <button
                                 onClick={() => setSelectedKeyForLogs(null)}
                                 className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-xl transition-colors text-gray-400"
                             >
@@ -1306,7 +1301,7 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
                                 const total = keyLogs.length;
                                 const success = keyLogs.filter(l => l.status_code < 400).length;
                                 const successRate = Math.round((success / total) * 100);
-                                
+
                                 const endpoints = keyLogs.reduce((acc: any, curr) => {
                                     acc[curr.endpoint] = (acc[curr.endpoint] || 0) + 1;
                                     return acc;
@@ -1355,12 +1350,11 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
                                                 return (
                                                     <div key={log.id} className="group relative bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700/50 rounded-2xl p-4 flex items-center justify-between hover:border-blue-200 dark:hover:border-blue-900/30 transition-all hover:shadow-md">
                                                         <div className="flex items-center gap-4">
-                                                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xs ${
-                                                                log.method === 'GET' ? 'bg-blue-100 text-blue-600' :
+                                                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xs ${log.method === 'GET' ? 'bg-blue-100 text-blue-600' :
                                                                 log.method === 'POST' ? 'bg-green-100 text-green-600' :
-                                                                log.method === 'DELETE' ? 'bg-red-100 text-red-600' :
-                                                                'bg-amber-100 text-amber-600'
-                                                            }`}>
+                                                                    log.method === 'DELETE' ? 'bg-red-100 text-red-600' :
+                                                                        'bg-amber-100 text-amber-600'
+                                                                }`}>
                                                                 {log.method}
                                                             </div>
                                                             <div>
@@ -1386,9 +1380,8 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
                                                             </div>
                                                         </div>
                                                         <div className="flex items-center gap-3">
-                                                            <span className={`px-2.5 py-1 rounded-lg text-xs font-black ${
-                                                                log.status_code >= 400 ? 'bg-red-100 text-red-600' : 'bg-blue-50 text-blue-600'
-                                                            }`}>
+                                                            <span className={`px-2.5 py-1 rounded-lg text-xs font-black ${log.status_code >= 400 ? 'bg-red-100 text-red-600' : 'bg-blue-50 text-blue-600'
+                                                                }`}>
                                                                 {log.status_code}
                                                             </span>
                                                         </div>
@@ -1419,7 +1412,7 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
                                     Showing all {filteredTxs.filter(t => t.internalStatus === 'Approved').length} approved transactions for the selected period
                                 </p>
                             </div>
-                            <button 
+                            <button
                                 onClick={() => setShowApprovedDetails(false)}
                                 className="p-3 hover:bg-white/80 dark:hover:bg-gray-800 rounded-2xl transition-all text-gray-400 hover:text-gray-900 dark:hover:text-white shadow-sm border border-transparent hover:border-gray-200"
                             >
@@ -1453,12 +1446,12 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
                         <div className="flex-1 overflow-auto p-8">
                             <div className="grid gap-4">
                                 {filteredTxs.filter(t => t.internalStatus === 'Approved').map((tx) => (
-                                    <div 
-                                        key={tx.id} 
+                                    <div
+                                        key={tx.id}
                                         className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl p-5 flex items-center justify-between hover:border-orange-200 dark:hover:border-orange-900/40 transition-all hover:shadow-xl group relative overflow-hidden"
                                     >
                                         <div className="absolute left-0 top-0 bottom-0 w-1 bg-orange-500 opacity-0 group-hover:opacity-100 transition-opacity" />
-                                        
+
                                         <div className="flex items-center gap-5">
                                             <div className="w-14 h-14 rounded-2xl bg-orange-50 dark:bg-orange-900/20 text-orange-600 flex items-center justify-center font-black text-xs shadow-sm border border-orange-100 dark:border-orange-800 flex-shrink-0">
                                                 {new Date(tx.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
@@ -1466,9 +1459,8 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
                                             <div>
                                                 <div className="flex items-center gap-2">
                                                     <span className="text-sm font-black text-gray-900 dark:text-white uppercase tracking-tight">{tx.id}</span>
-                                                    <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold uppercase ${
-                                                        tx.type === 'Invoice' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
-                                                    }`}>{tx.type}</span>
+                                                    <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold uppercase ${tx.type === 'Invoice' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
+                                                        }`}>{tx.type}</span>
                                                 </div>
                                                 <div className="text-base font-bold text-gray-700 dark:text-gray-300 mt-0.5">{tx.customerName || 'No Name'}</div>
                                                 <div className="flex items-center gap-3 mt-1.5">
@@ -1492,7 +1484,7 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
 
                         {/* Modal Footer */}
                         <div className="px-8 py-5 bg-gray-50 dark:bg-gray-800/30 border-t border-gray-100 dark:border-gray-800 flex justify-end items-center">
-                            <button 
+                            <button
                                 onClick={() => setShowApprovedDetails(false)}
                                 className="px-8 py-3 bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-2xl text-sm font-black hover:bg-gray-800 dark:hover:bg-gray-100 transition-all shadow-lg active:scale-95"
                             >

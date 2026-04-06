@@ -2604,7 +2604,7 @@ router.post('/visa-operations/:id/ds-160/document/:itemId/review', authenticateT
     // Traverse dsData to find the document
     for (let gIdx = 0; gIdx < dsData.length; gIdx++) {
       const group = dsData[gIdx];
-      
+
       // Check main
       if (group.main && group.main.fillingDocuments) {
         const doc = group.main.fillingDocuments.find(d => d.id === itemId);
@@ -3830,37 +3830,62 @@ contact_id = $1, customer_name = $2, date = $3, description = $4, type = $5, sta
 router.get('/admin/finance-tracker', authenticateToken, requireRole('Admin'), async (req, res) => {
   try {
     const result = await query(`
+      WITH identity_joining AS (
+        SELECT 
+          LOWER(TRIM(name)) as clean_name, 
+          phone, 
+          MIN(created_at) as first_seen
+        FROM (
+          SELECT contact as name, phone, created_at FROM leads
+          UNION ALL
+          SELECT name, phone, created_at FROM contacts
+          UNION ALL
+          SELECT name, phone, created_at FROM users
+        ) all_entries
+        WHERE (name IS NOT NULL AND name != '') OR (phone IS NOT NULL AND phone != '')
+        GROUP BY 1, 2
+      )
       SELECT 
-        t.id, t.contact_id, t.customer_name, t.date, t.description, t.type, t.status, t.amount, t.payment_method, t.due_date, t.additional_discount, t.metadata, t.line_items, t.created_at,
-        ipr.internal_status, ipr.notes, ipr.received_amount 
-      FROM transactions t
-      LEFT JOIN internal_payment_records ipr ON t.id = ipr.transaction_id
-      WHERE t.type IN ('Invoice', 'Income') AND t.status = 'Paid'
+        res.*,
+        ij.first_seen as joining_date
+      FROM (
+        SELECT 
+          t.id, t.contact_id, t.customer_name, t.date, t.description, t.type, t.status, t.amount, t.payment_method, t.due_date, t.additional_discount, t.metadata, t.line_items, t.created_at,
+          ipr.internal_status, ipr.notes, ipr.received_amount,
+          c.phone as client_phone
+        FROM transactions t
+        LEFT JOIN contacts c ON t.contact_id = c.id
+        LEFT JOIN internal_payment_records ipr ON t.id = ipr.transaction_id
+        WHERE t.type IN ('Invoice', 'Income')
 
-      UNION ALL
+        UNION ALL
 
-      SELECT 
-        q->>'id' as id, 
-        NULL as contact_id, 
-        l.contact as customer_name, 
-        q->>'date' as date, 
-        l.title as description, 
-        'Quotation' as type, 
-        q->>'status' as status, 
-        (q->>'total')::real as amount, 
-        NULL as payment_method, 
-        NULL as due_date, 
-        0 as additional_discount, 
-        jsonb_build_object('lead_id', l.id, 'email', l.email, 'phone', l.phone, 'is_quotation', true) as metadata,
-        q->'line_items' as line_items,
-        l.created_at,
-        ipr.internal_status, 
-        ipr.notes, 
-        ipr.received_amount
-      FROM leads l, jsonb_array_elements(l.quotations) q
-      LEFT JOIN internal_payment_records ipr ON (q->>'id') = ipr.transaction_id
-      WHERE q->>'status' = 'Agreed'
-
+        SELECT 
+          q->>'id' as id, 
+          NULL as contact_id, 
+          l.contact as customer_name, 
+          q->>'date' as date, 
+          l.title as description, 
+          'Quotation' as type, 
+          q->>'status' as status, 
+          (q->>'total')::real as amount, 
+          NULL as payment_method, 
+          NULL as due_date, 
+          0 as additional_discount, 
+          jsonb_build_object('lead_id', l.id, 'email', l.email, 'phone', l.phone, 'is_quotation', true) as metadata,
+          COALESCE(q->'lineItems', q->'line_items', '[]'::jsonb) as line_items,
+          l.created_at,
+          ipr.internal_status, 
+          ipr.notes, 
+          ipr.received_amount,
+          l.phone as client_phone
+        FROM leads l, jsonb_array_elements(l.quotations) q
+        LEFT JOIN internal_payment_records ipr ON (q->>'id') = ipr.transaction_id
+        WHERE q->>'status' = 'Agreed'
+      ) res
+      LEFT JOIN identity_joining ij ON 
+        LOWER(TRIM(res.customer_name)) = ij.clean_name AND 
+        (res.client_phone IS NOT DISTINCT FROM ij.phone)
       ORDER BY date DESC, created_at DESC
     `);
     const transactions = result.rows.map(t => ({
@@ -3873,7 +3898,8 @@ router.get('/admin/finance-tracker', authenticateToken, requireRole('Admin'), as
       lineItems: typeof t.line_items === 'string' ? JSON.parse(t.line_items) : (t.line_items || []),
       internalStatus: t.internal_status || 'Pending',
       notes: t.notes || '',
-      receivedAmount: Number(t.received_amount) || 0
+      receivedAmount: Number(t.received_amount) || 0,
+      joiningDate: t.joining_date
     }));
     res.json(transactions);
   } catch (error) {
@@ -5553,13 +5579,13 @@ router.post('/lms/sessions/:id/slide', authenticateToken, async (req, res) => {
       WHERE id = $3
       RETURNING course_id
     `, [lessonId, slideIndex, req.params.id]);
- 
+
     const io = req.app.get('io');
     if (io && result.rows.length > 0) {
-      io.of('/lms').to(`session-${req.params.id}`).emit('slide-updated', { 
+      io.of('/lms').to(`session-${req.params.id}`).emit('slide-updated', {
         courseId: result.rows[0].course_id,
-        lessonId, 
-        slideIndex 
+        lessonId,
+        slideIndex
       });
     }
 
@@ -5583,14 +5609,14 @@ router.post('/lms/sessions/:id/pdf-page', authenticateToken, async (req, res) =>
       WHERE id = $4
       RETURNING course_id
     `, [lessonId, pdfPage, pdfPageCount, req.params.id]);
- 
+
     const io = req.app.get('io');
     if (io && result.rows.length > 0) {
-      io.of('/lms').to(`session-${req.params.id}`).emit('pdf-page-updated', { 
+      io.of('/lms').to(`session-${req.params.id}`).emit('pdf-page-updated', {
         courseId: result.rows[0].course_id,
-        lessonId, 
-        pdfPage, 
-        pdfPageCount 
+        lessonId,
+        pdfPage,
+        pdfPageCount
       });
     }
 
@@ -5616,10 +5642,10 @@ router.post('/lms/sessions/:id/lesson', authenticateToken, async (req, res) => {
     const io = req.app.get('io');
     if (io && result.rows.length > 0) {
       const courseId = result.rows[0].course_id;
-      io.of('/lms').emit('lesson-switched', { 
-        sessionId: req.params.id, 
+      io.of('/lms').emit('lesson-switched', {
+        sessionId: req.params.id,
         courseId,
-        lessonId 
+        lessonId
       });
     }
 
@@ -6868,18 +6894,18 @@ export const calculatePerformanceForUser = async (userId, month, year, isAdmin =
   const taskScore = totalTasks > 0 ? (totalTaskPoints / totalTasks) * 100 : 100;
 
   // 4. Client Satisfaction (25%)
-  const reviewsQuery = isAdmin 
+  const reviewsQuery = isAdmin
     ? 'SELECT r.rating, r.comment, r.created_at, c.name as "clientName" FROM client_satisfaction_reviews r LEFT JOIN contacts c ON r.student_id = c.id WHERE r.staff_id = $1 AND r.month = $2 AND r.year = $3'
     : 'SELECT rating, comment, created_at FROM client_satisfaction_reviews WHERE staff_id = $1 AND month = $2 AND year = $3';
-    
+
   const reviews = (await query(reviewsQuery, [userId, month, year])).rows;
   const avgRating = reviews.length > 0 ? reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length : 10;
   const clientScore = (avgRating / 10) * 100;
-  const recentReviews = reviews.map(r => ({ 
-    rating: r.rating, 
-    comment: r.comment, 
+  const recentReviews = reviews.map(r => ({
+    rating: r.rating,
+    comment: r.comment,
     date: r.created_at,
-    clientName: r.clientName || undefined 
+    clientName: r.clientName || undefined
   }));
 
   // 5. Ticket Resolution (25%) - 12 Working Hours Rule
@@ -7027,7 +7053,7 @@ async function getPipConsecutiveMonths(userId, month, year, pipThreshold = 60) {
       const metrics = typeof snap.metrics_snapshot === 'string' ? JSON.parse(snap.metrics_snapshot) : snap.metrics_snapshot;
       // Define what counts as "Activity" in the system
       hasActivity = Number(metrics.actualPresence) > 0 || Number(metrics.totalTasks) > 0 || Number(metrics.totalTickets) > 0 || Number(metrics.reviewCount) > 0;
-      
+
       if (hasActivity) {
         const score = Math.round(Number(snap.total_score));
         isPip = score < threshold;
@@ -7040,7 +7066,7 @@ async function getPipConsecutiveMonths(userId, month, year, pipThreshold = 60) {
         const stats = await calculatePerformanceForUser(userId, currM, currY);
         if (stats) {
           hasActivity = Number(stats.metrics.actualPresence) > 0 || Number(stats.metrics.totalTasks) > 0 || Number(stats.metrics.totalTickets) > 0 || Number(stats.metrics.reviewCount) > 0;
-          
+
           if (hasActivity) {
             const score = Math.round(Number(stats.totalScore));
             isPip = score < threshold;
