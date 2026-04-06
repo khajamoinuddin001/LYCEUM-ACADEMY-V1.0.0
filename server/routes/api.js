@@ -3830,11 +3830,38 @@ contact_id = $1, customer_name = $2, date = $3, description = $4, type = $5, sta
 router.get('/admin/finance-tracker', authenticateToken, requireRole('Admin'), async (req, res) => {
   try {
     const result = await query(`
-      SELECT t.*, ipr.internal_status, ipr.notes, ipr.received_amount 
+      SELECT 
+        t.id, t.contact_id, t.customer_name, t.date, t.description, t.type, t.status, t.amount, t.payment_method, t.due_date, t.additional_discount, t.metadata, t.line_items, t.created_at,
+        ipr.internal_status, ipr.notes, ipr.received_amount 
       FROM transactions t
       LEFT JOIN internal_payment_records ipr ON t.id = ipr.transaction_id
-      WHERE t.type IN ('Invoice', 'Income')
-      ORDER BY t.date DESC, t.created_at DESC
+      WHERE t.type IN ('Invoice', 'Income') AND t.status = 'Paid'
+
+      UNION ALL
+
+      SELECT 
+        q->>'id' as id, 
+        NULL as contact_id, 
+        l.contact as customer_name, 
+        q->>'date' as date, 
+        l.title as description, 
+        'Quotation' as type, 
+        q->>'status' as status, 
+        (q->>'total')::real as amount, 
+        NULL as payment_method, 
+        NULL as due_date, 
+        0 as additional_discount, 
+        jsonb_build_object('lead_id', l.id, 'email', l.email, 'phone', l.phone, 'is_quotation', true) as metadata,
+        q->'line_items' as line_items,
+        l.created_at,
+        ipr.internal_status, 
+        ipr.notes, 
+        ipr.received_amount
+      FROM leads l, jsonb_array_elements(l.quotations) q
+      LEFT JOIN internal_payment_records ipr ON (q->>'id') = ipr.transaction_id
+      WHERE q->>'status' = 'Agreed'
+
+      ORDER BY date DESC, created_at DESC
     `);
     const transactions = result.rows.map(t => ({
       ...t,

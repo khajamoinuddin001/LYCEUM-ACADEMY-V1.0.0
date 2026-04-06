@@ -33,6 +33,8 @@ interface FinanceTransaction {
     notes: string;
     receivedAmount: number;
     lineItems?: any[];
+    metadata?: any;
+    subTransactions?: FinanceTransaction[];
 }
 
 function getDeviceIcon(ua: string) {
@@ -132,10 +134,16 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
     const [keyLogs, setKeyLogs] = useState<any[]>([]);
     const [isLogsLoading, setIsLogsLoading] = useState(false);
     const [expandedTxId, setExpandedTxId] = useState<string | null>(null);
+    const [expandedSubTxId, setExpandedSubTxId] = useState<string | null>(null);
     const [showApprovedDetails, setShowApprovedDetails] = useState(false);
 
     const toggleTxExpand = (id: string) => {
         setExpandedTxId(prev => prev === id ? null : id);
+        setExpandedSubTxId(null); // Reset sub-expansion
+    };
+
+    const toggleSubTxExpand = (id: string) => {
+        setExpandedSubTxId(prev => prev === id ? null : id);
     };
 
     const filteredTxs = useMemo(() => {
@@ -156,10 +164,32 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
         });
     }, [financeTransactions, search, filterMonth, filterYear, internalStatusFilter]);
 
+    const hierarchicalTxs = useMemo(() => {
+        if (view !== 'finance-tracker') return [];
+        
+        // 1. Identify all Quotations
+        const items = [...filteredTxs];
+        const quotes = items.filter(t => t.type === 'Quotation');
+        const others = items.filter(t => t.type !== 'Quotation');
+        
+        // 2. Map others to quotes
+        const grouped = quotes.map(q => ({
+            ...q,
+            subTransactions: others.filter(o => String(o.metadata?.linkedQuotationId) === String(q.id))
+        }));
+        
+        // 3. Keep unlinked ones at top level? 
+        // User said "remove this income showing first", implying they want a Quote-centric view.
+        // I will only show Quotes as the top level for now as requested.
+        return grouped;
+    }, [filteredTxs, view]);
+
     const handleExportExcel = () => {
         const exportData = filteredTxs.map(t => ({
             'Transaction ID': t.id,
             'Customer Name': t.customerName || 'N/A',
+            'Email': t.metadata?.email || '',
+            'Phone': t.metadata?.phone || '',
             'Date': new Date(t.date).toLocaleDateString(),
             'Type': t.type,
             'Status': t.status,
@@ -815,13 +845,13 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
                             </thead>
                             <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
                                 {(() => {
-                                    const totalPages = Math.ceil(filteredTxs.length / ITEMS_PER_PAGE);
+                                    const totalPages = Math.ceil(hierarchicalTxs.length / ITEMS_PER_PAGE);
                                     const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-                                    const paginatedTxs = filteredTxs.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+                                    const paginatedHierarchical = hierarchicalTxs.slice(startIndex, startIndex + ITEMS_PER_PAGE);
 
                                     return (
                                         <>
-                                            {paginatedTxs.map(tx => (
+                                            {paginatedHierarchical.map(tx => (
                                                 <React.Fragment key={tx.id}>
                                                     <tr className={`transition-colors hover:bg-gray-50/60 dark:hover:bg-gray-800/40 ${expandedTxId === tx.id ? 'bg-gray-50/80 dark:bg-gray-800/60' : ''}`}>
                                                         <td className="px-4 py-4 text-center cursor-pointer" onClick={() => toggleTxExpand(tx.id)}>
@@ -840,14 +870,17 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
                                                         </td>
                                                         <td className="px-6 py-4">
                                                             <div className="flex flex-col gap-1">
-                                                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase w-fit ${
-                                                                    tx.type === 'Invoice' ? 'bg-green-100 text-green-700' :
-                                                                    tx.type === 'Expense' ? 'bg-red-100 text-red-700' :
-                                                                    'bg-blue-100 text-blue-700'
-                                                                }`}>
-                                                                    {tx.type}
+                                                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase w-fit bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400">
+                                                                    QUOTATION
                                                                 </span>
-                                                                <span className="text-[10px] text-gray-400 italic">{tx.status}</span>
+                                                                <div className="flex items-center gap-1.5">
+                                                                    <span className="text-[10px] font-bold italic text-gray-400">
+                                                                        {tx.status}
+                                                                    </span>
+                                                                    <span className="text-[10px] font-bold text-blue-500 px-1.5 bg-blue-50 rounded italic whitespace-nowrap">
+                                                                        {tx.subTransactions?.length || 0} Invoices
+                                                                    </span>
+                                                                </div>
                                                             </div>
                                                         </td>
                                                         <td className="px-6 py-4 text-sm font-black text-gray-900 dark:text-white">
@@ -859,12 +892,13 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
                                                                 tx.internalStatus === 'Refused' ? 'bg-red-500/10 text-red-600' :
                                                                 'bg-gray-100 text-gray-500'
                                                             }`}>
-                                                                {tx.internalStatus}
+                                                                {tx.internalStatus || 'Pending'}
                                                             </span>
                                                         </td>
                                                         <td className="px-6 py-4">
                                                             {tx.internalStatus === 'Approved' ? (
-                                                                <div className="relative w-32">
+                                                                <div className="flex items-center gap-1">
+                                                                    <span className="text-gray-400">₹</span>
                                                                     <input
                                                                         type="number"
                                                                         defaultValue={tx.receivedAmount || 0}
@@ -874,18 +908,12 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
                                                                                 handleUpdateFinanceTracker(tx.id, { receivedAmount: val });
                                                                             }
                                                                         }}
-                                                                        onKeyDown={(e) => {
-                                                                            if (e.key === 'Enter') {
-                                                                                (e.target as HTMLInputElement).blur();
-                                                                            }
-                                                                        }}
-                                                                        className="w-full bg-transparent border-b border-dashed border-orange-200 dark:border-orange-800 focus:border-orange-500 py-1 text-sm font-bold text-gray-900 dark:text-white outline-none transition-all tabular-nums"
+                                                                        className="w-24 bg-transparent border-b border-blue-100 text-left text-xs font-bold text-gray-900 dark:text-white outline-none focus:border-blue-500 transition-all"
                                                                     />
-                                                                    <span className="absolute left-0 -top-3 text-[9px] text-orange-500 font-bold uppercase">Received</span>
                                                                 </div>
                                                             ) : (
                                                                 <div className="text-xs text-gray-400 italic">
-                                                                    Approve to record...
+                                                                    See invoices...
                                                                 </div>
                                                             )}
                                                         </td>
@@ -907,12 +935,9 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
                                                                     placeholder="Add private note..."
                                                                     className="w-full bg-transparent border-b border-dashed border-gray-200 dark:border-gray-700 focus:border-blue-500 py-1 text-xs text-gray-600 dark:text-gray-400 outline-none transition-all placeholder:italic"
                                                                 />
-                                                                <svg className="absolute right-0 bottom-1.5 w-3 h-3 text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                                                </svg>
                                                             </div>
                                                         </td>
-                                                        <td className="px-6 py-4 text-right">
+                                                        <td className="px-6 py-4">
                                                             <div className="flex items-center justify-end gap-2">
                                                                 <button
                                                                     onClick={() => handleUpdateFinanceTracker(tx.id, { status: 'Approved' })}
@@ -924,55 +949,125 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
                                                                     onClick={() => handleUpdateFinanceTracker(tx.id, { status: 'Refused' })}
                                                                     className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-bold hover:bg-red-700 transition-all shadow-sm"
                                                                 >
-                                                                    Refuse
+                                                                    Reject
                                                                 </button>
                                                             </div>
                                                         </td>
                                                     </tr>
+
                                                     {expandedTxId === tx.id && (
-                                                        <tr className="bg-gray-50/50 dark:bg-gray-800/30">
-                                                            <td colSpan={8} className="px-6 py-6 border-t border-gray-100 dark:border-gray-800">
-                                                                <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 p-4 shadow-sm ml-10">
-                                                                    <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4 border-b border-gray-100 dark:border-gray-800 pb-2">Complete Item Details</h4>
-                                                                    {(!tx.lineItems || tx.lineItems.length === 0) ? (
-                                                                        <div className="text-sm text-gray-500 flex items-center gap-2">
-                                                                            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
-                                                                            No line items recorded for this transaction.
+                                                        <tr className="bg-gray-50/30 dark:bg-gray-900/40">
+                                                            <td colSpan={8} className="px-6 py-4 border-t border-gray-100 dark:border-gray-800">
+                                                                <div className="ml-10 bg-white dark:bg-gray-800/80 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+                                                                    <div className="px-4 py-2 bg-gray-50/50 dark:bg-gray-800/50 border-b border-gray-100 dark:border-gray-700 font-bold text-[10px] text-gray-500 uppercase tracking-widest flex items-center justify-between">
+                                                                        <span>Linked Invoices / Incomes</span>
+                                                                        <div className="flex gap-4">
+                                                                            {tx.metadata?.email && <span className="text-blue-500 lowercase">{tx.metadata.email}</span>}
+                                                                            {tx.metadata?.phone && <span className="text-emerald-500">{tx.metadata.phone}</span>}
+                                                                        </div>
+                                                                    </div>
+                                                                    
+                                                                    {(!tx.subTransactions || tx.subTransactions.length === 0) ? (
+                                                                        <div className="p-8 text-center">
+                                                                            <p className="text-xs text-gray-400 italic">No paid invoices found for this quotation.</p>
                                                                         </div>
                                                                     ) : (
-                                                                        <div className="overflow-x-auto">
-                                                                            <table className="w-full text-sm">
-                                                                                <thead className="bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400">
-                                                                                    <tr>
-                                                                                        <th className="text-left px-3 py-2 font-medium">Item Description</th>
-                                                                                        <th className="text-right px-3 py-2 font-medium">Qty</th>
-                                                                                        <th className="text-right px-3 py-2 font-medium">Rate</th>
-                                                                                        <th className="text-right px-3 py-2 font-medium">Total</th>
-                                                                                    </tr>
-                                                                                </thead>
-                                                                                <tbody className="divide-y divide-gray-100 dark:divide-gray-800 text-gray-700 dark:text-gray-300">
-                                                                                    {tx.lineItems.map((item: any, idx: number) => (
-                                                                                        <tr key={idx} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/50">
-                                                                                            <td className="px-3 py-2.5">
-                                                                                                <div className="font-semibold">{item.name || item.description || 'Unnamed Item'}</div>
-                                                                                                {item.description && item.description !== item.name && (
-                                                                                                    <div className="text-xs text-gray-500 mt-0.5">{item.description}</div>
+                                                                        <table className="w-full text-xs">
+                                                                            <thead className="bg-gray-50/30 dark:bg-gray-900/40 text-gray-500 border-b border-gray-100 dark:border-gray-800">
+                                                                                <tr>
+                                                                                    <th className="w-8 px-2 py-2"></th>
+                                                                                    <th className="text-left px-2 py-2 font-semibold">Invoice/Ref</th>
+                                                                                    <th className="text-left px-2 py-2 font-semibold">Date</th>
+                                                                                    <th className="text-left px-2 py-2 font-semibold">Type</th>
+                                                                                    <th className="text-right px-2 py-2 font-semibold">Amount</th>
+                                                                                    <th className="text-center px-2 py-2 font-semibold">Record</th>
+                                                                                    <th className="text-right px-4 py-2 font-semibold text-orange-500">Received ₹</th>
+                                                                                </tr>
+                                                                            </thead>
+                                                                            <tbody className="divide-y divide-gray-50 dark:divide-gray-800">
+                                                                                {tx.subTransactions.map(subTx => (
+                                                                                    <React.Fragment key={subTx.id}>
+                                                                                        <tr className={`hover:bg-gray-50/50 dark:hover:bg-gray-800/50 transition-colors ${expandedSubTxId === subTx.id ? 'bg-blue-50/30 dark:bg-blue-900/10' : ''}`}>
+                                                                                            <td className="px-2 py-2 text-center">
+                                                                                                <button onClick={() => toggleSubTxExpand(subTx.id)} className="p-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-400">
+                                                                                                    <svg className={`w-3.5 h-3.5 transition-transform duration-200 ${expandedSubTxId === subTx.id ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                                                                                    </svg>
+                                                                                                </button>
+                                                                                            </td>
+                                                                                            <td className="px-2 py-2 font-bold text-gray-700 dark:text-gray-300">{subTx.id}</td>
+                                                                                            <td className="px-2 py-2 text-gray-500">{new Date(subTx.date).toLocaleDateString()}</td>
+                                                                                            <td className="px-2 py-2 uppercase font-bold text-[9px] text-emerald-600 dark:text-emerald-400">
+                                                                                                {subTx.type}
+                                                                                            </td>
+                                                                                            <td className="px-2 py-2 text-right font-bold text-gray-900 dark:text-white">₹{subTx.amount.toLocaleString()}</td>
+                                                                                            <td className="px-2 py-2 text-center">
+                                                                                                <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold ${
+                                                                                                    subTx.internalStatus === 'Approved' ? 'text-green-500 bg-green-500/10' : 
+                                                                                                    subTx.internalStatus === 'Refused' ? 'text-red-500 bg-red-500/10' :
+                                                                                                    'text-gray-400 bg-gray-100'
+                                                                                                }`}>
+                                                                                                    {subTx.internalStatus === 'Refused' ? 'Rejected' : (subTx.internalStatus || 'Pending')}
+                                                                                                </span>
+                                                                                            </td>
+                                                                                            <td className="px-4 py-2 text-right tabular-nums">
+                                                                                                {subTx.internalStatus === 'Approved' ? (
+                                                                                                    <div className="flex items-center justify-end gap-1">
+                                                                                                        <span className="text-[10px] text-orange-400">₹</span>
+                                                                                                        <input
+                                                                                                            type="number"
+                                                                                                            defaultValue={subTx.receivedAmount || 0}
+                                                                                                            onBlur={(e) => {
+                                                                                                                const val = parseFloat(e.target.value) || 0;
+                                                                                                                if (val !== subTx.receivedAmount) {
+                                                                                                                    handleUpdateFinanceTracker(subTx.id, { receivedAmount: val });
+                                                                                                                }
+                                                                                                            }}
+                                                                                                            className="w-20 bg-transparent border-b border-orange-100 text-right text-xs font-bold text-orange-600 outline-none"
+                                                                                                        />
+                                                                                                    </div>
+                                                                                                ) : (
+                                                                                                    <span className="text-gray-300 italic">Pending...</span>
                                                                                                 )}
                                                                                             </td>
-                                                                                            <td className="px-3 py-2.5 text-right tabular-nums">{item.quantity || 1}</td>
-                                                                                            <td className="px-3 py-2.5 text-right tabular-nums">₹{Number(item.rate || item.price || 0).toLocaleString()}</td>
-                                                                                            <td className="px-3 py-2.5 text-right font-medium tabular-nums">₹{Number(item.amount || ((item.quantity || 1) * (item.rate || item.price || 0))).toLocaleString()}</td>
                                                                                         </tr>
-                                                                                    ))}
-                                                                                </tbody>
-                                                                                <tfoot className="border-t-2 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/80">
-                                                                                    <tr>
-                                                                                        <td colSpan={3} className="text-right px-3 py-3 font-bold text-gray-900 dark:text-white">Net Amount</td>
-                                                                                        <td className="text-right px-3 py-3 font-black text-blue-600 dark:text-blue-400 tabular-nums text-base">₹{tx.amount.toLocaleString()}</td>
-                                                                                    </tr>
-                                                                                </tfoot>
-                                                                            </table>
-                                                                        </div>
+
+                                                                                        {expandedSubTxId === subTx.id && (
+                                                                                            <tr className="bg-gray-50/10 dark:bg-gray-900/20">
+                                                                                                <td colSpan={7} className="px-8 py-3">
+                                                                                                    {(!subTx.lineItems || subTx.lineItems.length === 0) ? (
+                                                                                                        <div className="text-[10px] text-gray-400 italic">No line items recorded.</div>
+                                                                                                    ) : (
+                                                                                                        <div className="border border-gray-100 dark:border-gray-700 rounded-lg overflow-hidden">
+                                                                                                            <table className="w-full text-[10px]">
+                                                                                                                <thead className="bg-gray-50 dark:bg-gray-800 text-gray-400">
+                                                                                                                    <tr>
+                                                                                                                        <th className="text-left px-3 py-1 font-medium">Description</th>
+                                                                                                                        <th className="text-right px-3 py-1 font-medium">Qty</th>
+                                                                                                                        <th className="text-right px-3 py-1 font-medium">Rate</th>
+                                                                                                                        <th className="text-right px-3 py-1 font-medium">Total</th>
+                                                                                                                    </tr>
+                                                                                                                </thead>
+                                                                                                                <tbody className="divide-y divide-gray-50 dark:divide-gray-800 bg-white dark:bg-gray-900/50">
+                                                                                                                    {subTx.lineItems.map((item: any, idx: number) => (
+                                                                                                                        <tr key={idx} className="text-gray-600 dark:text-gray-400 hover:bg-gray-50/50 dark:hover:bg-gray-800/30">
+                                                                                                                            <td className="px-3 py-1.5 font-medium">{item.name || item.description || 'Unnamed Item'}</td>
+                                                                                                                            <td className="text-right px-3 py-1.5 tabular-nums">{item.quantity}</td>
+                                                                                                                            <td className="text-right px-3 py-1.5 tabular-nums">₹{(item.rate || item.price || 0).toLocaleString()}</td>
+                                                                                                                            <td className="text-right px-3 py-1.5 tabular-nums font-bold text-gray-900 dark:text-white">₹{(item.amount || (item.quantity * (item.rate || item.price || 0))).toLocaleString()}</td>
+                                                                                                                        </tr>
+                                                                                                                    ))}
+                                                                                                                </tbody>
+                                                                                                            </table>
+                                                                                                        </div>
+                                                                                                    )}
+                                                                                                </td>
+                                                                                            </tr>
+                                                                                        )}
+                                                                                    </React.Fragment>
+                                                                                ))}
+                                                                            </tbody>
+                                                                        </table>
                                                                     )}
                                                                 </div>
                                                             </td>
@@ -985,7 +1080,7 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
                                                     <td colSpan={8} className="px-6 py-4 bg-gray-50 dark:bg-gray-800/50">
                                                         <div className="flex items-center justify-between">
                                                             <div className="text-xs text-gray-500 dark:text-gray-400">
-                                                                Showing <span className="font-bold text-gray-900 dark:text-white">{startIndex + 1}-{Math.min(startIndex + ITEMS_PER_PAGE, filteredTxs.length)}</span> of <span className="font-bold text-gray-900 dark:text-white">{filteredTxs.length}</span> transactions
+                                                                Showing <span className="font-bold text-gray-900 dark:text-white">{startIndex + 1}-{Math.min(startIndex + ITEMS_PER_PAGE, hierarchicalTxs.length)}</span> of <span className="font-bold text-gray-900 dark:text-white">{hierarchicalTxs.length}</span> quotations
                                                             </div>
                                                             <div className="flex items-center gap-2">
                                                                 <button
