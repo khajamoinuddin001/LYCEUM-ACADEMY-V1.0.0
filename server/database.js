@@ -1081,12 +1081,32 @@ export async function initDatabase() {
       console.log('User columns (phone/is_active/performance_settings) might already exist');
     }
 
-    // SYSTEM SETTINGS (for Office Location etc)
+    // SYSTEM SETTINGS (for Office Location, Global Panic Switch, etc)
     await client.query(`
       CREATE TABLE IF NOT EXISTS system_settings (
         key TEXT PRIMARY KEY,
         value JSONB
       )
+    `);
+
+    // Safety: ensure primary key exists if table was created without it
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint 
+          WHERE conrelid = 'system_settings'::regclass AND contype = 'p'
+        ) THEN
+          ALTER TABLE system_settings ADD PRIMARY KEY (key);
+        END IF;
+      END $$;
+    `);
+
+    // Initialize Global Panic Switch if not exists
+    await client.query(`
+      INSERT INTO system_settings (key, value)
+      VALUES ('global_api_panic', 'false')
+      ON CONFLICT DO NOTHING
     `);
 
     // VENDORS
@@ -1382,20 +1402,7 @@ export async function initDatabase() {
       ALTER TABLE api_key_logs ADD COLUMN IF NOT EXISTS user_agent TEXT;
     `);
 
-    // SYSTEM SETTINGS (for Global Panic Switch)
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS system_settings (
-        key TEXT PRIMARY KEY,
-        value TEXT NOT NULL
-      )
-    `);
-
-    // Initialize Global Panic Switch if not exists
-    await client.query(`
-      INSERT INTO system_settings (key, value)
-      VALUES ('global_api_panic', 'false')
-      ON CONFLICT (key) DO NOTHING
-    `);
+    // System settings and Panic switch (moved to consolidated block above)
 
     // --- CONTACT DELETION FIXES (FOREIGN KEYS) ---
     // Ensure all tables referencing contacts(id) allow deletion (CASCADE or SET NULL)
