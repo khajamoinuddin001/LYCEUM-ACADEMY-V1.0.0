@@ -1005,6 +1005,7 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
                                                                                     <th className="text-left px-2 py-2 font-semibold">Invoice/Ref</th>
                                                                                     <th className="text-left px-2 py-2 font-semibold">Date</th>
                                                                                     <th className="text-left px-2 py-2 font-semibold">Type</th>
+                                                                                    <th className="text-left px-2 py-2 font-semibold">Items/Description</th>
                                                                                     <th className="text-right px-2 py-2 font-semibold">Amount</th>
                                                                                 </tr>
                                                                             </thead>
@@ -1024,12 +1025,17 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
                                                                                             <td className="px-2 py-2 uppercase font-bold text-[9px] text-emerald-600 dark:text-emerald-400">
                                                                                                 {subTx.type}
                                                                                             </td>
+                                                                                            <td className="px-2 py-2 text-[10px] text-gray-500 max-w-[200px] truncate">
+                                                                                                {subTx.lineItems && subTx.lineItems.length > 0 
+                                                                                                    ? subTx.lineItems.map((item: any) => item.name || item.description).join(", ") 
+                                                                                                    : "No description"}
+                                                                                            </td>
                                                                                             <td className="px-2 py-2 text-right font-bold text-gray-900 dark:text-white">₹{subTx.amount.toLocaleString()}</td>
                                                                                         </tr>
 
                                                                                         {expandedSubTxId === subTx.id && (
                                                                                             <tr className="bg-gray-50/10 dark:bg-gray-900/20">
-                                                                                                <td colSpan={5} className="px-8 py-3">
+                                                                                                <td colSpan={6} className="px-8 py-3">
                                                                                                     {(!subTx.lineItems || subTx.lineItems.length === 0) ? (
                                                                                                         <div className="text-[10px] text-gray-400 italic">No line items recorded.</div>
                                                                                                     ) : (
