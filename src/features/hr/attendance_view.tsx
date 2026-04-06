@@ -706,9 +706,9 @@ const AttendanceView: React.FC<AttendanceViewProps> = ({ user, users = [], onUpd
                                     <div className="p-2 bg-white dark:bg-gray-800 rounded-lg text-lyceum-blue shadow-sm">
                                         <History size={18} />
                                     </div>
-                                    <span className="text-xs font-bold text-gray-600 dark:text-gray-300">Worked Days</span>
+                                    <span className="text-xs font-bold text-gray-600 dark:text-gray-300">Total Hours Work</span>
                                 </div>
-                                <span className="text-xl font-black text-lyceum-blue">{monthlyStats.totalHours}D</span>
+                                <span className="text-xl font-black text-lyceum-blue">{monthlyStats.totalHours}H</span>
                             </div>
                         </div>
                     </div>
