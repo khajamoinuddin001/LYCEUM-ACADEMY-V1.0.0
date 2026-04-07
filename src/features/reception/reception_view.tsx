@@ -15,10 +15,10 @@ interface ReceptionViewProps {
 }
 
 const statusClasses: { [key in Visitor['status']]: string } = {
-    'Scheduled': 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300',
-    'Checked-in': 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300',
-    'Checked-out': 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300',
-    'Called': 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300',
+    'Scheduled': 'bg-amber-100/10 text-amber-500 border-amber-500/20',
+    'Checked-in': 'bg-emerald-100/10 text-emerald-500 border-emerald-500/20',
+    'Checked-out': 'bg-gray-100/10 text-gray-500 border-gray-500/20',
+    'Called': 'bg-blue-100/10 text-blue-500 border-blue-500/20',
 };
 
 const formatDateTime = (isoString?: string) => {
@@ -38,17 +38,55 @@ const formatDateTime = (isoString?: string) => {
     }
 }
 
-const StatCard: React.FC<{ title: string; value: string | number; icon: React.ReactNode }> = ({ title, value, icon }) => (
-    <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 flex items-center">
-        <div className="p-3 rounded-full bg-lyceum-blue/10 dark:bg-lyceum-blue/20 text-lyceum-blue mr-4">
-            {icon}
+const StatCard: React.FC<{
+    title: string;
+    value: string | number;
+    icon: React.ReactNode;
+    color: 'blue' | 'green' | 'amber';
+}> = ({ title, value, icon, color }) => {
+    const colorSchemes = {
+        blue: {
+            bg: 'bg-blue-50/30 dark:bg-blue-500/5',
+            border: 'border-blue-100 dark:border-blue-500/20',
+            icon: 'bg-gradient-to-br from-blue-500 to-blue-600',
+            glow: 'from-blue-500/20 to-transparent'
+        },
+        green: {
+            bg: 'bg-emerald-50/30 dark:bg-emerald-500/5',
+            border: 'border-emerald-100 dark:border-emerald-500/20',
+            icon: 'bg-gradient-to-br from-emerald-500 to-emerald-600',
+            glow: 'from-emerald-500/20 to-transparent'
+        },
+        amber: {
+            bg: 'bg-amber-50/30 dark:bg-amber-500/5',
+            border: 'border-amber-100 dark:border-amber-500/20',
+            icon: 'bg-gradient-to-br from-amber-400 to-amber-500',
+            glow: 'from-amber-400/20 to-transparent'
+        }
+    };
+
+    const scheme = colorSchemes[color];
+
+    return (
+        <div className={`relative overflow-hidden p-6 rounded-2xl border ${scheme.bg} ${scheme.border} transition-all duration-300 hover:shadow-xl hover:-translate-y-1 group`}>
+            {/* Background Accent Gradient */}
+            <div className={`absolute -right-4 -bottom-4 w-24 h-24 rounded-full bg-gradient-to-br ${scheme.glow} blur-2xl group-hover:scale-150 transition-transform duration-500`}></div>
+            
+            <div className="flex items-center justify-between relative z-10">
+                <div>
+                    <p className="text-xs font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400 mb-1">{title}</p>
+                    <p className="text-4xl font-black text-gray-900 dark:text-white tabular-nums tracking-tight">{value}</p>
+                </div>
+                <div className={`p-4 rounded-2xl shadow-lg border border-white/20 ${scheme.icon} text-white transform group-hover:rotate-12 group-hover:scale-110 transition-all duration-300`}>
+                    {React.cloneElement(icon as React.ReactElement, { size: 24, strokeWidth: 2.5 })}
+                </div>
+            </div>
+            
+            {/* Bottom Glow Line */}
+            <div className={`absolute bottom-0 left-0 h-1 bg-gradient-to-r ${scheme.icon} w-0 group-hover:w-full transition-all duration-500`}></div>
         </div>
-        <div>
-            <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{title}</p>
-            <p className="text-2xl font-bold text-gray-800 dark:text-gray-100">{value}</p>
-        </div>
-    </div>
-);
+    );
+};
 
 const ReceptionView: React.FC<ReceptionViewProps> = ({ visitors, onNewVisitorClick, onScheduleVisitorClick, onCheckOut, onCheckInScheduled, onEditVisitor, onDeleteVisitor, user }) => {
     const [searchQuery, setSearchQuery] = useState('');
@@ -143,23 +181,38 @@ const ReceptionView: React.FC<ReceptionViewProps> = ({ visitors, onNewVisitorCli
     const FilterButton: React.FC<{ label: 'All' | 'Checked-in' | 'Checked-out' }> = ({ label }) => (
         <button
             onClick={() => setStatusFilter(label)}
-            className={`px-3 py-1 text-sm rounded-md transition-colors ${statusFilter === label
-                ? 'bg-lyceum-blue text-white font-semibold'
-                : 'text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+            className={`px-6 py-1.5 text-xs font-bold uppercase tracking-widest rounded-full transition-all duration-300 ${statusFilter === label
+                ? 'bg-white dark:bg-gray-700 text-lyceum-blue shadow-sm scale-105'
+                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
                 }`}
         >
             {label}
         </button>
     );
 
-    const TabButton: React.FC<{ label: string; value: 'today' | 'appointments' | 'history'; count: number; }> = ({ label, value, count }) => (
-        <button onClick={() => setActiveTab(value)} className={`flex items-center gap-2 px-3 py-2 text-sm font-medium border-b-2 ${activeTab === value ? 'border-lyceum-blue text-lyceum-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
-            {label}
-            <span className={`px-2 py-0.5 rounded-full text-xs ${activeTab === value ? 'bg-lyceum-blue text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'}`}>
-                {count}
-            </span>
-        </button>
-    );
+    const TabButton: React.FC<{ label: string; value: 'today' | 'appointments' | 'history'; count: number; }> = ({ label, value, count }) => {
+        const isActive = activeTab === value;
+        return (
+            <button
+                onClick={() => setActiveTab(value)}
+                className={`relative flex items-center gap-2 px-6 py-4 text-sm font-bold transition-all duration-300 ${isActive
+                    ? 'text-lyceum-blue'
+                    : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+                    }`}
+            >
+                {label}
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${isActive
+                    ? 'bg-lyceum-blue text-white shadow-lg shadow-blue-500/30'
+                    : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
+                    }`}>
+                    {count}
+                </span>
+                {isActive && (
+                    <div className="absolute bottom-0 left-0 right-0 h-1 bg-lyceum-blue rounded-t-full shadow-[0_-4px_10px_rgba(0,163,224,0.5)]"></div>
+                )}
+            </button>
+        );
+    };
 
     const getVisitorsForTab = () => {
         switch (activeTab) {
@@ -199,30 +252,30 @@ const ReceptionView: React.FC<ReceptionViewProps> = ({ visitors, onNewVisitorCli
 
             {/* Stats Cards - Stack on mobile */}
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
-                <StatCard title="Visitors Today" value={visitorsToday} icon={<Users size={20} />} />
-                <StatCard title="Currently Checked-in" value={currentlyCheckedIn} icon={<LogIn size={20} />} />
-                <StatCard title="Pending Appointments" value={pendingAppointments} icon={<CalendarClock size={20} />} />
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                <StatCard title="Visitors Today" value={visitorsToday} icon={<Users />} color="blue" />
+                <StatCard title="Currently Checked-in" value={currentlyCheckedIn} icon={<LogIn />} color="green" />
+                <StatCard title="Pending Appointments" value={pendingAppointments} icon={<CalendarClock />} color="amber" />
             </div>
 
             {/* Visitor Table - Responsive */}
 
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div className="bg-white dark:bg-gray-800/80 backdrop-blur-md rounded-3xl shadow-xl border border-gray-200 dark:border-gray-700/50 overflow-hidden transition-all duration-500 hover:shadow-2xl hover:shadow-blue-500/5">
                 {/* Search and Filters - Stack on mobile */}
-                <div className="p-3 md:p-4 border-b border-gray-200 dark:border-gray-700">
-                    <div className="flex flex-col gap-3 md:gap-4">
-                        <div className="relative w-full">
-                            <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <div className="p-4 md:p-6 border-b border-gray-200 dark:border-gray-700/50 bg-gray-50/50 dark:bg-gray-800/50">
+                    <div className="flex flex-col lg:flex-row gap-4 items-center">
+                        <div className="relative flex-grow group w-full">
+                            <Search size={20} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-lyceum-blue transition-colors" />
                             <input
                                 type="text"
                                 placeholder="Search by name, mobile, or host..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                className="w-full pl-10 pr-4 py-2.5 md:py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-lyceum-blue focus:border-transparent dark:bg-gray-700 dark:text-white text-sm md:text-base"
+                                className="w-full pl-12 pr-4 py-3 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-2xl focus:ring-4 focus:ring-lyceum-blue/10 focus:border-lyceum-blue dark:text-white text-sm md:text-base shadow-inner transition-all duration-300 placeholder:text-gray-400 dark:placeholder:text-gray-600"
                             />
                         </div>
                         {activeTab === 'today' && (
-                            <div className="flex items-center justify-center bg-gray-100 dark:bg-gray-900/50 rounded-lg p-1 text-sm w-full sm:w-auto">
+                            <div className="flex items-center bg-gray-200 dark:bg-gray-900 rounded-2xl p-1.5 shadow-inner w-full lg:w-auto">
                                 <FilterButton label="All" />
                                 <FilterButton label="Checked-in" />
                                 <FilterButton label="Checked-out" />
@@ -243,20 +296,20 @@ const ReceptionView: React.FC<ReceptionViewProps> = ({ visitors, onNewVisitorCli
                 {/* Table - Horizontal scroll on mobile */}
                 <div className="overflow-x-auto -mx-4 md:mx-0">
                     <div className="inline-block min-w-full align-middle">
-                        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                            <thead className="bg-gray-50 dark:bg-gray-700/50">
+                        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700/50">
+                            <thead className="bg-gray-50/80 dark:bg-gray-900/50">
                                 <tr>
-                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">#</th>
-                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Visitor</th>
-                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{activeTab === 'appointments' ? 'Scheduled For' : 'Check-in'}</th>
-                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{activeTab === 'appointments' ? 'Department' : 'Check-out'}</th>
-                                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">{activeTab === 'appointments' ? 'Status' : 'Host'}</th>
-                                    {activeTab !== 'appointments' && <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Card</th>}
-                                    {activeTab !== 'appointments' && <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Status</th>}
-                                    <th scope="col" className="relative px-6 py-3"><span className="sr-only">Actions</span></th>
+                                    <th scope="col" className="px-6 py-5 text-left text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-[0.2em]">#</th>
+                                    <th scope="col" className="px-6 py-5 text-left text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-[0.2em]">Visitor</th>
+                                    <th scope="col" className="px-6 py-5 text-left text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-[0.2em]">{activeTab === 'appointments' ? 'Scheduled For' : 'Check-in'}</th>
+                                    <th scope="col" className="px-6 py-5 text-left text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-[0.2em]">{activeTab === 'appointments' ? 'Department' : 'Check-out'}</th>
+                                    <th scope="col" className="px-6 py-5 text-left text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-[0.2em]">{activeTab === 'appointments' ? 'Status' : 'Host'}</th>
+                                    {activeTab !== 'appointments' && <th scope="col" className="px-6 py-5 text-left text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-[0.2em]">Card</th>}
+                                    {activeTab !== 'appointments' && <th scope="col" className="px-6 py-5 text-left text-[10px] font-black text-gray-400 dark:text-gray-500 uppercase tracking-[0.2em]">Status</th>}
+                                    <th scope="col" className="relative px-6 py-5"><span className="sr-only">Actions</span></th>
                                 </tr>
                             </thead>
-                            <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                            <tbody className="bg-white dark:bg-transparent divide-y divide-gray-100 dark:divide-gray-700/30">
                                 {currentVisitors.length > 0 ? (
                                     currentVisitors.map(visitor => (
                                         <tr key={visitor.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50">
@@ -294,19 +347,15 @@ const ReceptionView: React.FC<ReceptionViewProps> = ({ visitors, onNewVisitorCli
                                                 )}
                                             </td>
 
-                                            {activeTab !== 'appointments' && (
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">{visitor.cardNumber || 'N/A'}</td>
-                                            )}
-                                            {activeTab !== 'appointments' && (
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm"><span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusClasses[visitor.status]}`}>{visitor.status}</span></td>
-                                            )}
+                                            <td className="px-6 py-6 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{visitor.cardNumber || '—'}</td>
+                                            <td className="px-6 py-6 whitespace-nowrap text-sm"><span className={`px-4 py-1.5 inline-flex text-[10px] font-black uppercase tracking-widest leading-5 rounded-full border shadow-sm ${statusClasses[visitor.status]}`}>{visitor.status}</span></td>
 
-                                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                                <div className="flex items-center justify-end gap-2 md:gap-4">
-                                                    {canUpdate && <button onClick={() => onEditVisitor(visitor)} className="p-2 text-gray-400 hover:text-lyceum-blue touch-manipulation" title="Edit"><Edit size={18} /></button>}
-                                                    {visitor.status === 'Checked-in' && canUpdate && (<button onClick={() => onCheckOut(visitor.id)} className="px-3 py-1.5 text-sm text-lyceum-blue hover:text-lyceum-blue-dark hover:bg-lyceum-blue/10 rounded touch-manipulation">Check-out</button>)}
-                                                    {visitor.status === 'Scheduled' && canUpdate && (<button onClick={() => onCheckInScheduled(visitor.id)} className="px-3 py-1.5 text-sm text-lyceum-blue hover:text-lyceum-blue-dark hover:bg-lyceum-blue/10 rounded touch-manipulation">Check-in</button>)}
-                                                    {canDelete && <button onClick={() => onDeleteVisitor(visitor.id)} className="p-2 text-gray-400 hover:text-red-600 touch-manipulation" title="Delete"><Trash2 size={18} /></button>}
+                                            <td className="px-6 py-6 whitespace-nowrap text-right text-sm font-medium">
+                                                <div className="flex items-center justify-end gap-3">
+                                                    {canUpdate && <button onClick={() => onEditVisitor(visitor)} className="p-2.5 text-gray-400 hover:text-lyceum-blue hover:bg-lyceum-blue/10 rounded-xl transition-all duration-300" title="Edit"><Edit size={18} /></button>}
+                                                    {visitor.status === 'Checked-in' && canUpdate && (<button onClick={() => onCheckOut(visitor.id)} className="px-4 py-2 text-sm font-bold text-white bg-lyceum-blue hover:bg-lyceum-blue-dark rounded-xl shadow-lg shadow-blue-500/20 transition-all duration-300">Check-out</button>)}
+                                                    {visitor.status === 'Scheduled' && canUpdate && (<button onClick={() => onCheckInScheduled(visitor.id)} className="px-4 py-2 text-sm font-bold text-white bg-lyceum-blue hover:bg-lyceum-blue-dark rounded-xl shadow-lg shadow-blue-500/20 transition-all duration-300">Check-in</button>)}
+                                                    {canDelete && <button onClick={() => onDeleteVisitor(visitor.id)} className="p-2.5 text-gray-400 hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all duration-300" title="Delete"><Trash2 size={18} /></button>}
                                                 </div>
                                             </td>
                                         </tr>
