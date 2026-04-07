@@ -153,6 +153,35 @@ export async function evaluateAutomation(triggerEvent, payload) {
     try {
         console.log(`🤖 [Automation] Evaluating trigger: ${triggerEvent}`);
 
+        // ENRICH PAYLOAD WITH CONTACT DETAILS IF contact_id IS PRESENT
+        const contactId = payload.contact_id || payload.contactId;
+        if (contactId) {
+            try {
+                const contactRes = await query(
+                    "SELECT name as contact_name, email as contact_email, phone as contact_phone FROM contacts WHERE id = $1",
+                    [contactId]
+                );
+                if (contactRes.rows.length > 0) {
+                    const contact = contactRes.rows[0];
+                    payload.contact_name = payload.contact_name || contact.contact_name;
+                    payload.contact_email = payload.contact_email || contact.contact_email;
+                    payload.contact_phone = payload.contact_phone || contact.contact_phone;
+                    
+                    // Derived first_name
+                    if (!payload.first_name && contact.contact_name) {
+                        payload.first_name = contact.contact_name.split(' ')[0];
+                    }
+                }
+            } catch (dbErr) {
+                console.error('🤖 [Automation] Failed to enrich payload with contact details:', dbErr);
+            }
+        }
+
+        // Generic date support
+        if (!payload.date) {
+            payload.date = new Date().toISOString().split('T')[0];
+        }
+
         // Select all rules for the trigger that are active
         const rulesResult = await query(
             `SELECT r.*, e.name as template_name, e.subject, e.body, e.from_address 
