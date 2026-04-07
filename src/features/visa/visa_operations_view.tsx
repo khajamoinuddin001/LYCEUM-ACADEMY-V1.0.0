@@ -38,13 +38,17 @@ interface VisaOperationsViewProps {
     onOperationCreated?: (op: VisaOperation) => void;
     existingOperations?: VisaOperation[];
     user?: User;
+    sidebarOpen?: boolean;
+    isMobile?: boolean;
 }
 
 export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
     contacts,
     onOperationCreated,
     existingOperations = [],
-    user
+    user,
+    sidebarOpen = false,
+    isMobile = false
 }) => {
     const [step, setStep] = useState<'list' | 'form' | 'detail' | 'cgi' | 'slot' | 'ds'>('list');
     const [selectedContactId, setSelectedContactId] = useState<number | ''>('');
@@ -1792,7 +1796,7 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
 
     if (step === 'ds') {
         return (
-            <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-50 flex items-center justify-center p-4 lg:p-10 animate-in fade-in duration-300">
+            <div className={`fixed inset-0 ${!isMobile && sidebarOpen ? 'lg:left-64' : 'left-0'} bg-slate-900/40 backdrop-blur-md z-50 flex items-center justify-center p-4 lg:p-10 animate-in fade-in duration-300 transition-all`}>
                 <div className="bg-white w-full max-w-7xl h-full max-h-[90vh] rounded-[3rem] shadow-2xl overflow-hidden flex flex-col border border-white/20 animate-in zoom-in-95 duration-300">
                     {/* Header */}
                     <div className="px-10 py-8 border-b border-slate-100 flex justify-between items-center bg-white/50 backdrop-blur-xl sticky top-0 z-10">

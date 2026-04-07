@@ -2331,6 +2331,8 @@ const DashboardLayout: React.FC = () => {
           onOperationCreated={handleOperationCreated}
           existingOperations={visaOperations}
           user={currentUser || undefined}
+          sidebarOpen={sidebarOpen}
+          isMobile={isMobile}
         />
       );
       case 'Tickets': return (
