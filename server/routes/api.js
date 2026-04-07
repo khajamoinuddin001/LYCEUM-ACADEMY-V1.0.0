@@ -1263,33 +1263,30 @@ router.get('/next-ack-number', authenticateToken, async (req, res) => {
 // Contacts routes
 router.get('/contacts', authenticateToken, async (req, res) => {
   try {
-    let sql = 'SELECT * FROM contacts';
-    let params = [];
+    const { page, limit, search, department, major, fileStatus } = req.query;
 
     // RBAC: Students only see their own contact record
     if (req.user.role === 'Student') {
-      sql = 'SELECT * FROM contacts WHERE user_id = $1';
-      params = [req.user.id];
-
-      const result = await query(sql, params);
+      const sql = 'SELECT * FROM contacts WHERE user_id = $1';
+      const result = await query(sql, [req.user.id]);
 
       // Auto-create contact if student doesn't have one
       if (result.rows.length === 0) {
-        console.log(`📝 Auto - creating contact for student user ${req.user.id} (${req.user.email})`);
+        console.log(`📝 Auto-creating contact for student user ${req.user.id} (${req.user.email})`);
 
         const contactId = `LA${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}${String(req.user.id).padStart(3, '0')} `;
         const defaultChecklist = DEFAULT_CHECKLIST_ITEMS;
 
         const createResult = await query(`
           INSERT INTO contacts(user_id, name, email, contact_id, department, major, notes, checklist, activity_log, recorded_sessions)
-VALUES($1, $2, $3, $4, 'Unassigned', 'Unassigned', $5, $6, '[]', '[]')
-RETURNING *
-  `, [
+          VALUES($1, $2, $3, $4, 'Unassigned', 'Unassigned', $5, $6, '[]', '[]')
+          RETURNING *
+        `, [
           req.user.id,
           req.user.email.split('@')[0], // Use email prefix as name if not available
           req.user.email,
           contactId,
-          `Student contact auto - created on ${new Date().toLocaleDateString()}.`,
+          `Student contact auto-created on ${new Date().toLocaleDateString()}.`,
           JSON.stringify(defaultChecklist)
         ]);
 
@@ -1342,7 +1339,66 @@ RETURNING *
       return res.json(transformedContacts);
     }
 
-    const result = await query(sql, params);
+    // For Admin/Staff - handle pagination optionally
+    if (page && limit) {
+      const p = parseInt(page) || 1;
+      const l = parseInt(limit) || 50;
+      const offset = (p - 1) * l;
+
+      let whereClauses = [];
+      let params = [];
+      let pCount = 1;
+
+      if (search) {
+        whereClauses.push(`(name ILIKE $${pCount} OR email ILIKE $${pCount} OR phone ILIKE $${pCount} OR contact_id ILIKE $${pCount})`);
+        params.push(`%${search}%`);
+        pCount++;
+      }
+
+      if (department && department !== 'All Departments') {
+        whereClauses.push(`department = $${pCount}`);
+        params.push(department);
+        pCount++;
+      }
+
+      if (major && major !== 'All Majors') {
+        whereClauses.push(`major = $${pCount}`);
+        params.push(major);
+        pCount++;
+      }
+
+      if (fileStatus && fileStatus !== 'All Statuses') {
+        if (fileStatus === 'Not Set') {
+          whereClauses.push(`(file_status IS NULL OR file_status = '')`);
+        } else {
+          whereClauses.push(`file_status = $${pCount}`);
+          params.push(fileStatus);
+          pCount++;
+        }
+      }
+
+      const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+
+      // Get total count for metadata
+      const countResult = await query(`SELECT COUNT(*)::int as count FROM contacts ${whereSql}`, params);
+      const totalCount = countResult.rows[0].count;
+
+      // Get paginated rows
+      const rowsResult = await query(
+        `SELECT * FROM contacts ${whereSql} ORDER BY name ASC LIMIT $${pCount} OFFSET $${pCount + 1}`,
+        [...params, l, offset]
+      );
+
+      return res.json({
+        contacts: rowsResult.rows.map(transformContact),
+        totalCount,
+        totalPages: Math.ceil(totalCount / l),
+        currentPage: p
+      });
+    }
+
+    // Default: return all contacts (existing behavior for backward compatibility)
+    const result = await query('SELECT * FROM contacts ORDER BY name ASC');
     const transformedContacts = result.rows.map(transformContact);
     res.json(transformedContacts);
   } catch (error) {

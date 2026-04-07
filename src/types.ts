@@ -8,6 +8,13 @@ export interface OdooApp {
   iconColor: string;
 }
 
+export interface PaginatedResponse<T> {
+  contacts: T[];
+  totalCount: number;
+  totalPages: number;
+  currentPage: number;
+}
+
 export interface Message {
   id: number;
   author: string;

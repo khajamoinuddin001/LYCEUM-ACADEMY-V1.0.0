@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import type { Contact, User } from '@/types';
-import { Search, Filter, MoreHorizontal } from '@/components/common/icons';
+import { Search, Filter, MoreHorizontal, ChevronLeft, ChevronRight, Loader2 } from '@/components/common/icons';
 import ContactCard from './student_card';
 import * as api from '@/utils/api';
 
@@ -13,12 +13,19 @@ interface ContactsViewProps {
 
 const ContactsView: React.FC<ContactsViewProps> = ({ contacts, onNewContactClick, onContactSelect, user }) => {
     const [searchQuery, setSearchQuery] = useState('');
+    const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
     const [departmentFilter, setDepartmentFilter] = useState('All Departments');
     const [majorFilter, setMajorFilter] = useState('All Majors');
     const [fileStatusFilter, setFileStatusFilter] = useState('All Statuses');
     const [selectedContacts, setSelectedContacts] = useState<Set<number>>(new Set());
     const [isFilterOpen, setIsFilterOpen] = useState(false);
     const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+    // Pagination state
+    const [paginatedData, setPaginatedData] = useState<any>(null);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [isLoading, setIsLoading] = useState(false);
+
     const [showMergeModal, setShowMergeModal] = useState(false);
     const [primaryContact, setPrimaryContact] = useState<Contact | null>(null);
     const [targetContact, setTargetContact] = useState<Contact | null>(null);
@@ -29,6 +36,38 @@ const ContactsView: React.FC<ContactsViewProps> = ({ contacts, onNewContactClick
     const [showTargetDropdown, setShowTargetDropdown] = useState(false);
     const filterRef = useRef<HTMLDivElement>(null);
     const menuRef = useRef<HTMLDivElement>(null);
+
+    // Debounce search query
+    useEffect(() => {
+        const handler = setTimeout(() => {
+            setDebouncedSearchQuery(searchQuery);
+            setCurrentPage(1); // Reset to first page on new search
+        }, 300);
+        return () => clearTimeout(handler);
+    }, [searchQuery]);
+
+    // Fetch paginated contacts
+    useEffect(() => {
+        const fetchPaginated = async () => {
+            setIsLoading(true);
+            try {
+                const data = await api.getPaginatedContacts({
+                    page: currentPage,
+                    limit: 50,
+                    search: debouncedSearchQuery,
+                    department: departmentFilter,
+                    major: majorFilter,
+                    fileStatus: fileStatusFilter
+                });
+                setPaginatedData(data);
+            } catch (error) {
+                console.error('Failed to fetch paginated contacts:', error);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchPaginated();
+    }, [currentPage, debouncedSearchQuery, departmentFilter, majorFilter, fileStatusFilter]);
 
     const allDepartments = useMemo(() => {
         const departments = new Set(contacts.map(s => s.department));
@@ -67,6 +106,7 @@ const ContactsView: React.FC<ContactsViewProps> = ({ contacts, onNewContactClick
         setMajorFilter('All Majors');
         setFileStatusFilter('All Statuses');
         setIsFilterOpen(false);
+        setCurrentPage(1);
     };
 
     const handleMergeClick = () => {
@@ -87,7 +127,7 @@ const ContactsView: React.FC<ContactsViewProps> = ({ contacts, onNewContactClick
             setShowMergeModal(false);
             setPrimaryContact(null);
             setTargetContact(null);
-            window.location.reload(); // Refresh to show updated contacts
+            window.location.reload(); 
         } catch (error: any) {
             alert(`Merge failed: ${error.message}`);
         } finally {
@@ -95,46 +135,7 @@ const ContactsView: React.FC<ContactsViewProps> = ({ contacts, onNewContactClick
         }
     };
 
-    const filteredAndSortedContacts = useMemo(() => {
-        let filteredContacts = [...contacts];
-
-        if (departmentFilter !== 'All Departments') {
-            filteredContacts = filteredContacts.filter(
-                contact => contact.department === departmentFilter
-            );
-        }
-
-        if (majorFilter !== 'All Majors') {
-            filteredContacts = filteredContacts.filter(
-                contact => contact.major === majorFilter
-            );
-        }
-
-        if (fileStatusFilter !== 'All Statuses') {
-            if (fileStatusFilter === 'Not Set') {
-                filteredContacts = filteredContacts.filter(
-                    contact => !contact.fileStatus
-                );
-            } else {
-                filteredContacts = filteredContacts.filter(
-                    contact => contact.fileStatus === fileStatusFilter
-                );
-            }
-        }
-
-        const query = searchQuery.toLowerCase();
-        if (query) {
-            filteredContacts = filteredContacts.filter(contact =>
-                Object.values(contact).some(value =>
-                    String(value).toLowerCase().includes(query)
-                )
-            );
-        }
-
-        filteredContacts.sort((a, b) => a.name.localeCompare(b.name));
-
-        return filteredContacts;
-    }, [searchQuery, departmentFilter, majorFilter, fileStatusFilter, contacts]);
+    const currentContacts = paginatedData?.contacts || [];
 
     const handleToggleSelectContact = (contactId: number) => {
         const newSelection = new Set(selectedContacts);
@@ -148,13 +149,13 @@ const ContactsView: React.FC<ContactsViewProps> = ({ contacts, onNewContactClick
 
     const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.checked) {
-            setSelectedContacts(new Set(filteredAndSortedContacts.map(s => s.id)));
+            setSelectedContacts(new Set(currentContacts.map((s: any) => s.id)));
         } else {
             setSelectedContacts(new Set());
         }
     };
 
-    const isAllSelected = selectedContacts.size > 0 && selectedContacts.size === filteredAndSortedContacts.length;
+    const isAllSelected = selectedContacts.size > 0 && currentContacts.length > 0 && selectedContacts.size === currentContacts.length;
 
 
     return (
@@ -272,23 +273,92 @@ const ContactsView: React.FC<ContactsViewProps> = ({ contacts, onNewContactClick
                 </label>
             </div>
 
-            {filteredAndSortedContacts.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                    {filteredAndSortedContacts.map(contact => (
-                        <ContactCard
-                            key={contact.id}
-                            contact={contact}
-                            onSelect={onContactSelect}
-                            isSelected={selectedContacts.has(contact.id)}
-                            onToggleSelect={handleToggleSelectContact}
-                        />
-                    ))}
+{isLoading ? (
+    <div className="flex flex-col items-center justify-center py-20 bg-white dark:bg-gray-800/50 rounded-lg shadow-sm">
+        <Loader2 size={40} className="text-lyceum-blue animate-spin mb-4" />
+        <p className="text-gray-500 dark:text-gray-400">Loading contacts...</p>
+    </div>
+) : currentContacts.length > 0 ? (
+    <>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            {currentContacts.map((contact: any) => (
+                <ContactCard
+                    key={contact.id}
+                    contact={contact}
+                    onSelect={onContactSelect}
+                    isSelected={selectedContacts.has(contact.id)}
+                    onToggleSelect={handleToggleSelectContact}
+                />
+            ))}
+        </div>
+
+        {/* Pagination Controls */}
+        {paginatedData && paginatedData.totalPages > 1 && (
+            <div className="flex flex-col md:flex-row items-center justify-between mt-8 pb-10 gap-4">
+                <div className="text-sm text-gray-500 dark:text-gray-400">
+                    Showing <span className="font-medium text-gray-700 dark:text-gray-200">{(currentPage - 1) * 50 + 1}</span> to <span className="font-medium text-gray-700 dark:text-gray-200">{Math.min(currentPage * 50, paginatedData.totalCount)}</span> of <span className="font-medium text-gray-700 dark:text-gray-200">{paginatedData.totalCount}</span> contacts
                 </div>
-            ) : (
-                <div className="text-center py-12 bg-white dark:bg-gray-800/50 rounded-lg shadow-sm">
-                    <p className="text-gray-500 dark:text-gray-400">No contacts found matching your criteria.</p>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={() => {
+                            setCurrentPage(prev => Math.max(1, prev - 1));
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                        }}
+                        disabled={currentPage === 1}
+                        className="p-2 border border-gray-300 dark:border-gray-600 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                    >
+                        <ChevronLeft size={20} className="text-gray-600 dark:text-gray-300" />
+                    </button>
+                    <div className="flex items-center gap-1 overflow-x-auto max-w-[200px] md:max-w-none">
+                        {Array.from({ length: paginatedData.totalPages }, (_, i) => i + 1).map(pg => {
+                            // Show first, last, and pages around current
+                            if (
+                                pg === 1 || 
+                                pg === paginatedData.totalPages || 
+                                (pg >= currentPage - 2 && pg <= currentPage + 2)
+                            ) {
+                                return (
+                                    <button
+                                        key={pg}
+                                        onClick={() => {
+                                            setCurrentPage(pg);
+                                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                                        }}
+                                        className={`w-10 h-10 flex-shrink-0 flex items-center justify-center rounded-md text-sm font-medium transition-all ${
+                                            currentPage === pg
+                                                ? 'bg-lyceum-blue text-white shadow-md transform scale-110'
+                                                : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                                        }`}
+                                    >
+                                        {pg}
+                                    </button>
+                                );
+                            }
+                            if (pg === currentPage - 3 || pg === currentPage + 3) {
+                                return <span key={pg} className="text-gray-400 px-1">...</span>;
+                            }
+                            return null;
+                        })}
+                    </div>
+                    <button
+                        onClick={() => {
+                            setCurrentPage(prev => Math.min(paginatedData.totalPages, prev + 1));
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                        }}
+                        disabled={currentPage === paginatedData.totalPages}
+                        className="p-2 border border-gray-300 dark:border-gray-600 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                    >
+                        <ChevronRight size={20} className="text-gray-600 dark:text-gray-300" />
+                    </button>
                 </div>
-            )}
+            </div>
+        )}
+    </>
+) : (
+    <div className="text-center py-12 bg-white dark:bg-gray-800/50 rounded-lg shadow-sm">
+        <p className="text-gray-500 dark:text-gray-400">No contacts found matching your criteria.</p>
+    </div>
+)}
 
             {/* Merge Contact Modal */}
             {showMergeModal && (

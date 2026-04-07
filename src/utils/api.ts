@@ -1,6 +1,6 @@
 import type {
   CalendarEvent, Contact, CrmLead, AccountingTransaction, CrmStage, Quotation, User, UserRole, AppPermissions, ActivityLog, DocumentAnalysisResult, Document as Doc, ChecklistItem, QuotationTemplate, Visitor, TodoTask, Ticket, PaymentActivityLog, LmsCourse, LmsLesson, LmsModule, Coupon, ContactActivity, ContactActivityAction, DiscussionPost, DiscussionThread, RecordedSession, Channel, Notification, RecurringTask, VisaOperation,
-  UniversityCourse, Announcement, EmailTemplate, ApiKey, ClassSession, SessionAttendance, ActivitySubmission
+  UniversityCourse, Announcement, EmailTemplate, ApiKey, ClassSession, SessionAttendance, ActivitySubmission, PaginatedResponse
 } from '../types';
 import { DEFAULT_PERMISSIONS, DEFAULT_CHECKLIST } from '@/lib/constants';
 
@@ -439,6 +439,26 @@ export const downloadVisaOperationItem = async (itemId: number, filename: string
 // Contacts
 export const getContacts = async (): Promise<Contact[]> => {
   return apiRequest<Contact[]>('/contacts');
+};
+
+export interface ContactFilters {
+  page?: number;
+  limit?: number;
+  search?: string;
+  department?: string;
+  major?: string;
+  fileStatus?: string;
+}
+
+export const getPaginatedContacts = async (filters: ContactFilters): Promise<PaginatedResponse<Contact>> => {
+  const queryParams = new URLSearchParams();
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      queryParams.append(key, value.toString());
+    }
+  });
+
+  return apiRequest<PaginatedResponse<Contact>>(`/contacts?${queryParams.toString()}`);
 };
 
 export const deleteContact = async (id: number): Promise<Contact[]> => {
