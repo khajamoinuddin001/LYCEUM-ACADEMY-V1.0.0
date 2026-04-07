@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import type { Visitor } from '@/types';
 import * as api from '@/utils/api';
-import { Users, Clock, Filter, Monitor } from '@/components/common/icons';
+import { Users, Clock, Filter } from '@/components/common/icons';
 
-const DEPARTMENTS = ['All', 'Admission', 'Accounts', 'Visa', 'LMS', 'Reception', 'Counseling'];
+
 const FLASH_DURATION_MS = 10000; // Flash for 10 seconds (reduced from 15)
 const DISPLAY_DURATION_MS = 30000; // Keep on list for 30 seconds (reduced from 60)
 
@@ -12,6 +12,7 @@ const VisitorDisplay: React.FC = () => {
     const [lastCalledVisitor, setLastCalledVisitor] = useState<Visitor | null>(null);
     const [flashing, setFlashing] = useState(false);
     const [selectedDept, setSelectedDept] = useState('All');
+    const [time, setTime] = useState(new Date());
     const audioRef = useRef<HTMLAudioElement | null>(null);
 
     useEffect(() => {
@@ -22,7 +23,15 @@ const VisitorDisplay: React.FC = () => {
     useEffect(() => {
         const intervalId = setInterval(fetchVisitors, 5000); // Poll every 5s for updates
         fetchVisitors(); // Initial fetch
-        return () => clearInterval(intervalId);
+
+        const timeInterval = setInterval(() => {
+            setTime(new Date());
+        }, 1000);
+
+        return () => {
+            clearInterval(intervalId);
+            clearInterval(timeInterval);
+        };
     }, [selectedDept]);
 
     const fetchVisitors = async () => {
@@ -80,11 +89,15 @@ const VisitorDisplay: React.FC = () => {
     };
 
     const getWaitingFor = (visitor: Visitor) => {
-        // PRIORITIZE Host Name (Specific Person)
+        // PRIORITIZE The Person (Staff) Name
+        if (visitor.staffName) {
+            return visitor.staffName;
+        }
+        // Fallback to Host Name
         if ((visitor as any).host_name) {
             return (visitor as any).host_name;
         }
-        // Then Department
+        // Then Department as fallback
         if (visitor.visitSegments && visitor.visitSegments.length > 0) {
             return visitor.visitSegments[visitor.visitSegments.length - 1].department;
         }
@@ -106,11 +119,10 @@ const VisitorDisplay: React.FC = () => {
         });
 
         if (justCalled) {
-            console.log('[Alert Check] Found just called visitor:', justCalled.name, 'Last called:', lastCalledVisitor?.name);
-            if (!lastCalledVisitor || justCalled.id !== lastCalledVisitor.id) {
-                console.log('[Alert Check] Triggering alert for:', justCalled.name);
+            if (!lastCalledVisitor || justCalled.id !== lastCalledVisitor.id || justCalled.calledAt !== lastCalledVisitor.calledAt) {
+                console.log('[Alert Check] Triggering alert for:', justCalled.name, 'New calledAt:', justCalled.calledAt);
                 triggerAlert(justCalled);
-                setLastCalledVisitor(justCalled);
+                setLastCalledVisitor({ ...justCalled });
             }
         }
     };
@@ -139,45 +151,58 @@ const VisitorDisplay: React.FC = () => {
             {/* Top Bar / Header */}
             <div className="flex justify-between items-center p-8 border-b border-gray-700 bg-gray-900/50 backdrop-blur-sm">
                 <div className="flex items-center gap-6">
-                    <Monitor size={56} className="text-lyceum-blue" />
-                    <div>
-                        <h1 className="text-5xl font-bold tracking-tight">Visitor Queue</h1>
-                        <p className="text-xl text-gray-400 mt-2 font-medium bg-gray-800 px-3 py-1 rounded inline-block">
-                            {selectedDept === 'All' ? 'All Departments' : `${selectedDept} Department`}
-                        </p>
+                    <div className="p-3 bg-white/5 rounded-2xl border border-white/10 backdrop-blur-md shadow-[0_0_20px_rgba(255,255,255,0.05)]">
+                        <img src="/academy logo.png" alt="Lyceum Academy" className="h-14 w-auto filter drop-shadow-[0_0_10px_rgba(255,255,255,0.2)]" />
+                    </div>
+                    <div className="border-l border-white/10 pl-6 h-12 flex flex-col justify-center">
+                        <h1 className="text-4xl font-black tracking-tighter text-white uppercase italic">Lyceum Academy</h1>
+                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.5em] mt-0.5">Creative Learning</p>
                     </div>
                 </div>
                 <div className="flex items-center gap-8">
                     <div className="text-right">
-                        <div className="text-6xl font-mono font-bold tracking-widest">{new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                        <div className="text-6xl font-mono font-bold tracking-widest">{time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</div>
                         <div className="text-gray-400 text-xl font-medium mt-1">{new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</div>
                     </div>
                 </div>
             </div>
 
-            {/* Department Filter Bar (Clickable) */}
-            <div className="flex justify-center gap-4 py-6 bg-gray-800/30 overflow-x-auto px-8">
-                {DEPARTMENTS.map(dept => (
-                    <button
-                        key={dept}
-                        onClick={() => setSelectedDept(dept)}
-                        className={`px-6 py-2 rounded-full text-lg font-bold transition-all whitespace-nowrap ${selectedDept === dept
-                            ? 'bg-lyceum-blue text-white shadow-lg shadow-lyceum-blue/30 scale-105'
-                            : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'
-                            }`}
-                    >
-                        {dept}
-                    </button>
-                ))}
-            </div>
+
 
             {/* Full Screen Alert Overlay */}
             {flashing && lastCalledVisitor && (
-                <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-red-600 text-white animate-bounce-subtle">
-                    <div className="text-[150px] font-black leading-none mb-8 animate-pulse text-yellow-300">CALLING</div>
-                    <div className="text-[120px] font-bold text-center leading-tight mb-12 drop-shadow-lg">{lastCalledVisitor.name}</div>
-                    <div className="bg-white text-red-600 px-16 py-8 rounded-3xl text-6xl font-bold shadow-2xl skew-x-[-10deg]">
-                        Proceed to {getWaitingFor(lastCalledVisitor)}
+                <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-slate-950/95 backdrop-blur-3xl overflow-hidden">
+                    {/* Atmospheric Background Effects */}
+                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(16,185,129,0.15)_0%,_transparent_70%)] animate-pulse"></div>
+                    <div className="absolute top-0 left-0 right-0 h-1 bg-emerald-500 shadow-[0_0_20px_rgba(16,185,129,1)]"></div>
+                    
+                    {/* Background "CALLING" watermarked text */}
+                    <div className="absolute top-20 left-1/2 -translate-x-1/2 text-[180px] font-black text-emerald-500/5 select-none tracking-[0.2em] whitespace-nowrap">
+                        CALLING
+                    </div>
+
+                    <div className="relative z-10 flex flex-col items-center animate-in fade-in zoom-in duration-700">
+                        <div className="text-emerald-400 text-xl font-black uppercase tracking-[0.8em] mb-8 opacity-60">System Arrival Notice</div>
+                        
+                        <div className="text-[140px] font-black text-white text-center leading-[0.9] tracking-tighter mb-12 drop-shadow-[0_0_50px_rgba(255,255,255,0.3)] max-w-[90vw]">
+                            {lastCalledVisitor.name}
+                        </div>
+
+                        <div className="relative overflow-hidden group">
+                           <div className="absolute inset-0 bg-emerald-500/20 blur-2xl animate-pulse"></div>
+                           <div className="relative bg-black/40 border-y-2 border-emerald-500/40 px-24 py-10 flex flex-col items-center">
+                               <div className="text-emerald-500/60 text-xs font-black uppercase tracking-[0.5em] mb-4">Please Proceed Immediately to</div>
+                               <div className="text-7xl font-black text-emerald-400 uppercase tracking-[0.1em] drop-shadow-glow">
+                                   {getWaitingFor(lastCalledVisitor)}
+                               </div>
+                           </div>
+                        </div>
+                    </div>
+
+                    <div className="absolute bottom-20 flex items-center gap-4 text-slate-500 font-black text-xs uppercase tracking-[0.4em]">
+                        <div className="w-12 h-[2px] bg-slate-800"></div>
+                        Institutional Lobby Protocol
+                        <div className="w-12 h-[2px] bg-slate-800"></div>
                     </div>
                 </div>
             )}
@@ -205,23 +230,25 @@ const VisitorDisplay: React.FC = () => {
                                 >
                                     {isCalled && <div className="absolute inset-0 bg-green-500 opacity-20 animate-pulse"></div>}
 
-                                    <div className="flex h-40">
+                                    <div className="flex min-h-[11rem]">
                                         {/* Sequence Number */}
                                         <div className={`w-32 flex items-center justify-center text-5xl font-black ${isCalled ? 'bg-green-700 text-white' : 'bg-gray-700/50 text-gray-400'}`}>
                                             #{visitor.dailySequenceNumber}
                                         </div>
 
                                         {/* Details */}
-                                        <div className="flex-1 p-6 flex flex-col justify-center">
-                                            <h2 className="text-5xl font-bold truncate tracking-tight mb-2">{visitor.name}</h2>
-                                            <div className="flex items-center justify-between mt-2">
-                                                <div className={`px-4 py-1 rounded-lg text-xl font-bold uppercase tracking-wider ${isCalled ? 'bg-white text-green-700' : 'bg-lyceum-blue/20 text-blue-300'}`}>
+                                        <div className="flex-1 p-8 flex flex-col justify-center">
+                                            <h2 className="text-5xl font-bold tracking-tight mb-4 leading-[1.1]">{visitor.name}</h2>
+                                            <div className="flex items-start justify-between gap-4">
+                                                <div className={`px-5 py-2 rounded-xl text-lg font-black uppercase tracking-wider leading-tight max-w-[280px] border shadow-lg ${isCalled 
+                                                    ? 'bg-white text-green-700 border-white' 
+                                                    : 'bg-lyceum-blue/10 text-blue-300 border-lyceum-blue/20'}`}>
                                                     {getWaitingFor(visitor)}
                                                 </div>
 
                                                 {!isCalled && (
-                                                    <div className="flex items-center gap-3 text-2xl font-mono text-yellow-400/90 font-bold bg-black/20 px-4 py-1 rounded-lg">
-                                                        <Clock size={28} />
+                                                    <div className="flex items-center gap-3 text-xl font-mono text-yellow-400/90 font-bold bg-black/20 px-4 py-2 rounded-xl border border-white/5 shrink-0">
+                                                        <Clock size={24} />
                                                         {getWaitTime(visitor.checkIn)}
                                                     </div>
                                                 )}
