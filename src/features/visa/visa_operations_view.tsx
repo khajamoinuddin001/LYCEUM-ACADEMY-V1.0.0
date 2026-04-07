@@ -2003,7 +2003,7 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                         }}
                         className="flex-1 md:flex-none px-8 py-3 bg-lyceum-blue text-white rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-lyceum-blue/20 flex items-center justify-center gap-2"
                     >
-                        {activeOp?.dsData?.confirmationNumber ? 'View DS-160' : 'Start DS'}
+                        {activeOp?.dsData ? 'View DS-160' : 'Start DS'}
                     </button>
                     <button
                         onClick={() => {
@@ -2129,7 +2129,7 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                                     <div className="flex items-center gap-2 mt-2">
                                         <FileText size={18} className="text-slate-400" />
                                         <p className="font-mono font-bold text-slate-700 text-sm">
-                                            {activeOp?.dsData?.confirmationNumber || 'Not Generated'}
+                                            {(Array.isArray(activeOp?.dsData) ? activeOp?.dsData[0]?.main?.confirmationNumber : activeOp?.dsData?.confirmationNumber) || 'Not Generated'}
                                         </p>
                                     </div>
                                 </div>
