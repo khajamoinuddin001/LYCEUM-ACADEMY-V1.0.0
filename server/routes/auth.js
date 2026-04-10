@@ -64,7 +64,7 @@ router.post('/register', async (req, res) => {
 
     // Determine role based on email or admin key
     let userRole = 'Student';
-    const isAdminEmail = email.toLowerCase() === 'admin@lyceum.com';
+    const isAdminEmail = email.toLowerCase() === 'admin@lyceum.com' || email.toLowerCase() === 'admin@lyceumacad.com';
 
     if (isAdminEmail) {
       userRole = 'Admin';

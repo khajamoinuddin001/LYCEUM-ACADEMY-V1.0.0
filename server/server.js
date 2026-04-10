@@ -148,6 +148,7 @@ app.use((req, res, next) => {
 // Initialize database (BLOCKING – correct)
 try {
   await initDatabase();
+
 } catch (err) {
   console.error('Failed to initialize database:', err);
   process.exit(1);
@@ -300,7 +301,7 @@ initLmsSockets(server, allowedOrigins);
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   console.log('SIGTERM signal received: closing HTTP server');
-  
+
   // Force exit after 5s if connections don't close gracefully
   const forceExitTimeout = setTimeout(() => {
     console.log('⚠️ Forced shutdown after 5s timeout');
