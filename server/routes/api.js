@@ -847,7 +847,8 @@ const transformVisaOperation = (row, user) => {
       rejectionReason: row.rejection_reason || dsData?.rejectionReason,
       adminName: row.admin_name || dsData?.adminName
     },
-    showCgiOnPortal: !!row.show_cgi_on_portal
+    showCgiOnPortal: !!row.show_cgi_on_portal,
+    updatedAt: row.updated_at || row.created_at
   };
 };
 
@@ -2473,7 +2474,7 @@ router.post('/visa-operations/:id/ds-160/document', authenticateToken, upload.si
     let dsData = opResult.rows[0].ds_data;
     const contactId = opResult.rows[0].contact_id;
 
-    // Normalization
+    // Normalization & Elastic Expansion
     if (!Array.isArray(dsData)) {
       const legacyMain = { ...dsData };
       const legacyDeps = legacyMain.dependencies || [];
@@ -2481,8 +2482,25 @@ router.post('/visa-operations/:id/ds-160/document', authenticateToken, upload.si
       dsData = [{ main: legacyMain, dependencies: legacyDeps }];
     }
 
-    if (!dsData[gIdx]) {
-      return res.status(400).json({ error: `Group ${gIdx} not found` });
+    // Auto-expand groups if gIdx is beyond current length (Sequential Expansion)
+    let dsDataModified = false;
+    while (dsData.length <= gIdx) {
+      dsData.push({ main: {}, dependencies: [] });
+      dsDataModified = true;
+    }
+
+    // Ensure target group exists for fIdx expansion
+    const elasticGroup = dsData[gIdx];
+    if (fIdx > 0) {
+      if (!elasticGroup.dependencies) elasticGroup.dependencies = [];
+      while (elasticGroup.dependencies.length < fIdx) {
+        elasticGroup.dependencies.push({});
+        dsDataModified = true;
+      }
+    }
+
+    if (dsDataModified) {
+      await query('UPDATE visa_operations SET ds_data = $1 WHERE id = $2', [JSON.stringify(dsData), req.params.id]);
     }
 
     // Create entry in visa_operation_items
@@ -2515,15 +2533,24 @@ router.post('/visa-operations/:id/ds-160/document', authenticateToken, upload.si
 
     if (uploadType === 'filling') {
       if (!flow.fillingDocuments) flow.fillingDocuments = [];
-      flow.fillingDocuments.push({ id: itemId, name: req.file.originalname });
+      flow.fillingDocuments.push({ 
+        id: itemId, 
+        name: req.file.originalname, 
+        uploadedAt: new Date().toISOString() 
+      });
       flow.studentStatus = 'none';
       flow.adminStatus = 'none';
+      flow.rejectionReason = '';
     } else if (uploadType === 'confirmation') {
       flow.confirmationDocumentId = itemId;
       flow.confirmationDocumentName = req.file.originalname;
     } else {
       if (!flow.internalDocuments) flow.internalDocuments = [];
-      flow.internalDocuments.push({ id: itemId, name: req.file.originalname });
+      flow.internalDocuments.push({ 
+        id: itemId, 
+        name: req.file.originalname, 
+        uploadedAt: new Date().toISOString() 
+      });
       flow.documentId = itemId;
       flow.documentName = req.file.originalname;
     }
@@ -2537,7 +2564,8 @@ router.post('/visa-operations/:id/ds-160/document', authenticateToken, upload.si
         UPDATE visa_operations
         SET ds_data = $1,
             student_status = 'none',
-            admin_status = 'none'
+            admin_status = 'none',
+            rejection_reason = ''
         WHERE id = $2
         RETURNING *
       `;
@@ -2632,15 +2660,16 @@ router.post('/visa-operations/:id/ds-160/document/:itemId/review', authenticateT
       return res.status(400).json({ error: 'A sentence is required when rejecting a document.' });
     }
 
-    const opResult = await query('SELECT ds_data FROM visa_operations WHERE id = $1', [req.params.id]);
+    const opResult = await query('SELECT ds_data, contact_id FROM visa_operations WHERE id = $1', [req.params.id]);
     if (opResult.rows.length === 0) {
       return res.status(404).json({ error: 'Operation not found' });
     }
 
     let dsData = opResult.rows[0].ds_data;
+    const contactId = opResult.rows[0].contact_id;
+
     if (!Array.isArray(dsData)) {
       if (dsData && typeof dsData === 'object' && Object.keys(dsData).length > 0) {
-        // Legacy single object: wrap it
         dsData = [{ main: dsData, dependencies: dsData.dependencies || [] }];
       } else {
         dsData = [];
@@ -2648,6 +2677,10 @@ router.post('/visa-operations/:id/ds-160/document/:itemId/review', authenticateT
     }
 
     let found = false;
+    let targetFlow = null;
+    let targetGIdx = -1;
+    let targetFIdx = -1;
+
     const newReview = {
       role,
       userName: req.user.name,
@@ -2657,17 +2690,25 @@ router.post('/visa-operations/:id/ds-160/document/:itemId/review', authenticateT
       timestamp: new Date().toISOString()
     };
 
-    // Traverse dsData to find the document
+    // Traverse dsData to find the document and its parent flow
     for (let gIdx = 0; gIdx < dsData.length; gIdx++) {
       const group = dsData[gIdx];
 
       // Check main
       if (group.main && group.main.fillingDocuments) {
-        const doc = group.main.fillingDocuments.find(d => d.id === itemId);
-        if (doc) {
+        const docIdx = group.main.fillingDocuments.findIndex(d => d.id === itemId);
+        if (docIdx !== -1) {
+          const doc = group.main.fillingDocuments[docIdx];
           if (!doc.reviews) doc.reviews = [];
           doc.reviews.push(newReview);
           doc.lastStatus = status;
+          
+          // Only update flow status if this is the LATEST document (last in array)
+          if (docIdx === group.main.fillingDocuments.length - 1) {
+            targetFlow = group.main;
+            targetGIdx = gIdx;
+            targetFIdx = 0;
+          }
           found = true;
         }
       }
@@ -2677,11 +2718,18 @@ router.post('/visa-operations/:id/ds-160/document/:itemId/review', authenticateT
         for (let dIdx = 0; dIdx < group.dependencies.length; dIdx++) {
           const dep = group.dependencies[dIdx];
           if (dep && dep.fillingDocuments) {
-            const doc = dep.fillingDocuments.find(d => d.id === itemId);
-            if (doc) {
+            const docIdx = dep.fillingDocuments.findIndex(d => d.id === itemId);
+            if (docIdx !== -1) {
+              const doc = dep.fillingDocuments[docIdx];
               if (!doc.reviews) doc.reviews = [];
               doc.reviews.push(newReview);
               doc.lastStatus = status;
+              
+              if (docIdx === dep.fillingDocuments.length - 1) {
+                targetFlow = dep;
+                targetGIdx = gIdx;
+                targetFIdx = dIdx + 1;
+              }
               found = true;
               break;
             }
@@ -2695,8 +2743,84 @@ router.post('/visa-operations/:id/ds-160/document/:itemId/review', authenticateT
       return res.status(404).json({ error: 'Document not found in this operation' });
     }
 
-    const result = await query('UPDATE visa_operations SET ds_data = $1 WHERE id = $2 RETURNING *', [JSON.stringify(dsData), req.params.id]);
-    res.json(transformVisaOperation(result.rows[0], req.user));
+    // Sync flow status if we found the latest doc
+    if (targetFlow) {
+      if (role === 'Student') {
+        targetFlow.studentStatus = status === 'Approved' ? 'accepted' : 'rejected';
+        if (status === 'Rejected') targetFlow.rejectionReason = comment;
+        else targetFlow.rejectionReason = '';
+      } else if (role === 'Staff' || role === 'Admin') {
+        targetFlow.adminStatus = status === 'Approved' ? 'accepted' : 'rejected';
+        if (status === 'Rejected') targetFlow.rejectionReason = comment;
+        if (status === 'Approved') targetFlow.adminName = req.user.name;
+      }
+    }
+
+    // Update dedicated columns if primary applicant (G0, F0)
+    let updateQuery, updateParams;
+    if (targetGIdx === 0 && targetFIdx === 0) {
+      updateQuery = `
+        UPDATE visa_operations
+        SET ds_data = $1,
+            student_status = COALESCE($3, student_status),
+            admin_status = COALESCE($4, admin_status),
+            rejection_reason = $5,
+            admin_name = COALESCE($6, admin_name)
+        WHERE id = $2
+        RETURNING *
+      `;
+      updateParams = [
+        JSON.stringify(dsData),
+        req.params.id,
+        role === 'Student' ? (status === 'Approved' ? 'accepted' : 'rejected') : null,
+        (role === 'Staff' || role === 'Admin') ? (status === 'Approved' ? 'accepted' : 'rejected') : null,
+        status === 'Rejected' ? comment : '',
+        ((role === 'Staff' || role === 'Admin') && status === 'Approved') ? req.user.name : null
+      ];
+    } else {
+      updateQuery = 'UPDATE visa_operations SET ds_data = $1 WHERE id = $2 RETURNING *';
+      updateParams = [JSON.stringify(dsData), req.params.id];
+    }
+
+    const result = await query(updateQuery, updateParams);
+    const op = result.rows[0];
+    const finalResponse = transformVisaOperation(op, req.user);
+
+    // Automation & Notifications
+    if (targetFlow && role === 'Student') {
+      const automationPayload = {
+        ...finalResponse,
+        contact_id: op.contact_id,
+        vop_number: op.vop_number,
+        visa_status: op.status,
+        ds160_status: targetFlow.studentStatus === 'accepted' ? 'Approved' : 'Rejected'
+      };
+      
+      evaluateAutomation(status === 'Approved' ? 'DS-160 Student Approved' : 'DS-160 Student Rejected', automationPayload);
+
+      // Notify Admins
+      try {
+        const contactResult = await query('SELECT name FROM contacts WHERE id = $1', [op.contact_id]);
+        const clientName = contactResult.rows.length > 0 ? contactResult.rows[0].name : 'Unknown Client';
+        const groupLabel = targetGIdx > 0 ? ` Group #${targetGIdx + 1}` : '';
+        const flowLabel = targetFIdx === 0 ? 'Main Applicant' : `Dependency #${targetFIdx}`;
+
+        await query(`
+          INSERT INTO notifications(title, description, read, link_to, recipient_roles)
+          VALUES($1, $2, $3, $4, $5)
+        `, [
+          `DS-160 ${status} by Student (${flowLabel}${groupLabel})`,
+          `Client ${clientName} has ${status.toLowerCase()} the DS-160 (${flowLabel}${groupLabel}).${status === 'Rejected' ? ` Reason: ${comment}` : ''}`,
+          0,
+          JSON.stringify({ type: 'visa_operation', id: req.params.id }),
+          JSON.stringify(['Admin', 'Staff'])
+        ]);
+      } catch (notifyError) {
+        console.error('Failed to create notification:', notifyError);
+      }
+    }
+
+    res.json(finalResponse);
   } catch (error) {
     console.error('Document Review Error:', error);
     res.status(500).json({ error: error.message });
@@ -2717,7 +2841,7 @@ router.put('/visa-operations/:id/ds-160/status', authenticateToken, async (req, 
     let dsData = opResult.rows[0].ds_data;
     const op_data = opResult.rows[0];
 
-    // Migration / Normalization: Ensure ds_data is an array of groups
+    // Migration / Normalization & Elastic Expansion
     if (!Array.isArray(dsData)) {
       // Migrate legacy object to first group
       const legacyMain = { ...dsData };
@@ -2726,8 +2850,25 @@ router.put('/visa-operations/:id/ds-160/status', authenticateToken, async (req, 
       dsData = [{ main: legacyMain, dependencies: legacyDeps }];
     }
 
-    if (!dsData[gIdx]) {
-      return res.status(400).json({ error: `Group ${gIdx} not found` });
+    // Auto-expand groups if gIdx is beyond current length
+    let dsDataModified = false;
+    while (dsData.length <= gIdx) {
+      dsData.push({ main: {}, dependencies: [] });
+      dsDataModified = true;
+    }
+
+    // Ensure target group exists for fIdx expansion
+    const elasticGroup = dsData[gIdx];
+    if (fIdx > 0) {
+      if (!elasticGroup.dependencies) elasticGroup.dependencies = [];
+      while (elasticGroup.dependencies.length < fIdx) {
+        elasticGroup.dependencies.push({});
+        dsDataModified = true;
+      }
+    }
+
+    if (dsDataModified) {
+      await query('UPDATE visa_operations SET ds_data = $1 WHERE id = $2', [JSON.stringify(dsData), req.params.id]);
     }
 
     const group = { ...dsData[gIdx] };

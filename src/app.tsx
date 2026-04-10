@@ -2710,7 +2710,7 @@ const DashboardLayout: React.FC = () => {
 
                 // Student Visa Application Page
                 if (activeApp === 'Visa Application') {
-                  return <StudentVisaView operations={visaOperations} />;
+                  return <StudentVisaView operations={visaOperations} user={currentUser || undefined} />;
                 }
 
                 // Student Announcements Page

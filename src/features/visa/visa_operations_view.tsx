@@ -592,10 +592,10 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
             });
             setActiveOp(updatedOp);
             setOperations(prev => prev.map(op => op.id === updatedOp.id ? updatedOp : op));
-            
+
             // Sync local state if needed (dsGroups)
             // The useEffect for dsGroups will handle it if step is 'ds'
-            
+
             // Clear current comment
             setReviewComments(prev => {
                 const next = { ...prev };
@@ -606,6 +606,38 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
         } catch (error) {
             console.error('Failed to submit review:', error);
             alert('Failed to submit review. Please try again.');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    const handleManualClientReview = async (itemId: number, status: 'Approved' | 'Rejected', groupIndex: number, flowIndex: number) => {
+        if (!activeOp) return;
+        const commentKey = `manual-${groupIndex}-${flowIndex}`;
+        const comment = reviewComments[commentKey] || '';
+        
+        if (status === 'Rejected' && !comment.trim()) {
+            alert('Please provide a reason for manual rejection.');
+            return;
+        }
+
+        setIsSubmitting(true);
+        try {
+            // We use 'Student' role to mirror the client portal action
+            const updatedOp = await addDs160DocumentReview(activeOp.id, itemId, {
+                role: 'Student',
+                status,
+                comment: comment || ''
+            });
+            setActiveOp(updatedOp);
+            setOperations(prev => prev.map(op => op.id === updatedOp.id ? updatedOp : op));
+            
+            // Clear comment
+            setReviewComments(prev => ({ ...prev, [commentKey]: '' }));
+            alert(`Manual ${status.toLowerCase()} successful!`);
+        } catch (error) {
+            console.error('Failed to submit manual review:', error);
+            alert('Failed to submit manual review.');
         } finally {
             setIsSubmitting(false);
         }
@@ -758,8 +790,9 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                                     <div key={doc.id} className="flex items-center justify-between bg-white p-2 rounded-lg border border-slate-100">
                                         <span className="text-xs font-medium text-slate-600 truncate max-w-[150px]">{doc.name}</span>
                                         <div className="flex items-center gap-1">
-                                            <button onClick={() => handlePreviewFile(doc.id)} className="p-1 text-blue-600 hover:bg-blue-50 rounded"><Eye size={12} /></button>
-                                            <button onClick={() => handleDsFileDelete(groupIndex, flowIndex, doc.id)} className="p-1 text-rose-500 hover:bg-rose-50 rounded"><Trash2 size={12} /></button>
+                                            <button onClick={() => handlePreviewFile(doc.id)} className="p-1 text-blue-600 hover:bg-blue-50 rounded" title="Preview"><Eye size={12} /></button>
+                                            <button onClick={() => handleDownloadFile(doc.id, doc.name)} className="p-1 text-blue-600 hover:bg-blue-50 rounded" title="Download"><Download size={12} /></button>
+                                            <button onClick={() => handleDsFileDelete(groupIndex, flowIndex, doc.id)} className="p-1 text-rose-500 hover:bg-rose-50 rounded" title="Delete"><Trash2 size={12} /></button>
                                         </div>
                                     </div>
                                 ))}
@@ -788,7 +821,7 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                                     <div key={doc.id} className="space-y-2">
                                         <div className="flex items-center justify-between bg-white/60 p-2 rounded-lg border border-blue-100">
                                             <div className="flex items-center gap-2 overflow-hidden">
-                                                <button 
+                                                <button
                                                     onClick={() => toggleDocExpansion(doc.id)}
                                                     className="p-1 text-blue-600 hover:bg-white rounded transition-colors"
                                                 >
@@ -802,8 +835,9 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                                                 </div>
                                             </div>
                                             <div className="flex items-center gap-1">
-                                                <button onClick={() => handlePreviewFile(doc.id)} className="p-1 text-blue-600 hover:bg-white rounded"><Eye size={12} /></button>
-                                                <button onClick={() => handleDsFileDelete(groupIndex, flowIndex, doc.id)} className="p-1 text-rose-500 hover:bg-white rounded"><Trash2 size={12} /></button>
+                                                <button onClick={() => handlePreviewFile(doc.id)} className="p-1 text-blue-600 hover:bg-white rounded" title="Preview"><Eye size={12} /></button>
+                                                <button onClick={() => handleDownloadFile(doc.id, doc.name)} className="p-1 text-blue-600 hover:bg-white rounded" title="Download"><Download size={12} /></button>
+                                                <button onClick={() => handleDsFileDelete(groupIndex, flowIndex, doc.id)} className="p-1 text-rose-500 hover:bg-white rounded" title="Delete"><Trash2 size={12} /></button>
                                             </div>
                                         </div>
 
@@ -847,13 +881,13 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                                                         rows={2}
                                                     />
                                                     <div className="flex gap-2">
-                                                        <button 
+                                                        <button
                                                             onClick={() => handleReviewSubmit(doc.id, 'Approved')}
                                                             className="flex-1 py-1.5 bg-emerald-600 text-white rounded-lg text-[10px] font-bold uppercase hover:bg-emerald-700 transition-all flex items-center justify-center gap-1.5 shadow-sm"
                                                         >
                                                             <CheckCircle size={12} /> Approve
                                                         </button>
-                                                        <button 
+                                                        <button
                                                             onClick={() => handleReviewSubmit(doc.id, 'Rejected')}
                                                             className="flex-1 py-1.5 bg-rose-600 text-white rounded-lg text-[10px] font-bold uppercase hover:bg-rose-700 transition-all flex items-center justify-center gap-1.5 shadow-sm"
                                                         >
@@ -871,24 +905,113 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
 
                         {/* Status Sections */}
                         <div className="grid grid-cols-2 gap-4">
-                            <div className={`p-4 rounded-xl border ${data.studentStatus === 'accepted' ? 'bg-emerald-50 border-emerald-100' : 'bg-slate-50 border-slate-200'}`}>
-                                <span className="text-[10px] font-bold text-slate-500 uppercase block mb-2">Filling Status</span>
-                                {data.studentStatus === 'accepted' ? (
-                                    <div className="flex items-center gap-2 text-emerald-600 font-bold text-xs">
-                                        <CheckCircle size={14} /> Accepted
-                                    </div>
-                                ) : (
-                                    <button
-                                        onClick={() => handleDsStatusUpdate(groupIndex, flowIndex, { studentStatus: 'accepted' })}
-                                        className="w-full py-1.5 bg-white text-slate-600 rounded-lg text-[9px] font-bold uppercase tracking-wider border border-slate-200 hover:bg-slate-50"
-                                    >
-                                        Mark as Accepted
-                                    </button>
-                                )}
+                            <div className={`p-4 rounded-xl border ${data.fillingDocuments?.[data.fillingDocuments.length - 1]?.reviews?.[data.fillingDocuments?.[data.fillingDocuments.length - 1]?.reviews?.length - 1]?.role === 'Student' || data.fillingDocuments?.[data.fillingDocuments.length - 1]?.reviews?.[data.fillingDocuments?.[data.fillingDocuments.length - 1]?.reviews?.length - 1]?.role === 'Client' ? (data.fillingDocuments[data.fillingDocuments.length - 1].lastStatus === 'Approved' ? 'bg-emerald-50 border-emerald-100' : 'bg-rose-50 border-rose-100 shadow-sm shadow-rose-50') : 'bg-slate-50 border-slate-200'}`}>
+                                <span className="text-[10px] font-bold text-slate-500 uppercase block mb-2">Client Status Monitoring</span>
+                                {(() => {
+                                    const latestDoc = data.fillingDocuments?.[data.fillingDocuments.length - 1];
+                                    const reviews = latestDoc?.reviews || [];
+                                    
+                                    // Specifically find the latest review FROM A CLIENT/STUDENT
+                                    const clientReviews = reviews.filter((r: any) => r.role === 'Student' || r.role === 'Client');
+                                    const latestClientReview = clientReviews.sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0];
+                                    
+                                    if (latestClientReview && latestClientReview.status === 'Approved') {
+                                        return (
+                                            <div className="space-y-2">
+                                                <div className="flex items-center gap-2 text-emerald-600 font-bold text-xs">
+                                                    <CheckCircle size={14} /> Student Accepted
+                                                </div>
+                                                <div className="space-y-1">
+                                                    {latestClientReview?.comment && (
+                                                        <div className="text-[10px] font-medium text-emerald-600 bg-emerald-100/50 p-2 rounded-lg border border-emerald-200/50 italic">
+                                                            "{latestClientReview.comment}"
+                                                        </div>
+                                                    )}
+                                                    <div className="text-[9px] text-emerald-500/70 font-medium pl-1">
+                                                        Accepted on {new Date(latestClientReview?.timestamp).toLocaleString()}
+                                                    </div>
+                                                </div>
+                                                {data.adminStatus === 'pending' && (
+                                                    <div className="mt-2 p-2 bg-purple-50 border border-purple-100 rounded-xl flex items-center gap-2 animate-pulse">
+                                                        <Clock size={12} className="text-purple-600" />
+                                                        <span className="text-[9px] font-black text-purple-600 uppercase tracking-tighter">Waiting for Academic Director Response</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    } else if (latestClientReview && latestClientReview.status === 'Rejected') {
+                                        return (
+                                            <div className="space-y-2">
+                                                <div className="flex items-center gap-2 text-rose-600 font-bold text-xs">
+                                                    <XCircle size={14} /> Student Rejected
+                                                </div>
+                                                <div className="space-y-1">
+                                                    {latestClientReview?.comment && (
+                                                        <div className="text-[10px] font-medium text-rose-600 bg-rose-100/50 p-2 rounded-lg border border-rose-200/50 italic">
+                                                            "{latestClientReview.comment}"
+                                                        </div>
+                                                    )}
+                                                    <div className="text-[9px] text-rose-500/70 font-medium pl-1">
+                                                        Rejected on {new Date(latestClientReview?.timestamp).toLocaleString()}
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    onClick={() => handleDsStatusUpdate(groupIndex, flowIndex, { studentStatus: 'accepted' })}
+                                                    className="w-full py-1.5 bg-white text-rose-500 rounded-lg text-[9px] font-bold uppercase tracking-wider border border-rose-200 hover:bg-rose-50 transition-colors mt-2"
+                                                >
+                                                    Override to Accepted
+                                                </button>
+                                            </div>
+                                        );
+                                    } else {
+                                        return (
+                                            <div className="flex flex-col space-y-4">
+                                                <div className="flex flex-col items-center justify-center py-2 gap-1">
+                                                    <Clock size={16} className="text-slate-400 animate-pulse" />
+                                                    <span className="text-[10px] font-bold text-slate-400 italic text-center">Waiting for Client response</span>
+                                                </div>
+                                                
+                                                <div className="pt-2 border-t border-slate-100 flex flex-col gap-2">
+                                                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">Manual Admin Override</span>
+                                                    <textarea
+                                                        placeholder="Reason for manual action (required for rejection)..."
+                                                        value={reviewComments[`manual-${groupIndex}-${flowIndex}`] || ''}
+                                                        onChange={(e) => setReviewComments(prev => ({ ...prev, [`manual-${groupIndex}-${flowIndex}`]: e.target.value }))}
+                                                        className="w-full h-16 p-2 bg-slate-50 border border-slate-200 rounded-lg text-[10px] focus:outline-none focus:border-slate-300 resize-none shadow-inner"
+                                                    />
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        <button
+                                                            onClick={latestDoc ? () => handleManualClientReview(latestDoc.id, 'Approved', groupIndex, flowIndex) : undefined}
+                                                            className="py-1.5 bg-emerald-500 text-white rounded-lg text-[9px] font-bold uppercase tracking-wider hover:bg-emerald-600 transition-colors shadow-sm"
+                                                        >
+                                                            Manual Approve
+                                                        </button>
+                                                        <button
+                                                            onClick={latestDoc ? () => handleManualClientReview(latestDoc.id, 'Rejected', groupIndex, flowIndex) : undefined}
+                                                            className="py-1.5 bg-rose-500 text-white rounded-lg text-[9px] font-bold uppercase tracking-wider hover:bg-rose-600 transition-colors shadow-sm"
+                                                        >
+                                                            Manual Reject
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    }
+                                })()}
                             </div>
-                            <div className={`p-4 rounded-xl border ${data.adminStatus === 'accepted' ? 'bg-emerald-50 border-emerald-100' : 'bg-slate-50 border-slate-200'}`}>
+                            <div className={`p-4 rounded-xl border relative overflow-hidden ${data.adminStatus === 'accepted' ? 'bg-emerald-50 border-emerald-100' : 'bg-slate-50 border-slate-200'} ${data.studentStatus !== 'accepted' ? 'opacity-60 cursor-not-allowed group' : ''}`}>
+                                {/* Overlay for locked state */}
+                                {data.studentStatus !== 'accepted' && (
+                                    <div className="absolute inset-0 z-10 bg-slate-50/40 backdrop-blur-[1px] flex items-center justify-center p-4">
+                                        <div className="bg-white/90 border border-slate-200 px-3 py-2 rounded-lg shadow-sm flex items-center gap-2">
+                                            <Lock size={12} className="text-slate-400" />
+                                            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-tight">Wait for Client Approval</span>
+                                        </div>
+                                    </div>
+                                )}
+
                                 <span className="text-[10px] font-bold text-slate-500 uppercase block mb-2">Academy Director Verification</span>
-                                 {data.adminStatus === 'accepted' ? (
+                                {data.adminStatus === 'accepted' ? (
                                     <div className="flex items-center gap-2 text-emerald-600 font-bold text-xs">
                                         <ShieldCheck size={14} /> Verified
                                     </div>
@@ -902,7 +1025,7 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                                                 Reason: {data.rejectionReason}
                                             </div>
                                         )}
-                                        <button 
+                                        <button
                                             onClick={() => handleDsStatusUpdate(groupIndex, flowIndex, { adminStatus: 'pending', rejectionReason: '' })}
                                             className="w-full py-1 bg-white text-slate-500 border border-slate-200 rounded text-[8px] font-bold uppercase hover:bg-slate-50 transition-colors"
                                         >
@@ -910,49 +1033,109 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                                         </button>
                                     </div>
                                 ) : (
-                                    <div className="flex gap-1.5">
-                                        <button onClick={() => handleDsStatusUpdate(groupIndex, flowIndex, { adminStatus: 'accepted', rejectionReason: '' })} className="flex-1 py-1.5 bg-emerald-600 text-white rounded-lg text-[9px] font-bold uppercase hover:bg-emerald-700">Accept</button>
-                                        <button 
-                                            onClick={() => {
-                                                const reason = window.prompt('Enter rejection reason:');
-                                                if (reason !== null) {
-                                                    handleDsStatusUpdate(groupIndex, flowIndex, { adminStatus: 'rejected', rejectionReason: reason });
-                                                }
-                                            }} 
-                                            className="flex-1 py-1.5 bg-rose-600 text-white rounded-lg text-[9px] font-bold uppercase hover:bg-rose-700"
-                                        >
-                                            Reject
-                                        </button>
+                                    <div className="space-y-3">
+                                        <textarea
+                                            placeholder="Academic Director's response..."
+                                            value={reviewComments[`flow-${groupIndex}-${flowIndex}`] || ''}
+                                            onChange={(e) => setReviewComments(prev => ({ ...prev, [`flow-${groupIndex}-${flowIndex}`]: e.target.value }))}
+                                            className="w-full h-20 p-3 bg-white border border-slate-200 rounded-xl text-[11px] font-medium text-slate-600 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all resize-none shadow-inner"
+                                        />
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={async () => {
+                                                    const latestDoc = (data.fillingDocuments || [])[(data.fillingDocuments?.length || 1) - 1];
+                                                    const comment = reviewComments[`flow-${groupIndex}-${flowIndex}`] || '';
+                                                    if (latestDoc) {
+                                                        await addDs160DocumentReview(activeOp!.id, latestDoc.id, {
+                                                            role: 'Academy Director',
+                                                            status: 'Approved',
+                                                            comment: comment || 'Verified by Director'
+                                                        });
+                                                    }
+                                                    handleDsStatusUpdate(groupIndex, flowIndex, { adminStatus: 'accepted', studentStatus: 'accepted', rejectionReason: '' });
+                                                    setReviewComments(prev => ({ ...prev, [`flow-${groupIndex}-${flowIndex}`]: '' }));
+                                                }}
+                                                className="flex-1 py-2.5 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-emerald-700 shadow-md shadow-emerald-200 transition-all flex items-center justify-center gap-2"
+                                            >
+                                                <ShieldCheck size={14} /> Accept
+                                            </button>
+                                            <button
+                                                onClick={async () => {
+                                                    const latestDoc = (data.fillingDocuments || [])[(data.fillingDocuments?.length || 1) - 1];
+                                                    const comment = reviewComments[`flow-${groupIndex}-${flowIndex}`] || '';
+                                                    if (!comment.trim()) {
+                                                        alert('Please provide a response for rejection.');
+                                                        return;
+                                                    }
+                                                    if (latestDoc) {
+                                                        await addDs160DocumentReview(activeOp!.id, latestDoc.id, {
+                                                            role: 'Academy Director',
+                                                            status: 'Rejected',
+                                                            comment
+                                                        });
+                                                    }
+                                                    handleDsStatusUpdate(groupIndex, flowIndex, { adminStatus: 'rejected', rejectionReason: comment });
+                                                    setReviewComments(prev => ({ ...prev, [`flow-${groupIndex}-${flowIndex}`]: '' }));
+                                                }}
+                                                className="flex-1 py-2.5 bg-rose-600 text-white rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-rose-700 shadow-md shadow-rose-200 transition-all flex items-center justify-center gap-2"
+                                            >
+                                                <XCircle size={14} /> Reject
+                                            </button>
+                                        </div>
                                     </div>
                                 )}
                             </div>
                         </div>
 
-                        {/* Final Confirmation */}
+                        {/* Final Confirmation Section */}
                         {data.studentStatus === 'accepted' && data.adminStatus === 'accepted' && (
-                            <div className="p-4 bg-slate-800 rounded-xl text-white shadow-lg space-y-3">
-                                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Final Confirmation</div>
-                                <input
-                                    type="file"
-                                    id={`upload-conf-${groupIndex}-${flowIndex}`}
-                                    className="hidden"
-                                    onChange={(e) => handleDsFileUpload(groupIndex, flowIndex, e, 'confirmation')}
-                                />
-                                <label
-                                    htmlFor={`upload-conf-${groupIndex}-${flowIndex}`}
-                                    className="w-full flex items-center justify-center gap-2 bg-emerald-600 text-white py-2 rounded-lg text-xs font-bold hover:bg-emerald-700 cursor-pointer shadow-sm"
-                                >
-                                    <Upload size={14} /> {data.confirmationDocumentId ? 'Replace File' : 'Upload Final Confirmation'}
-                                </label>
-                                {data.confirmationDocumentName && (
-                                    <div className="flex items-center justify-between bg-white/10 p-2 rounded-lg border border-white/10">
-                                        <span className="text-xs font-medium truncate flex-1 pr-2">{data.confirmationDocumentName}</span>
-                                        <div className="flex items-center gap-1">
-                                            <button onClick={() => handlePreviewFile(data.confirmationDocumentId!)} className="p-1 hover:bg-white/10 rounded"><Eye size={12} /></button>
-                                            <button onClick={() => handleDsFileDelete(groupIndex, flowIndex, data.confirmationDocumentId!)} className="p-1 text-rose-300 hover:bg-white/10 rounded"><Trash2 size={12} /></button>
+                            <div className="relative group overflow-hidden mt-4">
+                                {/* Premium Backdrop glow */}
+                                <div className="absolute -inset-1 bg-gradient-to-r from-emerald-500/20 via-teal-500/20 to-emerald-500/20 rounded-2xl blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                                
+                                <div className="relative p-5 bg-slate-900 rounded-2xl border border-slate-800 shadow-2xl space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2.5">
+                                            <div className="p-2 bg-emerald-500 rounded-xl shadow-lg shadow-emerald-500/20">
+                                                <ShieldCheck size={18} className="text-white" />
+                                            </div>
+                                            <h4 className="text-[11px] font-black text-white uppercase tracking-[0.2em]">DS-160 Confirmation</h4>
+                                        </div>
+                                        <div className="px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20 rounded-full text-[9px] font-bold text-emerald-400 uppercase tracking-widest">
+                                            Official
                                         </div>
                                     </div>
-                                )}
+                                    
+                                    <div className="space-y-3">
+                                        <input
+                                            type="file"
+                                            id={`upload-conf-${groupIndex}-${flowIndex}`}
+                                            className="hidden"
+                                            onChange={(e) => handleDsFileUpload(groupIndex, flowIndex, e, 'confirmation')}
+                                        />
+                                        <label
+                                            htmlFor={`upload-conf-${groupIndex}-${flowIndex}`}
+                                            className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white py-2.5 rounded-xl text-xs font-black uppercase tracking-wider cursor-pointer shadow-lg shadow-emerald-600/10 transition-all active:scale-[0.98] border border-emerald-500/50"
+                                        >
+                                            <Upload size={14} /> {data.confirmationDocumentId ? 'Update Official File' : 'Upload Final Confirmation'}
+                                        </label>
+                                        
+                                        {data.confirmationDocumentName && (
+                                            <div className="flex items-center justify-between bg-slate-800/50 p-3 rounded-xl border border-slate-700/50 group/file hover:border-emerald-500/30 transition-all">
+                                                <div className="flex items-center gap-3 overflow-hidden">
+                                                    <div className="p-2 bg-slate-800 rounded-lg border border-slate-700">
+                                                        <FileText size={14} className="text-slate-400" />
+                                                    </div>
+                                                    <span className="text-xs font-bold text-slate-300 truncate pr-2">{data.confirmationDocumentName}</span>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <button onClick={() => handlePreviewFile(data.confirmationDocumentId!)} className="p-2 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg transition-all" title="Preview"><Eye size={14} /></button>
+                                                    <button onClick={() => handleDsFileDelete(groupIndex, flowIndex, data.confirmationDocumentId!)} className="p-2 hover:bg-rose-500/10 text-rose-400 rounded-lg transition-all" title="Delete"><Trash2 size={14} /></button>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
                             </div>
                         )}
                     </div>
@@ -1143,32 +1326,46 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                                             <td className="px-6 py-4 text-right">
                                                 <div className="flex items-center justify-end gap-2">
                                                     {(() => {
-                                                        const mainDsData = Array.isArray(op.dsData) ? op.dsData[0]?.main : op.dsData;
-                                                        const allDependencies = Array.isArray(op.dsData)
-                                                            ? op.dsData.flatMap((g: any) => g.dependencies || [])
-                                                            : (op.dsData?.dependencies || []);
+                                                        const dsGroups = Array.isArray(op.dsData) ? op.dsData : [];
+                                                        if (dsGroups.length === 0) return null;
 
-                                                        if ((mainDsData?.studentStatus === 'accepted' && mainDsData?.adminStatus === 'pending') ||
-                                                            allDependencies.some((d: any) => d.studentStatus === 'accepted' && d.adminStatus === 'pending')) {
+                                                        // Focus exclusively on the LATEST group
+                                                        const latestGroup = dsGroups[dsGroups.length - 1];
+                                                        const currentFlows = [latestGroup.main, ...(latestGroup.dependencies || [])].filter(Boolean);
+
+                                                        if (currentFlows.length === 0) return null;
+
+                                                        const isWaitingForDirector = currentFlows.some((f: any) => f.studentStatus === 'accepted' && (!f.adminStatus || f.adminStatus === 'pending' || f.adminStatus === 'none'));
+                                                        const isWaitingForClient = currentFlows.some((f: any) => !f.studentStatus || f.studentStatus === 'pending' || f.studentStatus === 'none');
+                                                        const isWaitingForSubmission = currentFlows.some((f: any) => f.adminStatus === 'accepted' && !f.confirmationDocumentId);
+                                                        const isAllCompleted = currentFlows.every((f: any) => !!f.confirmationDocumentId);
+
+                                                        if (isWaitingForDirector) {
                                                             return (
                                                                 <div className="flex items-center gap-1.5 px-2 py-1 bg-purple-50 border border-purple-200 rounded-md animate-pulse">
                                                                     <div className="w-1.5 h-1.5 bg-purple-500 rounded-full"></div>
-                                                                    <span className="text-[9px] font-black text-purple-700 uppercase tracking-tighter">Waiting for Admin Approval</span>
+                                                                    <span className="text-[9px] font-black text-purple-700 uppercase tracking-tighter">Waiting for Academic Director Response</span>
                                                                 </div>
                                                             );
-                                                        } else if (mainDsData?.confirmationDocumentId &&
-                                                            (allDependencies.every((d: any) => d.confirmationDocumentId))) {
+                                                        } else if (isWaitingForClient) {
                                                             return (
-                                                                <div className="flex items-center gap-1.5 px-2 py-1 bg-emerald-50 border border-emerald-200 rounded-md">
-                                                                    <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div>
-                                                                    <span className="text-[9px] font-black text-emerald-700 uppercase tracking-tighter">Process Completed</span>
+                                                                <div className="flex items-center gap-1.5 px-2 py-1 bg-amber-50 border border-amber-200 rounded-md animate-pulse">
+                                                                    <div className="w-1.5 h-1.5 bg-amber-500 rounded-full"></div>
+                                                                    <span className="text-[9px] font-black text-amber-700 uppercase tracking-tighter">Waiting for Client Response</span>
                                                                 </div>
                                                             );
-                                                        } else if (mainDsData?.adminStatus === 'accepted') {
+                                                        } else if (isWaitingForSubmission) {
                                                             return (
                                                                 <div className="flex items-center gap-1.5 px-2 py-1 bg-lyceum-blue/5 border border-lyceum-blue/10 rounded-md">
                                                                     <div className="w-1.5 h-1.5 bg-lyceum-blue rounded-full animate-pulse"></div>
                                                                     <span className="text-[9px] font-black text-lyceum-blue uppercase tracking-tighter">Waiting for DS-160 Submission</span>
+                                                                </div>
+                                                            );
+                                                        } else if (isAllCompleted) {
+                                                            return (
+                                                                <div className="flex items-center gap-1.5 px-2 py-1 bg-emerald-50 border border-emerald-200 rounded-md">
+                                                                    <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div>
+                                                                    <span className="text-[9px] font-black text-emerald-700 uppercase tracking-tighter">Process Completed</span>
                                                                 </div>
                                                             );
                                                         }
@@ -1443,7 +1640,7 @@ export const VisaOperationsView: React.FC<VisaOperationsViewProps> = ({
                                         "In what city or town was your first job?",
                                         "What is the name of a college you applied to but didn't attend?"
                                     ];
-                                    
+
                                     const currentSet = num === 1 ? questionSet1 : num === 2 ? questionSet2 : questionSet3;
 
                                     return (
