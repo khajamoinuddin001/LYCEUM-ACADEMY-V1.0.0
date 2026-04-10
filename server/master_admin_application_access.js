@@ -28,28 +28,27 @@ async function run() {
     try {
         await client.query("BEGIN");
 
-        // Attempt to find the master admin (trying both possible emails)
-        let masterAdminRes = await client.query("SELECT * FROM users WHERE email = 'admin@lyceum.com'");
-
-        if (masterAdminRes.rows.length === 0) {
-            console.log("⚠️ Could not find 'admin@lyceum.com', trying fallback: 'admin@lyceumacad.com'...");
-            masterAdminRes = await client.query("SELECT * FROM users WHERE email = 'admin@lyceumacad.com'");
-        }
-
-        if (masterAdminRes.rows.length === 0) {
-            console.log("❌ Error: Could not find either 'admin@lyceum.com' or 'admin@lyceumacad.com'!");
+        // Find all master admins
+        const masterAdminsRes = await client.query(
+            "SELECT * FROM users WHERE email IN ('admin@lyceum.com', 'admin@lyceumacad.com')"
+        );
+        
+        if (masterAdminsRes.rows.length === 0) {
+            console.log("❌ Error: Could not find 'admin@lyceum.com' or 'admin@lyceumacad.com'!");
             await client.query("ROLLBACK");
             return;
         }
 
-        const masterAdmin = masterAdminRes.rows[0];
         const fullPerms = {};
         for (const app of ODOO_APPS) {
             fullPerms[app] = { read: true, create: true, update: true, delete: true };
         }
 
-        // Give full access to the master admin
-        await client.query("UPDATE users SET permissions = $1 WHERE id = $2", [JSON.stringify(fullPerms), masterAdmin.id]);
+        // Give full access to all found admins
+        for (const admin of masterAdminsRes.rows) {
+            await client.query("UPDATE users SET permissions = $1 WHERE id = $2", [JSON.stringify(fullPerms), admin.id]);
+            console.log(`✅ Successfully granted ALL application permissions to: ${admin.email}`);
+        }
 
         await client.query("COMMIT");
         console.log(`✅ Successfully granted ALL application permissions to: ${masterAdmin.email}`);
