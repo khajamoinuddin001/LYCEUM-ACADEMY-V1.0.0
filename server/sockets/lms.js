@@ -3,13 +3,7 @@ import { Server } from 'socket.io';
 export function initLmsSockets(server, allowedOrigins) {
   const io = new Server(server, {
     cors: {
-      origin: function (origin, callback) {
-        if (!origin) return callback(null, true);
-        if (allowedOrigins.includes(origin) || origin.startsWith('http://localhost:')) {
-          return callback(null, true);
-        }
-        return callback(new Error('Not allowed by CORS'));
-      },
+      origin: true,
       methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
       credentials: true,
       allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Requested-With', 'Origin']
