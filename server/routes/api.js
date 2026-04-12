@@ -6551,8 +6551,8 @@ router.delete('/attendance/branches/:id', authenticateToken, requireRole('Admin'
 // Payment Settings
 router.get('/settings/payment', authenticateToken, async (req, res) => {
   try {
-    const upiResult = await query('SELECT value FROM system_settings WHERE key = $1', ['PAYMENT_UPI_ID']);
-    const qrResult = await query('SELECT value FROM system_settings WHERE key = $1', ['PAYMENT_QR_CODE']);
+    const upiResult = await query('SELECT value FROM system_settings WHERE "key" = $1', ['PAYMENT_UPI_ID']);
+    const qrResult = await query('SELECT value FROM system_settings WHERE "key" = $1', ['PAYMENT_QR_CODE']);
 
     const upiData = upiResult.rows[0]?.value;
     const qrData = qrResult.rows[0]?.value;
@@ -6570,10 +6570,10 @@ router.post('/settings/payment', authenticateToken, requireRole('Admin'), async 
   try {
     const { upiId } = req.body;
     await query(`
-      INSERT INTO system_settings(key, value)
-VALUES($1, $2)
-      ON CONFLICT(key) DO UPDATE SET value = $2
-  `, ['PAYMENT_UPI_ID', { upiId }]);
+      INSERT INTO system_settings("key", value)
+      VALUES($1, $2)
+      ON CONFLICT("key") DO UPDATE SET value = $2
+  `, ['PAYMENT_UPI_ID', JSON.stringify({ upiId })]);
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -6589,10 +6589,10 @@ router.post('/settings/payment-qr', authenticateToken, requireRole('Admin'), upl
     const base64Data = `data:${req.file.mimetype}; base64, ${req.file.buffer.toString('base64')} `;
 
     await query(`
-      INSERT INTO system_settings(key, value)
-VALUES($1, $2)
-      ON CONFLICT(key) DO UPDATE SET value = $2
-  `, ['PAYMENT_QR_CODE', { qrCode: base64Data }]);
+      INSERT INTO system_settings("key", value)
+      VALUES($1, $2)
+      ON CONFLICT("key") DO UPDATE SET value = $2
+  `, ['PAYMENT_QR_CODE', JSON.stringify({ qrCode: base64Data })]);
 
     res.json({ success: true, qrCode: base64Data });
   } catch (error) {
@@ -6602,7 +6602,7 @@ VALUES($1, $2)
 
 router.get('/settings/:key', authenticateToken, async (req, res) => {
   try {
-    const result = await query('SELECT value FROM system_settings WHERE key = $1', [req.params.key]);
+    const result = await query('SELECT value FROM system_settings WHERE "key" = $1', [req.params.key]);
     console.log(`GET /settings/${req.params.key} - found:`, !!result.rows[0]);
     res.json(result.rows.length > 0 ? result.rows[0].value : null);
   } catch (error) {
@@ -6616,9 +6616,9 @@ router.post('/settings/:key', authenticateToken, requireRole('Admin'), async (re
     const { value } = req.body;
     console.log(`POST /settings/${req.params.key} - role: ${req.user.role}, value length: ${Array.isArray(value) ? value.length : 'N/A'}`);
     await query(`
-      INSERT INTO system_settings(key, value)
-VALUES($1, $2)
-      ON CONFLICT(key) DO UPDATE SET value = $2
+      INSERT INTO system_settings("key", value)
+      VALUES($1, $2)
+      ON CONFLICT("key") DO UPDATE SET value = $2
   `, [req.params.key, JSON.stringify(value)]);
     console.log(`POST /settings/${req.params.key} - saved successfully`);
     res.json({ success: true });

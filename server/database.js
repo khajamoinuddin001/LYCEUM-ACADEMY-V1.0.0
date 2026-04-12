@@ -1089,15 +1089,30 @@ export async function initDatabase() {
       )
     `);
 
-    // Safety: ensure primary key exists if table was created without it
+    // Safety: ensure primary key or unique index exists for ON CONFLICT support
     await client.query(`
       DO $$
       BEGIN
+        -- 1. Deduplicate if necessary before creating unique constraint
+        -- We unconditionally delete older duplicates (smaller ctid) to ensure LATEST is kept
+        DELETE FROM system_settings a
+        USING system_settings b
+        WHERE a.ctid < b.ctid AND a.key = b.key;
+
+        -- 2. Enforce unique constraint
         IF NOT EXISTS (
-          SELECT 1 FROM pg_constraint 
-          WHERE conrelid = 'system_settings'::regclass AND contype = 'p'
+          SELECT 1 FROM pg_indexes 
+          WHERE tablename = 'system_settings' AND indexdef LIKE '%(key)%'
         ) THEN
-          ALTER TABLE system_settings ADD PRIMARY KEY (key);
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint 
+            WHERE conrelid = 'system_settings'::regclass AND contype = 'p'
+          ) THEN
+            ALTER TABLE system_settings ADD PRIMARY KEY (key);
+          ELSE
+            -- If PK exists but index is not recognized, ensure we have a unique index
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_system_settings_key ON system_settings(key);
+          END IF;
         END IF;
       END $$;
     `);
