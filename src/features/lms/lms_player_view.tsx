@@ -489,7 +489,10 @@ const LmsPlayerView: React.FC<LmsPlayerViewProps> = (props) => {
         // Initialize Socket.IO
         const socketToken = getToken();
         // Ensure we connect to the root server, not the /api endpoint
-        const socketBaseUrl = (API_BASE_URL || '').replace('/api', '');
+        const configuredUrl = (API_BASE_URL || '').replace('/api', '');
+        const socketBaseUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
+            ? configuredUrl 
+            : window.location.origin;
         const socket = io(`${socketBaseUrl}/lms`, {
             auth: { token: socketToken }
         });

@@ -502,7 +502,10 @@ const DashboardLayout: React.FC = () => {
   useEffect(() => {
     if (currentUser) {
         const socketToken = api.getToken();
-        const socketBaseUrl = (api.API_BASE_URL || '').replace('/api', '');
+        const configuredUrl = (api.API_BASE_URL || '').replace('/api', '');
+        const socketBaseUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
+            ? configuredUrl 
+            : window.location.origin;
         const socket = io(`${socketBaseUrl}/lms`, {
             auth: { token: socketToken }
         });
