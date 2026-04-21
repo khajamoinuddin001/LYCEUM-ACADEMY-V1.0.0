@@ -20,7 +20,7 @@ const ODOO_APPS = [
     'Accounts', 'Analytics', 'Tasks', 'Tickets', 'Reception',
     'Settings', 'Access Control', 'Visitor Display', 'Department Dashboard',
     'Attendance & Payroll', 'University Application', 'Visa Operations', 'University Manager',
-    'Live Session Monitor', 'Automation Engine', 'Document manager', 'Announcements', 'Mock Interview', 'Employee Performance'
+    'Live Session Monitor', 'Automation Engine', 'Document manager', 'Announcements', 'Mock Interview', 'Employee Performance', 'Forms'
 ];
 
 async function run() {

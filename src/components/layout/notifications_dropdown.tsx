@@ -57,10 +57,10 @@ const NotificationsDropdown: React.FC<NotificationsDropdownProps> = ({ isOpen, o
               className={`block w-full text-left px-4 py-3 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 ${!notification.read ? 'bg-lyceum-blue/5 dark:bg-lyceum-blue/10' : ''}`}
             >
               <div className="flex justify-between items-start">
-                <p className="font-medium">{notification.title}</p>
+                <p className="font-medium">{String(notification.title || '')}</p>
                 {!notification.read && <div className="w-2 h-2 rounded-full bg-lyceum-blue mt-1.5 flex-shrink-0 ml-2"></div>}
               </div>
-              <p className="text-xs text-gray-500 dark:text-gray-400">{notification.description}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">{String(notification.description || '')}</p>
               <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{formatTimeAgo(notification.timestamp)}</p>
             </button>
           ))

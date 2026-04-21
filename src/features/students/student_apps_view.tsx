@@ -1,5 +1,5 @@
 import React from 'react';
-import { BookOpen, FileText, User, FileUp, Paperclip, Receipt, CheckCircle2, MessagesSquare, GraduationCap, Megaphone, UserCheck } from 'lucide-react';
+import { BookOpen, FileText, User, FileUp, Paperclip, Receipt, CheckCircle2, MessagesSquare, GraduationCap, Megaphone, UserCheck, FileStack, Clock } from 'lucide-react';
 
 import { useDraggable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
@@ -72,7 +72,39 @@ const DraggableAppCard: React.FC<{ app: AppCard, onAppSelect: (appName: string) 
     );
 };
 
+import * as api from '@/utils/api';
+import { FormAssignment, FormTemplate, FormSubmission } from '@/types';
+import StudentFormFiller from '../forms/student_form_filler';
+
 const StudentAppsView: React.FC<StudentAppsViewProps> = ({ onAppSelect }) => {
+    const [pendingForms, setPendingForms] = React.useState<FormAssignment[]>([]);
+    const [templates, setTemplates] = React.useState<FormTemplate[]>([]);
+    const [activeAssignment, setActiveAssignment] = React.useState<FormAssignment | null>(null);
+    const [isLoading, setIsLoading] = React.useState(true);
+
+    React.useEffect(() => {
+        const fetchData = async () => {
+            try {
+                const [asgns, tmpls] = await Promise.all([
+                    api.getFormAssignments(1), // Using a mock studentId for now
+                    api.getFormTemplates()
+                ]);
+                setPendingForms(asgns.filter(a => a.status === 'Pending' || a.status === 'In Progress'));
+                setTemplates(tmpls);
+            } catch (err) {
+                console.error(err);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchData();
+    }, []);
+
+    const handleFormSubmitted = (submission: FormSubmission) => {
+        setPendingForms(prev => prev.filter(f => f.id !== submission.assignmentId));
+        setActiveAssignment(null);
+    };
+
     const apps: AppCard[] = [
         {
             name: 'LMS',
@@ -165,18 +197,81 @@ const StudentAppsView: React.FC<StudentAppsViewProps> = ({ onAppSelect }) => {
             bgColor: 'bg-rose-100 dark:bg-rose-900/20',
             iconColor: 'text-rose-600 dark:text-rose-400',
         },
+        {
+            name: 'Forms',
+            icon: <FileStack size={48} />,
+            description: 'Access and submit various academy forms and surveys',
+            bgColor: 'bg-violet-100 dark:bg-violet-900/20',
+            iconColor: 'text-violet-600 dark:text-violet-400',
+        },
     ];
 
     return (
         <div className="h-full bg-gray-50 dark:bg-gray-900 p-8">
             <div className="max-w-6xl mx-auto">
                 {/* Header */}
-                <div className="mb-8">
-                    <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">My Apps</h1>
-                    <p className="text-gray-600 dark:text-gray-400">
-                        Access all your student portal applications
-                    </p>
+                <div className="mb-8 flex items-center justify-between">
+                    <div>
+                        <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">My Apps</h1>
+                        <p className="text-gray-600 dark:text-gray-400">
+                            Access all your student portal applications
+                        </p>
+                    </div>
+                    {isLoading && <Clock className="animate-spin text-gray-300" size={24} />}
                 </div>
+
+                {/* Pending Forms Widget */}
+                {pendingForms.length > 0 && (
+                    <div className="mb-10 bg-gradient-to-br from-violet-600 to-indigo-700 rounded-3xl p-8 text-white shadow-xl shadow-violet-500/20 animate-in fade-in duration-700">
+                        <div className="flex items-center gap-4 mb-6">
+                            <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/20">
+                                <FileStack size={28} />
+                            </div>
+                            <div>
+                                <h2 className="text-xl font-black tracking-tight">Pending Academy Forms</h2>
+                                <p className="text-violet-100 text-sm font-medium">You have {pendingForms.length} form{pendingForms.length > 1 ? 's' : ''} that need your attention.</p>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {pendingForms.map(asgn => {
+                                const template = templates.find(t => t.id === asgn.templateId);
+                                return (
+                                    <div key={asgn.id} className="bg-white/10 backdrop-blur-sm border border-white/10 rounded-2xl p-5 hover:bg-white/20 transition-all group">
+                                        <div className="flex justify-between items-start mb-3">
+                                            <h3 className="font-bold text-lg">{template?.title || 'Unknown Form'}</h3>
+                                            <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-widest ${asgn.status === 'In Progress' ? 'bg-amber-400 text-amber-950' : 'bg-white/20 text-white'}`}>
+                                                {asgn.status}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-2 text-xs text-violet-100 font-medium">
+                                                <Clock size={14} />
+                                                <span>Assigned: {new Date(asgn.assignedAt).toLocaleDateString()}</span>
+                                            </div>
+                                            <button 
+                                                onClick={() => setActiveAssignment(asgn)}
+                                                className="flex items-center gap-2 bg-white text-violet-700 px-4 py-2 rounded-xl text-xs font-black hover:scale-105 active:scale-95 transition-all"
+                                            >
+                                                <span>{asgn.status === 'In Progress' ? 'Resume' : 'Fill Now'}</span>
+                                                <ChevronRight size={14} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+
+                {activeAssignment && (
+                    <StudentFormFiller 
+                        assignment={activeAssignment}
+                        template={templates.find(t => t.id === activeAssignment.templateId)!}
+                        onClose={() => setActiveAssignment(null)}
+                        onSubmitted={handleFormSubmitted}
+                    />
+                )}
 
                 {/* Apps Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

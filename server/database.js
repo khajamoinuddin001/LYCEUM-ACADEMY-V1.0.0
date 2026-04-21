@@ -788,6 +788,226 @@ export async function initDatabase() {
       )
     `);
 
+    // FORMS SYSTEM
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS form_templates (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        description TEXT,
+        sections JSONB DEFAULT '[]',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS form_assignments (
+        id TEXT PRIMARY KEY,
+        template_id TEXT REFERENCES form_templates(id) ON DELETE CASCADE,
+        student_id INTEGER REFERENCES contacts(id) ON DELETE CASCADE,
+        status TEXT NOT NULL DEFAULT 'Pending' CHECK (status IN ('Pending', 'In Progress', 'Submitted', 'Approved', 'Rejected', 'Expired')),
+        assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        deadline TIMESTAMP,
+        submission_id TEXT
+      )
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS form_submissions (
+        id TEXT PRIMARY KEY,
+        assignment_id TEXT REFERENCES form_assignments(id) ON DELETE CASCADE,
+        student_id INTEGER REFERENCES contacts(id) ON DELETE CASCADE,
+        data JSONB NOT NULL DEFAULT '{}',
+        submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        processed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        processed_at TIMESTAMP,
+        processing_notes TEXT
+      )
+    `);
+
+    // Ensure assignments can reference submissions if needed (circular link handling)
+    await client.query('ALTER TABLE form_assignments ADD COLUMN IF NOT EXISTS submission_id TEXT');
+
+    // SEED: Predefined Form Templates
+    const templates = [
+      {
+        id: 'ds160-template',
+        title: 'DS-160 Pre-Filing Form',
+        description: 'Comprehensive data gathering for US Visa DS-160 application.',
+        sections: [
+          {
+            id: 'personal',
+            title: '1. Personal Information',
+            description: 'Identity and passport details',
+            fields: [
+              { id: 'f1_name', type: 'text', label: 'Full Name (as per Passport)', placeholder: 'Given Name + Surname', required: true, mapping: 'name' },
+              { id: 'f1_dob', type: 'date', label: 'Date of Birth', required: true, mapping: 'dob' },
+              { id: 'f1_gender', type: 'dropdown', label: 'Gender', options: ['Male', 'Female', 'Other'], required: true },
+              { id: 'f1_nat', type: 'text', label: 'Nationality', placeholder: 'e.g. Indian', required: true },
+              { id: 'f1_passport', type: 'text', label: 'Passport Number', required: true, mapping: 'visaInformation.otherInformation.passportNo' },
+              { id: 'f1_expiry', type: 'date', label: 'Passport Expiry Date', required: true }
+            ]
+          },
+          {
+            id: 'contact',
+            title: '2. Contact Details',
+            fields: [
+              { id: 'f2_email', type: 'email', label: 'Email Address', required: true, mapping: 'email' },
+              { id: 'f2_phone', type: 'phone', label: 'Phone Number', required: true, mapping: 'phone' },
+              { id: 'f2_address', type: 'long-text', label: 'Current Residential Address', required: true }
+            ]
+          },
+          {
+            id: 'travel',
+            title: '3. Travel Information',
+            fields: [
+              { id: 'f3_purpose', type: 'dropdown', label: 'Purpose of Travel', options: ['F1 - Student', 'B1/B2 - Visitor', 'H1B - Work', 'J1 - Exchange'], required: true },
+              { id: 'f3_date', type: 'date', label: 'Intended Travel Date', required: true },
+              { id: 'f3_duration', type: 'text', label: 'Intended Duration of Stay', placeholder: 'e.g. 2 Years', required: true },
+              { id: 'f3_contact', type: 'text', label: 'US Contact Person/Organization', required: true }
+            ]
+          },
+          {
+            id: 'employment',
+            title: '4. Employment History',
+            fields: [
+              { id: 'f4_employer', type: 'text', label: 'Current Employer/University', required: true },
+              { id: 'f4_title', type: 'text', label: 'Job Title / Occupation', required: true },
+              { id: 'f4_start', type: 'date', label: 'Start Date', required: true },
+              { id: 'f4_income', type: 'number', label: 'Monthly Income (Local Currency)', required: true }
+            ]
+          },
+          {
+            id: 'family',
+            title: '5. Family Information',
+            fields: [
+              { id: 'f5_father', type: 'text', label: "Father's Full Name", required: true },
+              { id: 'f5_mother', type: 'text', label: "Mother's Full Name", required: true },
+              { id: 'f5_marital', type: 'dropdown', label: 'Marital Status', options: ['Single', 'Married', 'Divorced', 'Widowed'], required: true },
+              { 
+                id: 'f5_spouse', 
+                type: 'text', 
+                label: "Spouse's Full Name", 
+                conditionalLogic: { fieldId: 'f5_marital', operator: 'equals', value: 'Married' }
+              },
+              { id: 'f5_relatives', type: 'radio', label: 'Any immediate relatives in US?', options: ['Yes', 'No'], required: true }
+            ]
+          },
+          {
+            id: 'education',
+            title: '6. Education History',
+            fields: [
+              { id: 'f6_qual', type: 'dropdown', label: 'Highest Qualification', options: ['High School', 'Bachelors', 'Masters', 'PhD'], required: true },
+              { id: 'f6_inst', type: 'text', label: 'Institution Name', required: true },
+              { id: 'f6_year', type: 'number', label: 'Graduation Year', required: true }
+            ]
+          },
+          {
+            id: 'previous_travel',
+            title: '7. Previous US Travel',
+            fields: [
+              { id: 'f7_visits', type: 'radio', label: 'Have you ever been to the US?', options: ['Yes', 'No'], required: true },
+              { id: 'f7_denied', type: 'radio', label: 'Have you ever been denied a US Visa?', options: ['Yes', 'No'], required: true },
+              { 
+                id: 'f7_denied_reason', 
+                type: 'long-text', 
+                label: 'Reason for Denial', 
+                conditionalLogic: { fieldId: 'f7_denied', operator: 'equals', value: 'Yes' }
+              }
+            ]
+          },
+          {
+            id: 'documents',
+            title: '8. Documents',
+            fields: [
+              { id: 'f8_note', type: 'file-upload-note', label: 'Required Documents', placeholder: 'Passport, Photograph, Financial Docs' }
+            ]
+          }
+        ]
+      },
+      {
+        id: 'refund-request',
+        title: 'Refund Request Form',
+        description: 'Official form to request a refund for tuition or service fees.',
+        sections: [
+          {
+            id: 'student_details',
+            title: '1. Student Details',
+            fields: [
+              { id: 'r1_name', type: 'text', label: 'Full Name', required: true, mapping: 'name' },
+              { id: 'r1_id', type: 'text', label: 'Enrollment ID', required: true },
+              { id: 'r1_prog', type: 'text', label: 'Program Enrolled', required: true },
+              { id: 'r1_contact', type: 'phone', label: 'Contact Number', required: true, mapping: 'phone' }
+            ]
+          },
+          {
+            id: 'refund_details',
+            title: '2. Refund Details',
+            fields: [
+              { id: 'r2_amount', type: 'number', label: 'Amount Requested', required: true },
+              { id: 'r2_reason', type: 'long-text', label: 'Reason for Refund', required: true },
+              { id: 'r2_ref', type: 'text', label: 'Original Payment Reference', required: true },
+              { id: 'r2_date', type: 'date', label: 'Date of Original Payment', required: true }
+            ]
+          },
+          {
+            id: 'bank_details',
+            title: '3. Bank Details',
+            fields: [
+              { id: 'r3_holder', type: 'text', label: 'Account Holder Name', required: true },
+              { id: 'r3_bank', type: 'text', label: 'Bank Name', required: true },
+              { id: 'r3_acc', type: 'text', label: 'Account Number', required: true },
+              { id: 'r3_ifsc', type: 'text', label: 'IFSC Code', required: true }
+            ]
+          }
+        ]
+      },
+      {
+        id: 'id-card-gen',
+        title: 'ID Card Generation Form',
+        description: 'Submit details for your student identification card.',
+        sections: [
+          {
+            id: 'personal',
+            title: '1. Personal Information',
+            fields: [
+              { id: 'i1_name', type: 'text', label: 'Full Name (to appear on card)', required: true, mapping: 'name' },
+              { id: 'i1_dob', type: 'date', label: 'Date of Birth', required: true, mapping: 'dob' },
+              { id: 'i1_prog', type: 'text', label: 'Program Enrolled', required: true }
+            ]
+          },
+          {
+            id: 'id_details',
+            title: '2. ID Card Details',
+            fields: [
+              { id: 'i2_pref', type: 'text', label: 'Preferred Display Name', placeholder: 'e.g. Alex J.' },
+              { id: 'i2_blood', type: 'dropdown', label: 'Blood Group', options: ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'], required: true },
+              { id: 'i2_emerg', type: 'phone', label: 'Emergency Contact Number', required: true }
+            ]
+          },
+          {
+            id: 'photo',
+            title: '3. Photo',
+            fields: [
+              { id: 'i3_note', type: 'file-upload-note', label: 'Passport Size Photograph', placeholder: 'White background, High Resolution' }
+            ]
+          }
+        ]
+      }
+    ];
+
+    for (const t of templates) {
+      await client.query(`
+        INSERT INTO form_templates (id, title, description, sections)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (id) DO UPDATE SET
+          title = EXCLUDED.title,
+          description = EXCLUDED.description,
+          sections = EXCLUDED.sections,
+          updated_at = CURRENT_TIMESTAMP
+      `, [t.id, t.title, t.description, JSON.stringify(t.sections)]);
+    }
+
     await client.query('ALTER TABLE announcement_attachments ADD COLUMN IF NOT EXISTS announcement_id INTEGER REFERENCES announcements(id) ON DELETE CASCADE');
     await client.query('ALTER TABLE announcement_attachments ADD COLUMN IF NOT EXISTS filename TEXT');
     await client.query('ALTER TABLE announcement_attachments ADD COLUMN IF NOT EXISTS content_type TEXT');

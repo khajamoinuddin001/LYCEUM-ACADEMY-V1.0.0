@@ -21,6 +21,7 @@ interface NewContactFormProps {
     onNavigateToCRM: () => void;
     onNavigateToTasks: () => void;
     onNavigateToCourses: () => void;
+    onNavigateToForms: () => void;
     onSave: (contact: Contact) => Promise<Contact | null>;
     onComposeAIEmail: (prompt: string, contact: Contact) => void;
     user: User;
@@ -206,6 +207,7 @@ const NewContactForm: React.FC<NewContactFormProps> = ({
     onNavigateToCRM,
     onNavigateToTasks,
     onNavigateToCourses,
+    onNavigateToForms,
     onSave,
     onComposeAIEmail,
     user,
@@ -545,6 +547,7 @@ const NewContactForm: React.FC<NewContactFormProps> = ({
                 <button onClick={onNavigateToCRM} disabled={!contact} className="ml-4 px-1 py-3 font-medium text-gray-500 dark:text-gray-400 hover:text-lyceum-blue disabled:opacity-50 disabled:cursor-not-allowed">CRM</button>
                 <button onClick={onNavigateToTasks} disabled={!contact} className="ml-4 px-1 py-3 font-medium text-gray-500 dark:text-gray-400 hover:text-lyceum-blue disabled:opacity-50 disabled:cursor-not-allowed">Tasks</button>
                 <button onClick={onNavigateToCourses} disabled={!contact} className="ml-4 px-1 py-3 font-medium text-gray-500 dark:text-gray-400 hover:text-lyceum-blue disabled:opacity-50 disabled:cursor-not-allowed">Courses</button>
+                <button onClick={onNavigateToForms} disabled={!contact} className="ml-4 px-1 py-3 font-medium text-gray-500 dark:text-gray-400 hover:text-lyceum-blue disabled:opacity-50 disabled:cursor-not-allowed">Forms</button>
 
                 <button
                     onClick={() => setCurrentTab('visa')}

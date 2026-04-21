@@ -902,10 +902,10 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
                                                                 </span>
                                                                 <div className="flex items-center gap-1.5">
                                                                     <span className="text-[10px] font-bold italic text-gray-400">
-                                                                        {tx.status}
+                                                                        {String(tx.status || 'Draft')}
                                                                     </span>
                                                                     <span className="text-[10px] font-bold text-blue-500 px-1.5 bg-blue-50 rounded italic whitespace-nowrap">
-                                                                        {tx.subTransactions?.length || 0} Invoices
+                                                                        {Number(tx.subTransactions?.length || 0)} Invoices
                                                                     </span>
                                                                 </div>
                                                             </div>
@@ -1020,17 +1020,17 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
                                                                                                     </svg>
                                                                                                 </button>
                                                                                             </td>
-                                                                                            <td className="px-2 py-2 font-bold text-gray-700 dark:text-gray-300">{subTx.id}</td>
+                                                                                            <td className="px-2 py-2 font-bold text-gray-700 dark:text-gray-300">{String(subTx.id || '—')}</td>
                                                                                             <td className="px-2 py-2 text-gray-500">{new Date(subTx.date).toLocaleDateString()}</td>
                                                                                             <td className="px-2 py-2 uppercase font-bold text-[9px] text-emerald-600 dark:text-emerald-400">
-                                                                                                {subTx.type}
+                                                                                                {String(subTx.type || 'Income')}
                                                                                             </td>
                                                                                             <td className="px-2 py-2 text-[10px] text-gray-500 max-w-[200px] truncate">
                                                                                                 {subTx.lineItems && subTx.lineItems.length > 0 
-                                                                                                    ? subTx.lineItems.map((item: any) => item.name || item.description).join(", ") 
+                                                                                                    ? subTx.lineItems.map((item: any) => String(item.name || item.description || 'Unnamed')).join(", ") 
                                                                                                     : "No description"}
                                                                                             </td>
-                                                                                            <td className="px-2 py-2 text-right font-bold text-gray-900 dark:text-white">₹{subTx.amount.toLocaleString()}</td>
+                                                                                            <td className="px-2 py-2 text-right font-bold text-gray-900 dark:text-white">₹{Number(subTx.amount || 0).toLocaleString()}</td>
                                                                                         </tr>
 
                                                                                         {expandedSubTxId === subTx.id && (
@@ -1052,10 +1052,10 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
                                                                                                                 <tbody className="divide-y divide-gray-50 dark:divide-gray-800 bg-white dark:bg-gray-900/50">
                                                                                                                     {subTx.lineItems.map((item: any, idx: number) => (
                                                                                                                         <tr key={idx} className="text-gray-600 dark:text-gray-400 hover:bg-gray-50/50 dark:hover:bg-gray-800/30">
-                                                                                                                            <td className="px-3 py-1.5 font-medium">{item.name || item.description || 'Unnamed Item'}</td>
-                                                                                                                            <td className="text-right px-3 py-1.5 tabular-nums">{item.quantity}</td>
-                                                                                                                            <td className="text-right px-3 py-1.5 tabular-nums">₹{(item.rate || item.price || 0).toLocaleString()}</td>
-                                                                                                                            <td className="text-right px-3 py-1.5 tabular-nums font-bold text-gray-900 dark:text-white">₹{(item.amount || (item.quantity * (item.rate || item.price || 0))).toLocaleString()}</td>
+                                                                                                                            <td className="px-3 py-1.5 font-medium">{String(item.name || item.description || 'Unnamed Item')}</td>
+                                                                                                                            <td className="text-right px-3 py-1.5 tabular-nums">{Number(item.quantity || 0)}</td>
+                                                                                                                            <td className="text-right px-3 py-1.5 tabular-nums">₹{Number(item.rate || item.price || 0).toLocaleString()}</td>
+                                                                                                                            <td className="text-right px-3 py-1.5 tabular-nums font-bold text-gray-900 dark:text-white">₹{Number(item.amount || (item.quantity * (item.rate || item.price || 0))).toLocaleString()}</td>
                                                                                                                         </tr>
                                                                                                                     ))}
                                                                                                                 </tbody>
@@ -1150,19 +1150,18 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
                                                     </div>
                                                     <div>
                                                         <div className="font-semibold text-gray-900 dark:text-white text-sm">
-                                                            {session.username}
+                                                            {String(session.username || 'Unknown')}
                                                             {isMe && view === 'active' && <span className="ml-2 text-xs text-blue-500 font-normal">(you)</span>}
                                                         </div>
                                                         <div className="flex items-center gap-1.5 mt-0.5">
-                                                            <span className={getRoleBadge(session.role)}>{session.role}</span>
+                                                            <span className={getRoleBadge(session.role)}>{String(session.role || 'User')}</span>
                                                         </div>
                                                     </div>
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4">
-                                                <div className="text-sm font-medium text-gray-700 dark:text-gray-200 flex items-center gap-2">
-                                                    <div className="w-1.5 h-1.5 rounded-full bg-blue-400" />
-                                                    {session.last_page || (view === 'active' ? 'Apps' : 'Ended')}
+                                                <div className="inline-flex items-center px-2 py-0.5 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 text-[10px] font-black uppercase tracking-widest border border-gray-200 dark:border-gray-700">
+                                                    {String(session.current_page || 'Home')}
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4">
@@ -1172,7 +1171,7 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
                                                         <span>{getBrowserName(session.device_info || '')}</span>
                                                     </div>
                                                     <span className="text-[10px] font-mono text-gray-400 uppercase">
-                                                        {session.ip_address || '—'}
+                                                        {String(session.ip_address || '—')}
                                                     </span>
                                                 </div>
                                             </td>
@@ -1212,7 +1211,7 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
                                                             h.reason === 'Terminated by Admin' ? 'bg-red-100 text-red-600' :
                                                                 'bg-amber-100 text-amber-600'
                                                             }`}>
-                                                            {h.reason || 'Closed'}
+                                                            {String(h.reason || 'Closed')}
                                                         </span>
                                                     </div>
                                                 )}
@@ -1277,7 +1276,7 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
                                     </span>
                                     Activity Logs
                                 </h3>
-                                <p className="text-xs text-gray-500 mt-1">Showing last 1000 requests for key ID: {selectedKeyForLogs}</p>
+                                <p className="text-xs text-gray-500 mt-1">Showing last 1000 requests for key ID: {String(selectedKeyForLogs)}</p>
                             </div>
                             <button
                                 onClick={() => setSelectedKeyForLogs(null)}
@@ -1328,8 +1327,8 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
                                             {[
                                                 { label: 'Total Volume', value: total, icon: '📊', sub: 'Last 1000 requests' },
                                                 { label: 'Success Rate', value: `${successRate}%`, icon: '✅', sub: `${success} successful`, color: successRate > 90 ? 'text-green-500' : 'text-amber-500' },
-                                                { label: 'Top Endpoint', value: topEndpoint.split('/').pop() || '/', icon: '📍', sub: topEndpoint, truncate: true },
-                                                { label: 'Primary Tool', value: topTool, icon: '🛠️', sub: 'Most active client' },
+                                                { label: 'Top Endpoint', value: String(topEndpoint).split('/').pop() || '/', icon: '📍', sub: String(topEndpoint), truncate: true },
+                                                { label: 'Primary Tool', value: String(topTool), icon: '🛠️', sub: 'Most active client' },
                                             ].map((stat, i) => (
                                                 <div key={i} className="bg-gray-50 dark:bg-gray-800/50 rounded-2xl p-4 border border-gray-100 dark:border-gray-700/50">
                                                     <div className="flex items-center gap-2 text-gray-400 text-[10px] font-bold uppercase tracking-wider mb-2">
@@ -1338,7 +1337,7 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
                                                     <div className={`text-xl font-black truncate ${stat.color || 'text-gray-900 dark:text-white'}`}>
                                                         {stat.value}
                                                     </div>
-                                                    <div className="text-[10px] text-gray-400 mt-1 truncate" title={stat.sub as string}>
+                                                    <div className="text-[10px] text-gray-400 mt-1 truncate" title={String(stat.sub)}>
                                                         {stat.sub}
                                                     </div>
                                                 </div>
@@ -1361,20 +1360,20 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
                                                                     log.method === 'DELETE' ? 'bg-red-100 text-red-600' :
                                                                         'bg-amber-100 text-amber-600'
                                                                 }`}>
-                                                                {log.method}
+                                                                {String(log.method || 'REQ')}
                                                             </div>
                                                             <div>
-                                                                <div className="text-sm font-bold text-gray-900 dark:text-white font-mono">{log.endpoint}</div>
+                                                                <div className="text-sm font-bold text-gray-900 dark:text-white font-mono">{String(log.endpoint || '/')}</div>
                                                                 <div className="flex items-center gap-3 mt-1 underline-offset-4">
                                                                     <span className="text-[10px] text-gray-400 font-mono flex items-center gap-1">
                                                                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                                                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                                                                         </svg>
-                                                                        {log.ip_address}
+                                                                        {String(log.ip_address || '—')}
                                                                     </span>
-                                                                    <span className="text-[10px] text-gray-400 font-medium flex items-center gap-1 bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded" title={log.user_agent}>
-                                                                        {uaInfo.icon} {uaInfo.label}
+                                                                    <span className="text-[10px] text-gray-400 font-medium flex items-center gap-1 bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded" title={String(log.user_agent || '')}>
+                                                                        {uaInfo.icon} {String(uaInfo.label || 'Unknown Client')}
                                                                     </span>
                                                                     <span className="text-[10px] text-gray-400 flex items-center gap-1">
                                                                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1388,7 +1387,7 @@ const ActiveSessionsView: React.FC<Props> = ({ currentUser }) => {
                                                         <div className="flex items-center gap-3">
                                                             <span className={`px-2.5 py-1 rounded-lg text-xs font-black ${log.status_code >= 400 ? 'bg-red-100 text-red-600' : 'bg-blue-50 text-blue-600'
                                                                 }`}>
-                                                                {log.status_code}
+                                                                {String(log.status_code || '0')}
                                                             </span>
                                                         </div>
                                                     </div>

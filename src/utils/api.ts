@@ -1,6 +1,7 @@
 import type {
   CalendarEvent, Contact, CrmLead, AccountingTransaction, CrmStage, Quotation, User, UserRole, AppPermissions, ActivityLog, DocumentAnalysisResult, Document as Doc, ChecklistItem, QuotationTemplate, Visitor, TodoTask, Ticket, PaymentActivityLog, LmsCourse, LmsLesson, LmsModule, Coupon, ContactActivity, ContactActivityAction, DiscussionPost, DiscussionThread, RecordedSession, Channel, Notification, RecurringTask, VisaOperation,
-  UniversityCourse, Announcement, EmailTemplate, ApiKey, ClassSession, SessionAttendance, ActivitySubmission, PaginatedResponse
+  UniversityCourse, Announcement, EmailTemplate, ApiKey, ClassSession, SessionAttendance, ActivitySubmission, PaginatedResponse,
+  FormTemplate, FormAssignment, FormSubmission, FormStatus
 } from '../types';
 import { DEFAULT_PERMISSIONS, DEFAULT_CHECKLIST } from '@/lib/constants';
 
@@ -2360,4 +2361,80 @@ export const updateSessionLesson = async (sessionId: string | number, lessonId: 
     method: 'POST',
     body: JSON.stringify({ lessonId }),
   });
+};
+
+// --- Forms Application API ---
+
+export const getFormTemplates = async (): Promise<FormTemplate[]> => {
+    return apiRequest<FormTemplate[]>('/forms/templates');
+};
+
+export const saveFormTemplate = async (template: FormTemplate): Promise<FormTemplate> => {
+    return apiRequest<FormTemplate>('/forms/templates', {
+        method: 'POST',
+        body: JSON.stringify(template),
+    });
+};
+
+export const deleteFormTemplate = async (templateId: string): Promise<void> => {
+    await apiRequest(`/forms/templates/${templateId}`, {
+        method: 'DELETE',
+    });
+};
+
+export const getFormAssignments = async (studentId?: number): Promise<FormAssignment[]> => {
+    const assignments = await apiRequest<FormAssignment[]>('/forms/assignments');
+    if (studentId) {
+        return assignments.filter(a => Number(a.studentId) === Number(studentId));
+    }
+    return assignments;
+};
+
+export const assignForm = async (studentIds: number[], templateId: string, deadline?: string): Promise<void> => {
+    await apiRequest('/forms/assign', {
+        method: 'POST',
+        body: JSON.stringify({ studentIds, templateId, deadline }),
+    });
+};
+
+export const submitForm = async (assignmentId: string, submissionData: Record<string, any>): Promise<FormSubmission> => {
+    const result = await apiRequest<{ success: boolean; submissionId: string }>('/forms/submit', {
+        method: 'POST',
+        body: JSON.stringify({ assignmentId, data: submissionData }),
+    });
+    
+    return {
+        id: result.submissionId,
+        assignmentId,
+        studentId: 0, // Backend handles linkage
+        data: submissionData,
+        submittedAt: new Date().toISOString()
+    };
+};
+
+export const getFormSubmission = async (submissionId: string): Promise<FormSubmission | null> => {
+    const submissions = await getFormSubmissions();
+    return submissions.find(s => s.id === submissionId) || null;
+};
+
+export const getFormSubmissions = async (): Promise<FormSubmission[]> => {
+    return apiRequest<FormSubmission[]>('/forms/submissions');
+};
+
+export const processFormSubmission = async (
+    submissionId: string, 
+    status: 'Approved' | 'Rejected', 
+    notes: string
+): Promise<void> => {
+    // Backend update only - no profile synchronization per user request
+    await apiRequest('/forms/process', {
+        method: 'POST',
+        body: JSON.stringify({ submissionId, status, notes })
+    });
+};
+
+export const deleteFormAssignment = async (assignmentId: string): Promise<void> => {
+    await apiRequest(`/forms/assignments/${assignmentId}`, {
+        method: 'DELETE',
+    });
 };

@@ -33,7 +33,8 @@ import {
   Sparkles,
   Zap,
   FileUp,
-  Megaphone
+  Megaphone,
+  FileStack
 } from '@/components/common/icons';
 
 const PerformanceLogo = ({ size = 36 }: { size?: number }) => (
@@ -216,6 +217,12 @@ export const ODOO_APPS: OdooApp[] = [
     bgColor: 'bg-indigo-100',
     iconColor: 'text-indigo-600',
   },
+  {
+    name: 'Forms',
+    icon: <FileStack size={36} />,
+    bgColor: 'bg-violet-100',
+    iconColor: 'text-violet-600',
+  },
 ];
 
 export const STAFF_ROLES: UserRole[] = ['Admin', 'Staff'];
@@ -230,7 +237,7 @@ const adminPermissions = ODOO_APPS.reduce((acc, app) => {
   return acc;
 }, {} as { [appName: string]: AppPermissions });
 
-const employeeFullAccessApps = new Set(['Contacts', 'CRM', 'Calendar', 'Discuss', 'Tasks', 'Tickets', 'Reception', 'Sales', 'Analytics', 'LMS', 'Visitor Display', 'Department Dashboard', 'Attendance & Payroll', 'University Application', 'University Manager', 'Document manager', 'Employee Performance']);
+const employeeFullAccessApps = new Set(['Contacts', 'CRM', 'Calendar', 'Discuss', 'Tasks', 'Tickets', 'Reception', 'Sales', 'Analytics', 'LMS', 'Visitor Display', 'Department Dashboard', 'Attendance & Payroll', 'University Application', 'University Manager', 'Document manager', 'Employee Performance', 'Forms']);
 const employeeReadOnlyApps = new Set(['dashboard', 'Accounts']);
 const employeePermissions: { [appName: string]: AppPermissions } = ODOO_APPS.reduce((acc, app) => {
   if (employeeFullAccessApps.has(app.name)) {
@@ -251,6 +258,7 @@ export const DEFAULT_PERMISSIONS: Record<UserRole, { [appName: string]: AppPermi
     'Document manager': fullAccess,
     'Announcements': readOnly,
     'Mock Interview': readOnly,
+    'Forms': readOnly,
   },
 };
 

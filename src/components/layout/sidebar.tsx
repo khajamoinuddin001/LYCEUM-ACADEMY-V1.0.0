@@ -18,7 +18,8 @@ import {
   Target,
   Trash2,
   TrendingUp,
-  Megaphone
+  Megaphone,
+  FileStack
 } from '@/components/common/icons';
 import type { User, OdooApp } from '@/types';
 import { ODOO_APPS as ALL_ODOO_APPS } from '@/lib/constants';
@@ -72,6 +73,7 @@ const DEFAULT_STAFF_NAV = [
   { name: 'Reception', icon: <ConciergeBell size={20} /> },
   { name: 'Live Session Monitor', icon: <UserCheck size={20} /> },
   { name: 'Employee Performance', icon: <Target size={20} /> },
+  { name: 'Forms', icon: <FileStack size={20} /> },
 ];
 
 const DEFAULT_STUDENT_NAV = [
@@ -81,6 +83,7 @@ const DEFAULT_STUDENT_NAV = [
   { name: 'Announcements', label: 'Announcements', icon: <Megaphone size={20} /> },
   { name: 'Tickets', label: 'Tickets', icon: <FileText size={20} /> },
   { name: 'Mock Interview', label: 'Mock Interview', icon: <UserCheck size={20} /> },
+  { name: 'Forms', label: 'Forms', icon: <FileStack size={20} /> },
   { name: 'My Profile', label: 'My Profile', icon: <UserCircle size={20} /> },
 ];
 
@@ -233,7 +236,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, activeApp, onAppSe
         <NavItem
           key={item.name || item.label}
           icon={item.icon}
-          label={item.label || item.name}
+          label={String(item.label || item.name || 'App')}
           active={activeApp === item.name}
           onClick={() => onAppSelect(item.name)}
           draggable
@@ -253,7 +256,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, setIsOpen, activeApp, onAppSe
       <NavItem
         key={item.name}
         icon={item.icon}
-        label={item.name}
+        label={String(item.name || 'App')}
         active={activeApp === item.name}
         onClick={() => onAppSelect(item.name)}
         draggable

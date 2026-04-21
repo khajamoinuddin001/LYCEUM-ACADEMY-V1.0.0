@@ -1268,12 +1268,31 @@ router.get('/contacts', authenticateToken, async (req, res) => {
 
     // RBAC: Students only see their own contact record
     if (req.user.role === 'Student') {
-      const sql = 'SELECT * FROM contacts WHERE user_id = $1';
-      const result = await query(sql, [req.user.id]);
+      const studentEmail = req.user.email.toLowerCase().trim();
+      
+      // 1. Try to find by user_id link
+      let sql = 'SELECT * FROM contacts WHERE user_id = $1';
+      let result = await query(sql, [req.user.id]);
 
-      // Auto-create contact if student doesn't have one
+      // 2. If not found by ID, try to find by Email and link it
       if (result.rows.length === 0) {
-        console.log(`📝 Auto-creating contact for student user ${req.user.id} (${req.user.email})`);
+        console.log(`🔍 [Contacts] No direct link for student ${req.user.id}. Searching by email: ${studentEmail}`);
+        const emailResult = await query('SELECT * FROM contacts WHERE LOWER(TRIM(email)) = $1 AND user_id IS NULL LIMIT 1', [studentEmail]);
+        
+        if (emailResult.rows.length > 0) {
+          const contactToLink = emailResult.rows[0];
+          console.log(`🔗 [Contacts] Found unlinked contact ${contactToLink.id} with matching email. Linking to user ${req.user.id}...`);
+          
+          await query('UPDATE contacts SET user_id = $1 WHERE id = $2', [req.user.id, contactToLink.id]);
+          
+          // Re-fetch to get updated record
+          result = await query('SELECT * FROM contacts WHERE id = $1', [contactToLink.id]);
+        }
+      }
+
+      // 3. Still not found? Auto-create as last resort
+      if (result.rows.length === 0) {
+        console.log(`📝 [Contacts] Auto-creating contact for student user ${req.user.id} (${req.user.email})`);
 
         const contactId = `LA${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}${String(req.user.id).padStart(3, '0')} `;
         const defaultChecklist = DEFAULT_CHECKLIST_ITEMS;
@@ -9079,6 +9098,213 @@ router.post('/mock-interview/generate-feedback', authenticateToken, async (req, 
     res.json(data);
   } catch (error) {
     console.error('AI Feedback generation error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// --- FORMS SYSTEM API ---
+
+// Templates
+router.get('/forms/templates', authenticateToken, async (req, res) => {
+  try {
+    const result = await query('SELECT * FROM form_templates ORDER BY created_at DESC');
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/forms/templates', authenticateToken, requireRole('Admin', 'Staff'), async (req, res) => {
+  try {
+    const { id, title, description, sections } = req.body;
+    const result = await query(`
+      INSERT INTO form_templates (id, title, description, sections)
+      VALUES ($1, $2, $3, $4)
+      ON CONFLICT (id) DO UPDATE SET
+        title = EXCLUDED.title,
+        description = EXCLUDED.description,
+        sections = EXCLUDED.sections,
+        updated_at = CURRENT_TIMESTAMP
+      RETURNING *
+    `, [id || `form-${Date.now()}`, title, description, JSON.stringify(sections || [])]);
+    res.json(result.rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete('/forms/templates/:id', authenticateToken, requireRole('Admin', 'Staff'), async (req, res) => {
+  try {
+    await query('DELETE FROM form_templates WHERE id = $1', [req.params.id]);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Assignments
+router.get('/forms/assignments', authenticateToken, async (req, res) => {
+  try {
+    const isStudent = req.user.role === 'Student';
+    let sql = 'SELECT * FROM form_assignments';
+    let params = [];
+
+    if (isStudent) {
+      // Find ALL contacts associated with this student
+      const contactRes = await query('SELECT id FROM contacts WHERE user_id = $1', [req.user.id]);
+      if (contactRes.rows.length === 0) return res.json([]);
+      
+      const contactIds = contactRes.rows.map(r => r.id);
+      sql += ` WHERE student_id IN (${contactIds.map((_, i) => `$${i + 1}`).join(', ')})`;
+      params = contactIds;
+    }
+
+    sql += ' ORDER BY assigned_at DESC';
+    const result = await query(sql, params);
+    res.json(result.rows.map(row => ({
+      ...row,
+      templateId: row.template_id,
+      studentId: row.student_id,
+      assignedAt: row.assigned_at,
+      submissionId: row.submission_id
+    })));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/forms/assign', authenticateToken, requireRole('Admin', 'Staff'), async (req, res) => {
+  try {
+    const { studentIds, templateId, deadline } = req.body;
+    
+    for (const sid of studentIds) {
+      await query(`
+        INSERT INTO form_assignments (id, template_id, student_id, deadline, status)
+        VALUES ($1, $2, $3, $4, 'Pending')
+      `, [`asgn-${Date.now()}-${sid}`, templateId, sid, deadline || null]);
+    }
+    
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete('/forms/assignments/:id', authenticateToken, requireRole('Admin', 'Staff'), async (req, res) => {
+  try {
+    await query('DELETE FROM form_assignments WHERE id = $1', [req.params.id]);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Submissions
+router.get('/forms/submissions', authenticateToken, async (req, res) => {
+  try {
+    const isStudent = req.user.role === 'Student';
+    let sql = 'SELECT * FROM form_submissions';
+    let params = [];
+
+    if (isStudent) {
+      const contactRes = await query('SELECT id FROM contacts WHERE user_id = $1', [req.user.id]);
+      if (contactRes.rows.length === 0) return res.json([]);
+      const contactId = contactRes.rows[0].id;
+      sql += ' WHERE student_id = $1';
+      params.push(contactId);
+    }
+
+    sql += ' ORDER BY submitted_at DESC';
+    const result = await query(sql, params);
+    res.json(result.rows.map(row => ({
+      ...row,
+      assignmentId: row.assignment_id,
+      studentId: row.student_id,
+      submittedAt: row.submitted_at,
+      processedBy: row.processed_by,
+      processedAt: row.processed_at,
+      processingNotes: row.processing_notes
+    })));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/forms/submit', authenticateToken, async (req, res) => {
+  try {
+    const { assignmentId, data } = req.body;
+    
+    // Auth check: verify assignment belongs to student
+    const asgnRes = await query(`
+      SELECT fa.*, c.user_id 
+      FROM form_assignments fa 
+      JOIN contacts c ON c.id = fa.student_id 
+      WHERE fa.id = $1
+    `, [assignmentId]);
+
+    if (asgnRes.rows.length === 0) return res.status(404).json({ error: 'Assignment not found' });
+    const assignment = asgnRes.rows[0];
+
+    if (req.user.role === 'Student' && assignment.user_id !== req.user.id) {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+
+    const submissionId = `sub-${Date.now()}`;
+    
+    await query('BEGIN');
+    
+    await query(`
+      INSERT INTO form_submissions (id, assignment_id, student_id, data)
+      VALUES ($1, $2, $3, $4)
+    `, [submissionId, assignmentId, assignment.student_id, JSON.stringify(data)]);
+
+    await query(`
+      UPDATE form_assignments 
+      SET status = 'Submitted', submission_id = $1 
+      WHERE id = $2
+    `, [submissionId, assignmentId]);
+
+    await query('COMMIT');
+    
+    res.json({ success: true, submissionId });
+  } catch (error) {
+    await query('ROLLBACK');
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/forms/process', authenticateToken, requireRole('Admin', 'Staff'), async (req, res) => {
+  try {
+    const { submissionId, status, notes } = req.body;
+    
+    await query('BEGIN');
+    
+    const subRes = await query('SELECT assignment_id FROM form_submissions WHERE id = $1', [submissionId]);
+    if (subRes.rows.length === 0) {
+      await query('ROLLBACK');
+      return res.status(404).json({ error: 'Submission not found' });
+    }
+    
+    const assignmentId = subRes.rows[0].assignment_id;
+    
+    await query(`
+      UPDATE form_assignments 
+      SET status = $1 
+      WHERE id = $2
+    `, [status, assignmentId]);
+    
+    await query(`
+      UPDATE form_submissions 
+      SET processed_at = CURRENT_TIMESTAMP, 
+          processed_by = $1, 
+          processing_notes = $2 
+      WHERE id = $3
+    `, [req.user.id, notes, submissionId]);
+    
+    await query('COMMIT');
+    res.json({ success: true });
+  } catch (error) {
+    await query('ROLLBACK');
     res.status(500).json({ error: error.message });
   }
 });

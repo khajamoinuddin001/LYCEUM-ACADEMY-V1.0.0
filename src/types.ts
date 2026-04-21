@@ -130,6 +130,88 @@ export interface Document {
   category?: string;
 }
 
+export interface ContactForm {
+  id: number;
+  name: string;
+  status: FormStatus;
+  allocatedAt: string;
+  submittedAt?: string;
+  reviewedAt?: string;
+  formId: string; // ID of the template from the Forms application
+  submissionId?: string;
+  response?: any;
+}
+
+export type FormElementType = 
+  | 'text' 
+  | 'long-text' 
+  | 'email' 
+  | 'phone' 
+  | 'date' 
+  | 'dropdown' 
+  | 'radio' 
+  | 'checkbox' 
+  | 'number' 
+  | 'file-upload-note' 
+  | 'signature';
+
+export interface FormField {
+  id: string;
+  type: FormElementType;
+  label: string;
+  placeholder?: string;
+  required?: boolean;
+  mapping?: string; // e.g., "passportNo" or "address.street1"
+  options?: string[]; // For dropdown, radio, checkbox
+  helpText?: string;
+  conditionalLogic?: {
+    fieldId: string;
+    operator: 'equals' | 'not-equals' | 'contains';
+    value: any;
+  };
+  signatureType?: 'draw' | 'type' | 'both'; // For signature fields
+  declarationText?: string; // For signature fields
+}
+
+export interface FormSection {
+  id: string;
+  title: string;
+  description?: string;
+  fields: FormField[];
+}
+
+export interface FormTemplate {
+  id: string;
+  title: string;
+  description: string;
+  sections: FormSection[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type FormStatus = 'Pending' | 'In Progress' | 'Submitted' | 'Approved' | 'Rejected' | 'Expired';
+
+export interface FormAssignment {
+  id: string;
+  templateId: string;
+  studentId: number;
+  status: FormStatus;
+  assignedAt: string;
+  deadline?: string;
+  submissionId?: string;
+}
+
+export interface FormSubmission {
+  id: string;
+  assignmentId: string;
+  studentId: number;
+  data: Record<string, any>;
+  submittedAt: string;
+  processedBy?: number;
+  processedAt?: string;
+  processingNotes?: string;
+}
+
 export interface StaffNote {
   id: string;
   text: string;
@@ -455,6 +537,7 @@ export interface Contact {
   };
   applicationEmail?: string;
   applicationPassword?: string;
+  forms?: ContactForm[];
   createdAt?: string;
 }
 

@@ -87,6 +87,8 @@ import AnouncementView from '@/features/announcement/announcement_view';
 import StudentAnnouncementsView from '@/features/students/student_announcements_view';
 import AdminMockInterviewView from '@/features/mock_interview/admin_mock_interview_view';
 import StudentMockInterviewView from '@/features/students/student_mock_interview_view';
+import FormsView from '@/features/forms/forms_view';
+import ContactFormsView from '@/features/students/contact_forms_view';
 import ConfirmationModal from '@/components/common/confirmation_modal';
 import {
   DndContext,
@@ -109,7 +111,7 @@ import { Target } from '@/components/common/icons';
 
 
 
-type ContactViewMode = 'details' | 'documents' | 'visaFiling' | 'checklist' | 'visits' | 'crm' | 'tasks';
+type ContactViewMode = 'details' | 'documents' | 'visaFiling' | 'checklist' | 'visits' | 'crm' | 'tasks' | 'courses' | 'forms';
 
 // ... (keep existing imports)
 import { Routes, Route } from 'react-router-dom';
@@ -890,7 +892,7 @@ const DashboardLayout: React.FC = () => {
       logActivity(`Deleted contact (ID: ${id})`);
     } catch (error: any) {
       console.error('Failed to delete contact:', error);
-      addNotification({ title: 'Delete Failed', description: error.message || 'Failed to delete contact', type: 'error' });
+      addNotification({ title: 'Delete Failed', description: String(error.message || 'Failed to delete contact'), type: 'error' });
     }
   };
 
@@ -906,7 +908,7 @@ const DashboardLayout: React.FC = () => {
       addNotification({ title: 'Quotation Approved', description: 'Quotation has been approved and Lead marked as WON.', type: 'success' });
     } catch (error: any) {
       console.error('Failed to approve quotation:', error);
-      addNotification({ title: 'Approval Failed', description: error.message, type: 'error' });
+      addNotification({ title: 'Approval Failed', description: String(error.message || 'Unknown error'), type: 'error' });
     }
   };
 
@@ -922,7 +924,7 @@ const DashboardLayout: React.FC = () => {
       addNotification({ title: 'Quotation Accepted', description: 'Quotation marked as accepted and Lead marked as WON.', type: 'success' });
     } catch (error: any) {
       console.error('Failed to manual accept quotation:', error);
-      addNotification({ title: 'Action Failed', description: error.message, type: 'error' });
+      addNotification({ title: 'Action Failed', description: String(error.message || 'Unknown error'), type: 'error' });
     }
   };
 
@@ -1259,8 +1261,8 @@ const DashboardLayout: React.FC = () => {
         }
 
         addNotification({
-          title: `New ${tx.type} Created`,
-          description: `${tx.type} ${tx.id} for ${tx.customerName} has been created${(data as any).linkedArId ? ' and linked to fee' : ''}.`,
+          title: `New ${String(tx.type || 'Transaction')} Created`,
+          description: `${String(tx.type || 'Transaction')} ${String(tx.id || '')} for ${String(tx.customerName || 'Customer')} has been created${(data as any).linkedArId ? ' and linked to fee' : ''}.`,
           recipientRoles: ['Admin', 'Staff']
         });
         await api.logPaymentActivity(`${tx.type} ${tx.id} for ${tx.customerName} was created.`, tx.amount, 'invoice_created');
@@ -2414,10 +2416,11 @@ const DashboardLayout: React.FC = () => {
           if (contactData && contactViewMode === 'crm') return <ContactCrmView contact={contactData} leads={leads} onNavigateBack={() => setContactViewMode('details')} user={currentUser} onSaveTask={handleSaveTask} onSaveQuotation={handleSaveContactQuotation} quotationTemplates={quotationTemplates} onSaveTemplate={handleSaveQuotationTemplate} onDeleteTemplate={handleDeleteQuotationTemplate} onDeleteContact={handleDeleteContact} onApproveQuotation={handleApproveQuotation} onManualAcceptQuotation={handleManualAcceptQuotation} onDeleteQuotation={async (leadId, quotationId) => { setConfirmModal({ isOpen: true, title: 'Delete Quotation', message: 'Are you sure you want to delete this quotation? This action cannot be undone.', onConfirm: async () => { const updatedLeads = await api.deleteQuotation(leadId, quotationId); setLeads(updatedLeads); const updatedContacts = await api.getContacts(); setContacts(updatedContacts); } }); }} />;
           if (contactData && contactViewMode === 'tasks') return <ContactTasksView contact={contactData} tasks={tasks} user={currentUser} onNavigateBack={() => setContactViewMode('details')} onSaveTask={handleSaveTask} />;
           if (contactData && contactViewMode === 'courses') return <ContactCoursesView contact={contactData} user={currentUser} onNavigateBack={() => setContactViewMode('details')} courses={lmsCourses} />;
+          if (contactData && contactViewMode === 'forms') return <ContactFormsView contact={contactData} user={currentUser} onNavigateBack={() => setContactViewMode('details')} />;
 
           // Render form if we have data OR if we are creating a new contact
           if (contactData || editingContact === 'new') {
-            return <NewContactForm user={currentUser} users={users} contact={contactData} contacts={contacts} onNavigateBack={handleBackToContacts} onNavigateToDocuments={() => setContactViewMode('documents')} onNavigateToVisa={() => setContactViewMode('visaFiling')} onNavigateToChecklist={() => setContactViewMode('checklist')} onNavigateToVisits={() => setContactViewMode('visits')} onNavigateToCRM={() => setContactViewMode('crm')} onNavigateToTasks={() => setContactViewMode('tasks')} onNavigateToCourses={() => setContactViewMode('courses')} onSave={handleSaveContact} onComposeAIEmail={handleGenerateEmailDraft} onAddSessionVideo={api.addSessionVideo} onDeleteSessionVideo={api.deleteSessionVideo} transactions={transactions} tasks={tasks} onSaveTask={handleSaveTask} onDeleteContact={handleDeleteContact} visaOperations={visaOperations} onOperationCreated={handleOperationCreated} onPrintTransaction={setPrintingTransaction} />;
+            return <NewContactForm user={currentUser} users={users} contact={contactData} contacts={contacts} onNavigateBack={handleBackToContacts} onNavigateToDocuments={() => setContactViewMode('documents')} onNavigateToVisa={() => setContactViewMode('visaFiling')} onNavigateToChecklist={() => setContactViewMode('checklist')} onNavigateToVisits={() => setContactViewMode('visits')} onNavigateToCRM={() => setContactViewMode('crm')} onNavigateToTasks={() => setContactViewMode('tasks')} onNavigateToCourses={() => setContactViewMode('courses')} onNavigateToForms={() => setContactViewMode('forms')} onSave={handleSaveContact} onComposeAIEmail={handleGenerateEmailDraft} onAddSessionVideo={api.addSessionVideo} onDeleteSessionVideo={api.deleteSessionVideo} transactions={transactions} tasks={tasks} onSaveTask={handleSaveTask} onDeleteContact={handleDeleteContact} visaOperations={visaOperations} onOperationCreated={handleOperationCreated} onPrintTransaction={setPrintingTransaction} />;
           }
         }
         return <ContactsView contacts={contacts} onContactSelect={handleContactSelect} onNewContactClick={handleNewContactClick} user={currentUser} />;
@@ -2498,6 +2501,7 @@ const DashboardLayout: React.FC = () => {
       case 'Analytics': return <MarketingView />;
       case 'University Manager': return <UniversityManager user={currentUser} />;
       case 'Live Session Monitor': return <ActiveSessionsView currentUser={{ id: currentUser.id, role: currentUser.role }} />;
+      case 'Forms': return <FormsView user={currentUser} student={studentContact} />;
       case 'Document manager': return <StaffDocumentManagerView />;
       default: return <AppView appName={activeApp} onNavigateBack={() => handleAppSelect('Apps')} />;
     }
