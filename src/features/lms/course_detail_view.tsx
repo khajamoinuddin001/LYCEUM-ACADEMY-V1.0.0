@@ -143,6 +143,7 @@ const CourseDetailView: React.FC<CourseDetailViewProps> = (props) => {
     const [showEnrollModal, setShowEnrollModal] = useState(false);
 
     const isAdmin = user.role === 'Admin';
+    const canManage = user.role === 'Admin' || user.role === 'Staff';
     const isEnrolled = !!(student?.lmsProgress?.[course.id]);
     const isStudent = user.role === 'Student';
 
@@ -203,7 +204,7 @@ const CourseDetailView: React.FC<CourseDetailViewProps> = (props) => {
                     <div className="flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50">
                         <div onClick={() => toggleModule(module.id)} className="flex items-center text-left flex-grow cursor-pointer select-none">
                             <span className="text-lg font-bold text-lyceum-blue mr-4">{String(index + 1).padStart(2, '0')}</span>
-                            {isAdmin ? (
+                            {canManage ? (
                                 <ModuleEditor module={module} courseId={course.id} onModuleUpdate={onModuleUpdate} onModuleDelete={onModuleDelete} />
                             ) : (
                                 <h3 className="font-semibold text-gray-800 dark:text-gray-100">{module.title}</h3>
@@ -233,7 +234,7 @@ const CourseDetailView: React.FC<CourseDetailViewProps> = (props) => {
                                                     {lesson.videoUrl && <Video size={16} className="text-gray-400 dark:text-gray-500" />}
                                                 </div>
                                             </button>
-                                            {isAdmin && (
+                                            {canManage && (
                                                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                                     <button type="button" onClick={(e) => { e.stopPropagation(); e.preventDefault(); onLessonUpdate(lesson); }} className="p-1 text-gray-400 hover:text-lyceum-blue"><Edit size={16} /></button>
                                                     <button type="button" onClick={(e) => { e.stopPropagation(); e.preventDefault(); onLessonDelete(course.id, lesson.id); }} className="p-1 text-gray-400 hover:text-red-500"><Trash2 size={16} /></button>
@@ -257,7 +258,7 @@ const CourseDetailView: React.FC<CourseDetailViewProps> = (props) => {
                     )}
                 </div>
             ))}
-            {isAdmin && (
+            {canManage && (
                 <div className="p-4 flex items-center gap-2">
                     <input
                         type="text"
@@ -301,7 +302,7 @@ const CourseDetailView: React.FC<CourseDetailViewProps> = (props) => {
                             <div className="p-3 rounded-full bg-lyceum-blue/10 dark:bg-lyceum-blue/20 text-lyceum-blue">
                                 <BookOpen size={24} />
                             </div>
-                            {(user.role === 'Admin' || user.role === 'Staff') && (
+                            {canManage && (
                                 <button
                                     onClick={() => {
                                         const firstLesson = course.modules[0]?.lessons[0];
@@ -335,7 +336,7 @@ const CourseDetailView: React.FC<CourseDetailViewProps> = (props) => {
                         </div>
                     </div>
                 </div>
-                {isAdmin && (
+                {canManage && (
                     <div className="px-6 pb-6 pt-0 border-b border-gray-100 dark:border-gray-700/50 flex">
                         <button
                             onClick={() => setShowEnrollModal(true)}
@@ -361,7 +362,7 @@ const CourseDetailView: React.FC<CourseDetailViewProps> = (props) => {
                         >
                             <MessageCircle size={16} /> Discussions
                         </button>
-                        {isAdmin && (
+                        {canManage && (
                             <button
                                 onClick={() => setViewMode('analytics')}
                                 className={`flex items-center gap-2 py-3 px-1 text-sm font-medium border-b-2 ${viewMode === 'analytics' ? 'border-lyceum-blue text-lyceum-blue' : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-200'}`}
@@ -372,7 +373,7 @@ const CourseDetailView: React.FC<CourseDetailViewProps> = (props) => {
                     </nav>
                 </div>
 
-                {viewMode === 'analytics' && isAdmin ? (
+                {viewMode === 'analytics' && canManage ? (
                     <CourseAnalyticsView course={course} enrolledStudents={enrolledStudents} />
                 ) : viewMode === 'discussions' ? (
                     <CourseDiscussionsView course={course} user={user} users={users} onSavePost={onSavePost} />

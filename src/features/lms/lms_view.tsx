@@ -21,11 +21,11 @@ const CourseCard: React.FC<{
     onSelect: () => void;
     onEdit: () => void;
     onDelete: () => void;
-    isAdmin: boolean;
+    canManage: boolean;
     isStudent: boolean;
     isEnrolled: boolean;
     onPurchase: () => void;
-}> = ({ course, progress, onSelect, onEdit, onDelete, isAdmin, isStudent, isEnrolled, onPurchase }) => {
+}> = ({ course, progress, onSelect, onEdit, onDelete, canManage, isStudent, isEnrolled, onPurchase }) => {
     const [menuOpen, setMenuOpen] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
 
@@ -51,7 +51,7 @@ const CourseCard: React.FC<{
             onClick={onSelect}
             className="group relative bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 flex flex-col transition-all duration-300 hover:shadow-lg hover:-translate-y-1 cursor-pointer"
         >
-            {isAdmin && (
+            {canManage && (
                 <div ref={menuRef} className="absolute top-4 right-4">
                     <button onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen); }} className="p-1 rounded-full text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700">
                         <MoreHorizontal size={20} />
@@ -116,6 +116,7 @@ const CourseCard: React.FC<{
 const LmsView: React.FC<LmsViewProps> = ({ courses, onCourseSelect, user, contacts, onNewCourse, onEditCourse, onDeleteCourse, onInitiatePurchase }) => {
     const studentContact = contacts.find(c => c.userId === user.id);
     const isAdmin = user.role === 'Admin';
+    const canManage = user.role === 'Admin' || user.role === 'Staff';
     const isStudent = user.role === 'Student';
     
     return (
@@ -125,7 +126,7 @@ const LmsView: React.FC<LmsViewProps> = ({ courses, onCourseSelect, user, contac
                     <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-100">Learning Management System</h1>
                     <p className="text-gray-500 dark:text-gray-400 mt-1">Browse and start your enrolled courses.</p>
                 </div>
-                {isAdmin && (
+                {canManage && (
                     <button
                         onClick={onNewCourse}
                         className="inline-flex items-center px-4 py-2 bg-lyceum-blue text-white rounded-md shadow-sm hover:bg-lyceum-blue-dark focus:outline-none focus:ring-2 focus:ring-offset-2 dark:focus:ring-offset-gray-800 focus:ring-lyceum-blue"
@@ -150,7 +151,7 @@ const LmsView: React.FC<LmsViewProps> = ({ courses, onCourseSelect, user, contac
                             onSelect={() => onCourseSelect(course)}
                             onEdit={() => onEditCourse(course)}
                             onDelete={() => onDeleteCourse(course.id)}
-                            isAdmin={isAdmin}
+                            canManage={canManage}
                             isStudent={isStudent}
                             isEnrolled={isEnrolled}
                             onPurchase={() => onInitiatePurchase(course)}
