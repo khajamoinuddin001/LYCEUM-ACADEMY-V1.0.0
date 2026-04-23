@@ -153,8 +153,8 @@ export async function evaluateAutomation(triggerEvent, payload) {
     try {
         console.log(`🤖 [Automation] Evaluating trigger: ${triggerEvent}`);
 
-        // ENRICH PAYLOAD WITH CONTACT DETAILS IF contact_id IS PRESENT
-        const contactId = payload.contact_id || payload.contactId;
+        // ENRICH PAYLOAD WITH CONTACT DETAILS IF contact_id OR student_id IS PRESENT
+        const contactId = payload.contact_id || payload.contactId || payload.student_id;
         if (contactId) {
             try {
                 const contactRes = await query(
@@ -209,6 +209,8 @@ export async function evaluateAutomation(triggerEvent, payload) {
                         const recipientTypes = (rule.email_recipient || 'student').split(',');
                         const recipientEmails = new Set();
 
+                        console.log(`🤖 [Automation] Rule matched: ${rule.name}. Resolving recipients of type: ${recipientTypes}`);
+
                         for (const type of recipientTypes) {
                             let email = null;
                             let sourceField = '';
@@ -220,14 +222,17 @@ export async function evaluateAutomation(triggerEvent, payload) {
                                 else if (isValidEmail(payload.email)) { email = payload.email; sourceField = 'email'; }
                                 else if (isValidEmail(payload.contact_email)) { email = payload.contact_email; sourceField = 'contact_email'; }
 
+                                console.log(`🤖 [Automation] Student email resolved: ${email} from ${sourceField}`);
+
                                 // Priority 2: Fallback to database lookup if contact_id exists
-                                const contactId = payload.contact_id || payload.contactId;
+                                const contactId = payload.contact_id || payload.contactId || payload.student_id;
                                 if (!email && contactId) {
                                     try {
                                         const contactRes = await query("SELECT email FROM contacts WHERE id = $1", [contactId]);
                                         if (contactRes.rows.length > 0 && isValidEmail(contactRes.rows[0].email)) {
                                             email = contactRes.rows[0].email;
                                             sourceField = 'database:contacts.email';
+                                            console.log(`🤖 [Automation] Student email found in DB: ${email}`);
                                         }
                                     } catch (dbErr) {
                                         console.error('🤖 [Automation] Failed to fetch contact email from database:', dbErr);
@@ -237,7 +242,6 @@ export async function evaluateAutomation(triggerEvent, payload) {
                                 if (isValidEmail(payload.staff_email)) { email = payload.staff_email; sourceField = 'staff_email'; }
                                 else if (isValidEmail(payload.assigned_to_email)) { email = payload.assigned_to_email; sourceField = 'assigned_to_email'; }
                             } else if (type === 'admin') {
-
                                 try {
                                     const admins = await query("SELECT email FROM users WHERE role = 'Admin'");
                                     admins.rows.forEach(row => {
@@ -245,10 +249,11 @@ export async function evaluateAutomation(triggerEvent, payload) {
                                             recipientEmails.add(row.email);
                                         }
                                     });
+                                    console.log(`🤖 [Automation] Admin emails resolved: ${admins.rows.length} found`);
                                 } catch (adminErr) {
                                     console.error('🤖 [Automation] Failed to fetch admin emails:', adminErr);
                                 }
-                                continue; // Admin emails are handled internally in this block
+                                continue;
                             }
 
                             if (email) {
@@ -259,6 +264,8 @@ export async function evaluateAutomation(triggerEvent, payload) {
                                 }
                             }
                         }
+
+                        console.log(`🤖 [Automation] Total recipients for rule ${rule.id}: ${recipientEmails.size} (${Array.from(recipientEmails)})`);
 
                         const compiledSubject = compileTemplate(rule.subject, payload);
                         const compiledBody = compileTemplate(rule.body, payload);

@@ -117,6 +117,7 @@ const MockInterviewView: React.FC<MockInterviewViewProps> = ({ contacts = [] }) 
                 const accuracy = questionsCount > 0 ? ((correctCount / questionsCount) * 100).toFixed(1) : '0.0';
 
                 const automationPayload = {
+                    contact_id: allContacts[contactIndex].id,
                     contact_name: allContacts[contactIndex].name,
                     contact_email: allContacts[contactIndex].email,
                     student_id: session.student_id,
