@@ -14,6 +14,87 @@ import {
 } from '@/components/common/icons';
 import { FormTemplate, FormSection, FormField, FormElementType } from '@/types';
 import { FORM_ELEMENTS } from './form_elements_config';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+
+interface SortableFormFieldProps {
+  field: FormField;
+  selectedFieldId: string | null;
+  onSelect: (id: string) => void;
+  onRemove: (id: string) => void;
+}
+
+const SortableFormField: React.FC<SortableFormFieldProps> = ({ 
+  field, 
+  selectedFieldId, 
+  onSelect, 
+  onRemove 
+}) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging
+  } = useSortable({ id: field.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 50 : undefined,
+  };
+
+  return (
+    <div 
+      ref={setNodeRef}
+      style={style}
+      onClick={() => onSelect(field.id)}
+      className={`group relative p-4 bg-gray-50 dark:bg-gray-800/50 rounded-2xl border transition-all cursor-pointer ${selectedFieldId === field.id ? 'ring-2 ring-violet-500 border-violet-500 shadow-lg shadow-violet-500/10 translate-x-2' : 'border-transparent hover:border-gray-200 dark:hover:border-gray-700'} ${isDragging ? 'opacity-50 grayscale' : ''}`}
+    >
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-white dark:bg-gray-900 rounded-lg text-gray-400 shadow-sm group-hover:text-violet-500">
+            {FORM_ELEMENTS.find(e => e.type === field.type)?.icon}
+          </div>
+          <span className="text-sm font-bold text-gray-900 dark:text-white">
+            {String(field.label || 'Unnamed Field')}
+            {field.required && <span className="text-red-500 font-black ml-0.5">*</span>}
+          </span>
+        </div>
+        <div className="flex items-center gap-1 opacity-100 transition-opacity">
+          <button onClick={(e) => { e.stopPropagation(); onRemove(field.id); }} className="p-2 text-gray-400 hover:text-red-500 transition-colors">
+            <Trash2 size={16} />
+          </button>
+          <div className="p-2 text-gray-300 cursor-grab active:cursor-grabbing" {...attributes} {...listeners}>
+            <GripVertical size={16} />
+          </div>
+        </div>
+      </div>
+      
+      {field.mapping && (
+        <div className="flex items-center gap-2 text-[10px] font-black text-violet-500 uppercase tracking-widest bg-violet-50 dark:bg-violet-900/30 px-2 py-0.5 rounded-full w-fit mt-2">
+          <span>Mapped to: {field.mapping}</span>
+        </div>
+      )}
+    </div>
+  );
+};
 
 interface FormBuilderProps {
   template: FormTemplate;
@@ -26,6 +107,17 @@ const FormBuilder: React.FC<FormBuilderProps> = ({ template: initialTemplate, on
   const [activeSectionId, setActiveSectionId] = useState<string | null>(template.sections[0]?.id || null);
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   const activeSection = template.sections.find(s => s.id === activeSectionId);
   const selectedField = template.sections.flatMap(s => s.fields).find(f => f.id === selectedFieldId);
@@ -89,6 +181,26 @@ const FormBuilder: React.FC<FormBuilderProps> = ({ template: initialTemplate, on
         fields: s.fields.map(f => f.id === fieldId ? { ...f, ...updates } : f)
       }))
     }));
+  };
+
+  const handleFieldDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id && activeSectionId) {
+      setTemplate(prev => ({
+        ...prev,
+        sections: prev.sections.map(s => {
+          if (s.id === activeSectionId) {
+            const oldIndex = s.fields.findIndex(f => f.id === active.id);
+            const newIndex = s.fields.findIndex(f => f.id === over.id);
+            return {
+              ...s,
+              fields: arrayMove(s.fields, oldIndex, newIndex)
+            };
+          }
+          return s;
+        })
+      }));
+    }
   };
 
   return (
@@ -209,39 +321,26 @@ const FormBuilder: React.FC<FormBuilderProps> = ({ template: initialTemplate, on
                         <p className="text-gray-400 text-sm font-medium">No fields in this section yet.<br/>Select an element from the sidebar to add it.</p>
                       </div>
                     ) : (
-                      activeSection.fields.map((field, fIdx) => (
-                        <div 
-                          key={field.id}
-                          onClick={() => setSelectedFieldId(field.id)}
-                          className={`group relative p-4 bg-gray-50 dark:bg-gray-800/50 rounded-2xl border transition-all cursor-pointer ${selectedFieldId === field.id ? 'ring-2 ring-violet-500 border-violet-500 shadow-lg shadow-violet-500/10 translate-x-2' : 'border-transparent hover:border-gray-200 dark:hover:border-gray-700'}`}
+                      <DndContext 
+                        sensors={sensors}
+                        collisionDetection={closestCenter}
+                        onDragEnd={handleFieldDragEnd}
+                      >
+                        <SortableContext 
+                          items={activeSection.fields.map(f => f.id)}
+                          strategy={verticalListSortingStrategy}
                         >
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-3">
-                              <div className="p-2 bg-white dark:bg-gray-900 rounded-lg text-gray-400 shadow-sm group-hover:text-violet-500">
-                                {FORM_ELEMENTS.find(e => e.type === field.type)?.icon}
-                              </div>
-                              <span className="text-sm font-bold text-gray-900 dark:text-white">
-                                {String(field.label || 'Unnamed Field')}
-                                {field.required && <span className="text-red-500 font-black ml-0.5">*</span>}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button onClick={(e) => { e.stopPropagation(); handleRemoveField(field.id); }} className="p-2 text-gray-400 hover:text-red-500 transition-colors">
-                                <Trash2 size={16} />
-                              </button>
-                              <div className="p-2 text-gray-300 cursor-grab">
-                                <GripVertical size={16} />
-                              </div>
-                            </div>
-                          </div>
-                          
-                          {field.mapping && (
-                            <div className="flex items-center gap-2 text-[10px] font-black text-violet-500 uppercase tracking-widest bg-violet-50 dark:bg-violet-900/30 px-2 py-0.5 rounded-full w-fit mt-2">
-                              <span>Mapped to: {field.mapping}</span>
-                            </div>
-                          )}
-                        </div>
-                      ))
+                          {activeSection.fields.map((field) => (
+                            <SortableFormField
+                              key={field.id}
+                              field={field}
+                              selectedFieldId={selectedFieldId}
+                              onSelect={setSelectedFieldId}
+                              onRemove={handleRemoveField}
+                            />
+                          ))}
+                        </SortableContext>
+                      </DndContext>
                     )}
                   </div>
                 </div>
