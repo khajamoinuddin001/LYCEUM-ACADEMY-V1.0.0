@@ -9176,12 +9176,21 @@ router.get('/forms/assignments', authenticateToken, async (req, res) => {
 router.post('/forms/assign', authenticateToken, requireRole('Admin', 'Staff'), async (req, res) => {
   try {
     const { studentIds, templateId, deadline } = req.body;
-    
+    const templateRes = await query('SELECT title FROM form_templates WHERE id = $1', [templateId]);
+    const formTitle = templateRes.rows[0]?.title || 'Form';
+
     for (const sid of studentIds) {
       await query(`
         INSERT INTO form_assignments (id, template_id, student_id, deadline, status)
         VALUES ($1, $2, $3, $4, 'Pending')
       `, [`asgn-${Date.now()}-${sid}`, templateId, sid, deadline || null]);
+
+      // Trigger Automation
+      evaluateAutomation('Form Assigned', {
+        student_id: sid,
+        form_title: formTitle,
+        deadline: deadline || 'No deadline'
+      });
     }
     
     res.json({ success: true });

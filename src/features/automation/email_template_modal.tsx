@@ -371,7 +371,14 @@ const EmailTemplateModal: React.FC<EmailTemplateModalProps> = ({ isOpen, onClose
                                         </div>
                                     </div>
                                     <div>
-                                        {/* Empty column for balance */}
+                                        <p className="text-[10px] uppercase tracking-wider font-bold text-gray-500 dark:text-gray-400 mb-2">📋 Forms Application</p>
+                                        <div className="flex flex-wrap gap-1.5">
+                                            {['form_title', 'deadline'].map(tag => (
+                                                <button key={tag} type="button" onClick={() => insertText(`{{${tag}}}`)} className="px-2 py-0.5 bg-white dark:bg-gray-800 rounded shadow-sm text-[10px] font-mono border border-gray-200 dark:border-gray-700 hover:border-emerald-500 hover:text-emerald-600 transition-colors">
+                                                    {`{{${tag}}}`}
+                                                </button>
+                                            ))}
+                                        </div>
                                     </div>
                                 </div>
                             </div>

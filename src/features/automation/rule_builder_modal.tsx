@@ -96,6 +96,12 @@ const TRIGGER_GROUPS = [
             'Mock Interview Rejected (<2.5)',
             'Mock Interview Review Required'
         ]
+    },
+    {
+        group: '📋 Forms Application',
+        triggers: [
+            'Form Assigned'
+        ]
     }
 ];
 
@@ -167,6 +173,12 @@ const TRIGGER_PAYLOAD_FIELDS: Record<string, { value: string; label: string }[]>
         { value: '{{contact_name}}', label: 'Contact Name' },
         { value: '{{mock_interview_outcome}}', label: 'Outcome' },
         { value: '{{mock_interview_average_score}}', label: 'Avg Score' }
+    ],
+    '📋 Forms Application': [
+        { value: '{{contact_name}}', label: 'Contact Name' },
+        { value: '{{contact_email}}', label: 'Contact Email' },
+        { value: '{{form_title}}', label: 'Form Title' },
+        { value: '{{deadline}}', label: 'Deadline' }
     ]
 };
 
