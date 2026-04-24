@@ -1,5 +1,5 @@
 import React from 'react';
-import { BookOpen, FileText, User, FileUp, Paperclip, Receipt, CheckCircle2, MessagesSquare, GraduationCap, Megaphone, UserCheck, FileStack, Clock } from 'lucide-react';
+import { BookOpen, FileText, User, FileUp, Paperclip, Receipt, CheckCircle2, MessagesSquare, GraduationCap, Megaphone, UserCheck, FileStack, Clock, ChevronRight } from 'lucide-react';
 
 import { useDraggable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
