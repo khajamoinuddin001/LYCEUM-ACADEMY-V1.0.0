@@ -36,8 +36,7 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({ templateId, onClose, 
           api.getContacts()
         ]);
         setTemplates(tmpls);
-        // Only show students who have a userId (can log into the portal)
-        setContacts(ctcList.filter(c => c.contactType === 'Student' || c.userId));
+        setContacts(ctcList);
       } catch (err) {
         console.error(err);
       } finally {
@@ -110,12 +109,12 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({ templateId, onClose, 
           {/* Step 2: Students */}
           <div className="space-y-4">
              <div className="flex items-center justify-between">
-                <label className="text-xs font-black text-gray-400 uppercase tracking-widest block">2. Select Students ({selectedStudentIds.length})</label>
+                <label className="text-xs font-black text-gray-400 uppercase tracking-widest block">2. Select Contacts ({selectedStudentIds.length})</label>
                 <div className="relative group w-48">
                     <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                     <input 
                       type="text" 
-                      placeholder="Search students..."
+                      placeholder="Search contacts..."
                       value={searchQuery}
                       onChange={e => setSearchQuery(e.target.value)}
                       className="w-full pl-8 pr-3 py-1.5 bg-gray-50 dark:bg-gray-800 border-none rounded-xl text-xs outline-none focus:ring-1 focus:ring-violet-500 transition-all font-medium"
@@ -146,7 +145,7 @@ const AssignmentModal: React.FC<AssignmentModalProps> = ({ templateId, onClose, 
                ))}
                {filteredContacts.length === 0 && !isLoading && (
                  <div className="p-8 text-center text-gray-400 text-sm italic">
-                    No students found matching your search.
+                    No contacts found matching your search.
                  </div>
                )}
              </div>
