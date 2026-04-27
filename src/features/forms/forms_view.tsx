@@ -324,6 +324,8 @@ const FormsView: React.FC<FormsViewProps> = ({ user, student: propStudent }) => 
                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {assignments.map(asgn => {
                           const template = templates.find(t => t.id === asgn.templateId);
+                          const submission = submissions.find(s => s.id === asgn.submissionId || s.assignmentId === asgn.id);
+                          
                           return (
                             <div key={asgn.id} className="relative group overflow-hidden">
                               {/* Glowing background effect for high status */}
@@ -352,9 +354,34 @@ const FormsView: React.FC<FormsViewProps> = ({ user, student: propStudent }) => 
                                 <h3 className="text-2xl font-black text-gray-900 dark:text-white leading-tight mb-2 uppercase tracking-tight">
                                   {String(template?.title || 'Unknown Form')}
                                 </h3>
-                                <p className="text-sm text-gray-500 dark:text-gray-400 mb-8 line-clamp-2 font-medium">
+                                <p className="text-sm text-gray-500 dark:text-gray-400 mb-6 line-clamp-2 font-medium">
                                   {String(template?.description || 'Please complete this form to proceed with your application.')}
                                 </p>
+
+                                {/* Rejection Reason / Feedback Box */}
+                                {asgn.status === 'Rejected' && submission?.processingNotes && (
+                                  <div className="mb-6 p-4 bg-rose-50 dark:bg-rose-900/20 border border-rose-100 dark:border-rose-900/50 rounded-2xl animate-in slide-in-from-top-2 duration-500">
+                                    <p className="text-[10px] font-black text-rose-600 dark:text-rose-400 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
+                                      <AlertCircle size={12} />
+                                      Rejection Reason
+                                    </p>
+                                    <p className="text-sm font-bold text-rose-700 dark:text-rose-300 italic leading-snug">
+                                      "{submission.processingNotes}"
+                                    </p>
+                                  </div>
+                                )}
+
+                                {asgn.status === 'Approved' && submission?.processingNotes && (
+                                  <div className="mb-6 p-4 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-900/50 rounded-2xl animate-in slide-in-from-top-2 duration-500">
+                                    <p className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
+                                      <CheckCircle2 size={12} />
+                                      Reviewer Feedback
+                                    </p>
+                                    <p className="text-sm font-bold text-emerald-700 dark:text-emerald-300 italic leading-snug">
+                                      "{submission.processingNotes}"
+                                    </p>
+                                  </div>
+                                )}
 
                                 <div className="space-y-4">
                                   <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800/50 rounded-2xl border border-gray-100 dark:border-gray-800">

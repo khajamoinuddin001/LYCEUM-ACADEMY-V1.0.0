@@ -32,7 +32,7 @@ const SubmissionReview: React.FC<SubmissionReviewProps> = ({ submission, user, i
   const [template, setTemplate] = useState<FormTemplate | null>(null);
   const [contact, setContact] = useState<Contact | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [processingNotes, setProcessingNotes] = useState('');
+  const [processingNotes, setProcessingNotes] = useState(submission.processingNotes || '');
   const [isProcessing, setIsProcessing] = useState(false);
 
   const isStaff = user?.role === 'Admin' || user?.role === 'Staff';
@@ -211,16 +211,27 @@ const SubmissionReview: React.FC<SubmissionReviewProps> = ({ submission, user, i
           </div>
 
           {/* Processing Notes */}
-          {isStaff && (
-            <div className="space-y-4 pt-8 border-t border-gray-100 dark:border-gray-800">
-              <label className="text-xs font-black text-gray-400 uppercase tracking-widest block">Internal Processing Notes / Rejection Reason</label>
-              <textarea 
-                 value={processingNotes}
-                 onChange={e => setProcessingNotes(e.target.value)}
-                 placeholder="Add context for this review or reason for rejection..."
-                 className="w-full p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl outline-none focus:ring-4 focus:ring-violet-500/10 focus:border-violet-500 transition-all text-sm font-medium"
-                 rows={3}
-              />
+          {(isStaff || submission.processingNotes) && (
+            <div className={`space-y-4 pt-8 border-t border-gray-100 dark:border-gray-800 ${!isStaff ? 'animate-in slide-in-from-bottom-2 duration-700' : ''}`}>
+              <label className="text-xs font-black text-gray-400 uppercase tracking-widest block flex items-center gap-2">
+                <MessageSquare size={14} className="text-violet-500" />
+                {isStaff ? 'Internal Processing Notes / Rejection Reason' : 'Reviewer Feedback & Notes'}
+              </label>
+              {isStaff ? (
+                <textarea 
+                   value={processingNotes}
+                   onChange={e => setProcessingNotes(e.target.value)}
+                   placeholder="Add context for this review or reason for rejection..."
+                   className="w-full p-4 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl outline-none focus:ring-4 focus:ring-violet-500/10 focus:border-violet-500 transition-all text-sm font-medium"
+                   rows={3}
+                />
+              ) : (
+                <div className="p-6 bg-violet-50 dark:bg-violet-900/10 border border-violet-100 dark:border-violet-900/30 rounded-2xl">
+                  <p className="text-sm font-bold text-violet-900 dark:text-violet-100 italic leading-relaxed">
+                    "{submission.processingNotes}"
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </div>
