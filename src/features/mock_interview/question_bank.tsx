@@ -1,8 +1,64 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Search, Filter, Edit, Trash2, ChevronDown, ChevronUp, BookOpen, Layout, Target, CheckCircle, X } from '@/components/common/icons';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Plus, Search, Filter, Edit, Trash2, ChevronDown, ChevronUp, BookOpen, Layout, Target, CheckCircle, X, GripVertical } from '@/components/common/icons';
+import {
+    DndContext,
+    closestCenter,
+    KeyboardSensor,
+    PointerSensor,
+    useSensor,
+    useSensors,
+    DragEndEvent,
+} from '@dnd-kit/core';
+import {
+    arrayMove,
+    SortableContext,
+    sortableKeyboardCoordinates,
+    verticalListSortingStrategy,
+    useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import * as api from '@/utils/api';
 import type { Question, QuestionTemplate, VisaType } from '@/types';
 import { MOCK_INTERVIEW_VISA_TYPES } from '@/lib/constants';
+
+const SortableQuestionItem: React.FC<{ question: Question; onRemove: (id: string) => void }> = ({ question, onRemove }) => {
+    const {
+        attributes,
+        listeners,
+        setNodeRef,
+        transform,
+        transition,
+        isDragging
+    } = useSortable({ id: question.id });
+
+    const style = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+        zIndex: isDragging ? 50 : undefined,
+    };
+
+    return (
+        <div 
+            ref={setNodeRef}
+            style={style}
+            className={`flex items-center gap-3 p-3 bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-xl shadow-sm ${isDragging ? 'opacity-50 ring-2 ring-lyceum-blue' : ''}`}
+        >
+            <div className="p-1 cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600" {...attributes} {...listeners}>
+                <GripVertical size={16} />
+            </div>
+            <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{question.question_text}</p>
+                <p className="text-[10px] text-gray-500 uppercase tracking-tight">{question.category}</p>
+            </div>
+            <button 
+                onClick={() => onRemove(question.id)}
+                className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+            >
+                <X size={14} />
+            </button>
+        </div>
+    );
+};
 
 const QuestionBank: React.FC = () => {
     const [questions, setQuestions] = useState<Question[]>([]);
@@ -26,6 +82,19 @@ const QuestionBank: React.FC = () => {
         visa_types: ['F-1'],
         questions: []
     });
+
+    const [bankSearchQuery, setBankSearchQuery] = useState('');
+
+    const sensors = useSensors(
+        useSensor(PointerSensor, {
+            activationConstraint: {
+                distance: 8,
+            },
+        }),
+        useSensor(KeyboardSensor, {
+            coordinateGetter: sortableKeyboardCoordinates,
+        })
+    );
 
     useEffect(() => {
         loadData();
@@ -87,6 +156,20 @@ const QuestionBank: React.FC = () => {
             loadData();
         } catch (err) {
             console.error('Error deleting template:', err);
+        }
+    };
+
+    const handleDragEnd = (event: DragEndEvent) => {
+        const { active, over } = event;
+        if (over && active.id !== over.id) {
+            const currentQuestions = newTemplate.questions || [];
+            const oldIndex = currentQuestions.findIndex(q => q.id === active.id);
+            const newIndex = currentQuestions.findIndex(q => q.id === over.id);
+            
+            setNewTemplate({
+                ...newTemplate,
+                questions: arrayMove(currentQuestions, oldIndex, newIndex)
+            });
         }
     };
 
@@ -308,29 +391,83 @@ const QuestionBank: React.FC = () => {
                                             </select>
                                         </div>
                                     </div>
-                                    <div className="space-y-2">
-                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Select Questions ({newTemplate.questions?.length || 0})</label>
-                                        <div className="max-h-48 overflow-y-auto border border-gray-100 dark:border-gray-700 rounded-2xl p-2 space-y-1">
-                                            {questions.map(q => (
-                                                <button
-                                                    key={q.id}
-                                                    onClick={() => {
-                                                        const current = newTemplate.questions || [];
-                                                        const exists = current.find(cq => cq.id === q.id);
-                                                        const updated = exists 
-                                                            ? current.filter(cq => cq.id !== q.id) 
-                                                            : [...current, q];
-                                                        setNewTemplate({ ...newTemplate, questions: updated });
-                                                    }}
-                                                    className={`w-full text-left px-3 py-2 rounded-xl text-sm transition-all ${
-                                                        newTemplate.questions?.find(cq => cq.id === q.id)
-                                                            ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 border border-blue-200'
-                                                            : 'hover:bg-gray-50 dark:hover:bg-gray-700'
-                                                    }`}
-                                                >
-                                                    {q.question_text}
-                                                </button>
-                                            ))}
+                                    <div className="space-y-4">
+                                        <div className="space-y-2">
+                                            <label className="text-sm font-bold text-gray-700 dark:text-gray-300 flex items-center justify-between">
+                                                <span>Selected Questions ({newTemplate.questions?.length || 0})</span>
+                                                <span className="text-[10px] text-gray-400 font-normal italic">Drag to reorder</span>
+                                            </label>
+                                            <div className="bg-gray-50 dark:bg-gray-900/50 rounded-2xl p-3 border border-gray-100 dark:border-gray-800 min-h-[100px] max-h-64 overflow-y-auto">
+                                                {newTemplate.questions && newTemplate.questions.length > 0 ? (
+                                                    <DndContext 
+                                                        sensors={sensors}
+                                                        collisionDetection={closestCenter}
+                                                        onDragEnd={handleDragEnd}
+                                                    >
+                                                        <SortableContext 
+                                                            items={newTemplate.questions.map(q => q.id)}
+                                                            strategy={verticalListSortingStrategy}
+                                                        >
+                                                            <div className="space-y-2">
+                                                                {newTemplate.questions.map((q) => (
+                                                                    <SortableQuestionItem 
+                                                                        key={q.id} 
+                                                                        question={q} 
+                                                                        onRemove={(id) => {
+                                                                            setNewTemplate({
+                                                                                ...newTemplate,
+                                                                                questions: newTemplate.questions?.filter(cq => cq.id !== id)
+                                                                            });
+                                                                        }}
+                                                                    />
+                                                                ))}
+                                                            </div>
+                                                        </SortableContext>
+                                                    </DndContext>
+                                                ) : (
+                                                    <div className="flex flex-col items-center justify-center py-8 text-center">
+                                                        <BookOpen className="text-gray-200 mb-2" size={32} />
+                                                        <p className="text-xs text-gray-400">No questions selected.<br/>Add some from the bank below.</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <div className="flex items-center justify-between">
+                                                <label className="text-sm font-bold text-gray-700 dark:text-gray-300">Question Bank</label>
+                                                <div className="relative w-48">
+                                                    <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                                                    <input 
+                                                        type="text" 
+                                                        placeholder="Search bank..."
+                                                        value={bankSearchQuery}
+                                                        onChange={(e) => setBankSearchQuery(e.target.value)}
+                                                        className="w-full pl-8 pr-3 py-1.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-xs outline-none focus:ring-1 focus:ring-purple-500"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="max-h-48 overflow-y-auto border border-gray-100 dark:border-gray-700 rounded-2xl p-2 space-y-1 bg-gray-50 dark:bg-gray-900/30">
+                                                {questions
+                                                    .filter(q => 
+                                                        !newTemplate.questions?.find(cq => cq.id === q.id) &&
+                                                        (q.question_text.toLowerCase().includes(bankSearchQuery.toLowerCase()) || 
+                                                         q.category.toLowerCase().includes(bankSearchQuery.toLowerCase()))
+                                                    )
+                                                    .map(q => (
+                                                        <button
+                                                            key={q.id}
+                                                            onClick={() => {
+                                                                const current = newTemplate.questions || [];
+                                                                setNewTemplate({ ...newTemplate, questions: [...current, q] });
+                                                            }}
+                                                            className="w-full text-left px-3 py-2 rounded-xl text-sm transition-all hover:bg-purple-50 dark:hover:bg-purple-900/20 group flex items-center justify-between"
+                                                        >
+                                                            <span className="truncate">{q.question_text}</span>
+                                                            <Plus size={14} className="text-purple-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                                        </button>
+                                                    ))}
+                                            </div>
                                         </div>
                                     </div>
                                     <button onClick={handleSaveTemplate} className="w-full py-4 bg-purple-600 text-white rounded-2xl font-bold shadow-lg hover:shadow-xl transition-all">
