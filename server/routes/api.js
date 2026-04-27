@@ -9245,9 +9245,10 @@ router.post('/forms/submit', authenticateToken, async (req, res) => {
 
     // Auth check: verify assignment belongs to student
     const asgnRes = await query(`
-      SELECT fa.*, c.user_id 
+      SELECT fa.*, c.user_id, t.title as form_title 
       FROM form_assignments fa 
       JOIN contacts c ON c.id = fa.student_id 
+      JOIN form_templates t ON t.id = fa.template_id
       WHERE fa.id = $1
     `, [assignmentId]);
 
@@ -9274,6 +9275,13 @@ router.post('/forms/submit', authenticateToken, async (req, res) => {
     `, [submissionId, assignmentId]);
 
     await query('COMMIT');
+
+    // Automation Trigger
+    evaluateAutomation('student form submit button', {
+      student_id: assignment.student_id,
+      form_title: assignment.form_title,
+      'form_date&time': new Date().toLocaleString()
+    });
 
     res.json({ success: true, submissionId });
   } catch (error) {

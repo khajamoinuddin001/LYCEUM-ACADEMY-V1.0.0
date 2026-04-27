@@ -102,7 +102,8 @@ const TRIGGER_GROUPS = [
         triggers: [
             'Form Assigned',
             'Form Approved',
-            'Form Rejected'
+            'Form Rejected',
+            'student form submit button'
         ]
     }
 ];
@@ -181,7 +182,8 @@ const TRIGGER_PAYLOAD_FIELDS: Record<string, { value: string; label: string }[]>
         { value: '{{contact_email}}', label: 'Contact Email' },
         { value: '{{form_title}}', label: 'Form Title' },
         { value: '{{reason_forms}}', label: 'Rejection Reason/Staff Notes' },
-        { value: '{{deadline}}', label: 'Deadline' }
+        { value: '{{deadline}}', label: 'Deadline' },
+        { value: '{{form_date&time}}', label: 'Submission Time' }
     ]
 };
 
