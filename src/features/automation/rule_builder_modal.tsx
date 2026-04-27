@@ -100,7 +100,9 @@ const TRIGGER_GROUPS = [
     {
         group: '📋 Forms Application',
         triggers: [
-            'Form Assigned'
+            'Form Assigned',
+            'Form Approved',
+            'Form Rejected'
         ]
     }
 ];
@@ -178,6 +180,7 @@ const TRIGGER_PAYLOAD_FIELDS: Record<string, { value: string; label: string }[]>
         { value: '{{contact_name}}', label: 'Contact Name' },
         { value: '{{contact_email}}', label: 'Contact Email' },
         { value: '{{form_title}}', label: 'Form Title' },
+        { value: '{{reason_forms}}', label: 'Rejection Reason/Staff Notes' },
         { value: '{{deadline}}', label: 'Deadline' }
     ]
 };

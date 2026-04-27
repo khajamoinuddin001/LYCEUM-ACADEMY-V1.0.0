@@ -1269,7 +1269,7 @@ router.get('/contacts', authenticateToken, async (req, res) => {
     // RBAC: Students only see their own contact record
     if (req.user.role === 'Student') {
       const studentEmail = req.user.email.toLowerCase().trim();
-      
+
       // 1. Try to find by user_id link
       let sql = 'SELECT * FROM contacts WHERE user_id = $1';
       let result = await query(sql, [req.user.id]);
@@ -1278,13 +1278,13 @@ router.get('/contacts', authenticateToken, async (req, res) => {
       if (result.rows.length === 0) {
         console.log(`🔍 [Contacts] No direct link for student ${req.user.id}. Searching by email: ${studentEmail}`);
         const emailResult = await query('SELECT * FROM contacts WHERE LOWER(TRIM(email)) = $1 AND user_id IS NULL LIMIT 1', [studentEmail]);
-        
+
         if (emailResult.rows.length > 0) {
           const contactToLink = emailResult.rows[0];
           console.log(`🔗 [Contacts] Found unlinked contact ${contactToLink.id} with matching email. Linking to user ${req.user.id}...`);
-          
+
           await query('UPDATE contacts SET user_id = $1 WHERE id = $2', [req.user.id, contactToLink.id]);
-          
+
           // Re-fetch to get updated record
           result = await query('SELECT * FROM contacts WHERE id = $1', [contactToLink.id]);
         }
@@ -2552,10 +2552,10 @@ router.post('/visa-operations/:id/ds-160/document', authenticateToken, upload.si
 
     if (uploadType === 'filling') {
       if (!flow.fillingDocuments) flow.fillingDocuments = [];
-      flow.fillingDocuments.push({ 
-        id: itemId, 
-        name: req.file.originalname, 
-        uploadedAt: new Date().toISOString() 
+      flow.fillingDocuments.push({
+        id: itemId,
+        name: req.file.originalname,
+        uploadedAt: new Date().toISOString()
       });
       flow.studentStatus = 'none';
       flow.adminStatus = 'none';
@@ -2565,10 +2565,10 @@ router.post('/visa-operations/:id/ds-160/document', authenticateToken, upload.si
       flow.confirmationDocumentName = req.file.originalname;
     } else {
       if (!flow.internalDocuments) flow.internalDocuments = [];
-      flow.internalDocuments.push({ 
-        id: itemId, 
-        name: req.file.originalname, 
-        uploadedAt: new Date().toISOString() 
+      flow.internalDocuments.push({
+        id: itemId,
+        name: req.file.originalname,
+        uploadedAt: new Date().toISOString()
       });
       flow.documentId = itemId;
       flow.documentName = req.file.originalname;
@@ -2721,7 +2721,7 @@ router.post('/visa-operations/:id/ds-160/document/:itemId/review', authenticateT
           if (!doc.reviews) doc.reviews = [];
           doc.reviews.push(newReview);
           doc.lastStatus = status;
-          
+
           // Only update flow status if this is the LATEST document (last in array)
           if (docIdx === group.main.fillingDocuments.length - 1) {
             targetFlow = group.main;
@@ -2743,7 +2743,7 @@ router.post('/visa-operations/:id/ds-160/document/:itemId/review', authenticateT
               if (!doc.reviews) doc.reviews = [];
               doc.reviews.push(newReview);
               doc.lastStatus = status;
-              
+
               if (docIdx === dep.fillingDocuments.length - 1) {
                 targetFlow = dep;
                 targetGIdx = gIdx;
@@ -2814,7 +2814,7 @@ router.post('/visa-operations/:id/ds-160/document/:itemId/review', authenticateT
         visa_status: op.status,
         ds160_status: targetFlow.studentStatus === 'accepted' ? 'Approved' : 'Rejected'
       };
-      
+
       evaluateAutomation(status === 'Approved' ? 'DS-160 Student Approved' : 'DS-160 Student Rejected', automationPayload);
 
       // Notify Admins
@@ -9153,7 +9153,7 @@ router.get('/forms/assignments', authenticateToken, async (req, res) => {
       // Find ALL contacts associated with this student
       const contactRes = await query('SELECT id FROM contacts WHERE user_id = $1', [req.user.id]);
       if (contactRes.rows.length === 0) return res.json([]);
-      
+
       const contactIds = contactRes.rows.map(r => r.id);
       sql += ` WHERE student_id IN (${contactIds.map((_, i) => `$${i + 1}`).join(', ')})`;
       params = contactIds;
@@ -9192,7 +9192,7 @@ router.post('/forms/assign', authenticateToken, requireRole('Admin', 'Staff'), a
         deadline: deadline || 'No deadline'
       });
     }
-    
+
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -9242,7 +9242,7 @@ router.get('/forms/submissions', authenticateToken, async (req, res) => {
 router.post('/forms/submit', authenticateToken, async (req, res) => {
   try {
     const { assignmentId, data } = req.body;
-    
+
     // Auth check: verify assignment belongs to student
     const asgnRes = await query(`
       SELECT fa.*, c.user_id 
@@ -9259,9 +9259,9 @@ router.post('/forms/submit', authenticateToken, async (req, res) => {
     }
 
     const submissionId = `sub-${Date.now()}`;
-    
+
     await query('BEGIN');
-    
+
     await query(`
       INSERT INTO form_submissions (id, assignment_id, student_id, data)
       VALUES ($1, $2, $3, $4)
@@ -9274,7 +9274,7 @@ router.post('/forms/submit', authenticateToken, async (req, res) => {
     `, [submissionId, assignmentId]);
 
     await query('COMMIT');
-    
+
     res.json({ success: true, submissionId });
   } catch (error) {
     await query('ROLLBACK');
@@ -9285,23 +9285,30 @@ router.post('/forms/submit', authenticateToken, async (req, res) => {
 router.post('/forms/process', authenticateToken, requireRole('Admin', 'Staff'), async (req, res) => {
   try {
     const { submissionId, status, notes } = req.body;
-    
+
     await query('BEGIN');
-    
-    const subRes = await query('SELECT assignment_id FROM form_submissions WHERE id = $1', [submissionId]);
+
+    const subRes = await query(`
+      SELECT s.assignment_id, a.student_id, t.title as form_title
+      FROM form_submissions s
+      JOIN form_assignments a ON s.assignment_id = a.id
+      JOIN form_templates t ON a.template_id = t.id
+      WHERE s.id = $1
+    `, [submissionId]);
+
     if (subRes.rows.length === 0) {
       await query('ROLLBACK');
       return res.status(404).json({ error: 'Submission not found' });
     }
-    
-    const assignmentId = subRes.rows[0].assignment_id;
-    
+
+    const { assignment_id: assignmentId, student_id: studentId, form_title: formTitle } = subRes.rows[0];
+
     await query(`
       UPDATE form_assignments 
       SET status = $1 
       WHERE id = $2
     `, [status, assignmentId]);
-    
+
     await query(`
       UPDATE form_submissions 
       SET processed_at = CURRENT_TIMESTAMP, 
@@ -9309,8 +9316,19 @@ router.post('/forms/process', authenticateToken, requireRole('Admin', 'Staff'), 
           processing_notes = $2 
       WHERE id = $3
     `, [req.user.id, notes, submissionId]);
-    
+
     await query('COMMIT');
+
+    // Automation Trigger
+    const triggerEvent = status === 'Approved' ? 'Form Approved' : 'Form Rejected';
+    evaluateAutomation(triggerEvent, {
+      student_id: studentId,
+      form_title: formTitle,
+      reason_forms: notes,
+      status: status,
+      processed_by_name: req.user.name
+    });
+
     res.json({ success: true });
   } catch (error) {
     await query('ROLLBACK');
