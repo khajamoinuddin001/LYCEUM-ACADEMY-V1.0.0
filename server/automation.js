@@ -154,15 +154,22 @@ export async function evaluateAutomation(triggerEvent, payload) {
         console.log(`🤖 [Automation] Evaluating trigger: ${triggerEvent}`);
 
         // ENRICH PAYLOAD WITH CONTACT DETAILS IF contact_id OR student_id IS PRESENT
-        const contactId = payload.contact_id || payload.contactId || payload.student_id;
-        if (contactId) {
+        const contactIdVal = payload.contact_id || payload.contactId || payload.student_id;
+        if (contactIdVal) {
             try {
-                const contactRes = await query(
-                    "SELECT name as contact_name, email as contact_email, phone as contact_phone FROM contacts WHERE id = $1",
-                    [contactId]
-                );
+                // LA2026... format is a string contact_id, not an integer id
+                const isNumeric = !isNaN(contactIdVal) && !isNaN(parseFloat(contactIdVal));
+                const sqlArr = [
+                    "SELECT id, name as contact_name, email as contact_email, phone as contact_phone FROM contacts WHERE ",
+                    isNumeric ? "id = $1" : "contact_id = $1"
+                ];
+
+                const contactRes = await query(sqlArr.join(''), [contactIdVal]);
                 if (contactRes.rows.length > 0) {
                     const contact = contactRes.rows[0];
+                    // Store the resolved integer ID for internal DB use
+                    payload.internal_contact_id = contact.id;
+
                     payload.contact_name = payload.contact_name || contact.contact_name;
                     payload.contact_email = payload.contact_email || contact.contact_email;
                     payload.contact_phone = payload.contact_phone || contact.contact_phone;
@@ -228,7 +235,12 @@ export async function evaluateAutomation(triggerEvent, payload) {
                                 const contactId = payload.contact_id || payload.contactId || payload.student_id;
                                 if (!email && contactId) {
                                     try {
-                                        const contactRes = await query("SELECT email FROM contacts WHERE id = $1", [contactId]);
+                                        const isNumeric = !isNaN(contactId) && !isNaN(parseFloat(contactId));
+                                        const sql = isNumeric 
+                                            ? "SELECT email FROM contacts WHERE id = $1"
+                                            : "SELECT email FROM contacts WHERE contact_id = $1";
+                                        
+                                        const contactRes = await query(sql, [contactId]);
                                         if (contactRes.rows.length > 0 && isValidEmail(contactRes.rows[0].email)) {
                                             email = contactRes.rows[0].email;
                                             sourceField = 'database:contacts.email';
@@ -346,7 +358,9 @@ export async function evaluateAutomation(triggerEvent, payload) {
                                 }
                             }
 
-                            let contactId = payload.contact_id || null;
+                            let contactId = payload.internal_contact_id || payload.contact_id || null;
+                            // If it's still a string LA... it will fail here if passed directly to DB as integer.
+                            // But we try to use internal_contact_id which we resolved earlier.
 
                             const tzTask = await query("SELECT nextval('application_ack_seq') as seq");
                             const seq1 = tzTask.rows[0].seq;
