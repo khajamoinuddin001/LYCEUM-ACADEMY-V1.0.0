@@ -832,7 +832,7 @@ export async function initDatabase() {
     const templates = [
       {
         id: 'ds160-template',
-        title: 'DS-160 Pre-Filing Form',
+        title: 'demo ds form',
         description: 'Comprehensive data gathering for US Visa DS-160 application.',
         sections: [
           {
@@ -927,7 +927,7 @@ export async function initDatabase() {
       },
       {
         id: 'refund-request',
-        title: 'Refund Request Form',
+        title: 'demo refund form',
         description: 'Official form to request a refund for tuition or service fees.',
         sections: [
           {
@@ -964,7 +964,7 @@ export async function initDatabase() {
       },
       {
         id: 'id-card-gen',
-        title: 'ID Card Generation Form',
+        title: 'demo id form',
         description: 'Submit details for your student identification card.',
         sections: [
           {
