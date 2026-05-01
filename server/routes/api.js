@@ -9344,6 +9344,277 @@ router.post('/forms/process', authenticateToken, requireRole('Admin', 'Staff'), 
   }
 });
 
+// 1. University Applications Endpoint
+router.get('/university-applications', authenticateToken, async (req, res) => {
+  try {
+    let sql = 'SELECT id, courses, user_id, contact_id, name, email FROM contacts';
+    let params = [];
+    if (req.user.role === 'Student') {
+      sql += ' WHERE user_id = $1';
+      params.push(req.user.id);
+    } else if (req.query.contactId) {
+      sql += ' WHERE id = $1';
+      params.push(req.query.contactId);
+    }
+    const result = await query(sql, params);
+    
+    // Fetch all university courses to map IDs to course details
+    const uniCourses = await query('SELECT * FROM university_courses');
+    const courseMap = {};
+    uniCourses.rows.forEach(c => {
+      courseMap[c.id] = c;
+    });
+
+    const apps = [];
+    result.rows.forEach(contact => {
+      let enrolledCourses = [];
+      try {
+        enrolledCourses = typeof contact.courses === 'string' ? JSON.parse(contact.courses || '[]') : (contact.courses || []);
+      } catch (e) {
+        enrolledCourses = [];
+      }
+      
+      enrolledCourses.forEach(cId => {
+        const cDetail = courseMap[cId];
+        if (cDetail) {
+          apps.push({
+            id: `${contact.id}-${cId}`,
+            contactId: contact.id,
+            contactName: contact.name,
+            contactEmail: contact.email,
+            courseId: cId,
+            universityName: cDetail.university_name,
+            courseName: cDetail.course_name,
+            country: cDetail.country,
+            intake: cDetail.intake,
+            status: 'Applied'
+          });
+        }
+      });
+    });
+
+    res.json(apps);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 2. Student Finance / Payments (Quotations) Endpoint
+router.get('/student/quotations', authenticateToken, async (req, res) => {
+  try {
+    const result = await query('SELECT * FROM quotation_templates ORDER BY created_at DESC');
+    res.json(result.rows.map(row => ({
+      id: row.id,
+      title: row.title,
+      description: row.description,
+      lineItems: row.line_items,
+      total: row.total,
+      createdAt: row.created_at
+    })));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 3. Mock Interviews Endpoint
+router.get('/mock-interview/sessions', authenticateToken, async (req, res) => {
+  try {
+    let sql = 'SELECT id, user_id, name, metadata FROM contacts';
+    let params = [];
+    if (req.user.role === 'Student') {
+      sql += ' WHERE user_id = $1';
+      params.push(req.user.id);
+    } else if (req.query.contactId) {
+      sql += ' WHERE id = $1';
+      params.push(req.query.contactId);
+    }
+    const result = await query(sql, params);
+    const sessionsList = [];
+    result.rows.forEach(contact => {
+      let meta = contact.metadata || {};
+      if (typeof meta === 'string') {
+        try { meta = JSON.parse(meta); } catch (e) { meta = {}; }
+      }
+      const sessions = meta.mockInterviewSessions || [];
+      sessions.forEach(s => {
+        sessionsList.push({
+          ...s,
+          contactId: contact.id,
+          contactName: contact.name
+        });
+      });
+    });
+    res.json(sessionsList);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 4. Forms / DS-160 Endpoint
+router.get('/forms/submissions/me', authenticateToken, async (req, res) => {
+  try {
+    const contactRes = await query('SELECT id FROM contacts WHERE user_id = $1', [req.user.id]);
+    if (contactRes.rows.length === 0) return res.json([]);
+    const contactIds = contactRes.rows.map(r => r.id);
+    const result = await query(
+      `SELECT * FROM form_submissions WHERE student_id IN (${contactIds.map((_, i) => `$${i + 1}`).join(', ')}) ORDER BY submitted_at DESC`,
+      contactIds
+    );
+    res.json(result.rows.map(row => ({
+      ...row,
+      assignmentId: row.assignment_id,
+      studentId: row.student_id,
+      submittedAt: row.submitted_at,
+      processedBy: row.processed_by,
+      processedAt: row.processed_at,
+      processingNotes: row.processing_notes
+    })));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 5. Accounts / Invoices Endpoint
+router.get('/student/invoices', authenticateToken, async (req, res) => {
+  try {
+    let sql = `
+      SELECT t.*, c.name as contact_name
+      FROM transactions t
+      LEFT JOIN contacts c ON t.contact_id = c.id
+      WHERE t.type IN ('Invoice', 'Income')
+    `;
+    let params = [];
+    if (req.user.role === 'Student') {
+      sql += ' AND c.user_id = $1';
+      params.push(req.user.id);
+    } else if (req.query.contactId) {
+      sql += ' AND t.contact_id = $1';
+      params.push(req.query.contactId);
+    }
+    sql += ' ORDER BY t.date DESC';
+    const result = await query(sql, params);
+    res.json(result.rows.map(row => {
+      const metadata = typeof row.metadata === 'string' ? JSON.parse(row.metadata || '{}') : (row.metadata || {});
+      return {
+        ...row,
+        contactId: row.contact_id,
+        customerName: row.customer_name,
+        paymentMethod: row.payment_method,
+        dueDate: row.due_date,
+        additionalDiscount: row.additional_discount,
+        metadata: metadata,
+        amount: Number(row.amount),
+        lineItems: row.line_items
+      };
+    }));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 6. Attendance Endpoint
+router.get('/attendance/summary', authenticateToken, async (req, res) => {
+  try {
+    const targetUserId = req.user.role === 'Admin' || req.user.role === 'Staff' ? (req.query.userId || req.user.id) : req.user.id;
+    const result = await query(
+      'SELECT date, check_in, check_out, status, late_minutes, branch FROM attendance_logs WHERE user_id = $1 ORDER BY date DESC LIMIT 30',
+      [targetUserId]
+    );
+    const summary = {
+      totalLogs: result.rows.length,
+      present: result.rows.filter(r => r.status === 'Present').length,
+      late: result.rows.filter(r => r.status === 'Late').length,
+      recentLogs: result.rows
+    };
+    res.json(summary);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 7. Document Upload Endpoint
+router.get('/student/documents', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.role === 'Student' ? req.user.id : (req.query.userId || req.user.id);
+    const result = await query(`
+      SELECT ds.id, ds.contact_id, ds.filename, ds.content_type, ds.file_size, ds.category,
+             ds.status, ds.rejection_reason, ds.created_at, ds.reviewed_at,
+             u.name as reviewed_by_name
+      FROM document_submissions ds
+      LEFT JOIN users u ON ds.reviewed_by = u.id
+      WHERE ds.user_id = $1
+      ORDER BY ds.created_at DESC
+    `, [userId]);
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 8. Notifications Endpoint
+router.get('/notifications/me', authenticateToken, async (req, res) => {
+  try {
+    const result = await query(
+      `SELECT * FROM notifications 
+       WHERE (recipient_user_ids::jsonb @> $1::jsonb OR recipient_roles::jsonb @> $2::jsonb)
+       ORDER BY timestamp DESC LIMIT 50`,
+      [JSON.stringify([req.user.id]), JSON.stringify([req.user.role])]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 9. Tasks Endpoint
+router.get('/contacts/:contactId/tasks', authenticateToken, async (req, res) => {
+  try {
+    const { contactId } = req.params;
+    const result = await query('SELECT * FROM tasks WHERE contact_id = $1 ORDER BY created_at DESC', [contactId]);
+    res.json(result.rows.map(row => ({
+      ...row,
+      contactId: row.contact_id,
+      assignedTo: row.assigned_to,
+      dueDate: row.due_date,
+      createdAt: row.created_at
+    })));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 10. Calendar / Events Endpoint
+router.get('/events/calendar', authenticateToken, async (req, res) => {
+  try {
+    const eventsResult = await query('SELECT * FROM events');
+    const tasksResult = await query('SELECT id, title, due_date FROM tasks WHERE due_date IS NOT NULL');
+    
+    const combined = [
+      ...eventsResult.rows.map(e => ({
+        id: e.id,
+        title: e.title,
+        start: e.start,
+        end: e.end,
+        color: e.color,
+        description: e.description,
+        type: 'event'
+      })),
+      ...tasksResult.rows.map(t => ({
+        id: t.id,
+        title: `Task: ${t.title}`,
+        start: t.due_date,
+        end: t.due_date,
+        color: '#f87171',
+        description: `Task Deadline: ${t.due_date}`,
+        type: 'task'
+      }))
+    ];
+    res.json(combined);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;
 
 // trigger reload 1770196752
