@@ -107,7 +107,7 @@ import {
 } from '@dnd-kit/sortable';
 import { restrictToWindowEdges } from '@dnd-kit/modifiers';
 import { ODOO_APPS } from '@/lib/constants';
-import { Target } from '@/components/common/icons';
+import { Target, FileText } from '@/components/common/icons';
 
 
 
@@ -189,7 +189,7 @@ const DashboardLayout: React.FC = () => {
     title: string;
     message: string;
     onConfirm: () => void | Promise<void>;
-  }>({ isOpen: false, title: '', message: '', onConfirm: () => {} });
+  }>({ isOpen: false, title: '', message: '', onConfirm: () => { } });
 
   // Keep ref in sync with state
   useEffect(() => {
@@ -503,23 +503,23 @@ const DashboardLayout: React.FC = () => {
 
   useEffect(() => {
     if (currentUser) {
-        const socketToken = api.getToken();
-        const configuredUrl = (api.API_BASE_URL || '').replace('/api', '');
-        const socketBaseUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
-            ? configuredUrl 
-            : window.location.origin;
-        const socket = io(`${socketBaseUrl}/lms`, {
-            auth: { token: socketToken }
-        });
+      const socketToken = api.getToken();
+      const configuredUrl = (api.API_BASE_URL || '').replace('/api', '');
+      const socketBaseUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+        ? configuredUrl
+        : window.location.origin;
+      const socket = io(`${socketBaseUrl}/lms`, {
+        auth: { token: socketToken }
+      });
 
-        socket.on('global-session-ended', ({ courseId }) => {
-            console.log('Global Socket: session-ended received for course', courseId);
-            handleLmsSessionChange(courseId, false);
-        });
+      socket.on('global-session-ended', ({ courseId }) => {
+        console.log('Global Socket: session-ended received for course', courseId);
+        handleLmsSessionChange(courseId, false);
+      });
 
-        return () => {
-            socket.disconnect();
-        };
+      return () => {
+        socket.disconnect();
+      };
     }
   }, [currentUser?.id]);
 
@@ -2176,11 +2176,11 @@ const DashboardLayout: React.FC = () => {
   };
 
   const handleLmsSessionChange = (courseId: string, isLive: boolean) => {
-    setLmsCourses(courses => courses.map(c => 
+    setLmsCourses(courses => courses.map(c =>
       String(c.id) === String(courseId) ? { ...c, isLive, is_live: isLive } : c
     ));
     if (activeCourse && String(activeCourse.id) === String(courseId)) {
-        setActiveCourse(prev => prev ? { ...prev, isLive, is_live: isLive } : null);
+      setActiveCourse(prev => prev ? { ...prev, isLive, is_live: isLive } : null);
     }
   };
 
@@ -2358,51 +2358,51 @@ const DashboardLayout: React.FC = () => {
       case 'LMS':
         const isEnrolled = activeCourse && studentContact && studentContact.lmsProgress?.[activeCourse.id];
         const isStaff = currentUser?.role === 'Admin' || currentUser?.role === 'Staff';
-        
+
         if (isEnrolled || (activeCourse && activeLesson && isStaff)) {
           return (
-            <LmsPlayerView 
-              course={activeCourse} 
-              student={studentContact} 
-              user={currentUser} 
-              users={users} 
+            <LmsPlayerView
+              course={activeCourse}
+              student={studentContact}
+              user={currentUser}
+              users={users}
               isLiveMode={isLmsLiveMode}
-              onBack={() => { 
-                setActiveCourse(null); 
-                setActiveLesson(null); 
+              onBack={() => {
+                setActiveCourse(null);
+                setActiveLesson(null);
                 setIsLmsLiveMode(false);
-              }} 
-              onMarkComplete={handleMarkLessonComplete} 
-              onSaveNote={handleSaveNote} 
-              onSavePost={handleSaveDiscussionPost} 
+              }}
+              onMarkComplete={handleMarkLessonComplete}
+              onSaveNote={handleSaveNote}
+              onSavePost={handleSaveDiscussionPost}
               onSessionChange={handleLmsSessionChange}
             />
           );
         }
         if (activeCourse) {
-          return <CourseDetailView 
-            course={activeCourse} 
-            student={studentContact} 
-            contacts={contacts} 
-            user={currentUser} 
-            users={users} 
-            onSelectLesson={(lesson) => { setActiveLesson(lesson); setIsLmsLiveMode(false); }} 
+          return <CourseDetailView
+            course={activeCourse}
+            student={studentContact}
+            contacts={contacts}
+            user={currentUser}
+            users={users}
+            onSelectLesson={(lesson) => { setActiveLesson(lesson); setIsLmsLiveMode(false); }}
             onStartLive={(lesson) => { setActiveLesson(lesson); setIsLmsLiveMode(true); }}
-            onBack={() => { setActiveCourse(null); setActiveLesson(null); setViewingCertificateForCourse(null); }} 
-            onModuleCreate={handleLmsModuleCreate} 
-            onModuleUpdate={handleLmsModuleUpdate} 
-            onModuleDelete={handleLmsModuleDelete} 
-            onLessonCreate={(moduleId, type) => setEditingLessonInfo({ 
-              courseId: activeCourse.id, 
-              moduleId, 
-              lesson: type === 'quiz' ? { title: '', content: '', type: 'quiz', quiz: [] } as any : 'new' 
-            })} 
-            onLessonUpdate={(lesson) => setEditingLessonInfo({ courseId: activeCourse.id, moduleId: '', lesson })} 
-            onLessonDelete={handleLmsLessonDelete} 
-            onViewCertificate={setViewingCertificateForCourse} 
-            onInitiatePurchase={handleInitiatePurchase} 
-            onSavePost={handleSaveDiscussionPost} 
-            onManualEnroll={handleManualEnroll} 
+            onBack={() => { setActiveCourse(null); setActiveLesson(null); setViewingCertificateForCourse(null); }}
+            onModuleCreate={handleLmsModuleCreate}
+            onModuleUpdate={handleLmsModuleUpdate}
+            onModuleDelete={handleLmsModuleDelete}
+            onLessonCreate={(moduleId, type) => setEditingLessonInfo({
+              courseId: activeCourse.id,
+              moduleId,
+              lesson: type === 'quiz' ? { title: '', content: '', type: 'quiz', quiz: [] } as any : 'new'
+            })}
+            onLessonUpdate={(lesson) => setEditingLessonInfo({ courseId: activeCourse.id, moduleId: '', lesson })}
+            onLessonDelete={handleLmsLessonDelete}
+            onViewCertificate={setViewingCertificateForCourse}
+            onInitiatePurchase={handleInitiatePurchase}
+            onSavePost={handleSaveDiscussionPost}
+            onManualEnroll={handleManualEnroll}
           />;
         }
         return <LmsView courses={lmsCourses} onCourseSelect={setActiveCourse} user={currentUser} contacts={contacts} onNewCourse={() => setEditingCourse('new')} onEditCourse={setEditingCourse} onDeleteCourse={handleLmsCourseDelete} onInitiatePurchase={handleInitiatePurchase} />;
@@ -2503,6 +2503,26 @@ const DashboardLayout: React.FC = () => {
       case 'Live Session Monitor': return <ActiveSessionsView currentUser={{ id: currentUser.id, role: currentUser.role }} />;
       case 'Forms': return <FormsView user={currentUser} student={studentContact} />;
       case 'Document manager': return <StaffDocumentManagerView />;
+      case 'Document Generator':
+        return (
+          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 min-h-[400px]">
+            <div className="p-4 bg-orange-50 dark:bg-orange-900/20 rounded-full mb-6">
+              <FileText className="w-12 h-12 text-orange-600 dark:text-orange-400" />
+            </div>
+            <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">Document Generator</h2>
+            <p className="text-gray-500 dark:text-gray-400 max-w-md mx-auto text-lg leading-relaxed">
+              This module is currently under development. Soon you'll be able to generate Documents!
+            </p>
+            <div className="mt-8 flex gap-4">
+              <button onClick={() => setActiveApp('Apps')} className="px-6 py-2.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-xl font-semibold hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
+                Back to Apps
+              </button>
+              <button className="px-6 py-2.5 bg-lyceum-blue text-white rounded-xl font-semibold opacity-50 cursor-not-allowed">
+                Coming Soon
+              </button>
+            </div>
+          </div>
+        );
       default: return <AppView appName={activeApp} onNavigateBack={() => handleAppSelect('Apps')} />;
     }
   }
@@ -2821,22 +2841,22 @@ const DashboardLayout: React.FC = () => {
             {editingCourse && (<CourseEditModal course={editingCourse === 'new' ? null : editingCourse} onClose={() => setEditingCourse(null)} onSave={handleLmsCourseSave} />)}
             {editingLessonInfo && (
               (typeof editingLessonInfo.lesson === 'object' && editingLessonInfo.lesson.type === 'quiz') ? (
-                <QuizEditModal 
-                  lesson={editingLessonInfo.lesson} 
-                  onClose={() => setEditingLessonInfo(null)} 
-                  onSave={handleLmsLessonSave} 
+                <QuizEditModal
+                  lesson={editingLessonInfo.lesson}
+                  onClose={() => setEditingLessonInfo(null)}
+                  onSave={handleLmsLessonSave}
                 />
               ) : (
-                <LessonEditModal 
-                  lesson={editingLessonInfo.lesson === 'new' ? null : editingLessonInfo.lesson} 
-                  onClose={() => setEditingLessonInfo(null)} 
-                  onSave={handleLmsLessonSave} 
+                <LessonEditModal
+                  lesson={editingLessonInfo.lesson === 'new' ? null : editingLessonInfo.lesson}
+                  onClose={() => setEditingLessonInfo(null)}
+                  onSave={handleLmsLessonSave}
                 />
               )
             )}
           </>
         )}
-        <ConfirmationModal 
+        <ConfirmationModal
           isOpen={confirmModal.isOpen}
           title={confirmModal.title}
           message={confirmModal.message}

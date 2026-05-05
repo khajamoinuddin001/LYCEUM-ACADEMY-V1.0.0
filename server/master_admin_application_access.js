@@ -20,7 +20,7 @@ const ODOO_APPS = [
     'Accounts', 'Analytics', 'Tasks', 'Tickets', 'Reception',
     'Settings', 'Access Control', 'Visitor Display', 'Department Dashboard',
     'Attendance & Payroll', 'University Application', 'Visa Operations', 'University Manager',
-    'Live Session Monitor', 'Automation Engine', 'Document manager', 'Announcements', 'Mock Interview', 'Employee Performance', 'Forms'
+    'Live Session Monitor', 'Automation Engine', 'Document manager', 'Announcements', 'Mock Interview', 'Employee Performance', 'Forms', 'Document Generator'
 ];
 
 async function run() {
@@ -51,7 +51,7 @@ async function run() {
         }
 
         await client.query("COMMIT");
-        console.log(`✅ Successfully granted ALL application permissions to: ${masterAdmin.email}`);
+        console.log(`✅ Successfully finished updating master admin permissions.`);
     } catch (e) {
         await client.query("ROLLBACK");
         console.error("Error updating permissions:", e);
