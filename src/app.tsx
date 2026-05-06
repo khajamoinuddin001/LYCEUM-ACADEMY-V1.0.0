@@ -89,6 +89,7 @@ import AdminMockInterviewView from '@/features/mock_interview/admin_mock_intervi
 import StudentMockInterviewView from '@/features/students/student_mock_interview_view';
 import FormsView from '@/features/forms/forms_view';
 import ContactFormsView from '@/features/students/contact_forms_view';
+import DocumentGeneratorView from '@/features/documents/document_generator_view';
 import ConfirmationModal from '@/components/common/confirmation_modal';
 import {
   DndContext,
@@ -2504,25 +2505,7 @@ const DashboardLayout: React.FC = () => {
       case 'Forms': return <FormsView user={currentUser} student={studentContact} />;
       case 'Document manager': return <StaffDocumentManagerView />;
       case 'Document Generator':
-        return (
-          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 min-h-[400px]">
-            <div className="p-4 bg-orange-50 dark:bg-orange-900/20 rounded-full mb-6">
-              <FileText className="w-12 h-12 text-orange-600 dark:text-orange-400" />
-            </div>
-            <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">Document Generator</h2>
-            <p className="text-gray-500 dark:text-gray-400 max-w-md mx-auto text-lg leading-relaxed">
-              This module is currently under development. Soon you'll be able to generate Documents!
-            </p>
-            <div className="mt-8 flex gap-4">
-              <button onClick={() => setActiveApp('Apps')} className="px-6 py-2.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 rounded-xl font-semibold hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
-                Back to Apps
-              </button>
-              <button className="px-6 py-2.5 bg-lyceum-blue text-white rounded-xl font-semibold opacity-50 cursor-not-allowed">
-                Coming Soon
-              </button>
-            </div>
-          </div>
-        );
+        return <DocumentGeneratorView currentUser={currentUser} contacts={contacts} />;
       default: return <AppView appName={activeApp} onNavigateBack={() => handleAppSelect('Apps')} />;
     }
   }

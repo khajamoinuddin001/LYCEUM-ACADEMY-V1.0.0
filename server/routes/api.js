@@ -8299,7 +8299,7 @@ Strict Rules:
         'X-Title': 'Lyceum Academy AI Assistant'
       },
       body: JSON.stringify({
-        model: 'stepfun/step-3.5-flash:free',
+        model: 'openrouter/free',
         messages: messages,
         temperature: 0.7,
         max_tokens: 1000
@@ -8320,6 +8320,138 @@ Strict Rules:
   } catch (error) {
     console.error('Chat endpoint error:', error);
     res.status(500).json({ error: 'An error occurred while processing your request.' });
+  }
+});
+
+
+// ==========================================
+// DOCUMENT GENERATOR MODULE ROUTES
+// ==========================================
+
+// GET all ID Card templates
+router.get('/id-card-templates', authenticateToken, async (req, res) => {
+  try {
+    const result = await query('SELECT * FROM id_card_templates ORDER BY created_at DESC');
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching ID card templates:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// CREATE ID Card template
+router.post('/id-card-templates', authenticateToken, async (req, res) => {
+  try {
+    const { name, background_image, zones, is_default } = req.body;
+    if (is_default) {
+      await query('UPDATE id_card_templates SET is_default = false');
+    }
+    const result = await query(
+      'INSERT INTO id_card_templates (name, background_image, zones, is_default) VALUES ($1, $2, $3, $4) RETURNING *',
+      [name, background_image, JSON.stringify(zones), !!is_default]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error('Error creating ID card template:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// UPDATE ID Card template
+router.put('/id-card-templates/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, background_image, zones, is_default } = req.body;
+    if (is_default) {
+      await query('UPDATE id_card_templates SET is_default = false WHERE id <> $1', [id]);
+    }
+    const result = await query(
+      'UPDATE id_card_templates SET name = $1, background_image = $2, zones = $3, is_default = $4 WHERE id = $5 RETURNING *',
+      [name, background_image, JSON.stringify(zones), !!is_default, id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Template not found' });
+    }
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error updating ID card template:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// DELETE ID Card template
+router.delete('/id-card-templates/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await query('DELETE FROM id_card_templates WHERE id = $1 RETURNING *', [id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Template not found' });
+    }
+    res.json({ success: true, message: 'Template deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting ID card template:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST SOP AI generation
+router.post('/sop/generate', authenticateToken, async (req, res) => {
+  try {
+    const { studentName, degree, gpa, workExperience, examScore, university, course } = req.body;
+    const apiKey = process.env.OPENROUTER_API_KEY;
+
+    if (!apiKey) {
+      return res.status(500).json({ error: 'OPENROUTER_API_KEY is not configured on the server.' });
+    }
+
+    const prompt = `Write a professional, highly persuasive, and outstanding Statement of Purpose (SOP) for a student applying for a university course.
+
+Student Details:
+- Name: ${studentName}
+- Target University: ${university}
+- Target Course: ${course}
+- Academic Background: ${degree || 'N/A'} (GPA/Percentage: ${gpa || 'N/A'})
+- Work Experience: ${workExperience || 'None'}
+- Test Scores: ${examScore || 'N/A'}
+
+SOP Structure Guidelines:
+1. **Introduction**: Introduce the student and capture the purpose/motivation for applying to this course at this specific university.
+2. **Academic Background**: Highlight academic accomplishments and key areas of learning relevant to the course.
+3. **Professional Experience**: Detail any relevant work experience, internships, or practical projects.
+4. **Why this University & Course**: Explain why this university is the perfect match and how the course curriculum aligns with the student's career aspirations.
+5. **Future Goals**: Detail short-term and long-term career goals.
+6. **Conclusion**: End with a powerful and polite concluding statement.
+
+Ensure the tone is professional, sophisticated, academic, and tailored directly to the student's background and target course/university. Avoid generic templates. Output only the well-formatted SOP content. Use Markdown for spacing and sections. Do not include extra preambles or introductions like 'Here is your SOP:'.`;
+
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        'HTTP-Referer': 'https://lyceumacademy.com',
+        'X-Title': 'Lyceum Academy SOP Generator'
+      },
+      body: JSON.stringify({
+        model: 'openrouter/free',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.7,
+        max_tokens: 1500
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.text();
+      console.error('OpenRouter SOP Error:', errorData);
+      return res.status(response.status).json({ error: 'Failed to generate SOP via AI.' });
+    }
+
+    const data = await response.json();
+    const sop = data.choices[0].message.content;
+    res.json({ sop });
+  } catch (error) {
+    console.error('SOP Generation error:', error);
+    res.status(500).json({ error: 'An error occurred while generating the SOP.' });
   }
 });
 
@@ -8676,7 +8808,7 @@ Return your response in JSON format: { "subject": "...", "body": "..." }`;
         'X-Title': 'Lyceum Academy Automation'
       },
       body: JSON.stringify({
-        model: 'stepfun/step-3.5-flash:free',
+        model: 'openrouter/free',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: `Draft an email for: ${prompt}. Context: ${context || 'General CRM'}` }

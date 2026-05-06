@@ -1676,6 +1676,18 @@ export async function initDatabase() {
       END $$;
     `);
 
+    // ID Card Templates Table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS id_card_templates (
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        background_image TEXT NOT NULL,
+        zones JSONB NOT NULL DEFAULT '[]',
+        is_default BOOLEAN DEFAULT false,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     console.log("✅ Database initialized successfully");
   } catch (err) {
     if (client) await client.query("ROLLBACK");

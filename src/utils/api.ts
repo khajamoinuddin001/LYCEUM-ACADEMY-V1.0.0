@@ -2438,3 +2438,44 @@ export const deleteFormAssignment = async (assignmentId: string): Promise<void> 
         method: 'DELETE',
     });
 };
+
+// --- ID Card Templates & SOP AI Generation API ---
+
+export const getIDCardTemplates = async (): Promise<any[]> => {
+    return apiRequest<any[]>('/id-card-templates');
+};
+
+export const saveIDCardTemplate = async (template: any): Promise<any> => {
+    if (template.id) {
+        return apiRequest<any>(`/id-card-templates/${template.id}`, {
+            method: 'PUT',
+            body: JSON.stringify(template),
+        });
+    } else {
+        return apiRequest<any>('/id-card-templates', {
+            method: 'POST',
+            body: JSON.stringify(template),
+        });
+    }
+};
+
+export const deleteIDCardTemplate = async (id: number): Promise<void> => {
+    await apiRequest(`/id-card-templates/${id}`, {
+        method: 'DELETE',
+    });
+};
+
+export const generateAIStatementOfPurpose = async (data: {
+    studentName: string;
+    degree?: string;
+    gpa?: string;
+    workExperience?: string;
+    examScore?: string;
+    university: string;
+    course: string;
+}): Promise<{ sop: string }> => {
+    return apiRequest<{ sop: string }>('/sop/generate', {
+        method: 'POST',
+        body: JSON.stringify(data),
+    });
+};
