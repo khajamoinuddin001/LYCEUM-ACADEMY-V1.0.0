@@ -11,6 +11,7 @@ import {
     FileText,
     Award,
     Send,
+    Phone,
     Users,
     Star,
     ChevronDown,
@@ -1028,15 +1029,15 @@ const LandingPage: React.FC<LandingPageProps> = ({ onLogin, onRegister, onTerms,
                             <h4 className="font-bold text-lg mb-6">Contact Us</h4>
                             <ul className="space-y-4 text-gray-400 text-sm">
                                 <li className="flex items-center gap-3">
-                                    <Send size={16} className="text-lyceum-blue" />
+                                    <Send size={16} className="text-lyceum-blue flex-shrink-0" />
                                     <span>omar@lyceumacad.com</span>
                                 </li>
                                 <li className="flex items-center gap-3">
-                                    <Users size={16} className="text-lyceum-blue" />
+                                    <Phone size={16} className="text-lyceum-blue flex-shrink-0" />
                                     <span>+91 78930 78791</span>
                                 </li>
                                 <li className="flex items-start gap-3">
-                                    <MapPin size={16} className="text-lyceum-blue mt-1" />
+                                    <MapPin size={16} className="text-lyceum-blue mt-1 flex-shrink-0" />
                                     <span> 19-4-2/3/13, First Floor, Below Gladiator Gym, opposite HP Petrol Pump, Falaknuma, Hyderabad, Telangana 500053 </span>
                                 </li>
                             </ul>
